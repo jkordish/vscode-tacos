@@ -55,6 +55,25 @@ Settings namespace: `tacos`
 - `openaiTimeoutMs` (default `15000`)
 - `codexOpenCommand` (default `""`, optional command id to open Codex panel)
 
+## Provider Behavior
+
+- `Source: local` means TaCoS generated the summary with built-in local heuristics (no OpenAI API call).
+- `Source: openai` means TaCoS successfully generated the summary via the OpenAI API.
+- If `summaryProvider` is set to `openai` but the request fails (for example missing key, timeout, or request error), TaCoS falls back to `local`.
+- Fallback details are logged in the `TaCoS` output channel.
+
+## Enabling OpenAI Summaries
+
+Set these in VS Code settings (`settings.json`):
+
+```json
+{
+  "tacos.summaryProvider": "openai",
+  "tacos.openaiApiKey": "YOUR_API_KEY",
+  "tacos.openaiModel": "gpt-5.2"
+}
+```
+
 ## Development
 
 ```bash
