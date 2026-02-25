@@ -61,6 +61,9 @@ Settings namespace: `tacos`
 npm install
 npm run compile
 npm test
+npm run package:vsix
 ```
 
 Run extension host with `F5` in VS Code.
+
+Jest upgrade roadmap: [docs/jest-modernization-plan.md](docs/jest-modernization-plan.md).

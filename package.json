@@ -4,6 +4,10 @@
   "description": "Auto task-context summaries when you resume work in VS Code.",
   "version": "0.0.1",
   "publisher": "jkordish",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jkordish/vscode-tacos.git"
+  },
   "private": true,
   "engines": {
     "vscode": "^1.96.0"
@@ -164,12 +168,14 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "jest --runInBand",
+    "package:vsix": "vsce package",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
     "@types/node": "^20.17.30",
     "@types/vscode": "^1.96.0",
+    "@vscode/vsce": "3.7.1",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
     "typescript": "^5.7.3"

@@ -1,0 +1,8 @@
+.github/**
+coverage/**
+docs/**
+src/**
+test/**
+**/*.map
+jest.config.cjs
+tsconfig.json
