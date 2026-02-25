@@ -1,6 +1,7 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import MarkdownIt from 'markdown-it';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
 import { redactList, redactText } from './redaction';
@@ -19,6 +20,11 @@ const KEY_DONE_ITEMS = 'tacos.doneItems';
 const KEY_LAST_FAILING_COMMAND = 'tacos.lastFailingCommand';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
+const markdownRenderer = new MarkdownIt({
+  html: false,
+  linkify: false,
+  typographer: false,
+});
 
 class RingBuffer {
   private valuesList: string[] = [];
@@ -493,6 +499,7 @@ function renderWebview(summary: ResumeSummary): string {
 
   const nextSteps = summary.nextSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join('');
   const topFiles = summary.topFiles.map((file) => `<li>${escapeHtml(file)}</li>`).join('');
+  const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
 
   return `<!doctype html>
 <html>
@@ -515,6 +522,22 @@ function renderWebview(summary: ResumeSummary): string {
       pre {
         white-space: pre-wrap;
         word-break: break-word;
+      }
+      .details-markdown {
+        line-height: 1.45;
+      }
+      .details-markdown > :first-child {
+        margin-top: 0;
+      }
+      .details-markdown > :last-child {
+        margin-bottom: 0;
+      }
+      .details-markdown p,
+      .details-markdown li {
+        overflow-wrap: anywhere;
+      }
+      .details-markdown code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
       }
       .kind {
         color: #8b8b8b;
@@ -544,7 +567,7 @@ function renderWebview(summary: ResumeSummary): string {
 
     <div class="card">
       <h3>Details</h3>
-      <pre>${escapeHtml(summary.detailsMarkdown)}</pre>
+      <div class="details-markdown">${detailsHtml}</div>
     </div>
 
     <script>

@@ -22,7 +22,7 @@ TaCoS is a VS Code extension scaffold that auto-generates a resume brief when yo
 
 ## Commands
 
-- `/resume`
+- `TaCoS: Resume Summary Quick`
 - `TaCoS: Show Resume Brief Now`
 - `TaCoS: Copy Prompt and Open Codex`
 - `TaCoS: Show Last Summary`
@@ -31,7 +31,7 @@ TaCoS is a VS Code extension scaffold that auto-generates a resume brief when yo
 - `TaCoS: Add Recent URL`
 - `TaCoS: Export Local Metrics`
 
-`/resume` runs the full flow behind the scenes: generate the complete summary response, copy it, and open a new untitled editor tab prefilled with that summary.
+`TaCoS: Resume Summary Quick` runs the full flow behind the scenes: generate the complete summary response, copy it, and open a new untitled editor tab prefilled with that summary.
 
 ## Configuration
 

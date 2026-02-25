@@ -31,7 +31,7 @@
     "commands": [
       {
         "command": "tacos.slash",
-        "title": "/resume"
+        "title": "TaCoS: Resume Summary Quick"
       },
       {
         "command": "tacos.showNow",
@@ -173,11 +173,15 @@
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^20.17.30",
     "@types/vscode": "^1.96.0",
     "@vscode/vsce": "3.7.1",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.5",
     "typescript": "^5.7.3"
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.1"
   }
 }
