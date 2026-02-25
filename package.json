@@ -1,0 +1,177 @@
+{
+  "name": "vscode-tacos",
+  "displayName": "TaCoS Resume Brief",
+  "description": "Auto task-context summaries when you resume work in VS Code.",
+  "version": "0.0.1",
+  "publisher": "jkordish",
+  "private": true,
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:tacos.slash",
+    "onCommand:tacos.showNow",
+    "onCommand:tacos.copyPromptAndOpenCodex",
+    "onCommand:tacos.showLastSummary",
+    "onCommand:tacos.pauseSummaries",
+    "onCommand:tacos.resumeSummaries",
+    "onCommand:tacos.exportMetrics",
+    "onCommand:tacos.addVisitedUrl"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "tacos.slash",
+        "title": "/tacos"
+      },
+      {
+        "command": "tacos.showNow",
+        "title": "TaCoS: Show Resume Brief Now"
+      },
+      {
+        "command": "tacos.copyPromptAndOpenCodex",
+        "title": "TaCoS: Copy Prompt and Open Codex"
+      },
+      {
+        "command": "tacos.showLastSummary",
+        "title": "TaCoS: Show Last Summary"
+      },
+      {
+        "command": "tacos.pauseSummaries",
+        "title": "TaCoS: Pause Auto Summaries"
+      },
+      {
+        "command": "tacos.resumeSummaries",
+        "title": "TaCoS: Resume Auto Summaries"
+      },
+      {
+        "command": "tacos.exportMetrics",
+        "title": "TaCoS: Export Local Metrics"
+      },
+      {
+        "command": "tacos.addVisitedUrl",
+        "title": "TaCoS: Add Recent URL"
+      }
+    ],
+    "configuration": {
+      "title": "TaCoS",
+      "properties": {
+        "tacos.showOnFocus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically show a resume brief when VS Code regains focus after idle."
+        },
+        "tacos.pauseSummaries": {
+          "type": "boolean",
+          "default": false,
+          "description": "Temporarily disable auto summaries without uninstalling the extension."
+        },
+        "tacos.idleMinutes": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "Minimum idle minutes before auto summary triggers on focus."
+        },
+        "tacos.cooldownSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "description": "Minimum seconds between summaries to avoid spam."
+        },
+        "tacos.includeDiff": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include truncated git diff text in the details and Codex prompt."
+        },
+        "tacos.maxDiffChars": {
+          "type": "number",
+          "default": 6000,
+          "minimum": 0,
+          "description": "Maximum characters of git diff included when enabled."
+        },
+        "tacos.includeTerminalHistory": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include recent terminal commands when shell integration is available."
+        },
+        "tacos.includeDebugHistory": {
+          "type": "boolean",
+          "default": true,
+          "description": "Include recent debug sessions in context collection."
+        },
+        "tacos.cacheIfContextUnchanged": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reuse the previous summary when no meaningful context changed."
+        },
+        "tacos.redactionPatterns": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Additional regex patterns to redact from collected context."
+        },
+        "tacos.metricsEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Track local resumption/edit lag metrics in workspace state."
+        },
+        "tacos.summaryProvider": {
+          "type": "string",
+          "enum": [
+            "local",
+            "openai"
+          ],
+          "default": "local",
+          "description": "Summary generation mode. `openai` uses a direct API call with strict JSON schema."
+        },
+        "tacos.openaiApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional API key for direct OpenAI summaries. If empty, OPENAI_API_KEY env var is used."
+        },
+        "tacos.openaiModel": {
+          "type": "string",
+          "default": "gpt-4.1-mini",
+          "description": "OpenAI model used when `summaryProvider` is `openai`."
+        },
+        "tacos.openaiBaseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "Base URL for OpenAI-compatible endpoints."
+        },
+        "tacos.openaiTimeoutMs": {
+          "type": "number",
+          "default": 15000,
+          "minimum": 1000,
+          "description": "Timeout for direct OpenAI summary requests."
+        },
+        "tacos.codexOpenCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Optional VS Code command id to open the Codex panel (used by Copy + Open flow)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "jest --runInBand",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^20.17.30",
+    "@types/vscode": "^1.96.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.7.3"
+  }
+}
