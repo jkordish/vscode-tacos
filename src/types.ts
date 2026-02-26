@@ -1,8 +1,12 @@
 export type TriggerReason = 'focus' | 'manual' | 'cached';
+export type SummaryProvider = 'local' | 'vscode-lm' | 'openai';
 
 export interface ExtensionConfig {
+  enabled: boolean;
   showOnFocus: boolean;
   pauseSummaries: boolean;
+  minIdleMinutes: number;
+  cooldownMinutes: number;
   idleMinutes: number;
   cooldownSeconds: number;
   includeDiff: boolean;
@@ -12,7 +16,7 @@ export interface ExtensionConfig {
   cacheIfContextUnchanged: boolean;
   redactionPatterns: string[];
   metricsEnabled: boolean;
-  summaryProvider: 'local' | 'openai';
+  summaryProvider: SummaryProvider;
   openaiApiKeySetting: string;
   openaiModel: string;
   openaiBaseUrl: string;
@@ -56,16 +60,37 @@ export interface SummaryLink {
   kind: 'file' | 'url';
 }
 
+export type SummaryEvidenceKind = 'file' | 'url' | 'commit' | 'branch' | 'terminal' | 'task' | 'debug';
+
+export interface SummaryEvidenceItem {
+  id: string;
+  kind: SummaryEvidenceKind;
+  label: string;
+  target?: string;
+  meta?: Record<string, string | number | boolean>;
+}
+
+export type ResumeMode = 'coding' | 'debugging';
+
 export interface ResumeSummary {
   intent: string;
   nextSteps: string[];
+  nextStepEvidenceIds?: string[][];
+  mode?: ResumeMode;
+  currentBranch?: string;
+  previousBranch?: string;
+  lastFailingCommand?: string;
+  recentFilesSnapshot?: string[];
   topFiles: string[];
   links: SummaryLink[];
+  evidenceCatalog?: SummaryEvidenceItem[];
+  userCorrections?: string[];
+  correctionsFingerprint?: string;
   detailsMarkdown: string;
   codexPrompt: string;
   contextHash: string;
   generatedAt: number;
-  source: 'local' | 'openai';
+  source: SummaryProvider;
 }
 
 export interface MetricRecord {
@@ -74,4 +99,11 @@ export interface MetricRecord {
   trigger: TriggerReason;
   firstMeaningfulEditLagMs?: number;
   firstRunLagMs?: number;
+}
+
+export interface VscodeLmModelSelector {
+  vendor: string;
+  id?: string;
+  family?: string;
+  name?: string;
 }

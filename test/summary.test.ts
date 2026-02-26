@@ -35,6 +35,35 @@ describe('buildResumeSummary', () => {
     expect(summary.nextSteps.length).toBeGreaterThanOrEqual(2);
     expect(summary.nextSteps.length).toBeLessThanOrEqual(3);
     expect(summary.links.length).toBeLessThanOrEqual(3);
+    expect(summary.evidenceCatalog?.length ?? 0).toBeGreaterThan(0);
+    expect(summary.nextStepEvidenceIds?.length).toBe(summary.nextSteps.length);
+    expect(summary.mode).toBe('debugging');
     expect(summary.intent.length).toBeGreaterThan(0);
+  });
+
+  it('builds file/url evidence IDs from trusted extension-generated data', () => {
+    const summary = buildResumeSummary(sampleSignals());
+    const evidence = summary.evidenceCatalog ?? [];
+
+    expect(evidence.some((item) => item.id === 'file:src/extension.ts')).toBe(true);
+    expect(evidence.some((item) => item.id === 'url:https://github.com/org/repo/pull/1')).toBe(true);
+  });
+
+  it('marks mode as coding when no debug/failing signals exist', () => {
+    const signals = sampleSignals();
+    signals.failingCommand = undefined;
+    signals.recentDebug = [];
+    signals.recentTerminal = ['pnpm lint'];
+
+    const summary = buildResumeSummary(signals);
+    expect(summary.mode).toBe('coding');
+  });
+
+  it('does not include absolute file targets in details markdown evidence lines', () => {
+    const summary = buildResumeSummary(sampleSignals());
+
+    expect(summary.detailsMarkdown).not.toContain('/workspace/repo/src/extension.ts');
+    expect(summary.detailsMarkdown).toContain('url:https://github.com/org/repo/pull/1');
+    expect(summary.detailsMarkdown).toContain('-> https://github.com/org/repo/pull/1');
   });
 });

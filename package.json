@@ -14,8 +14,14 @@
   },
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": true,
-      "description": "TaCoS disables git execution and terminal command collection in Restricted Mode until the workspace is trusted."
+      "supported": "limited",
+      "description": "TaCoS runs in safe mode in Restricted Mode: git execution, terminal command collection, and restore actions that execute tooling are disabled until trust is granted.",
+      "restrictedConfigurations": [
+        "tacos.summaryProvider",
+        "tacos.openaiApiKey",
+        "tacos.openaiBaseUrl",
+        "tacos.openaiModel"
+      ]
     }
   },
   "categories": [
@@ -29,8 +35,14 @@
     "onCommand:tacos.showLastSummary",
     "onCommand:tacos.pauseSummaries",
     "onCommand:tacos.resumeSummaries",
+    "onCommand:tacos.toggleEnabled",
+    "onCommand:tacos.pauseUntilRestart",
     "onCommand:tacos.exportMetrics",
     "onCommand:tacos.addVisitedUrl",
+    "onCommand:tacos.addCheckpointNote",
+    "onCommand:tacos.clearCheckpointNote",
+    "onCommand:tacos.configureAiProvider",
+    "onCommand:tacos.clearCorrections",
     "onCommand:tacos.setOpenAiApiKey",
     "onCommand:tacos.clearOpenAiApiKey"
   ],
@@ -62,12 +74,36 @@
         "title": "TaCoS: Resume Auto Summaries"
       },
       {
+        "command": "tacos.toggleEnabled",
+        "title": "TaCoS: Toggle Summaries Enabled"
+      },
+      {
+        "command": "tacos.pauseUntilRestart",
+        "title": "TaCoS: Pause Summaries Until Restart"
+      },
+      {
         "command": "tacos.exportMetrics",
         "title": "TaCoS: Export Local Metrics"
       },
       {
         "command": "tacos.addVisitedUrl",
         "title": "TaCoS: Add Recent URL"
+      },
+      {
+        "command": "tacos.addCheckpointNote",
+        "title": "TaCoS: Add Checkpoint Note"
+      },
+      {
+        "command": "tacos.clearCheckpointNote",
+        "title": "TaCoS: Clear Checkpoint Note"
+      },
+      {
+        "command": "tacos.configureAiProvider",
+        "title": "TaCoS: Configure AI Provider"
+      },
+      {
+        "command": "tacos.clearCorrections",
+        "title": "TaCoS: Clear Summary Corrections"
       },
       {
         "command": "tacos.setOpenAiApiKey",
@@ -86,10 +122,27 @@
           "default": true,
           "description": "Automatically show a resume brief when VS Code regains focus after idle."
         },
+        "tacos.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Master switch for automatic TaCoS summaries."
+        },
         "tacos.pauseSummaries": {
           "type": "boolean",
           "default": false,
           "description": "Temporarily disable auto summaries without uninstalling the extension."
+        },
+        "tacos.minIdleMinutes": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "Minimum idle minutes before auto summary may trigger."
+        },
+        "tacos.cooldownMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "description": "Cooldown in minutes between automatic summaries."
         },
         "tacos.idleMinutes": {
           "type": "number",
@@ -146,10 +199,11 @@
           "type": "string",
           "enum": [
             "local",
+            "vscode-lm",
             "openai"
           ],
           "default": "local",
-          "description": "Summary generation mode. `openai` uses a direct API call with strict JSON schema."
+          "description": "Summary generation mode. `vscode-lm` uses a model selected via the Configure AI Provider command; `openai` uses a direct API call with strict JSON schema."
         },
         "tacos.openaiApiKey": {
           "type": "string",
@@ -188,13 +242,14 @@
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.14",
+    "@swc/core": "^1.15.13",
+    "@swc/jest": "^0.2.39",
+    "@types/jest": "^30.0.0",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^20.17.30",
     "@types/vscode": "^1.96.0",
     "@vscode/vsce": "3.7.1",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.2.5",
+    "jest": "^30.2.0",
     "typescript": "^5.7.3"
   },
   "dependencies": {

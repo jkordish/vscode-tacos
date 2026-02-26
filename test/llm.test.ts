@@ -1,20 +1,43 @@
 import * as path from 'node:path';
-import { validateOpenAiSummaryPayload } from '../src/llm';
+import { buildSummaryContextPrompt, validateOpenAiSummaryPayload } from '../src/llm';
+import type { SummaryEvidenceItem } from '../src/types';
 
 describe('validateOpenAiSummaryPayload', () => {
-  it('accepts valid payload and keeps only safe links', () => {
+  function sampleEvidence(workspaceRoot: string): SummaryEvidenceItem[] {
+    return [
+      {
+        id: 'file:src/extension.ts',
+        kind: 'file',
+        label: 'src/extension.ts',
+        target: path.resolve(workspaceRoot, 'src/extension.ts'),
+      },
+      {
+        id: 'url:https://github.com/org/repo/pull/1',
+        kind: 'url',
+        label: 'PR',
+        target: 'https://github.com/org/repo/pull/1',
+      },
+      {
+        id: 'terminal:abc123',
+        kind: 'terminal',
+        label: 'npm test',
+      },
+    ];
+  }
+
+  it('accepts valid payload and keeps only catalog-backed safe links', () => {
     const workspaceRoot = '/workspace/repo';
+    const evidenceCatalog = sampleEvidence(workspaceRoot);
     const payload = {
       intent: 'You were finishing resume-brief generation and wiring UI actions.',
-      next_steps: ['Run tests', 'Validate command wiring'],
-      links: [
-        { label: 'src/extension.ts', target: 'src/extension.ts', kind: 'file' },
-        { label: 'PR', target: 'https://github.com/org/repo/pull/1', kind: 'url' },
-        { label: 'Unsafe command', target: 'command:workbench.action.openSettings', kind: 'url' },
+      next_steps: [
+        { text: 'Run tests', evidence_ids: ['terminal:abc123'] },
+        { text: 'Validate command wiring', evidence_ids: ['file:src/extension.ts'] },
       ],
+      top_links: ['file:src/extension.ts', 'url:https://github.com/org/repo/pull/1', 'terminal:abc123'],
     };
 
-    const parsed = validateOpenAiSummaryPayload(payload, workspaceRoot);
+    const parsed = validateOpenAiSummaryPayload(payload, evidenceCatalog, workspaceRoot);
 
     expect(parsed.intent).toContain('resume-brief');
     expect(parsed.nextSteps).toHaveLength(2);
@@ -30,100 +53,169 @@ describe('validateOpenAiSummaryPayload', () => {
         kind: 'url',
       },
     ]);
+    expect(parsed.nextStepEvidenceIds).toEqual([['terminal:abc123'], ['file:src/extension.ts']]);
   });
 
-  it('drops non-http(s) URL schemes', () => {
+  it('drops unknown IDs and non-file/url IDs from top_links', () => {
+    const workspaceRoot = '/workspace/repo';
     const payload = {
       intent: 'intent',
-      next_steps: ['a', 'b'],
-      links: [
-        { label: 'file URI', target: 'file:///etc/passwd', kind: 'url' },
-        { label: 'command', target: 'command:workbench.action.files.openFile', kind: 'url' },
-        { label: 'vscode', target: 'vscode://file/c:/temp/a.ts', kind: 'url' },
-        { label: 'javascript', target: 'javascript:alert(1)', kind: 'url' },
-        { label: 'data', target: 'data:text/plain,hello', kind: 'url' },
+      next_steps: [
+        { text: 'a', evidence_ids: ['unknown:id'] },
+        { text: 'b', evidence_ids: [] },
       ],
+      top_links: ['terminal:abc123', 'unknown:id', 'file:src/extension.ts'],
     };
 
-    const parsed = validateOpenAiSummaryPayload(payload, '/workspace/repo');
-    expect(parsed.links).toEqual([]);
-  });
-
-  it('treats scheme-based targets as URLs when kind is missing', () => {
-    const parsed = validateOpenAiSummaryPayload(
+    const parsed = validateOpenAiSummaryPayload(payload, sampleEvidence(workspaceRoot), workspaceRoot);
+    expect(parsed.links).toEqual([
       {
-        intent: 'intent',
-        next_steps: ['a', 'b'],
-        links: [{ label: 'command', target: 'command:workbench.action.tasks.runTask' }],
+        label: 'src/extension.ts',
+        target: path.resolve(workspaceRoot, 'src/extension.ts'),
+        kind: 'file',
       },
-      '/workspace/repo'
-    );
-
-    expect(parsed.links).toEqual([]);
+    ]);
+    expect(parsed.nextStepEvidenceIds[0]).toEqual(['file:src/extension.ts']);
   });
 
-  it('drops file links that escape root via traversal', () => {
-    const parsed = validateOpenAiSummaryPayload(
-      {
-        intent: 'intent',
-        next_steps: ['a', 'b'],
-        links: [{ label: 'outside', target: '../secrets.txt', kind: 'file' }],
-      },
-      '/workspace/repo'
-    );
-
-    expect(parsed.links).toEqual([]);
-  });
-
-  it('drops absolute file paths outside workspace root', () => {
-    const parsed = validateOpenAiSummaryPayload(
-      {
-        intent: 'intent',
-        next_steps: ['a', 'b'],
-        links: [{ label: 'outside', target: '/etc/passwd', kind: 'file' }],
-      },
-      '/workspace/repo'
-    );
-
-    expect(parsed.links).toEqual([]);
-  });
-
-  it('drops file links when workspace root is unavailable', () => {
-    const parsed = validateOpenAiSummaryPayload(
-      {
-        intent: 'intent',
-        next_steps: ['a', 'b'],
-        links: [{ label: 'inside', target: 'src/index.ts', kind: 'file' }],
-      },
-      ''
-    );
-
-    expect(parsed.links).toEqual([]);
-  });
-
-  it('keeps valid http/https URLs and in-root relative file paths', () => {
+  it('drops evidence-backed top links that resolve to unsafe protocols/paths', () => {
     const workspaceRoot = '/workspace/repo';
+    const evidenceCatalog: SummaryEvidenceItem[] = [
+      {
+        id: 'url:bad',
+        kind: 'url',
+        label: 'bad',
+        target: 'command:workbench.action.files.openFile',
+      },
+      {
+        id: 'file:outside',
+        kind: 'file',
+        label: '/etc/passwd',
+        target: '/etc/passwd',
+      },
+      {
+        id: 'url:good',
+        kind: 'url',
+        label: 'good',
+        target: 'https://example.com',
+      },
+    ];
     const parsed = validateOpenAiSummaryPayload(
       {
         intent: 'intent',
-        next_steps: ['a', 'b'],
-        links: [
-          { label: 'docs', target: 'http://example.com/docs', kind: 'url' },
-          { label: 'pr', target: 'https://example.com/pr/1', kind: 'url' },
-          { label: 'inside', target: './src/feature.ts', kind: 'file' },
+        next_steps: [
+          { text: 'a', evidence_ids: [] },
+          { text: 'b', evidence_ids: [] },
         ],
+        top_links: ['url:bad', 'file:outside', 'url:good'],
       },
+      evidenceCatalog,
       workspaceRoot
     );
 
     expect(parsed.links).toEqual([
-      { label: 'docs', target: 'http://example.com/docs', kind: 'url' },
-      { label: 'pr', target: 'https://example.com/pr/1', kind: 'url' },
-      { label: 'inside', target: path.resolve(workspaceRoot, './src/feature.ts'), kind: 'file' },
+      { label: 'good', target: 'https://example.com/', kind: 'url' },
     ]);
   });
 
   it('throws when required structure is missing', () => {
-    expect(() => validateOpenAiSummaryPayload({ intent: '', next_steps: [], links: [] }, '/workspace')).toThrow();
+    expect(() =>
+      validateOpenAiSummaryPayload(
+        { intent: '', next_steps: [], top_links: [] },
+        sampleEvidence('/workspace'),
+        '/workspace'
+      )
+    ).toThrow();
+  });
+});
+
+describe('buildSummaryContextPrompt', () => {
+  it('includes user corrections when present', () => {
+    const prompt = buildSummaryContextPrompt(
+      {
+        workspaceRoot: '/workspace/repo',
+        workspaceName: 'repo',
+        branch: 'main',
+        gitStatus: '',
+        gitDiffStat: '',
+        gitDiff: '',
+        gitLog: '',
+        changedFiles: [],
+        openFiles: [],
+        recentFiles: [],
+        recentTerminal: [],
+        recentDebug: [],
+        recentUrls: [],
+        doneItems: [],
+        failingCommand: undefined,
+      },
+      {
+        intent: 'intent',
+        nextSteps: ['step 1', 'step 2'],
+        topFiles: [],
+        links: [],
+        detailsMarkdown: 'details',
+        codexPrompt: 'prompt',
+        contextHash: 'hash',
+        generatedAt: 1,
+        source: 'local',
+        userCorrections: ['wrong intent: focus is parser fix'],
+      }
+    );
+
+    expect(prompt).toContain('User corrections (must respect)');
+    expect(prompt).toContain('wrong intent: focus is parser fix');
+  });
+
+  it('does not include absolute local file targets in evidence lines', () => {
+    const workspaceRoot = '/workspace/repo';
+    const prompt = buildSummaryContextPrompt(
+      {
+        workspaceRoot,
+        workspaceName: 'repo',
+        branch: 'main',
+        gitStatus: '',
+        gitDiffStat: '',
+        gitDiff: '',
+        gitLog: '',
+        changedFiles: [],
+        openFiles: [],
+        recentFiles: [],
+        recentTerminal: [],
+        recentDebug: [],
+        recentUrls: [],
+        doneItems: [],
+        failingCommand: undefined,
+      },
+      {
+        intent: 'intent',
+        nextSteps: ['step 1', 'step 2'],
+        topFiles: [],
+        links: [],
+        evidenceCatalog: [
+          {
+            id: 'file:src/index.ts',
+            kind: 'file',
+            label: 'src/index.ts',
+            target: path.resolve(workspaceRoot, 'src/index.ts'),
+          },
+          {
+            id: 'url:https://example.com/docs',
+            kind: 'url',
+            label: 'Docs',
+            target: 'https://example.com/docs',
+          },
+        ],
+        detailsMarkdown: 'details',
+        codexPrompt: 'prompt',
+        contextHash: 'hash',
+        generatedAt: 1,
+        source: 'local',
+      }
+    );
+
+    expect(prompt).toContain('id=file:src/index.ts | kind=file | label=src/index.ts');
+    expect(prompt).not.toContain(path.resolve(workspaceRoot, 'src/index.ts'));
+    expect(prompt).toContain('id=url:https://example.com/docs | kind=url | label=Docs | target=https://example.com/docs');
   });
 });

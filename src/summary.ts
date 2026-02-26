@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import * as path from 'node:path';
-import type { ResumeSignals, ResumeSummary, SummaryLink } from './types';
+import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
+import type { ResumeMode, ResumeSignals, ResumeSummary, SummaryEvidenceItem, SummaryLink } from './types';
 
 function dedupe(values: string[], limit: number): string[] {
   const seen = new Set<string>();
@@ -101,26 +101,162 @@ function buildNextSteps(signals: ResumeSignals, topFiles: string[]): string[] {
   return dedupe(next, 3).slice(0, 3);
 }
 
-function fileLinks(workspaceRoot: string, files: string[]): SummaryLink[] {
-  return dedupe(files, 3).map((relative) => ({
-    label: relative,
-    target: path.isAbsolute(relative) ? relative : path.join(workspaceRoot, relative),
-    kind: 'file',
-  }));
+function detectResumeMode(signals: ResumeSignals): ResumeMode {
+  if (signals.failingCommand || signals.recentDebug.length > 0) {
+    return 'debugging';
+  }
+
+  if (signals.recentTerminal.some((command) => /\b(test|build|debug)\b/i.test(command))) {
+    return 'debugging';
+  }
+
+  return 'coding';
 }
 
-function urlLinks(urls: string[]): SummaryLink[] {
-  return dedupe(urls, 3).map((url) => ({
-    label: url,
-    target: url,
-    kind: 'url',
-  }));
+function hashIdFragment(value: string): string {
+  return createHash('sha1').update(value).digest('hex').slice(0, 10);
+}
+
+function addEvidenceItem(catalog: SummaryEvidenceItem[], item: SummaryEvidenceItem): void {
+  if (!item.id || catalog.some((existing) => existing.id === item.id)) {
+    return;
+  }
+
+  catalog.push(item);
+}
+
+function buildEvidenceCatalog(signals: ResumeSignals, topFiles: string[]): SummaryEvidenceItem[] {
+  const catalog: SummaryEvidenceItem[] = [];
+
+  for (const relative of dedupe([...topFiles, ...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles], 8)) {
+    const resolved = resolveFileTargetInWorkspace(relative, signals.workspaceRoot);
+    if (!resolved) {
+      continue;
+    }
+
+    addEvidenceItem(catalog, {
+      id: `file:${relative}`,
+      kind: 'file',
+      label: relative,
+      target: resolved,
+      meta: { relativePath: relative },
+    });
+  }
+
+  for (const rawUrl of dedupe(signals.recentUrls, 5)) {
+    const safeUrl = normalizeHttpUrl(rawUrl);
+    if (!safeUrl) {
+      continue;
+    }
+
+    addEvidenceItem(catalog, {
+      id: `url:${safeUrl}`,
+      kind: 'url',
+      label: rawUrl,
+      target: safeUrl,
+    });
+  }
+
+  if (signals.branch.trim()) {
+    addEvidenceItem(catalog, {
+      id: `branch:${signals.branch.trim()}`,
+      kind: 'branch',
+      label: signals.branch.trim(),
+    });
+  }
+
+  const firstCommitLine = signals.gitLog.split(/\r?\n/).find((line) => line.trim());
+  if (firstCommitLine) {
+    addEvidenceItem(catalog, {
+      id: `commit:${hashIdFragment(firstCommitLine)}`,
+      kind: 'commit',
+      label: firstCommitLine.trim(),
+      meta: { preview: true },
+    });
+  }
+
+  if (signals.failingCommand) {
+    addEvidenceItem(catalog, {
+      id: `terminal:${hashIdFragment(signals.failingCommand)}`,
+      kind: 'terminal',
+      label: signals.failingCommand,
+      meta: { failing: true },
+    });
+  }
+
+  for (const terminalEntry of dedupe(signals.recentTerminal, 4)) {
+    addEvidenceItem(catalog, {
+      id: `terminal:${hashIdFragment(terminalEntry)}`,
+      kind: 'terminal',
+      label: terminalEntry,
+    });
+  }
+
+  for (const debugEntry of dedupe(signals.recentDebug, 3)) {
+    addEvidenceItem(catalog, {
+      id: `debug:${hashIdFragment(debugEntry)}`,
+      kind: 'debug',
+      label: debugEntry,
+    });
+  }
+
+  for (const doneItem of dedupe(signals.doneItems, 3)) {
+    addEvidenceItem(catalog, {
+      id: `task:${hashIdFragment(doneItem)}`,
+      kind: 'task',
+      label: doneItem,
+    });
+  }
+
+  return catalog;
+}
+
+function buildLinksFromEvidence(evidenceCatalog: SummaryEvidenceItem[]): SummaryLink[] {
+  const links: SummaryLink[] = [];
+  for (const item of evidenceCatalog) {
+    if ((item.kind !== 'file' && item.kind !== 'url') || typeof item.target !== 'string' || !item.target) {
+      continue;
+    }
+
+    links.push({
+      label: item.label,
+      target: item.target,
+      kind: item.kind,
+    });
+
+    if (links.length >= 3) {
+      break;
+    }
+  }
+
+  return links;
+}
+
+function buildStepEvidenceIds(nextSteps: string[], evidenceCatalog: SummaryEvidenceItem[]): string[][] {
+  const evidenceIds = evidenceCatalog.map((item) => item.id);
+  if (evidenceIds.length === 0) {
+    return nextSteps.map(() => []);
+  }
+
+  return nextSteps.map((_, index) => [evidenceIds[Math.min(index, evidenceIds.length - 1)]]);
 }
 
 export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
   const topFiles = dedupe([...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles], 3);
+  const recentFilesSnapshot = dedupe([...signals.openFiles, ...signals.recentFiles], 10);
   const nextSteps = buildNextSteps(signals, topFiles).slice(0, 3);
-  const links = dedupe([...urlLinks(signals.recentUrls).map((link) => JSON.stringify(link)), ...fileLinks(signals.workspaceRoot, topFiles).map((link) => JSON.stringify(link))], 3).map((serialized) => JSON.parse(serialized) as SummaryLink);
+  const mode = detectResumeMode(signals);
+  const evidenceCatalog = buildEvidenceCatalog(signals, topFiles);
+  const links = buildLinksFromEvidence(evidenceCatalog);
+  const nextStepEvidenceIds = buildStepEvidenceIds(nextSteps, evidenceCatalog);
+
+  const evidenceLines = evidenceCatalog.length
+    ? evidenceCatalog.map((item) => {
+        // Keep local file paths out of the markdown payload that can be sent to AI providers.
+        const target = item.kind === 'url' && item.target ? ` -> ${item.target}` : '';
+        return `- [${item.kind}] ${item.id}: ${item.label}${target}`;
+      })
+    : ['- None captured'];
 
   const intent = buildIntent(signals, topFiles);
   const detailsSections = [
@@ -133,8 +269,14 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     '## Top files',
     ...(topFiles.length > 0 ? topFiles.map((file) => `- ${file}`) : ['- None captured']),
     '',
+    '## Mode',
+    `- ${mode}`,
+    '',
     '## Top links',
     ...(signals.recentUrls.length > 0 ? dedupe(signals.recentUrls, 3).map((url) => `- ${url}`) : ['- None captured']),
+    '',
+    '## Evidence catalog',
+    ...evidenceLines,
     '',
     '---',
     `**Workspace:** ${signals.workspaceName}`,
@@ -170,8 +312,14 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
   return {
     intent,
     nextSteps,
+    nextStepEvidenceIds,
+    mode,
+    currentBranch: signals.branch || undefined,
+    lastFailingCommand: signals.failingCommand,
+    recentFilesSnapshot,
     topFiles,
     links,
+    evidenceCatalog,
     detailsMarkdown,
     codexPrompt,
     contextHash: hashSignals(signals),
