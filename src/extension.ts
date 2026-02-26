@@ -3106,11 +3106,9 @@ async function openPrivacySafetyDoc(context: vscode.ExtensionContext): Promise<v
       }
     }
 
-    throw new Error('README file not found');
+    throw new Error(`privacy docs not found in candidates: ${candidates.join(', ')}`);
   } catch (error) {
-    state.output.appendLine(
-      `TaCoS: failed to open README privacy section: ${(error as Error).message}`,
-    );
+    state.output.appendLine(`TaCoS: failed to open privacy docs: ${(error as Error).message}`);
     void vscode.window.showWarningMessage('TaCoS: unable to open privacy docs.');
   }
 }

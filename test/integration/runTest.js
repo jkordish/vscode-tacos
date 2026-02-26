@@ -62,19 +62,23 @@ async function main() {
   const vscodeExecutablePath = resolveLocalVscodeExecutable();
   const restrictedUserDataDir = prepareRestrictedUserDataDir();
 
-  await runSuite(
-    'trusted',
-    path.resolve(__dirname, 'suite', 'trusted.js'),
-    [fixtureWorkspace, '--disable-extensions'],
-    vscodeExecutablePath,
-  );
+  try {
+    await runSuite(
+      'trusted',
+      path.resolve(__dirname, 'suite', 'trusted.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
 
-  await runSuite(
-    'restricted',
-    path.resolve(__dirname, 'suite', 'restricted.js'),
-    [fixtureWorkspace, '--disable-extensions', '--user-data-dir', restrictedUserDataDir],
-    vscodeExecutablePath,
-  );
+    await runSuite(
+      'isolated-profile-local',
+      path.resolve(__dirname, 'suite', 'isolatedProfileLocal.js'),
+      [fixtureWorkspace, '--disable-extensions', '--user-data-dir', restrictedUserDataDir],
+      vscodeExecutablePath,
+    );
+  } finally {
+    fs.rmSync(restrictedUserDataDir, { recursive: true, force: true });
+  }
 }
 
 main().catch((error) => {

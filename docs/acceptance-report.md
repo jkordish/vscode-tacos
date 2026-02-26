@@ -21,7 +21,7 @@ Status: Implemented
 - Integration harness added for repeatable extension-host verification:
   - `test/integration/runTest.js`
   - `test/integration/suite/trusted.js`
-  - `test/integration/suite/restricted.js`
+  - `test/integration/suite/isolatedProfileLocal.js`
   - `docs/integration-test-harness.md`
 
 ## Phase 1 - Webview Security Hardening (CSP) + HTML Escaping
@@ -102,7 +102,7 @@ Status: Implemented
 - Integration harness:
   - `test/integration/runTest.js`
   - `test/integration/suite/trusted.js`
-  - `test/integration/suite/restricted.js`
+  - `test/integration/suite/isolatedProfileLocal.js`
 
 ## Phase 5 - CI/CD + Marketplace Readiness
 

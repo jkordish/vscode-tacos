@@ -22,20 +22,21 @@ The harness launches Extension Development Host runs against `test/fixtures/work
    - extension `jkordish.vscode-tacos` activates
    - `tacos.slash` opens markdown summary output
    - `tacos.showLastSummary` executes without throwing
-2. Restricted suite (dedicated user-data profile with trust settings):
-   - executes against a fresh profile configured for restricted startup prompts
+2. Isolated-profile local suite (dedicated user-data profile with trust settings):
+   - executes against a fresh profile configured for trust prompts disabled
    - `tacos.slash` still works
    - summary source remains local-only (`- Source: local`)
 
 ## Files
 
 - Runner: `test/integration/runTest.js`
-- Suites: `test/integration/suite/trusted.js`, `test/integration/suite/restricted.js`
+- Suites: `test/integration/suite/trusted.js`, `test/integration/suite/isolatedProfileLocal.js`
 - Fixture workspace: `test/fixtures/workspace/`
 
 ## Notes
 
 - Integration tests require launching a VS Code/Electron instance.
 - Runner prefers a local VS Code executable (`VSCODE_TEST_BINARY` or common OS install paths) to avoid network download flakiness.
-- Workspace trust semantics can vary by host build and local-folder policies; final restricted-mode behavior must still be validated via manual smoke runbook.
+- Runner now deletes temporary isolated-profile user-data directories after execution.
+- Workspace trust semantics can vary by host build and local-folder policies; final true Restricted Mode behavior must still be validated via manual smoke runbook.
 - Keep this suite minimal and deterministic; most safety logic remains covered by unit tests.

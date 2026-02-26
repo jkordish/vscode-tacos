@@ -24,12 +24,14 @@ All notable changes to this project are documented in this file.
 - Git snapshot collection uses bounded command timeouts and caching to reduce repeated cost.
 - CI quality gates now enforce compile, lint, format-check, unit/integration tests, and VSIX packaging.
 - Added `npm run verify` and `npm run verify:quick` scripts for consistent local release gating.
+- Integration runner now cleans up temporary isolated-profile test directories after each run.
 
 ### Security
 
 - Webview click handling now uses explicit `data-action` routing and strict host-side message parsing.
 - Unsafe links and malformed webview messages are blocked/no-op by default.
 - Summary link clicks now require click-time evidence grounding (target must match validated evidence catalog).
+- Privacy doc open failures now report accurate “privacy docs” messaging in logs/errors.
 - Persisted terminal-derived fields are anonymized/fingerprinted to avoid storing raw commands.
 - Legacy persisted activity is migrated to sanitized/fingerprinted storage at startup.
 - Privacy & Safety command opens a dedicated markdown document shipped with the extension.
