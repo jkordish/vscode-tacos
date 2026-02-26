@@ -243,6 +243,7 @@ function buildStepEvidenceIds(nextSteps: string[], evidenceCatalog: SummaryEvide
 
 export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
   const topFiles = dedupe([...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles], 3);
+  const recentFilesSnapshot = dedupe([...signals.openFiles, ...signals.recentFiles], 10);
   const nextSteps = buildNextSteps(signals, topFiles).slice(0, 3);
   const mode = detectResumeMode(signals);
   const evidenceCatalog = buildEvidenceCatalog(signals, topFiles);
@@ -312,6 +313,9 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     nextSteps,
     nextStepEvidenceIds,
     mode,
+    currentBranch: signals.branch || undefined,
+    lastFailingCommand: signals.failingCommand,
+    recentFilesSnapshot,
     topFiles,
     links,
     evidenceCatalog,

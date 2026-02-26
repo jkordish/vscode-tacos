@@ -73,6 +73,10 @@ export interface ResumeSummary {
   nextSteps: string[];
   nextStepEvidenceIds?: string[][];
   mode?: ResumeMode;
+  currentBranch?: string;
+  previousBranch?: string;
+  lastFailingCommand?: string;
+  recentFilesSnapshot?: string[];
   topFiles: string[];
   links: SummaryLink[];
   evidenceCatalog?: SummaryEvidenceItem[];

@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
 import { sanitizeActivityForPersistence } from './activityPersistence';
@@ -26,6 +28,7 @@ const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
+const execFileAsync = promisify(execFile);
 const markdownRenderer = new MarkdownIt({
   html: false,
   linkify: false,
@@ -71,6 +74,10 @@ interface RuntimeState {
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
   displayedCheckpointNote?: { workspaceRoot: string; value: string; persisted: boolean };
+  lastTaskName?: string;
+  lastTaskWorkspaceRoot?: string;
+  lastDebugConfigName?: string;
+  lastDebugWorkspaceRoot?: string;
   metricSession?: MetricRecord;
   workspaceTrusted: boolean;
   terminalHooks: vscode.Disposable[];
@@ -281,8 +288,20 @@ export function activate(context: vscode.ExtensionContext): void {
       const label = session?.name ? `${session.type}: ${session.name}` : session.type;
       if (label) {
         state.recentDebug.push(label);
+        state.lastDebugConfigName = session.name;
+        state.lastDebugWorkspaceRoot = session.workspaceFolder?.uri.fsPath;
         await persistActivity(context);
       }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.tasks.onDidStartTaskProcess((event) => {
+      const task = event.execution.task;
+      state.lastTaskName = task.name;
+      state.lastTaskWorkspaceRoot = task.scope && typeof task.scope === 'object' && 'uri' in task.scope
+        ? task.scope.uri.fsPath
+        : pickWorkspaceRoot();
     })
   );
 
@@ -510,6 +529,14 @@ async function generateSummary(
   const openAiApiKey = await resolveOpenAiApiKey(context, config);
   const signals = await collectSignals(root, config);
   const generatedLocal = buildResumeSummary(signals);
+  const previousBranch = context.workspaceState.get<string>(branchStateKey(root));
+  if (generatedLocal.currentBranch && previousBranch && generatedLocal.currentBranch !== previousBranch) {
+    generatedLocal.previousBranch = previousBranch;
+  }
+
+  if (generatedLocal.currentBranch) {
+    await context.workspaceState.update(branchStateKey(root), generatedLocal.currentBranch);
+  }
 
   const cacheKey = summaryCacheKey(root);
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
@@ -523,6 +550,9 @@ async function generateSummary(
     (cachedSource === desiredSource || (desiredSource === 'openai' && !hasOpenAiKey));
 
   if (canUseCached && cached) {
+    if (cached.currentBranch && previousBranch && cached.currentBranch !== previousBranch && !cached.previousBranch) {
+      cached.previousBranch = previousBranch;
+    }
     return { summary: cached, triggerReason: 'cached' };
   }
 
@@ -680,6 +710,42 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'restoreReopenFiles') {
+        const opened = await reopenSummaryFiles(state.panelSummary, 6);
+        if (opened === 0) {
+          void vscode.window.showInformationMessage('TaCoS: no recent files available to reopen.');
+        }
+        return;
+      }
+
+      if (message.type === 'restoreOpenChangedFiles') {
+        const opened = await openChangedSummaryFiles(state.panelSummary, 6);
+        if (opened === 0) {
+          void vscode.window.showInformationMessage('TaCoS: no changed files available to open.');
+        }
+        return;
+      }
+
+      if (message.type === 'restoreRerunTask') {
+        await rerunLastTask();
+        return;
+      }
+
+      if (message.type === 'restoreRerunDebug') {
+        await rerunLastDebugSession();
+        return;
+      }
+
+      if (message.type === 'restoreCheckoutPreviousBranch') {
+        await checkoutPreviousBranch(state.panelSummary);
+        return;
+      }
+
+      if (message.type === 'restoreCopyFailingCommand') {
+        await copyFailingCommand(state.panelSummary);
+        return;
+      }
+
       if (message.type === 'openEvidence') {
         if (typeof message.evidenceId !== 'string') {
           return;
@@ -805,6 +871,15 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
     .join('');
   const hasExtraEvidence = (summary.evidenceCatalog?.length ?? 0) > 5;
   const mode = summary.mode ?? 'coding';
+  const trusted = vscode.workspace.isTrusted;
+  const canRerunTask = trusted && Boolean(state.lastTaskName);
+  const canRerunDebug = trusted && Boolean(state.lastDebugConfigName);
+  const canCheckoutPreviousBranch =
+    trusted &&
+    Boolean(summary.previousBranch) &&
+    Boolean(summary.currentBranch) &&
+    summary.previousBranch !== summary.currentBranch;
+  const hasFailingCommand = Boolean(state.lastFailingCommand ?? summary.lastFailingCommand);
   const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
 
   return `<!doctype html>
@@ -898,6 +973,28 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
       .show-more-btn {
         margin-top: 8px;
       }
+      .restore-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 8px;
+      }
+      .restore-grid button {
+        border: 1px solid rgba(127, 127, 127, 0.45);
+        background: transparent;
+        border-radius: 8px;
+        padding: 8px 10px;
+        text-align: left;
+        cursor: pointer;
+      }
+      .restore-grid button:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .restore-note {
+        color: #8b8b8b;
+        font-size: 12px;
+        margin-top: 8px;
+      }
       .note-actions {
         display: flex;
         gap: 8px;
@@ -932,6 +1029,23 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
     <div class="card">
       <h3>Top Links / Files</h3>
       <ul>${linkItems || '<li>None captured</li>'}</ul>
+    </div>
+
+    <div class="card">
+      <h3>Restore Pack</h3>
+      <div class="restore-grid">
+        <button type="button" data-action="restoreReopenFiles">Reopen files</button>
+        <button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>
+        <button type="button" data-action="restoreRerunTask" ${canRerunTask ? '' : 'disabled'}>Rerun last task</button>
+        <button type="button" data-action="restoreRerunDebug" ${canRerunDebug ? '' : 'disabled'}>Rerun debug config</button>
+        <button type="button" data-action="restoreCheckoutPreviousBranch" ${canCheckoutPreviousBranch ? '' : 'disabled'}>Checkout previous branch</button>
+        <button type="button" data-action="restoreCopyFailingCommand" ${hasFailingCommand ? '' : 'disabled'}>Copy failing command</button>
+      </div>
+      ${
+        trusted
+          ? ''
+          : '<div class="restore-note">Restricted Mode: task/debug/branch execution actions are disabled.</div>'
+      }
     </div>
 
     <div class="card">
@@ -976,6 +1090,9 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
               const expanded = list.classList.toggle('show-more');
               actionButton.textContent = expanded ? 'Show less' : 'Show more';
             }
+          }
+          if (action && action.startsWith('restore')) {
+            vscode.postMessage({ type: action });
           }
           return;
         }
@@ -1114,6 +1231,163 @@ function formatMarkdownSummary(summary: ResumeSummary): string {
   lines.push(summary.detailsMarkdown);
 
   return lines.join('\n');
+}
+
+async function reopenSummaryFiles(summary: ResumeSummary | undefined, limit: number): Promise<number> {
+  if (!summary) {
+    return 0;
+  }
+
+  const candidates = uniqueStrings([...(summary.recentFilesSnapshot ?? []), ...summary.topFiles]).slice(0, limit);
+  return openWorkspaceFiles(candidates);
+}
+
+async function openChangedSummaryFiles(summary: ResumeSummary | undefined, limit: number): Promise<number> {
+  if (!summary) {
+    return 0;
+  }
+
+  return openWorkspaceFiles(summary.topFiles.slice(0, limit));
+}
+
+async function openWorkspaceFiles(paths: string[]): Promise<number> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showWarningMessage('TaCoS: open a workspace folder to restore files.');
+    return 0;
+  }
+
+  let opened = 0;
+  for (const item of paths) {
+    const safePath = resolveFileTargetInWorkspace(item, workspaceRoot);
+    if (!safePath || !isPathWithinWorkspaceRoot(workspaceRoot, safePath)) {
+      continue;
+    }
+
+    await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(safePath), {
+      preview: false,
+      preserveFocus: opened > 0,
+    });
+    opened += 1;
+  }
+
+  return opened;
+}
+
+function taskWorkspaceRoot(task: vscode.Task): string | undefined {
+  const scope = task.scope;
+  if (scope && typeof scope === 'object' && 'uri' in scope) {
+    return scope.uri.fsPath;
+  }
+
+  return undefined;
+}
+
+async function rerunLastTask(): Promise<void> {
+  if (!vscode.workspace.isTrusted) {
+    void vscode.window.showWarningMessage('TaCoS: rerun task is disabled in Restricted Mode.');
+    return;
+  }
+
+  if (!state.lastTaskName) {
+    void vscode.window.showInformationMessage('TaCoS: no recent VS Code task is available to rerun.');
+    return;
+  }
+
+  const tasks = await vscode.tasks.fetchTasks();
+  const match = tasks.find((task) => {
+    if (task.name !== state.lastTaskName) {
+      return false;
+    }
+
+    if (!state.lastTaskWorkspaceRoot) {
+      return true;
+    }
+
+    const root = taskWorkspaceRoot(task);
+    return !root || root === state.lastTaskWorkspaceRoot;
+  });
+
+  if (!match) {
+    void vscode.window.showWarningMessage(`TaCoS: could not find task "${state.lastTaskName}" to rerun.`);
+    return;
+  }
+
+  await vscode.tasks.executeTask(match);
+  void vscode.window.showInformationMessage(`TaCoS: reran task "${state.lastTaskName}".`);
+}
+
+async function rerunLastDebugSession(): Promise<void> {
+  if (!vscode.workspace.isTrusted) {
+    void vscode.window.showWarningMessage('TaCoS: rerun debug is disabled in Restricted Mode.');
+    return;
+  }
+
+  if (!state.lastDebugConfigName) {
+    void vscode.window.showInformationMessage('TaCoS: no recent debug configuration is available.');
+    return;
+  }
+
+  const folder = vscode.workspace.workspaceFolders?.find(
+    (entry) => entry.uri.fsPath === state.lastDebugWorkspaceRoot
+  );
+  const started = await vscode.debug.startDebugging(folder, state.lastDebugConfigName);
+  if (!started) {
+    void vscode.window.showWarningMessage(`TaCoS: failed to start debug configuration "${state.lastDebugConfigName}".`);
+    return;
+  }
+
+  void vscode.window.showInformationMessage(`TaCoS: started debug configuration "${state.lastDebugConfigName}".`);
+}
+
+async function checkoutPreviousBranch(summary: ResumeSummary | undefined): Promise<void> {
+  if (!vscode.workspace.isTrusted) {
+    void vscode.window.showWarningMessage('TaCoS: checkout branch is disabled in Restricted Mode.');
+    return;
+  }
+
+  const previousBranch = summary?.previousBranch?.trim() ?? '';
+  const currentBranch = summary?.currentBranch?.trim() ?? '';
+  if (!previousBranch || !currentBranch || previousBranch === currentBranch) {
+    void vscode.window.showInformationMessage('TaCoS: no previous branch is available to checkout.');
+    return;
+  }
+
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showWarningMessage('TaCoS: open a workspace folder to checkout a branch.');
+    return;
+  }
+
+  const choice = await vscode.window.showWarningMessage(
+    `Checkout previous branch "${previousBranch}"?`,
+    { modal: true },
+    'Checkout'
+  );
+  if (choice !== 'Checkout') {
+    return;
+  }
+
+  try {
+    await execFileAsync('git', ['-C', workspaceRoot, 'checkout', previousBranch], {
+      encoding: 'utf8',
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    void vscode.window.showInformationMessage(`TaCoS: checked out "${previousBranch}".`);
+  } catch (error) {
+    void vscode.window.showErrorMessage(`TaCoS: failed to checkout "${previousBranch}": ${(error as Error).message}`);
+  }
+}
+
+async function copyFailingCommand(summary: ResumeSummary | undefined): Promise<void> {
+  const command = state.lastFailingCommand ?? summary?.lastFailingCommand;
+  if (!command) {
+    void vscode.window.showInformationMessage('TaCoS: no recent failing command available.');
+    return;
+  }
+
+  await vscode.env.clipboard.writeText(command);
+  void vscode.window.showInformationMessage('TaCoS: failing command copied to clipboard.');
 }
 
 async function tryOpenCodexPanel(config: ExtensionConfig): Promise<string | undefined> {
@@ -1326,6 +1600,10 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
 
 function summaryCacheKey(root: string): string {
   return `tacos.summary.${Buffer.from(root).toString('base64url')}`;
+}
+
+function branchStateKey(root: string): string {
+  return `tacos.branch.${Buffer.from(root).toString('base64url')}`;
 }
 
 function getCheckpointNote(context: vscode.ExtensionContext, workspaceRoot: string): string | undefined {
