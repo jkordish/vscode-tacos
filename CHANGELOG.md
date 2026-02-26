@@ -23,6 +23,7 @@ All notable changes to this project are documented in this file.
 - Configure AI Provider flow includes clearer privacy/trust guidance.
 - Git snapshot collection uses bounded command timeouts and caching to reduce repeated cost.
 - CI quality gates now enforce compile, lint, format-check, unit/integration tests, and VSIX packaging.
+- Added `npm run verify` and `npm run verify:quick` scripts for consistent local release gating.
 
 ### Security
 

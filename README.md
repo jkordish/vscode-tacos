@@ -165,6 +165,12 @@ npm run test:integration
 npx @vscode/vsce package --no-dependencies
 ```
 
+One-command gate:
+
+```bash
+npm run verify
+```
+
 Formatting:
 
 ```bash
