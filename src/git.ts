@@ -72,12 +72,12 @@ export async function collectGit(root: string, config: ExtensionConfig): Promise
   const cached = gitSnapshotCache.get(cacheKey);
   const now = Date.now();
 
-  const refreshEntryInBackground = (entry: GitCacheEntry): void => {
+  const refreshEntryInBackground = (entry: GitCacheEntry): Promise<GitSnapshot> => {
     if (entry.inFlight) {
-      return;
+      return entry.inFlight;
     }
 
-    entry.inFlight = collectGitUncached(root, config)
+    const inFlight = collectGitUncached(root, config)
       .then((freshSnapshot) => {
         gitSnapshotCache.set(cacheKey, {
           snapshot: freshSnapshot,
@@ -92,7 +92,9 @@ export async function collectGit(root: string, config: ExtensionConfig): Promise
         });
         return entry.snapshot;
       });
+    entry.inFlight = inFlight;
     gitSnapshotCache.set(cacheKey, entry);
+    return inFlight;
   };
 
   if (cached && now - cached.fetchedAt < GIT_CACHE_TTL_MS) {
@@ -104,17 +106,15 @@ export async function collectGit(root: string, config: ExtensionConfig): Promise
   }
 
   if (cached) {
-    refreshEntryInBackground(cached);
+    void refreshEntryInBackground(cached);
     return cached.snapshot;
   }
 
-  const seedSnapshot = emptySnapshot();
-  const seedEntry: GitCacheEntry = {
-    snapshot: seedSnapshot,
+  const coldCacheSeed: GitCacheEntry = {
+    snapshot: emptySnapshot(),
     fetchedAt: now,
   };
-  refreshEntryInBackground(seedEntry);
-  return seedSnapshot;
+  return refreshEntryInBackground(coldCacheSeed);
 }
 
 async function collectGitUncached(root: string, config: ExtensionConfig): Promise<GitSnapshot> {

@@ -12,6 +12,10 @@ export interface PersistedActivityState {
 
 const PERSISTED_TERMINAL_TOKEN_PATTERN = /^terminal:[a-z0-9._:/-]+#[a-f0-9]{12}$/;
 
+export function isPersistedTerminalCommandToken(value: string): boolean {
+  return value.trim() === 'terminal:empty' || PERSISTED_TERMINAL_TOKEN_PATTERN.test(value.trim());
+}
+
 function compactCommandLabel(redactedCommand: string): string {
   const cleaned = redactedCommand
     .toLowerCase()
@@ -33,7 +37,7 @@ export function persistTerminalCommandForStorage(
   customPatterns: string[] = [],
 ): string {
   const prePersisted = command.trim();
-  if (prePersisted === 'terminal:empty' || PERSISTED_TERMINAL_TOKEN_PATTERN.test(prePersisted)) {
+  if (isPersistedTerminalCommandToken(prePersisted)) {
     return prePersisted;
   }
 

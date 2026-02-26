@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
 import {
+  isPersistedTerminalCommandToken,
   persistTerminalCommandForStorage,
   sanitizeActivityForPersistence,
   type PersistedActivityState,
@@ -104,6 +105,7 @@ interface RuntimeState {
   recentUrls: RingBuffer;
   doneItems: RingBuffer;
   lastFailingCommand?: string;
+  lastFailingCommandRaw?: string;
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
   panelWorkspaceRoot?: string;
@@ -144,6 +146,7 @@ export function activate(context: vscode.ExtensionContext): void {
     recentUrls: new RingBuffer(5, persistedActivity.sanitized.recentUrls),
     doneItems: new RingBuffer(10, persistedActivity.sanitized.doneItems),
     lastFailingCommand: persistedActivity.sanitized.lastFailingCommand,
+    lastFailingCommandRaw: undefined,
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
     refinementSequence: 0,
@@ -582,7 +585,14 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       return;
     }
 
-    state.recentTerminal.push(command);
+    const config = getConfig();
+    const workspaceRoot = pickWorkspaceRoot() ?? '';
+    const sanitizedCommand = persistTerminalCommandForStorage(
+      command,
+      workspaceRoot,
+      config.redactionPatterns,
+    );
+    state.recentTerminal.push(sanitizedCommand);
     markMeaningfulActivity();
     for (const url of extractUrls(command)) {
       state.recentUrls.push(url);
@@ -609,20 +619,29 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
     if (!command) {
       return;
     }
+    const config = getConfig();
+    const workspaceRoot = pickWorkspaceRoot() ?? '';
+    const sanitizedCommand = persistTerminalCommandForStorage(
+      command,
+      workspaceRoot,
+      config.redactionPatterns,
+    );
 
     if (typeof exitCode === 'number' && exitCode !== 0 && isTestOrBuildCommand(command)) {
-      state.lastFailingCommand = command;
+      state.lastFailingCommandRaw = command;
+      state.lastFailingCommand = sanitizedCommand;
       await persistActivity(context);
     }
 
     if (typeof exitCode === 'number' && exitCode === 0 && isTestOrBuildCommand(command)) {
-      state.doneItems.push(command);
+      state.doneItems.push(sanitizedCommand);
 
       if (
         state.lastFailingCommand &&
         doesCommandMatchStoredFailure(state.lastFailingCommand, command)
       ) {
         state.lastFailingCommand = undefined;
+        state.lastFailingCommandRaw = undefined;
       }
 
       await persistActivity(context);
@@ -1341,7 +1360,7 @@ function renderWebview(
     trusted,
     hasLastTask: Boolean(state.lastTaskName),
     hasLastDebug: Boolean(state.lastDebugConfigName),
-    hasFailingCommand: Boolean(state.lastFailingCommand ?? summary.lastFailingCommand),
+    hasFailingCommand: Boolean(getCopyableFailingCommand(summary)),
     currentBranch: summary.currentBranch,
     previousBranch: summary.previousBranch,
   });
@@ -2054,14 +2073,30 @@ async function checkoutPreviousBranch(
 }
 
 async function copyFailingCommand(summary: ResumeSummary | undefined): Promise<void> {
-  const command = state.lastFailingCommand ?? summary?.lastFailingCommand;
+  const command = getCopyableFailingCommand(summary);
   if (!command) {
-    void vscode.window.showInformationMessage('TaCoS: no recent failing command available.');
+    void vscode.window.showInformationMessage(
+      'TaCoS: no copyable failing command is available (raw commands are not persisted).',
+    );
     return;
   }
 
   await vscode.env.clipboard.writeText(command);
   void vscode.window.showInformationMessage('TaCoS: failing command copied to clipboard.');
+}
+
+function getCopyableFailingCommand(summary?: ResumeSummary): string | undefined {
+  const raw = state.lastFailingCommandRaw?.trim();
+  if (raw) {
+    return raw;
+  }
+
+  const fallback = summary?.lastFailingCommand?.trim();
+  if (!fallback || isPersistedTerminalCommandToken(fallback)) {
+    return undefined;
+  }
+
+  return fallback;
 }
 
 async function tryOpenCodexPanel(config: ExtensionConfig): Promise<string | undefined> {
@@ -2751,6 +2786,7 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
   const recentTerminal =
     isTrusted && config.includeTerminalHistory ? state.recentTerminal.values() : [];
   const recentDebug = config.includeDebugHistory ? state.recentDebug.values() : [];
+  const failingCommandRaw = state.lastFailingCommandRaw?.trim();
 
   return {
     workspaceRoot: root,
@@ -2766,8 +2802,8 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
     recentTerminal: redactList(recentTerminal, root, customPatterns),
     recentDebug: redactList(recentDebug, root, customPatterns),
     recentUrls: redactList(state.recentUrls.values(), root, customPatterns),
-    failingCommand: state.lastFailingCommand
-      ? redactText(state.lastFailingCommand, root, customPatterns)
+    failingCommand: failingCommandRaw
+      ? redactText(failingCommandRaw, root, customPatterns)
       : undefined,
     doneItems: redactList(state.doneItems.values(), root, customPatterns),
   };
@@ -2876,6 +2912,7 @@ async function maybePromptCheckpointOnBlur(
     'Add note',
   );
   if (action !== 'Add note') {
+    state.meaningfulActivitySinceCheckpointPrompt = false;
     return;
   }
 
@@ -2886,6 +2923,7 @@ async function maybePromptCheckpointOnBlur(
     ignoreFocusOut: false,
   });
   if (!note) {
+    state.meaningfulActivitySinceCheckpointPrompt = false;
     return;
   }
 
@@ -2894,6 +2932,7 @@ async function maybePromptCheckpointOnBlur(
     void vscode.window.showWarningMessage(
       'TaCoS: note was empty after sanitization and was not saved.',
     );
+    state.meaningfulActivitySinceCheckpointPrompt = false;
     return;
   }
 
