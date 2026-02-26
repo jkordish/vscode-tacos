@@ -14,8 +14,14 @@
   },
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": true,
-      "description": "TaCoS disables git execution and terminal command collection in Restricted Mode until the workspace is trusted."
+      "supported": "limited",
+      "description": "TaCoS runs in safe mode in Restricted Mode: git execution, terminal command collection, and restore actions that execute tooling are disabled until trust is granted.",
+      "restrictedConfigurations": [
+        "tacos.summaryProvider",
+        "tacos.openaiApiKey",
+        "tacos.openaiBaseUrl",
+        "tacos.openaiModel"
+      ]
     }
   },
   "categories": [
