@@ -11,6 +11,10 @@ All of the following passed on branch `feature/epic-must-have-tracking`:
 - `npm run test:integration`
 - `npx @vscode/vsce package --no-dependencies`
 
+Integration note:
+
+- `npm run test:integration` now executes both trusted and restricted suites.
+
 ## Trusted / Restricted Manual Smoke
 
 Manual Extension Host verification requires interactive VS Code UI and is not executed in this terminal-only run.

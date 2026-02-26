@@ -16,20 +16,26 @@ VSCODE_TEST_BINARY=/absolute/path/to/Code npm run test:integration
 
 ## What It Verifies
 
-The harness launches an Extension Development Host against `test/fixtures/workspace` and verifies:
+The harness launches Extension Development Host runs against `test/fixtures/workspace`:
 
-1. extension `jkordish.vscode-tacos` activates
-2. `tacos.slash` runs and opens markdown summary output
-3. `tacos.showLastSummary` executes without throwing
+1. Trusted suite:
+   - extension `jkordish.vscode-tacos` activates
+   - `tacos.slash` opens markdown summary output
+   - `tacos.showLastSummary` executes without throwing
+2. Restricted suite (`--disable-workspace-trust`):
+   - executes against restricted-mode launch args
+   - `tacos.slash` still works
+   - summary source remains local-only (`- Source: local`)
 
 ## Files
 
 - Runner: `test/integration/runTest.js`
-- Suite: `test/integration/suite/index.js`
+- Suites: `test/integration/suite/trusted.js`, `test/integration/suite/restricted.js`
 - Fixture workspace: `test/fixtures/workspace/`
 
 ## Notes
 
 - Integration tests require launching a VS Code/Electron instance.
 - Runner prefers a local VS Code executable (`VSCODE_TEST_BINARY` or common OS install paths) to avoid network download flakiness.
+- Workspace trust semantics can vary by host build; final restricted-mode behavior must still be validated via manual smoke runbook.
 - Keep this suite minimal and deterministic; most safety logic remains covered by unit tests.

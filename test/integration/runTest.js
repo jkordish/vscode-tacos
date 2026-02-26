@@ -26,18 +26,33 @@ function resolveLocalVscodeExecutable() {
   return candidates.find((candidate) => fs.existsSync(candidate));
 }
 
+async function runSuite(name, extensionTestsPath, launchArgs, vscodeExecutablePath) {
+  process.stdout.write(`\nRunning integration suite: ${name}\n`);
+  await runTests({
+    extensionDevelopmentPath: path.resolve(__dirname, '..', '..'),
+    extensionTestsPath,
+    ...(vscodeExecutablePath ? { vscodeExecutablePath } : {}),
+    launchArgs,
+  });
+}
+
 async function main() {
-  const extensionDevelopmentPath = path.resolve(__dirname, '..', '..');
-  const extensionTestsPath = path.resolve(__dirname, 'suite', 'index.js');
   const fixtureWorkspace = path.resolve(__dirname, '..', 'fixtures', 'workspace');
   const vscodeExecutablePath = resolveLocalVscodeExecutable();
 
-  await runTests({
-    extensionDevelopmentPath,
-    extensionTestsPath,
-    ...(vscodeExecutablePath ? { vscodeExecutablePath } : {}),
-    launchArgs: [fixtureWorkspace, '--disable-extensions'],
-  });
+  await runSuite(
+    'trusted',
+    path.resolve(__dirname, 'suite', 'trusted.js'),
+    [fixtureWorkspace, '--disable-extensions'],
+    vscodeExecutablePath,
+  );
+
+  await runSuite(
+    'restricted',
+    path.resolve(__dirname, 'suite', 'restricted.js'),
+    [fixtureWorkspace, '--disable-extensions', '--disable-workspace-trust'],
+    vscodeExecutablePath,
+  );
 }
 
 main().catch((error) => {
