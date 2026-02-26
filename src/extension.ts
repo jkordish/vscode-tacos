@@ -969,7 +969,7 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'restoreCheckoutPreviousBranch') {
-        await checkoutPreviousBranch(state.panelSummary);
+        await checkoutPreviousBranch(state.panelSummary, state.panelWorkspaceRoot);
         return;
       }
 
@@ -990,7 +990,7 @@ async function showDetailsPanel(
         }
 
         if (evidence.kind === 'file') {
-          const workspaceRoot = pickWorkspaceRoot();
+          const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
           if (!workspaceRoot) {
             void vscode.window.showWarningMessage(
               'TaCoS blocked file evidence because no workspace root is available for validation.'
@@ -1028,7 +1028,7 @@ async function showDetailsPanel(
       }
 
       if (link.kind === 'file') {
-        const workspaceRoot = pickWorkspaceRoot();
+        const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
         if (!workspaceRoot) {
           void vscode.window.showWarningMessage(
             'TaCoS blocked file link because no workspace root is available for validation.'
@@ -1580,7 +1580,10 @@ async function rerunLastDebugSession(): Promise<void> {
   void vscode.window.showInformationMessage(`TaCoS: started debug configuration "${state.lastDebugConfigName}".`);
 }
 
-async function checkoutPreviousBranch(summary: ResumeSummary | undefined): Promise<void> {
+async function checkoutPreviousBranch(
+  summary: ResumeSummary | undefined,
+  preferredWorkspaceRoot?: string
+): Promise<void> {
   if (!vscode.workspace.isTrusted) {
     void vscode.window.showWarningMessage('TaCoS: checkout branch is disabled in Restricted Mode.');
     return;
@@ -1593,7 +1596,7 @@ async function checkoutPreviousBranch(summary: ResumeSummary | undefined): Promi
     return;
   }
 
-  const workspaceRoot = pickWorkspaceRoot();
+  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
   if (!workspaceRoot) {
     void vscode.window.showWarningMessage('TaCoS: open a workspace folder to checkout a branch.');
     return;
