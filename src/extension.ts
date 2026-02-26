@@ -961,7 +961,7 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'restoreReopenFiles') {
-        const opened = await reopenSummaryFiles(state.panelSummary, 6);
+        const opened = await reopenSummaryFiles(state.panelSummary, 6, state.panelWorkspaceRoot);
         if (opened === 0) {
           void vscode.window.showInformationMessage('TaCoS: no recent files available to reopen.');
         }
@@ -969,7 +969,7 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'restoreOpenChangedFiles') {
-        const opened = await openChangedSummaryFiles(state.panelSummary, 6);
+        const opened = await openChangedSummaryFiles(state.panelSummary, 6, state.panelWorkspaceRoot);
         if (opened === 0) {
           void vscode.window.showInformationMessage('TaCoS: no changed files available to open.');
         }
@@ -1491,25 +1491,33 @@ function formatMarkdownSummary(summary: ResumeSummary): string {
   return lines.join('\n');
 }
 
-async function reopenSummaryFiles(summary: ResumeSummary | undefined, limit: number): Promise<number> {
+async function reopenSummaryFiles(
+  summary: ResumeSummary | undefined,
+  limit: number,
+  preferredWorkspaceRoot?: string
+): Promise<number> {
   if (!summary) {
     return 0;
   }
 
   const candidates = uniqueStrings([...(summary.recentFilesSnapshot ?? []), ...summary.topFiles]).slice(0, limit);
-  return openWorkspaceFiles(candidates);
+  return openWorkspaceFiles(candidates, preferredWorkspaceRoot);
 }
 
-async function openChangedSummaryFiles(summary: ResumeSummary | undefined, limit: number): Promise<number> {
+async function openChangedSummaryFiles(
+  summary: ResumeSummary | undefined,
+  limit: number,
+  preferredWorkspaceRoot?: string
+): Promise<number> {
   if (!summary) {
     return 0;
   }
 
-  return openWorkspaceFiles(summary.topFiles.slice(0, limit));
+  return openWorkspaceFiles(summary.topFiles.slice(0, limit), preferredWorkspaceRoot);
 }
 
-async function openWorkspaceFiles(paths: string[]): Promise<number> {
-  const workspaceRoot = pickWorkspaceRoot();
+async function openWorkspaceFiles(paths: string[], preferredWorkspaceRoot?: string): Promise<number> {
+  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
   if (!workspaceRoot) {
     void vscode.window.showWarningMessage('TaCoS: open a workspace folder to restore files.');
     return 0;
