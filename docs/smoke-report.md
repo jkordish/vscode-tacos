@@ -14,6 +14,10 @@ All of the following passed on branch `feature/epic-must-have-tracking`:
 
 Manual Extension Host verification requires interactive VS Code UI and is not executed in this terminal-only run.
 
+Detailed step-by-step runbook:
+
+- `docs/manual-smoke-runbook.md`
+
 ### Trusted Workspace Checklist
 
 - [ ] Edit files, run task/test, trigger resume.

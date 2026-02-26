@@ -185,6 +185,10 @@ Restricted Mode:
 - confirm risky restore actions are disabled
 - confirm local summary still works
 
+Pedantic step-by-step runbook:
+
+- `docs/manual-smoke-runbook.md`
+
 ## License
 
 MIT
