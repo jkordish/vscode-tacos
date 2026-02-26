@@ -1,8 +1,15 @@
 .github/**
 coverage/**
 docs/**
+!docs/privacy-safety.md
 src/**
 test/**
+.gitignore
+.vscode-test/**
+*.vsix
+.eslintrc.cjs
+.prettierignore
+.prettierrc.json
 **/*.map
 jest.config.cjs
 tsconfig.json

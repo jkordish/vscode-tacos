@@ -46,7 +46,9 @@ describe('buildResumeSummary', () => {
     const evidence = summary.evidenceCatalog ?? [];
 
     expect(evidence.some((item) => item.id === 'file:src/extension.ts')).toBe(true);
-    expect(evidence.some((item) => item.id === 'url:https://github.com/org/repo/pull/1')).toBe(true);
+    expect(evidence.some((item) => item.id === 'url:https://github.com/org/repo/pull/1')).toBe(
+      true,
+    );
   });
 
   it('marks mode as coding when no debug/failing signals exist', () => {
@@ -57,6 +59,16 @@ describe('buildResumeSummary', () => {
 
     const summary = buildResumeSummary(signals);
     expect(summary.mode).toBe('coding');
+  });
+
+  it('marks mode as debugging when terminal tokens indicate test/build/debug activity', () => {
+    const signals = sampleSignals();
+    signals.failingCommand = undefined;
+    signals.recentDebug = [];
+    signals.recentTerminal = ['terminal:npm_run_test#abcdef1234'];
+
+    const summary = buildResumeSummary(signals);
+    expect(summary.mode).toBe('debugging');
   });
 
   it('does not include absolute file targets in details markdown evidence lines', () => {

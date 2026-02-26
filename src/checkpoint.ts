@@ -7,7 +7,7 @@ export function checkpointStorageKey(workspaceRoot: string): string {
 export function sanitizeCheckpointNote(
   rawNote: string,
   workspaceRoot: string,
-  redactionPatterns: string[] = []
+  redactionPatterns: string[] = [],
 ): string | undefined {
   const trimmed = rawNote.trim();
   if (!trimmed) {

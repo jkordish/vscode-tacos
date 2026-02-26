@@ -40,7 +40,7 @@ export function normalizeHttpUrl(rawTarget: string): string | undefined {
 export function isPathWithinWorkspaceRoot(
   workspaceRoot: string,
   candidatePath: string,
-  options: PathSafetyOptions = {}
+  options: PathSafetyOptions = {},
 ): boolean {
   if (!workspaceRoot) {
     return false;
@@ -66,7 +66,7 @@ export function isPathWithinWorkspaceRoot(
 export function resolveFileTargetInWorkspace(
   rawTarget: string,
   workspaceRoot: string,
-  options: PathSafetyOptions = {}
+  options: PathSafetyOptions = {},
 ): string | undefined {
   if (!workspaceRoot) {
     return undefined;

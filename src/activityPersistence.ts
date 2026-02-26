@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { redactList, redactText } from './redaction';
 
 export interface PersistedActivityState {
@@ -9,19 +10,63 @@ export interface PersistedActivityState {
   lastFailingCommand?: string;
 }
 
+const PERSISTED_TERMINAL_TOKEN_PATTERN = /^terminal:[a-z0-9._:/-]+#[a-f0-9]{12}$/;
+
+export function isPersistedTerminalCommandToken(value: string): boolean {
+  return value.trim() === 'terminal:empty' || PERSISTED_TERMINAL_TOKEN_PATTERN.test(value.trim());
+}
+
+function compactCommandLabel(redactedCommand: string): string {
+  const cleaned = redactedCommand
+    .toLowerCase()
+    .replace(/<redacted>/g, 'redacted')
+    .replace(/[^a-z0-9._:/-]+/g, ' ')
+    .trim();
+
+  if (!cleaned) {
+    return 'command';
+  }
+
+  const tokens = cleaned.split(/\s+/).slice(0, 3);
+  return tokens.join('_').slice(0, 48) || 'command';
+}
+
+export function persistTerminalCommandForStorage(
+  command: string,
+  workspaceRoot: string,
+  customPatterns: string[] = [],
+): string {
+  const prePersisted = command.trim();
+  if (isPersistedTerminalCommandToken(prePersisted)) {
+    return prePersisted;
+  }
+
+  const redacted = redactText(command, workspaceRoot, customPatterns).trim();
+  if (!redacted) {
+    return 'terminal:empty';
+  }
+
+  const digest = createHash('sha256').update(redacted).digest('hex').slice(0, 12);
+  return `terminal:${compactCommandLabel(redacted)}#${digest}`;
+}
+
 export function sanitizeActivityForPersistence(
   activity: PersistedActivityState,
   workspaceRoot: string,
-  customPatterns: string[] = []
+  customPatterns: string[] = [],
 ): PersistedActivityState {
   return {
     recentFiles: redactList(activity.recentFiles, workspaceRoot, customPatterns),
-    recentTerminal: redactList(activity.recentTerminal, workspaceRoot, customPatterns),
+    recentTerminal: activity.recentTerminal.map((command) =>
+      persistTerminalCommandForStorage(command, workspaceRoot, customPatterns),
+    ),
     recentDebug: redactList(activity.recentDebug, workspaceRoot, customPatterns),
     recentUrls: redactList(activity.recentUrls, workspaceRoot, customPatterns),
-    doneItems: redactList(activity.doneItems, workspaceRoot, customPatterns),
+    doneItems: activity.doneItems.map((item) =>
+      persistTerminalCommandForStorage(item, workspaceRoot, customPatterns),
+    ),
     lastFailingCommand: activity.lastFailingCommand
-      ? redactText(activity.lastFailingCommand, workspaceRoot, customPatterns)
+      ? persistTerminalCommandForStorage(activity.lastFailingCommand, workspaceRoot, customPatterns)
       : undefined,
   };
 }

@@ -1,4 +1,9 @@
-import { buildAiSummary, buildSummaryContextPrompt, buildSummaryInstructionsPrompt, validateOpenAiSummaryPayload } from './llm';
+import {
+  buildAiSummary,
+  buildSummaryContextPrompt,
+  buildSummaryInstructionsPrompt,
+  validateOpenAiSummaryPayload,
+} from './llm';
 import type { ResumeSignals, ResumeSummary } from './types';
 
 interface LmChatMessageLike {
@@ -20,7 +25,7 @@ export interface VscodeLmModelLike {
   sendRequest: (
     messages: LmChatMessageLike[],
     options?: Record<string, unknown>,
-    token?: unknown
+    token?: unknown,
   ) => Promise<unknown>;
 }
 
@@ -163,7 +168,7 @@ export async function tryGenerateVscodeLmSummary(
   signals: ResumeSignals,
   base: ResumeSummary,
   model: VscodeLmModelLike,
-  log: (message: string) => void
+  log: (message: string) => void,
 ): Promise<ResumeSummary | undefined> {
   const prompt = [
     buildSummaryInstructionsPrompt(),
@@ -180,7 +185,7 @@ export async function tryGenerateVscodeLmSummary(
           content: prompt,
         },
       ],
-      { temperature: 0.1 }
+      { temperature: 0.1 },
     );
 
     const rawText = await readModelResponseText(response);
@@ -189,7 +194,11 @@ export async function tryGenerateVscodeLmSummary(
       throw new Error('Failed to parse JSON payload from VS Code LM response.');
     }
 
-    const validated = validateOpenAiSummaryPayload(parsed, base.evidenceCatalog ?? [], signals.workspaceRoot);
+    const validated = validateOpenAiSummaryPayload(
+      parsed,
+      base.evidenceCatalog ?? [],
+      signals.workspaceRoot,
+    );
     return buildAiSummary(base, validated, 'vscode-lm', 'VS Code LM');
   } catch (error) {
     log(`VS Code LM summary failed: ${(error as Error).message}`);

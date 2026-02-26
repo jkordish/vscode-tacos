@@ -2,8 +2,6 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
   pull_request:
 
 jobs:
@@ -26,8 +24,23 @@ jobs:
       - name: Compile
         run: npm run compile
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
       - name: Test
         run: npm test
 
+      - name: Integration test
+        run: xvfb-run -a npm run test:integration
+
       - name: Package smoke test
-        run: npx @vscode/vsce package --no-dependencies
+        run: npx @vscode/vsce package --no-dependencies --out vscode-tacos-ci.vsix
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-tacos-vsix
+          path: vscode-tacos-ci.vsix

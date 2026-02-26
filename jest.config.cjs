@@ -8,16 +8,16 @@ module.exports = {
       {
         sourceMaps: 'inline',
         module: {
-          type: 'commonjs'
+          type: 'commonjs',
         },
         jsc: {
           target: 'es2022',
           parser: {
             syntax: 'typescript',
-            decorators: false
-          }
-        }
-      }
-    ]
-  }
+            decorators: false,
+          },
+        },
+      },
+    ],
+  },
 };
