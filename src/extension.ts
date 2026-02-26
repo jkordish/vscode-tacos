@@ -10,7 +10,7 @@ import { tryGenerateOpenAiSummary } from './llm';
 import { isPathWithinWorkspaceRoot, normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
 import { redactList, redactText } from './redaction';
 import { buildResumeSummary } from './summary';
-import type { ExtensionConfig, MetricRecord, ResumeSignals, ResumeSummary, TriggerReason } from './types';
+import type { ExtensionConfig, MetricRecord, ResumeSignals, ResumeSummary, SummaryEvidenceItem, TriggerReason } from './types';
 
 const KEY_LAST_BLUR_AT = 'tacos.lastBlurAt';
 const KEY_LAST_SUMMARY_AT = 'tacos.lastSummaryAt';
@@ -644,7 +644,7 @@ async function showDetailsPanel(
       state.displayedCheckpointNote = undefined;
     });
 
-    state.panel.webview.onDidReceiveMessage(async (message: { type?: unknown; index?: unknown }) => {
+    state.panel.webview.onDidReceiveMessage(async (message: { type?: unknown; index?: unknown; evidenceId?: unknown }) => {
       if (message.type === 'checkpointKeep') {
         if (!state.displayedCheckpointNote) {
           return;
@@ -677,6 +677,46 @@ async function showDetailsPanel(
         void vscode.window.showWarningMessage(
           'TaCoS blocked a link that was not part of the validated summary link list.'
         );
+        return;
+      }
+
+      if (message.type === 'openEvidence') {
+        if (typeof message.evidenceId !== 'string') {
+          return;
+        }
+
+        const evidence = (state.panelSummary?.evidenceCatalog ?? []).find((item) => item.id === message.evidenceId);
+        if (!evidence || (evidence.kind !== 'file' && evidence.kind !== 'url')) {
+          void vscode.window.showWarningMessage('TaCoS blocked an unsupported evidence link.');
+          return;
+        }
+
+        if (evidence.kind === 'file') {
+          const workspaceRoot = pickWorkspaceRoot();
+          if (!workspaceRoot) {
+            void vscode.window.showWarningMessage(
+              'TaCoS blocked file evidence because no workspace root is available for validation.'
+            );
+            return;
+          }
+
+          const safeTarget = resolveFileTargetInWorkspace(evidence.target ?? '', workspaceRoot);
+          if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
+            void vscode.window.showWarningMessage('TaCoS blocked an unsafe file evidence target.');
+            return;
+          }
+
+          await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(safeTarget));
+          return;
+        }
+
+        const safeUrl = normalizeHttpUrl(evidence.target ?? '');
+        if (!safeUrl) {
+          void vscode.window.showWarningMessage('TaCoS blocked an unsafe evidence URL.');
+          return;
+        }
+
+        await vscode.env.openExternal(vscode.Uri.parse(safeUrl));
         return;
       }
 
@@ -727,6 +767,7 @@ async function showDetailsPanel(
 
 function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpointNote?: string): string {
   const nonce = createNonce();
+  const evidenceById = new Map((summary.evidenceCatalog ?? []).map((item) => [item.id, item] as const));
   const checkpointCard = checkpointNote
     ? `<div class="card">
       <h3>Your Note</h3>
@@ -744,8 +785,26 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
     )
     .join('');
 
-  const nextSteps = summary.nextSteps.map((step) => `<li>${escapeHtml(step)}</li>`).join('');
+  const nextSteps = summary.nextSteps
+    .map((step, index) => {
+      const evidenceIds = summary.nextStepEvidenceIds?.[index] ?? [];
+      const badges = evidenceIds
+        .map((evidenceId) => renderStepEvidenceBadge(evidenceId, evidenceById.get(evidenceId)))
+        .join('');
+      const badgeRow = badges ? `<div class="step-evidence">${badges}</div>` : '';
+      return `<li>${escapeHtml(step)}${badgeRow}</li>`;
+    })
+    .join('');
   const topFiles = summary.topFiles.map((file) => `<li>${escapeHtml(file)}</li>`).join('');
+  const evidenceItems = (summary.evidenceCatalog ?? [])
+    .map((item, index) => {
+      const target = item.target ? ` <span class="evidence-target">${escapeHtml(item.target)}</span>` : '';
+      const hiddenClass = index >= 5 ? 'extra-evidence' : '';
+      return `<li class="${hiddenClass}"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> ${escapeHtml(item.label)} <code>${escapeHtml(item.id)}</code>${target}</li>`;
+    })
+    .join('');
+  const hasExtraEvidence = (summary.evidenceCatalog?.length ?? 0) > 5;
+  const mode = summary.mode ?? 'coding';
   const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
 
   return `<!doctype html>
@@ -793,6 +852,52 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
       .kind {
         color: #8b8b8b;
       }
+      .mode {
+        color: #8b8b8b;
+        font-size: 13px;
+      }
+      .step-evidence {
+        margin-top: 6px;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .badge {
+        display: inline-block;
+        border: 1px solid rgba(127, 127, 127, 0.4);
+        border-radius: 999px;
+        padding: 2px 8px;
+        font-size: 12px;
+        text-decoration: none;
+        color: inherit;
+      }
+      .badge.clickable {
+        cursor: pointer;
+      }
+      .badge.kind-url {
+        border-color: rgba(56, 132, 255, 0.5);
+      }
+      .badge.kind-file {
+        border-color: rgba(80, 190, 100, 0.45);
+      }
+      .evidence-kind {
+        color: #8b8b8b;
+      }
+      .evidence-target {
+        color: #7a7a7a;
+      }
+      .extra-evidence {
+        display: none;
+      }
+      .evidence-list.show-more .extra-evidence {
+        display: list-item;
+      }
+      details summary {
+        cursor: pointer;
+      }
+      .show-more-btn {
+        margin-top: 8px;
+      }
       .note-actions {
         display: flex;
         gap: 8px;
@@ -811,6 +916,7 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
     <div class="card">
       <h3>Intent</h3>
       <p>${escapeHtml(summary.intent)}</p>
+      <p class="mode">Mode: ${escapeHtml(mode)}</p>
     </div>
 
     <div class="card">
@@ -826,6 +932,18 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
     <div class="card">
       <h3>Top Links / Files</h3>
       <ul>${linkItems || '<li>None captured</li>'}</ul>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary><strong>Evidence</strong></summary>
+        <ul class="evidence-list" id="evidence-list">${evidenceItems || '<li>None captured</li>'}</ul>
+        ${
+          hasExtraEvidence
+            ? '<button type="button" class="show-more-btn" data-action="toggleEvidenceMore">Show more</button>'
+            : ''
+        }
+      </details>
     </div>
 
     <div class="card">
@@ -852,6 +970,13 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
           if (action === 'checkpointClear') {
             vscode.postMessage({ type: 'checkpointClear' });
           }
+          if (action === 'toggleEvidenceMore') {
+            const list = document.getElementById('evidence-list');
+            if (list) {
+              const expanded = list.classList.toggle('show-more');
+              actionButton.textContent = expanded ? 'Show less' : 'Show more';
+            }
+          }
           return;
         }
 
@@ -862,6 +987,12 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
         event.preventDefault();
         const idxRaw = anchor.getAttribute('data-idx');
         if (idxRaw === null) {
+          const evidenceId = anchor.getAttribute('data-evidence-id');
+          if (evidenceId) {
+            vscode.postMessage({ type: 'openEvidence', evidenceId });
+            return;
+          }
+
           vscode.postMessage({ type: 'blockedLink' });
           return;
         }
@@ -879,6 +1010,19 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
 
 function createNonce(): string {
   return randomBytes(18).toString('base64url');
+}
+
+function renderStepEvidenceBadge(evidenceId: string, evidence?: SummaryEvidenceItem): string {
+  if (!evidence) {
+    return `<span class="badge">${escapeHtml(evidenceId)}</span>`;
+  }
+
+  const label = `[${evidence.kind}] ${evidence.label}`;
+  if (evidence.kind === 'file' || evidence.kind === 'url') {
+    return `<a href="#" class="badge clickable kind-${escapeHtml(evidence.kind)}" data-evidence-id="${escapeHtml(evidenceId)}">${escapeHtml(label)}</a>`;
+  }
+
+  return `<span class="badge">${escapeHtml(label)}</span>`;
 }
 
 function escapeHtml(value: string): string {
@@ -934,6 +1078,9 @@ function formatMarkdownSummary(summary: ResumeSummary): string {
   lines.push('# TaCoS Resume Summary');
   lines.push('');
   lines.push(`- Source: ${summary.source}`);
+  if (summary.mode) {
+    lines.push(`- Mode: ${summary.mode}`);
+  }
   lines.push(`- Generated: ${new Date(summary.generatedAt).toLocaleString()}`);
   lines.push('');
   lines.push('## Intent');

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
-import type { ResumeSignals, ResumeSummary, SummaryEvidenceItem, SummaryLink } from './types';
+import type { ResumeMode, ResumeSignals, ResumeSummary, SummaryEvidenceItem, SummaryLink } from './types';
 
 function dedupe(values: string[], limit: number): string[] {
   const seen = new Set<string>();
@@ -99,6 +99,18 @@ function buildNextSteps(signals: ResumeSignals, topFiles: string[]): string[] {
   }
 
   return dedupe(next, 3).slice(0, 3);
+}
+
+function detectResumeMode(signals: ResumeSignals): ResumeMode {
+  if (signals.failingCommand || signals.recentDebug.length > 0) {
+    return 'debugging';
+  }
+
+  if (signals.recentTerminal.some((command) => /\b(test|build|debug)\b/i.test(command))) {
+    return 'debugging';
+  }
+
+  return 'coding';
 }
 
 function hashIdFragment(value: string): string {
@@ -232,6 +244,7 @@ function buildStepEvidenceIds(nextSteps: string[], evidenceCatalog: SummaryEvide
 export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
   const topFiles = dedupe([...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles], 3);
   const nextSteps = buildNextSteps(signals, topFiles).slice(0, 3);
+  const mode = detectResumeMode(signals);
   const evidenceCatalog = buildEvidenceCatalog(signals, topFiles);
   const links = buildLinksFromEvidence(evidenceCatalog);
   const nextStepEvidenceIds = buildStepEvidenceIds(nextSteps, evidenceCatalog);
@@ -253,6 +266,9 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     '',
     '## Top files',
     ...(topFiles.length > 0 ? topFiles.map((file) => `- ${file}`) : ['- None captured']),
+    '',
+    '## Mode',
+    `- ${mode}`,
     '',
     '## Top links',
     ...(signals.recentUrls.length > 0 ? dedupe(signals.recentUrls, 3).map((url) => `- ${url}`) : ['- None captured']),
@@ -295,6 +311,7 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     intent,
     nextSteps,
     nextStepEvidenceIds,
+    mode,
     topFiles,
     links,
     evidenceCatalog,

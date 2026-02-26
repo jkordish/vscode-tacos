@@ -66,10 +66,13 @@ export interface SummaryEvidenceItem {
   meta?: Record<string, string | number | boolean>;
 }
 
+export type ResumeMode = 'coding' | 'debugging';
+
 export interface ResumeSummary {
   intent: string;
   nextSteps: string[];
   nextStepEvidenceIds?: string[][];
+  mode?: ResumeMode;
   topFiles: string[];
   links: SummaryLink[];
   evidenceCatalog?: SummaryEvidenceItem[];
