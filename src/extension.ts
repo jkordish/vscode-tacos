@@ -719,6 +719,19 @@ async function resolveProviderPlan(
   reason: Exclude<TriggerReason, 'cached'>
 ): Promise<ProviderPlan> {
   const requestedProvider = config.summaryProvider;
+
+  if (!state.workspaceTrusted || !vscode.workspace.isTrusted) {
+    if (requestedProvider !== 'local' && reason === 'manual') {
+      void vscode.window.showInformationMessage(
+        'TaCoS: AI refinement is disabled in Restricted Mode. Trust this workspace to enable AI providers.'
+      );
+    }
+    return {
+      requestedProvider,
+      activeProvider: 'local',
+    };
+  }
+
   if (requestedProvider === 'local') {
     return {
       requestedProvider,
@@ -742,7 +755,8 @@ async function resolveProviderPlan(
     };
   }
 
-  if (!state.vscodeLmModel && state.vscodeLmSelector) {
+  // `selectChatModels` must only run from a user-initiated action.
+  if (reason === 'manual' && !state.vscodeLmModel && state.vscodeLmSelector) {
     const restored = await restoreVscodeLmModelFromSelector(context);
     if (restored) {
       state.output.appendLine(`TaCoS: restored VS Code LM model (${modelLabel(restored)}).`);
@@ -757,8 +771,7 @@ async function resolveProviderPlan(
     };
   }
 
-  if (!state.vscodeLmUnavailableNotified || reason === 'manual') {
-    state.vscodeLmUnavailableNotified = true;
+  if (reason === 'manual') {
     const action = await vscode.window.showInformationMessage(
       'TaCoS: VS Code LM is configured but not available in this session. Run "TaCoS: Configure AI Provider" to re-select a model.',
       'Configure AI Provider'
@@ -766,6 +779,11 @@ async function resolveProviderPlan(
     if (action === 'Configure AI Provider') {
       await vscode.commands.executeCommand('tacos.configureAiProvider');
     }
+  } else if (!state.vscodeLmUnavailableNotified) {
+    state.vscodeLmUnavailableNotified = true;
+    state.output.appendLine(
+      'TaCoS: VS Code LM is configured but unavailable for auto summaries in this session; falling back to local.'
+    );
   }
 
   return {
@@ -2305,6 +2323,10 @@ async function clearCheckpointNote(context: vscode.ExtensionContext, workspaceRo
   }
 }
 
+// SECURITY INVARIANT:
+// ONLY this function may persist activity-derived string keys:
+// KEY_RECENT_FILES, KEY_RECENT_TERMINAL, KEY_RECENT_DEBUG, KEY_RECENT_URLS, KEY_DONE_ITEMS, KEY_LAST_FAILING_COMMAND.
+// It must redact before writing to storage.
 async function persistActivity(context: vscode.ExtensionContext): Promise<void> {
   const config = getConfig();
   const workspaceRoot = pickWorkspaceRoot() ?? '';

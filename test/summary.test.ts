@@ -58,4 +58,12 @@ describe('buildResumeSummary', () => {
     const summary = buildResumeSummary(signals);
     expect(summary.mode).toBe('coding');
   });
+
+  it('does not include absolute file targets in details markdown evidence lines', () => {
+    const summary = buildResumeSummary(sampleSignals());
+
+    expect(summary.detailsMarkdown).not.toContain('/workspace/repo/src/extension.ts');
+    expect(summary.detailsMarkdown).toContain('url:https://github.com/org/repo/pull/1');
+    expect(summary.detailsMarkdown).toContain('-> https://github.com/org/repo/pull/1');
+  });
 });

@@ -252,7 +252,8 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
 
   const evidenceLines = evidenceCatalog.length
     ? evidenceCatalog.map((item) => {
-        const target = item.target ? ` -> ${item.target}` : '';
+        // Keep local file paths out of the markdown payload that can be sent to AI providers.
+        const target = item.kind === 'url' && item.target ? ` -> ${item.target}` : '';
         return `- [${item.kind}] ${item.id}: ${item.label}${target}`;
       })
     : ['- None captured'];

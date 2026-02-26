@@ -119,6 +119,7 @@ In Restricted Mode:
 
 - Git CLI collection is disabled.
 - Terminal shell command collection is disabled.
+- AI provider refinement is disabled (TaCoS uses local summaries only).
 - Risky restore actions that execute tooling are disabled.
 - Safe local summary behavior remains available.
 
