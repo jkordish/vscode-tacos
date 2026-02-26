@@ -33,6 +33,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Integration test
+        run: npm run test:integration
+
       - name: Package smoke test
         run: npx @vscode/vsce package --no-dependencies --out vscode-tacos-ci.vsix
 

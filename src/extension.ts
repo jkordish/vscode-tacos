@@ -2922,7 +2922,7 @@ async function maybeShowOnboardingNotice(context: vscode.ExtensionContext): Prom
 }
 
 async function openPrivacySafetyDoc(context: vscode.ExtensionContext): Promise<void> {
-  const candidates = ['README.md', 'readme.md'];
+  const candidates = ['docs/privacy-safety.md', 'README.md', 'readme.md'];
   try {
     for (const candidate of candidates) {
       try {

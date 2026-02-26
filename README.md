@@ -112,6 +112,10 @@ Only if AI provider is enabled:
 - Structured summarization instructions.
 - Optional correction hints.
 
+### Privacy Doc
+
+- `TaCoS: Privacy & Safety` opens `docs/privacy-safety.md` in-editor.
+
 ### Webview and link safety
 
 - Strict nonce-based CSP with default deny policy.

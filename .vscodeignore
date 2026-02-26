@@ -1,6 +1,7 @@
 .github/**
 coverage/**
 docs/**
+!docs/privacy-safety.md
 src/**
 test/**
 .eslintrc.cjs
