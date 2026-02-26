@@ -216,7 +216,7 @@ function extractResponseText(responsePayload: unknown): string {
   throw new Error('Could not extract message content from OpenAI response');
 }
 
-function buildSystemPrompt(): string {
+export function buildSummaryInstructionsPrompt(): string {
   return [
     'You summarize a developer\'s paused task from IDE evidence.',
     'Be concise, avoid speculation, and return JSON only.',
@@ -228,7 +228,7 @@ function buildSystemPrompt(): string {
   ].join('\n');
 }
 
-function buildUserPrompt(signals: ResumeSignals, base: ResumeSummary): string {
+export function buildSummaryContextPrompt(signals: ResumeSignals, base: ResumeSummary): string {
   const evidenceCatalog = base.evidenceCatalog ?? [];
   const evidenceLines =
     evidenceCatalog.length > 0
@@ -347,9 +347,11 @@ function jsonSchema() {
   };
 }
 
-function buildOpenAiSummary(
+export function buildAiSummary(
   base: ResumeSummary,
-  validated: ValidatedOpenAiSummaryPayload
+  validated: ValidatedOpenAiSummaryPayload,
+  source: Extract<ResumeSummary['source'], 'openai' | 'vscode-lm'>,
+  sourceLabel: string
 ): ResumeSummary {
   const topFiles = uniqueBy(
     validated.links.filter((link) => link.kind === 'file').map((link) => link.label),
@@ -361,7 +363,7 @@ function buildOpenAiSummary(
 
   const links = validated.links.length > 0 ? validated.links : base.links;
   const details = [
-    '## LLM Summary (OpenAI)',
+    `## LLM Summary (${sourceLabel})`,
     `- ${validated.intent}`,
     '',
     '## Next steps',
@@ -383,7 +385,7 @@ function buildOpenAiSummary(
 
   return {
     ...base,
-    source: 'openai',
+    source,
     intent: validated.intent,
     nextSteps: validated.nextSteps,
     nextStepEvidenceIds: validated.nextStepEvidenceIds,
@@ -416,11 +418,11 @@ export async function tryGenerateOpenAiSummary(
     messages: [
       {
         role: 'system',
-        content: buildSystemPrompt(),
+        content: buildSummaryInstructionsPrompt(),
       },
       {
         role: 'user',
-        content: buildUserPrompt(signals, base),
+        content: buildSummaryContextPrompt(signals, base),
       },
     ],
     response_format: {
@@ -443,7 +445,7 @@ export async function tryGenerateOpenAiSummary(
     const content = extractResponseText(responsePayload);
     const parsed = JSON.parse(content) as unknown;
     const validated = validateOpenAiSummaryPayload(parsed, base.evidenceCatalog ?? [], signals.workspaceRoot);
-    return buildOpenAiSummary(base, validated);
+    return buildAiSummary(base, validated, 'openai', 'OpenAI');
   } catch (error) {
     log(`OpenAI summary failed: ${(error as Error).message}`);
     return undefined;

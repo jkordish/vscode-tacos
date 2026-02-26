@@ -1,4 +1,5 @@
 export type TriggerReason = 'focus' | 'manual' | 'cached';
+export type SummaryProvider = 'local' | 'vscode-lm' | 'openai';
 
 export interface ExtensionConfig {
   enabled: boolean;
@@ -15,7 +16,7 @@ export interface ExtensionConfig {
   cacheIfContextUnchanged: boolean;
   redactionPatterns: string[];
   metricsEnabled: boolean;
-  summaryProvider: 'local' | 'openai';
+  summaryProvider: SummaryProvider;
   openaiApiKeySetting: string;
   openaiModel: string;
   openaiBaseUrl: string;
@@ -87,7 +88,7 @@ export interface ResumeSummary {
   codexPrompt: string;
   contextHash: string;
   generatedAt: number;
-  source: 'local' | 'openai';
+  source: SummaryProvider;
 }
 
 export interface MetricRecord {
@@ -96,4 +97,11 @@ export interface MetricRecord {
   trigger: TriggerReason;
   firstMeaningfulEditLagMs?: number;
   firstRunLagMs?: number;
+}
+
+export interface VscodeLmModelSelector {
+  vendor: string;
+  id?: string;
+  family?: string;
+  name?: string;
 }

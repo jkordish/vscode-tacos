@@ -13,7 +13,17 @@ import { shouldAutoTriggerSummary } from './noiseControl';
 import { isPathWithinWorkspaceRoot, normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
 import { redactList, redactText } from './redaction';
 import { buildResumeSummary } from './summary';
-import type { ExtensionConfig, MetricRecord, ResumeSignals, ResumeSummary, SummaryEvidenceItem, TriggerReason } from './types';
+import type {
+  ExtensionConfig,
+  MetricRecord,
+  ResumeSignals,
+  ResumeSummary,
+  SummaryEvidenceItem,
+  SummaryProvider,
+  TriggerReason,
+  VscodeLmModelSelector,
+} from './types';
+import { tryGenerateVscodeLmSummary, type VscodeLmModelLike } from './vscodeLm';
 
 const KEY_LAST_BLUR_AT = 'tacos.lastBlurAt';
 const KEY_LAST_SUMMARY_AT = 'tacos.lastSummaryAt';
@@ -27,6 +37,7 @@ const KEY_RECENT_URLS = 'tacos.recentUrls';
 const KEY_DONE_ITEMS = 'tacos.doneItems';
 const KEY_LAST_FAILING_COMMAND = 'tacos.lastFailingCommand';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
+const KEY_VSCODE_LM_SELECTOR = 'tacos.vscodeLmSelector';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
@@ -86,6 +97,9 @@ interface RuntimeState {
   refinementSequence: number;
   activeRefinementSequence?: number;
   pauseUntilRestart: boolean;
+  vscodeLmModel?: VscodeLmModelLike;
+  vscodeLmSelector?: VscodeLmModelSelector;
+  vscodeLmUnavailableNotified: boolean;
 }
 
 let state: RuntimeState;
@@ -109,6 +123,8 @@ export function activate(context: vscode.ExtensionContext): void {
     terminalHooks: [],
     refinementSequence: 0,
     pauseUntilRestart: false,
+    vscodeLmSelector: context.globalState.get<VscodeLmModelSelector | undefined>(KEY_VSCODE_LM_SELECTOR),
+    vscodeLmUnavailableNotified: false,
   };
 
   context.subscriptions.push(state.output);
@@ -245,6 +261,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
       await clearCheckpointNote(context, root);
       void vscode.window.showInformationMessage('TaCoS: checkpoint note cleared for this workspace.');
+    }),
+    vscode.commands.registerCommand('tacos.configureAiProvider', async () => {
+      await configureAiProvider(context);
     }),
     vscode.commands.registerCommand('tacos.setOpenAiApiKey', async () => {
       const value = await vscode.window.showInputBox({
@@ -545,9 +564,16 @@ async function triggerSummary(context: vscode.ExtensionContext, reason: Exclude<
     checkpointNote: getCheckpointNote(context, root),
   });
 
-  if (prepared.shouldRefineWithOpenAi) {
+  if (prepared.shouldRefineWithAi) {
     void refineSummaryInBackground(context, prepared);
   }
+}
+
+interface ProviderPlan {
+  requestedProvider: SummaryProvider;
+  activeProvider: SummaryProvider;
+  openAiApiKey?: string;
+  vscodeLmModel?: VscodeLmModelLike;
 }
 
 interface PreparedTriggerSummary {
@@ -558,8 +584,8 @@ interface PreparedTriggerSummary {
   localSummary: ResumeSummary;
   signals: ResumeSignals;
   config: ExtensionConfig;
-  openAiApiKey: string;
-  shouldRefineWithOpenAi: boolean;
+  providerPlan: ProviderPlan;
+  shouldRefineWithAi: boolean;
 }
 
 async function applyBranchHistory(
@@ -585,7 +611,7 @@ async function prepareTriggerSummary(
   reason: Exclude<TriggerReason, 'cached'>
 ): Promise<PreparedTriggerSummary> {
   const config = getConfig();
-  const openAiApiKey = await resolveOpenAiApiKey(context, config);
+  const providerPlan = await resolveProviderPlan(context, config, reason);
   const signals = await collectSignals(root, config);
   const localSummary = await applyBranchHistory(context, root, buildResumeSummary(signals));
   const cacheKey = summaryCacheKey(root);
@@ -598,8 +624,7 @@ async function prepareTriggerSummary(
   }
 
   const summary = contextUnchanged && cached ? cached : localSummary;
-  const shouldRefineWithOpenAi =
-    config.summaryProvider === 'openai' && Boolean(openAiApiKey) && summary.source !== 'openai';
+  const shouldRefineWithAi = providerPlan.activeProvider !== 'local' && summary.source !== providerPlan.activeProvider;
 
   return {
     root,
@@ -609,8 +634,8 @@ async function prepareTriggerSummary(
     localSummary,
     signals,
     config,
-    openAiApiKey,
-    shouldRefineWithOpenAi,
+    providerPlan,
+    shouldRefineWithAi,
   };
 }
 
@@ -619,15 +644,7 @@ async function refineSummaryInBackground(context: vscode.ExtensionContext, prepa
   state.refinementSequence = sequence;
   state.activeRefinementSequence = sequence;
 
-  const refined = await tryGenerateOpenAiSummary(
-    prepared.signals,
-    prepared.localSummary,
-    prepared.config,
-    prepared.openAiApiKey,
-    (message) => {
-      state.output.appendLine(message);
-    }
-  );
+  const refined = await generateAiSummary(prepared);
 
   if (!refined || state.activeRefinementSequence !== sequence) {
     return;
@@ -650,50 +667,103 @@ async function generateSummary(
   root: string,
   reason: Exclude<TriggerReason, 'cached'>
 ): Promise<{ summary: ResumeSummary; triggerReason: TriggerReason }> {
-  const config = getConfig();
-  const openAiApiKey = await resolveOpenAiApiKey(context, config);
-  const signals = await collectSignals(root, config);
-  const generatedLocal = buildResumeSummary(signals);
-  const previousBranch = context.workspaceState.get<string>(branchStateKey(root));
-  if (generatedLocal.currentBranch && previousBranch && generatedLocal.currentBranch !== previousBranch) {
-    generatedLocal.previousBranch = previousBranch;
+  const prepared = await prepareTriggerSummary(context, root, reason);
+  if (!prepared.shouldRefineWithAi) {
+    return {
+      summary: prepared.summary,
+      triggerReason: prepared.triggerReason,
+    };
   }
 
-  if (generatedLocal.currentBranch) {
-    await context.workspaceState.update(branchStateKey(root), generatedLocal.currentBranch);
+  const refined = await generateAiSummary(prepared);
+  if (!refined) {
+    return {
+      summary: prepared.summary,
+      triggerReason: prepared.triggerReason,
+    };
   }
 
-  const cacheKey = summaryCacheKey(root);
-  const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
-  const desiredSource: ResumeSummary['source'] = config.summaryProvider === 'openai' ? 'openai' : 'local';
-  const cachedSource: ResumeSummary['source'] = cached?.source ?? 'local';
-  const hasOpenAiKey = Boolean(openAiApiKey);
-  const canUseCached =
-    config.cacheIfContextUnchanged &&
-    Boolean(cached) &&
-    cached?.contextHash === generatedLocal.contextHash &&
-    (cachedSource === desiredSource || (desiredSource === 'openai' && !hasOpenAiKey));
+  await context.workspaceState.update(prepared.cacheKey, refined);
+  return {
+    summary: refined,
+    triggerReason: prepared.triggerReason,
+  };
+}
 
-  if (canUseCached && cached) {
-    if (cached.currentBranch && previousBranch && cached.currentBranch !== previousBranch && !cached.previousBranch) {
-      cached.previousBranch = previousBranch;
+async function resolveProviderPlan(
+  context: vscode.ExtensionContext,
+  config: ExtensionConfig,
+  reason: Exclude<TriggerReason, 'cached'>
+): Promise<ProviderPlan> {
+  const requestedProvider = config.summaryProvider;
+  if (requestedProvider === 'local') {
+    return {
+      requestedProvider,
+      activeProvider: 'local',
+    };
+  }
+
+  if (requestedProvider === 'openai') {
+    const openAiApiKey = await resolveOpenAiApiKey(context, config);
+    if (openAiApiKey) {
+      return {
+        requestedProvider,
+        activeProvider: 'openai',
+        openAiApiKey,
+      };
     }
-    return { summary: cached, triggerReason: 'cached' };
+
+    return {
+      requestedProvider,
+      activeProvider: 'local',
+    };
   }
 
-  let summary = generatedLocal;
-  if (desiredSource === 'openai') {
-    const openAiSummary = await tryGenerateOpenAiSummary(signals, generatedLocal, config, openAiApiKey, (message) => {
-      state.output.appendLine(message);
-    });
+  if (state.vscodeLmModel) {
+    return {
+      requestedProvider,
+      activeProvider: 'vscode-lm',
+      vscodeLmModel: state.vscodeLmModel,
+    };
+  }
 
-    if (openAiSummary) {
-      summary = openAiSummary;
+  if (!state.vscodeLmUnavailableNotified || reason === 'manual') {
+    state.vscodeLmUnavailableNotified = true;
+    const action = await vscode.window.showInformationMessage(
+      'TaCoS: VS Code LM is configured but not available in this session. Run "TaCoS: Configure AI Provider" to re-select a model.',
+      'Configure AI Provider'
+    );
+    if (action === 'Configure AI Provider') {
+      await vscode.commands.executeCommand('tacos.configureAiProvider');
     }
   }
 
-  await context.workspaceState.update(cacheKey, summary);
-  return { summary, triggerReason: reason };
+  return {
+    requestedProvider,
+    activeProvider: 'local',
+  };
+}
+
+async function generateAiSummary(prepared: PreparedTriggerSummary): Promise<ResumeSummary | undefined> {
+  const log = (message: string): void => {
+    state.output.appendLine(message);
+  };
+
+  if (prepared.providerPlan.activeProvider === 'openai') {
+    return tryGenerateOpenAiSummary(
+      prepared.signals,
+      prepared.localSummary,
+      prepared.config,
+      prepared.providerPlan.openAiApiKey ?? '',
+      log
+    );
+  }
+
+  if (prepared.providerPlan.activeProvider === 'vscode-lm' && prepared.providerPlan.vscodeLmModel) {
+    return tryGenerateVscodeLmSummary(prepared.signals, prepared.localSummary, prepared.providerPlan.vscodeLmModel, log);
+  }
+
+  return undefined;
 }
 
 async function presentSummary(
@@ -1589,6 +1659,148 @@ async function setEnabled(value: boolean): Promise<void> {
   await vscode.workspace.getConfiguration('tacos').update('enabled', value, scope);
 }
 
+async function setSummaryProvider(value: SummaryProvider): Promise<void> {
+  const scope = vscode.workspace.workspaceFolders
+    ? vscode.ConfigurationTarget.Workspace
+    : vscode.ConfigurationTarget.Global;
+
+  await vscode.workspace.getConfiguration('tacos').update('summaryProvider', value, scope);
+}
+
+function describeProvider(provider: SummaryProvider): string {
+  if (provider === 'vscode-lm') {
+    return 'VS Code LM';
+  }
+
+  if (provider === 'openai') {
+    return 'OpenAI';
+  }
+
+  return 'Local-only';
+}
+
+function modelLabel(model: VscodeLmModelLike): string {
+  return model.name?.trim() || model.id?.trim() || model.family?.trim() || 'Selected model';
+}
+
+async function selectVscodeLmModel(): Promise<VscodeLmModelLike | undefined> {
+  const vscodeAny = vscode as typeof vscode & {
+    lm?: {
+      selectChatModels?: (selector?: Record<string, string>) => Promise<unknown[]>;
+    };
+  };
+  const selectChatModels = vscodeAny.lm?.selectChatModels;
+  if (typeof selectChatModels !== 'function') {
+    void vscode.window.showWarningMessage('TaCoS: this VS Code build does not expose the Language Model API.');
+    return undefined;
+  }
+
+  const available = await selectChatModels({ vendor: 'copilot' });
+  const models = (Array.isArray(available) ? available : []).filter((entry) =>
+    Boolean(entry && typeof entry === 'object' && 'sendRequest' in entry)
+  ) as unknown as VscodeLmModelLike[];
+
+  if (models.length === 0) {
+    void vscode.window.showWarningMessage(
+      'TaCoS: no VS Code LM models are available. Ensure Copilot chat access is enabled and try again.'
+    );
+    return undefined;
+  }
+
+  if (models.length === 1) {
+    return models[0];
+  }
+
+  const picked = await vscode.window.showQuickPick(
+    models.map((model) => ({
+      label: modelLabel(model),
+      description: [model.vendor, model.family, model.id].filter(Boolean).join(' • '),
+      model,
+    })),
+    {
+      title: 'TaCoS: Select VS Code LM Model',
+      placeHolder: 'Choose a model for AI summary refinement',
+      ignoreFocusOut: true,
+    }
+  );
+
+  return picked?.model;
+}
+
+async function configureAiProvider(context: vscode.ExtensionContext): Promise<void> {
+  const config = getConfig();
+  const picked = await vscode.window.showQuickPick(
+    [
+      {
+        label: 'Local-only',
+        description: 'No network calls; uses deterministic local summarization',
+        provider: 'local' as const,
+      },
+      {
+        label: 'VS Code LM (Copilot)',
+        description: 'Use a selected VS Code Language Model, fallback to local if unavailable',
+        provider: 'vscode-lm' as const,
+      },
+      {
+        label: 'OpenAI (direct API)',
+        description: 'Use OpenAI API key from Secret Storage/env/settings',
+        provider: 'openai' as const,
+      },
+    ],
+    {
+      title: 'TaCoS: Configure AI Provider',
+      placeHolder: `Current provider: ${describeProvider(config.summaryProvider)}`,
+      ignoreFocusOut: true,
+    }
+  );
+
+  if (!picked) {
+    return;
+  }
+
+  if (picked.provider === 'local') {
+    await setSummaryProvider('local');
+    void vscode.window.showInformationMessage('TaCoS: provider set to local-only.');
+    return;
+  }
+
+  if (picked.provider === 'openai') {
+    await setSummaryProvider('openai');
+    const key = await resolveOpenAiApiKey(context, getConfig());
+    if (!key) {
+      const action = await vscode.window.showInformationMessage(
+        'TaCoS: OpenAI selected. Set an API key in Secret Storage to enable refinement.',
+        'Set API Key'
+      );
+      if (action === 'Set API Key') {
+        await vscode.commands.executeCommand('tacos.setOpenAiApiKey');
+      }
+      return;
+    }
+
+    void vscode.window.showInformationMessage('TaCoS: provider set to OpenAI.');
+    return;
+  }
+
+  const model = await selectVscodeLmModel();
+  if (!model) {
+    return;
+  }
+
+  const selector: VscodeLmModelSelector = {
+    vendor: model.vendor?.trim() || 'copilot',
+    id: model.id?.trim() || undefined,
+    family: model.family?.trim() || undefined,
+    name: model.name?.trim() || undefined,
+  };
+  state.vscodeLmModel = model;
+  state.vscodeLmSelector = selector;
+  state.vscodeLmUnavailableNotified = false;
+  await context.globalState.update(KEY_VSCODE_LM_SELECTOR, selector);
+  await setSummaryProvider('vscode-lm');
+  void vscode.window.showInformationMessage(`TaCoS: provider set to VS Code LM (${modelLabel(model)}).`);
+}
+
 function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('tacos');
   const idleMinutesLegacy = config.get<number>('idleMinutes', 10);
@@ -1608,7 +1820,7 @@ function getConfig(): ExtensionConfig {
     cacheIfContextUnchanged: config.get<boolean>('cacheIfContextUnchanged', true),
     redactionPatterns: config.get<string[]>('redactionPatterns', []),
     metricsEnabled: config.get<boolean>('metricsEnabled', true),
-    summaryProvider: config.get<'local' | 'openai'>('summaryProvider', 'local'),
+    summaryProvider: config.get<SummaryProvider>('summaryProvider', 'local'),
     openaiApiKeySetting: config.get<string>('openaiApiKey', ''),
     openaiModel: config.get<string>('openaiModel', 'gpt-4.1-mini'),
     openaiBaseUrl: config.get<string>('openaiBaseUrl', 'https://api.openai.com/v1'),

@@ -35,6 +35,7 @@
     "onCommand:tacos.addVisitedUrl",
     "onCommand:tacos.addCheckpointNote",
     "onCommand:tacos.clearCheckpointNote",
+    "onCommand:tacos.configureAiProvider",
     "onCommand:tacos.setOpenAiApiKey",
     "onCommand:tacos.clearOpenAiApiKey"
   ],
@@ -88,6 +89,10 @@
       {
         "command": "tacos.clearCheckpointNote",
         "title": "TaCoS: Clear Checkpoint Note"
+      },
+      {
+        "command": "tacos.configureAiProvider",
+        "title": "TaCoS: Configure AI Provider"
       },
       {
         "command": "tacos.setOpenAiApiKey",
@@ -183,10 +188,11 @@
           "type": "string",
           "enum": [
             "local",
+            "vscode-lm",
             "openai"
           ],
           "default": "local",
-          "description": "Summary generation mode. `openai` uses a direct API call with strict JSON schema."
+          "description": "Summary generation mode. `vscode-lm` uses a model selected via the Configure AI Provider command; `openai` uses a direct API call with strict JSON schema."
         },
         "tacos.openaiApiKey": {
           "type": "string",
