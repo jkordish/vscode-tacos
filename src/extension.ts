@@ -5,7 +5,10 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
-import { sanitizeActivityForPersistence } from './activityPersistence';
+import {
+  persistTerminalCommandForStorage,
+  sanitizeActivityForPersistence,
+} from './activityPersistence';
 import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
@@ -2702,7 +2705,12 @@ function doesCommandMatchStoredFailure(stored: string, rawCommand: string): bool
   const config = getConfig();
   const workspaceRoot = pickWorkspaceRoot() ?? '';
   const redactedCommand = redactText(rawCommand, workspaceRoot, config.redactionPatterns);
-  return stored === redactedCommand;
+  const persistedCommand = persistTerminalCommandForStorage(
+    rawCommand,
+    workspaceRoot,
+    config.redactionPatterns,
+  );
+  return stored === redactedCommand || stored === persistedCommand;
 }
 
 async function collectSignals(root: string, config: ExtensionConfig): Promise<ResumeSignals> {

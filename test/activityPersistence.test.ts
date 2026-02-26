@@ -16,11 +16,11 @@ describe('sanitizeActivityForPersistence', () => {
     );
 
     expect(sanitized.recentFiles[0]).toContain('<workspace>');
-    expect(sanitized.recentTerminal[0]).toContain('<redacted>');
+    expect(sanitized.recentTerminal[0]).toContain('terminal:');
     expect(sanitized.recentTerminal[0]).not.toContain(rawTerminalCommand);
     expect(sanitized.recentTerminal[0]).not.toContain('super-secret-token-value');
-    expect(sanitized.doneItems[0]).toContain('<redacted>');
-    expect(sanitized.lastFailingCommand).toContain('<redacted>');
+    expect(sanitized.doneItems[0]).toContain('terminal:');
+    expect(sanitized.lastFailingCommand).toContain('terminal:');
     expect(sanitized.lastFailingCommand).not.toContain('abcdefghijklmnop');
     expect(sanitized.lastFailingCommand).not.toContain('super-secret-token-value');
   });
