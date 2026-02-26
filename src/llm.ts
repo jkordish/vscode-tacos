@@ -234,7 +234,8 @@ export function buildSummaryContextPrompt(signals: ResumeSignals, base: ResumeSu
     evidenceCatalog.length > 0
       ? evidenceCatalog
           .map((item) => {
-            const target = typeof item.target === 'string' ? ` | target=${item.target}` : '';
+            // Do not expose local absolute file paths in model prompts.
+            const target = item.kind === 'url' && typeof item.target === 'string' ? ` | target=${item.target}` : '';
             return `- id=${item.id} | kind=${item.kind} | label=${item.label}${target}`;
           })
           .join('\n')

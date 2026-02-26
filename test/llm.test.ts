@@ -166,4 +166,56 @@ describe('buildSummaryContextPrompt', () => {
     expect(prompt).toContain('User corrections (must respect)');
     expect(prompt).toContain('wrong intent: focus is parser fix');
   });
+
+  it('does not include absolute local file targets in evidence lines', () => {
+    const workspaceRoot = '/workspace/repo';
+    const prompt = buildSummaryContextPrompt(
+      {
+        workspaceRoot,
+        workspaceName: 'repo',
+        branch: 'main',
+        gitStatus: '',
+        gitDiffStat: '',
+        gitDiff: '',
+        gitLog: '',
+        changedFiles: [],
+        openFiles: [],
+        recentFiles: [],
+        recentTerminal: [],
+        recentDebug: [],
+        recentUrls: [],
+        doneItems: [],
+        failingCommand: undefined,
+      },
+      {
+        intent: 'intent',
+        nextSteps: ['step 1', 'step 2'],
+        topFiles: [],
+        links: [],
+        evidenceCatalog: [
+          {
+            id: 'file:src/index.ts',
+            kind: 'file',
+            label: 'src/index.ts',
+            target: path.resolve(workspaceRoot, 'src/index.ts'),
+          },
+          {
+            id: 'url:https://example.com/docs',
+            kind: 'url',
+            label: 'Docs',
+            target: 'https://example.com/docs',
+          },
+        ],
+        detailsMarkdown: 'details',
+        codexPrompt: 'prompt',
+        contextHash: 'hash',
+        generatedAt: 1,
+        source: 'local',
+      }
+    );
+
+    expect(prompt).toContain('id=file:src/index.ts | kind=file | label=src/index.ts');
+    expect(prompt).not.toContain(path.resolve(workspaceRoot, 'src/index.ts'));
+    expect(prompt).toContain('id=url:https://example.com/docs | kind=url | label=Docs | target=https://example.com/docs');
+  });
 });

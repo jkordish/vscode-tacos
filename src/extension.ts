@@ -633,11 +633,14 @@ async function prepareTriggerSummary(
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
   const correctionsUnchanged =
     (cached?.correctionsFingerprint ?? '') === (localSummary.correctionsFingerprint ?? '');
+  const providerCompatibleWithCache =
+    !cached || providerPlan.activeProvider !== 'local' || cached.source === 'local';
   const contextUnchanged =
     config.cacheIfContextUnchanged &&
     Boolean(cached) &&
     cached?.contextHash === localSummary.contextHash &&
-    correctionsUnchanged;
+    correctionsUnchanged &&
+    providerCompatibleWithCache;
 
   if (!contextUnchanged) {
     await context.workspaceState.update(cacheKey, localSummary);
@@ -737,6 +740,13 @@ async function resolveProviderPlan(
       requestedProvider,
       activeProvider: 'local',
     };
+  }
+
+  if (!state.vscodeLmModel && state.vscodeLmSelector) {
+    const restored = await restoreVscodeLmModelFromSelector(context);
+    if (restored) {
+      state.output.appendLine(`TaCoS: restored VS Code LM model (${modelLabel(restored)}).`);
+    }
   }
 
   if (state.vscodeLmModel) {
@@ -1853,22 +1863,135 @@ function modelLabel(model: VscodeLmModelLike): string {
   return model.name?.trim() || model.id?.trim() || model.family?.trim() || 'Selected model';
 }
 
-async function selectVscodeLmModel(): Promise<VscodeLmModelLike | undefined> {
-  const vscodeAny = vscode as typeof vscode & {
-    lm?: {
-      selectChatModels?: (selector?: Record<string, string>) => Promise<unknown[]>;
-    };
+type VscodeWithLmApi = typeof vscode & {
+  lm?: {
+    selectChatModels?: (selector?: Record<string, string>) => Promise<unknown[]>;
   };
-  const selectChatModels = vscodeAny.lm?.selectChatModels;
-  if (typeof selectChatModels !== 'function') {
+};
+
+function getSelectChatModelsApi(): ((selector?: Record<string, string>) => Promise<unknown[]>) | undefined {
+  const selectChatModels = (vscode as VscodeWithLmApi).lm?.selectChatModels;
+  return typeof selectChatModels === 'function' ? selectChatModels : undefined;
+}
+
+function toVscodeLmModels(available: unknown): VscodeLmModelLike[] {
+  return (Array.isArray(available) ? available : []).filter((entry) =>
+    Boolean(entry && typeof entry === 'object' && 'sendRequest' in entry)
+  ) as unknown as VscodeLmModelLike[];
+}
+
+function normalizeModelSelector(model: VscodeLmModelLike, fallbackVendor = 'copilot'): VscodeLmModelSelector {
+  return {
+    vendor: model.vendor?.trim() || fallbackVendor,
+    id: model.id?.trim() || undefined,
+    family: model.family?.trim() || undefined,
+    name: model.name?.trim() || undefined,
+  };
+}
+
+function modelSelectorCacheKey(model: VscodeLmModelLike): string {
+  return [
+    model.vendor?.trim().toLowerCase() || '',
+    model.id?.trim().toLowerCase() || '',
+    model.family?.trim().toLowerCase() || '',
+    model.name?.trim().toLowerCase() || '',
+  ].join('|');
+}
+
+function modelMatchesSelector(model: VscodeLmModelLike, selector: VscodeLmModelSelector): boolean {
+  const vendor = model.vendor?.trim().toLowerCase() ?? '';
+  const id = model.id?.trim().toLowerCase() ?? '';
+  const family = model.family?.trim().toLowerCase() ?? '';
+  const name = model.name?.trim().toLowerCase() ?? '';
+  const selectedVendor = selector.vendor?.trim().toLowerCase() ?? '';
+  const selectedId = selector.id?.trim().toLowerCase() ?? '';
+  const selectedFamily = selector.family?.trim().toLowerCase() ?? '';
+  const selectedName = selector.name?.trim().toLowerCase() ?? '';
+
+  if (selectedVendor && vendor && selectedVendor !== vendor) {
+    return false;
+  }
+  if (selectedId && selectedId !== id) {
+    return false;
+  }
+  if (selectedFamily && selectedFamily !== family) {
+    return false;
+  }
+  if (selectedName && selectedName !== name) {
+    return false;
+  }
+
+  return true;
+}
+
+async function restoreVscodeLmModelFromSelector(
+  context: vscode.ExtensionContext
+): Promise<VscodeLmModelLike | undefined> {
+  const selector = state.vscodeLmSelector;
+  if (!selector) {
+    return undefined;
+  }
+
+  const selectChatModels = getSelectChatModelsApi();
+  if (!selectChatModels) {
+    return undefined;
+  }
+
+  const queries: Record<string, string>[] = [];
+  const selectorVendor = selector.vendor?.trim() || 'copilot';
+  const selectorQuery: Record<string, string> = { vendor: selectorVendor };
+  if (selector.id) {
+    selectorQuery.id = selector.id;
+  }
+  if (selector.family) {
+    selectorQuery.family = selector.family;
+  }
+  queries.push(selectorQuery);
+  queries.push({ vendor: selectorVendor });
+  if (selectorVendor !== 'copilot') {
+    queries.push({ vendor: 'copilot' });
+  }
+
+  const models: VscodeLmModelLike[] = [];
+  for (const query of queries) {
+    try {
+      models.push(...toVscodeLmModels(await selectChatModels(query)));
+    } catch (error) {
+      state.output.appendLine(`TaCoS: failed restoring VS Code LM with selector ${JSON.stringify(query)}: ${(error as Error).message}`);
+    }
+  }
+
+  const uniqueModels: VscodeLmModelLike[] = [];
+  const seen = new Set<string>();
+  for (const model of models) {
+    const key = modelSelectorCacheKey(model);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    uniqueModels.push(model);
+  }
+
+  const restored = uniqueModels.find((model) => modelMatchesSelector(model, selector)) ?? uniqueModels[0];
+  if (!restored) {
+    return undefined;
+  }
+
+  state.vscodeLmModel = restored;
+  state.vscodeLmSelector = normalizeModelSelector(restored, selectorVendor);
+  await context.globalState.update(KEY_VSCODE_LM_SELECTOR, state.vscodeLmSelector);
+  state.vscodeLmUnavailableNotified = false;
+  return restored;
+}
+
+async function selectVscodeLmModel(): Promise<VscodeLmModelLike | undefined> {
+  const selectChatModels = getSelectChatModelsApi();
+  if (!selectChatModels) {
     void vscode.window.showWarningMessage('TaCoS: this VS Code build does not expose the Language Model API.');
     return undefined;
   }
 
-  const available = await selectChatModels({ vendor: 'copilot' });
-  const models = (Array.isArray(available) ? available : []).filter((entry) =>
-    Boolean(entry && typeof entry === 'object' && 'sendRequest' in entry)
-  ) as unknown as VscodeLmModelLike[];
+  const models = toVscodeLmModels(await selectChatModels({ vendor: 'copilot' }));
 
   if (models.length === 0) {
     void vscode.window.showWarningMessage(
@@ -1957,12 +2080,7 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
     return;
   }
 
-  const selector: VscodeLmModelSelector = {
-    vendor: model.vendor?.trim() || 'copilot',
-    id: model.id?.trim() || undefined,
-    family: model.family?.trim() || undefined,
-    name: model.name?.trim() || undefined,
-  };
+  const selector: VscodeLmModelSelector = normalizeModelSelector(model);
   state.vscodeLmModel = model;
   state.vscodeLmSelector = selector;
   state.vscodeLmUnavailableNotified = false;
@@ -1971,16 +2089,45 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
   void vscode.window.showInformationMessage(`TaCoS: provider set to VS Code LM (${modelLabel(model)}).`);
 }
 
+function hasExplicitConfigurationValue(config: vscode.WorkspaceConfiguration, key: string): boolean {
+  const inspected = config.inspect<unknown>(key);
+  if (!inspected) {
+    return false;
+  }
+
+  const languageAwareInspected = inspected as typeof inspected & {
+    globalLanguageValue?: unknown;
+    workspaceLanguageValue?: unknown;
+    workspaceFolderLanguageValue?: unknown;
+  };
+
+  return (
+    inspected.globalValue !== undefined ||
+    inspected.workspaceValue !== undefined ||
+    inspected.workspaceFolderValue !== undefined ||
+    languageAwareInspected.globalLanguageValue !== undefined ||
+    languageAwareInspected.workspaceLanguageValue !== undefined ||
+    languageAwareInspected.workspaceFolderLanguageValue !== undefined
+  );
+}
+
 function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('tacos');
   const idleMinutesLegacy = config.get<number>('idleMinutes', 10);
   const cooldownSecondsLegacy = config.get<number>('cooldownSeconds', 30);
+  const hasMinIdleMinutesOverride = hasExplicitConfigurationValue(config, 'minIdleMinutes');
+  const hasCooldownMinutesOverride = hasExplicitConfigurationValue(config, 'cooldownMinutes');
+  const minIdleMinutes = hasMinIdleMinutesOverride ? config.get<number>('minIdleMinutes', 10) : idleMinutesLegacy;
+  const cooldownMinutes = hasCooldownMinutesOverride
+    ? config.get<number>('cooldownMinutes', 5)
+    : Math.max(1, Math.round(cooldownSecondsLegacy / 60));
+
   return {
     enabled: config.get<boolean>('enabled', true),
     showOnFocus: config.get<boolean>('showOnFocus', true),
     pauseSummaries: config.get<boolean>('pauseSummaries', false),
-    minIdleMinutes: config.get<number>('minIdleMinutes', idleMinutesLegacy),
-    cooldownMinutes: config.get<number>('cooldownMinutes', Math.max(1, Math.round(cooldownSecondsLegacy / 60))),
+    minIdleMinutes: Math.max(1, minIdleMinutes),
+    cooldownMinutes: Math.max(1, cooldownMinutes),
     idleMinutes: idleMinutesLegacy,
     cooldownSeconds: cooldownSecondsLegacy,
     includeDiff: config.get<boolean>('includeDiff', false),
