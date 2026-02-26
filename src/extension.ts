@@ -9,6 +9,7 @@ import { sanitizeActivityForPersistence } from './activityPersistence';
 import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
+import { shouldAutoTriggerSummary } from './noiseControl';
 import { isPathWithinWorkspaceRoot, normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
 import { redactList, redactText } from './redaction';
 import { buildResumeSummary } from './summary';
@@ -17,6 +18,7 @@ import type { ExtensionConfig, MetricRecord, ResumeSignals, ResumeSummary, Summa
 const KEY_LAST_BLUR_AT = 'tacos.lastBlurAt';
 const KEY_LAST_SUMMARY_AT = 'tacos.lastSummaryAt';
 const KEY_LAST_WORKSPACE_ON_BLUR = 'tacos.lastWorkspaceOnBlur';
+const KEY_LAST_AUTO_TRIGGER_FINGERPRINT = 'tacos.lastAutoTriggerFingerprint';
 
 const KEY_RECENT_FILES = 'tacos.recentFiles';
 const KEY_RECENT_TERMINAL = 'tacos.recentTerminal';
@@ -83,6 +85,7 @@ interface RuntimeState {
   terminalHooks: vscode.Disposable[];
   refinementSequence: number;
   activeRefinementSequence?: number;
+  pauseUntilRestart: boolean;
 }
 
 let state: RuntimeState;
@@ -105,6 +108,7 @@ export function activate(context: vscode.ExtensionContext): void {
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
     refinementSequence: 0,
+    pauseUntilRestart: false,
   };
 
   context.subscriptions.push(state.output);
@@ -164,6 +168,17 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.resumeSummaries', async () => {
       await setPaused(false);
       void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
+    }),
+    vscode.commands.registerCommand('tacos.toggleEnabled', async () => {
+      const config = getConfig();
+      await setEnabled(!config.enabled);
+      void vscode.window.showInformationMessage(
+        !config.enabled ? 'TaCoS: automatic summaries enabled.' : 'TaCoS: automatic summaries disabled.'
+      );
+    }),
+    vscode.commands.registerCommand('tacos.pauseUntilRestart', async () => {
+      state.pauseUntilRestart = true;
+      void vscode.window.showInformationMessage('TaCoS: summaries paused until VS Code restarts.');
     }),
     vscode.commands.registerCommand('tacos.addVisitedUrl', async () => {
       const value = await vscode.window.showInputBox({
@@ -366,7 +381,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const config = getConfig();
-      if (!config.showOnFocus || config.pauseSummaries) {
+      if (!config.enabled || state.pauseUntilRestart || !config.showOnFocus || config.pauseSummaries) {
         return;
       }
 
@@ -377,19 +392,26 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const lastBlurAt = context.workspaceState.get<number>(KEY_LAST_BLUR_AT, now);
       const lastWorkspaceOnBlur = context.workspaceState.get<string>(KEY_LAST_WORKSPACE_ON_BLUR, '');
-      const idleMs = now - lastBlurAt;
-      const idleThresholdMs = config.idleMinutes * 60_000;
       const projectSwitched = Boolean(lastWorkspaceOnBlur) && lastWorkspaceOnBlur !== root;
-
-      if (!projectSwitched && idleMs < idleThresholdMs) {
-        return;
-      }
-
       const lastSummaryAt = context.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0);
-      if (lastSummaryAt > 0 && now - lastSummaryAt < config.cooldownSeconds * 1000) {
+      const fingerprint = computeAutoTriggerFingerprint(root);
+      const lastFingerprint = context.workspaceState.get<string>(autoTriggerFingerprintKey(root), '');
+      const significantChange = fingerprint !== lastFingerprint;
+
+      const shouldTrigger = shouldAutoTriggerSummary({
+        now,
+        lastBlurAt,
+        lastSummaryAt,
+        minIdleMinutes: config.minIdleMinutes,
+        cooldownMinutes: config.cooldownMinutes,
+        projectSwitched,
+        significantChange,
+      });
+      if (!shouldTrigger) {
         return;
       }
 
+      await context.workspaceState.update(autoTriggerFingerprintKey(root), fingerprint);
       await triggerSummary(context, 'focus');
     })
   );
@@ -1559,13 +1581,26 @@ async function setPaused(value: boolean): Promise<void> {
   await vscode.workspace.getConfiguration('tacos').update('pauseSummaries', value, scope);
 }
 
+async function setEnabled(value: boolean): Promise<void> {
+  const scope = vscode.workspace.workspaceFolders
+    ? vscode.ConfigurationTarget.Workspace
+    : vscode.ConfigurationTarget.Global;
+
+  await vscode.workspace.getConfiguration('tacos').update('enabled', value, scope);
+}
+
 function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('tacos');
+  const idleMinutesLegacy = config.get<number>('idleMinutes', 10);
+  const cooldownSecondsLegacy = config.get<number>('cooldownSeconds', 30);
   return {
+    enabled: config.get<boolean>('enabled', true),
     showOnFocus: config.get<boolean>('showOnFocus', true),
     pauseSummaries: config.get<boolean>('pauseSummaries', false),
-    idleMinutes: config.get<number>('idleMinutes', 10),
-    cooldownSeconds: config.get<number>('cooldownSeconds', 30),
+    minIdleMinutes: config.get<number>('minIdleMinutes', idleMinutesLegacy),
+    cooldownMinutes: config.get<number>('cooldownMinutes', Math.max(1, Math.round(cooldownSecondsLegacy / 60))),
+    idleMinutes: idleMinutesLegacy,
+    cooldownSeconds: cooldownSecondsLegacy,
     includeDiff: config.get<boolean>('includeDiff', false),
     maxDiffChars: config.get<number>('maxDiffChars', 6000),
     includeTerminalHistory: config.get<boolean>('includeTerminalHistory', true),
@@ -1707,6 +1742,24 @@ function summaryCacheKey(root: string): string {
 
 function branchStateKey(root: string): string {
   return `tacos.branch.${Buffer.from(root).toString('base64url')}`;
+}
+
+function autoTriggerFingerprintKey(root: string): string {
+  return `${KEY_LAST_AUTO_TRIGGER_FINGERPRINT}.${Buffer.from(root).toString('base64url')}`;
+}
+
+function computeAutoTriggerFingerprint(root: string): string {
+  const activeFile = vscode.window.activeTextEditor?.document?.uri.fsPath
+    ? toRelativePath(vscode.window.activeTextEditor.document.uri.fsPath, root)
+    : '';
+  return [
+    activeFile,
+    state.recentFiles.values()[0] ?? '',
+    state.recentTerminal.values()[0] ?? '',
+    state.recentDebug.values()[0] ?? '',
+    state.lastFailingCommand ?? '',
+    state.doneItems.values()[0] ?? '',
+  ].join('|');
 }
 
 function getCheckpointNote(context: vscode.ExtensionContext, workspaceRoot: string): string | undefined {

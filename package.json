@@ -29,6 +29,8 @@
     "onCommand:tacos.showLastSummary",
     "onCommand:tacos.pauseSummaries",
     "onCommand:tacos.resumeSummaries",
+    "onCommand:tacos.toggleEnabled",
+    "onCommand:tacos.pauseUntilRestart",
     "onCommand:tacos.exportMetrics",
     "onCommand:tacos.addVisitedUrl",
     "onCommand:tacos.addCheckpointNote",
@@ -64,6 +66,14 @@
         "title": "TaCoS: Resume Auto Summaries"
       },
       {
+        "command": "tacos.toggleEnabled",
+        "title": "TaCoS: Toggle Summaries Enabled"
+      },
+      {
+        "command": "tacos.pauseUntilRestart",
+        "title": "TaCoS: Pause Summaries Until Restart"
+      },
+      {
         "command": "tacos.exportMetrics",
         "title": "TaCoS: Export Local Metrics"
       },
@@ -96,10 +106,27 @@
           "default": true,
           "description": "Automatically show a resume brief when VS Code regains focus after idle."
         },
+        "tacos.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Master switch for automatic TaCoS summaries."
+        },
         "tacos.pauseSummaries": {
           "type": "boolean",
           "default": false,
           "description": "Temporarily disable auto summaries without uninstalling the extension."
+        },
+        "tacos.minIdleMinutes": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "Minimum idle minutes before auto summary may trigger."
+        },
+        "tacos.cooldownMinutes": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "description": "Cooldown in minutes between automatic summaries."
         },
         "tacos.idleMinutes": {
           "type": "number",

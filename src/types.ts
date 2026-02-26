@@ -1,8 +1,11 @@
 export type TriggerReason = 'focus' | 'manual' | 'cached';
 
 export interface ExtensionConfig {
+  enabled: boolean;
   showOnFocus: boolean;
   pauseSummaries: boolean;
+  minIdleMinutes: number;
+  cooldownMinutes: number;
   idleMinutes: number;
   cooldownSeconds: number;
   includeDiff: boolean;
