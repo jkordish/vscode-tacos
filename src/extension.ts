@@ -456,6 +456,20 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (
+        !event.affectsConfiguration('tacos.enabled') &&
+        !event.affectsConfiguration('tacos.pauseSummaries') &&
+        !event.affectsConfiguration('tacos.showTimeline')
+      ) {
+        return;
+      }
+
+      rerenderPanel();
+    }),
+  );
+
   void applyWorkspaceTrust(context, vscode.workspace.isTrusted, true);
 
   const workspaceAny = vscode.workspace as typeof vscode.workspace & {
@@ -805,12 +819,14 @@ async function refineSummaryInBackground(
   const sequence = state.refinementSequence + 1;
   state.refinementSequence = sequence;
   state.activeRefinementSequence = sequence;
+  rerenderPanel();
 
   const refined = await generateAiSummary(prepared);
 
   if (!refined) {
     if (state.activeRefinementSequence === sequence) {
       state.activeRefinementSequence = undefined;
+      rerenderPanel();
     }
     return;
   }
@@ -822,14 +838,9 @@ async function refineSummaryInBackground(
 
   await context.workspaceState.update(prepared.cacheKey, refined);
 
-  if (state.panel && state.panelSummary?.contextHash === prepared.localSummary.contextHash) {
+  if (state.panelSummary?.contextHash === prepared.localSummary.contextHash) {
     state.panelSummary = refined;
-    state.panel.title = 'TaCoS Resume Brief (Refined)';
-    state.panel.webview.html = renderWebview(
-      state.panel.webview,
-      refined,
-      state.displayedCheckpointNote?.value,
-    );
+    rerenderPanel();
     return;
   }
 
@@ -1122,13 +1133,7 @@ async function showDetailsPanel(
           undefined,
         );
         state.displayedCheckpointNote = undefined;
-        if (state.panel && state.panelSummary) {
-          state.panel.webview.html = renderWebview(
-            state.panel.webview,
-            state.panelSummary,
-            undefined,
-          );
-        }
+        rerenderPanel();
         void vscode.window.showInformationMessage('TaCoS: checkpoint note cleared.');
         return;
       }
@@ -1194,13 +1199,7 @@ async function showDetailsPanel(
           void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
         }
 
-        if (state.panel && state.panelSummary) {
-          state.panel.webview.html = renderWebview(
-            state.panel.webview,
-            state.panelSummary,
-            state.displayedCheckpointNote?.value,
-          );
-        }
+        rerenderPanel();
         return;
       }
 
@@ -1333,13 +1332,25 @@ async function showDetailsPanel(
     });
   }
 
-  state.panel.title = 'TaCoS Resume Brief';
+  rerenderPanel();
+  state.panel.reveal(vscode.ViewColumn.Beside, true);
+}
+
+function titleForSummary(summary: ResumeSummary): string {
+  return summary.source === 'local' ? 'TaCoS Resume Brief' : 'TaCoS Resume Brief (Refined)';
+}
+
+function rerenderPanel(): void {
+  if (!state.panel || !state.panelSummary) {
+    return;
+  }
+
+  state.panel.title = titleForSummary(state.panelSummary);
   state.panel.webview.html = renderWebview(
     state.panel.webview,
-    summary,
+    state.panelSummary,
     state.displayedCheckpointNote?.value,
   );
-  state.panel.reveal(vscode.ViewColumn.Beside, true);
 }
 
 function renderWebview(

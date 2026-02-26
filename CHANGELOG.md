@@ -18,6 +18,7 @@ All notable changes to this project are documented in this file.
 ### Changed
 
 - Summary panel now surfaces local/refined status with generation times.
+- Summary panel status now updates live during AI refinement and when pause/timeline settings change.
 - Configure AI Provider flow includes clearer privacy/trust guidance.
 - Git snapshot collection uses bounded command timeouts and caching to reduce repeated cost.
 - CI quality gates now enforce compile, lint, format-check, unit/integration tests, and VSIX packaging.
