@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
@@ -37,6 +37,7 @@ const KEY_RECENT_URLS = 'tacos.recentUrls';
 const KEY_DONE_ITEMS = 'tacos.doneItems';
 const KEY_LAST_FAILING_COMMAND = 'tacos.lastFailingCommand';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
+const KEY_SUMMARY_CORRECTIONS_PREFIX = 'tacos.summaryCorrections';
 const KEY_VSCODE_LM_SELECTOR = 'tacos.vscodeLmSelector';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
@@ -86,6 +87,7 @@ interface RuntimeState {
   lastFailingCommand?: string;
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
+  panelWorkspaceRoot?: string;
   displayedCheckpointNote?: { workspaceRoot: string; value: string; persisted: boolean };
   lastTaskName?: string;
   lastTaskWorkspaceRoot?: string;
@@ -264,6 +266,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.configureAiProvider', async () => {
       await configureAiProvider(context);
+    }),
+    vscode.commands.registerCommand('tacos.clearCorrections', async () => {
+      const root = pickWorkspaceRoot();
+      if (!root) {
+        void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+        return;
+      }
+
+      await clearSummaryCorrections(context, root);
+      void vscode.window.showInformationMessage('TaCoS: saved summary corrections cleared for this workspace.');
     }),
     vscode.commands.registerCommand('tacos.setOpenAiApiKey', async () => {
       const value = await vscode.window.showInputBox({
@@ -614,10 +626,18 @@ async function prepareTriggerSummary(
   const providerPlan = await resolveProviderPlan(context, config, reason);
   const signals = await collectSignals(root, config);
   const localSummary = await applyBranchHistory(context, root, buildResumeSummary(signals));
+  const corrections = getSummaryCorrectionsForContext(context, root, localSummary.contextHash);
+  localSummary.userCorrections = corrections;
+  localSummary.correctionsFingerprint = summarizeCorrectionsFingerprint(corrections);
   const cacheKey = summaryCacheKey(root);
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
+  const correctionsUnchanged =
+    (cached?.correctionsFingerprint ?? '') === (localSummary.correctionsFingerprint ?? '');
   const contextUnchanged =
-    config.cacheIfContextUnchanged && Boolean(cached) && cached?.contextHash === localSummary.contextHash;
+    config.cacheIfContextUnchanged &&
+    Boolean(cached) &&
+    cached?.contextHash === localSummary.contextHash &&
+    correctionsUnchanged;
 
   if (!contextUnchanged) {
     await context.workspaceState.update(cacheKey, localSummary);
@@ -844,6 +864,7 @@ async function showDetailsPanel(
   const workspaceRoot = options.workspaceRoot ?? pickWorkspaceRoot();
   const checkpointNote = options.checkpointNote;
   state.panelSummary = summary;
+  state.panelWorkspaceRoot = workspaceRoot;
 
   if (checkpointNote && workspaceRoot) {
     state.displayedCheckpointNote = {
@@ -866,10 +887,16 @@ async function showDetailsPanel(
     state.panel.onDidDispose(() => {
       state.panel = undefined;
       state.panelSummary = undefined;
+      state.panelWorkspaceRoot = undefined;
       state.displayedCheckpointNote = undefined;
     });
 
     state.panel.webview.onDidReceiveMessage(async (message: { type?: unknown; index?: unknown; evidenceId?: unknown }) => {
+      if (message.type === 'fixSummary') {
+        await captureSummaryCorrection(context);
+        return;
+      }
+
       if (message.type === 'checkpointKeep') {
         if (!state.displayedCheckpointNote) {
           return;
@@ -1244,6 +1271,11 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
     </div>
 
     <div class="card">
+      <h3>Summary Feedback</h3>
+      <button type="button" data-action="fixSummary">Fix summary</button>
+    </div>
+
+    <div class="card">
       <details>
         <summary><strong>Evidence</strong></summary>
         <ul class="evidence-list" id="evidence-list">${evidenceItems || '<li>None captured</li>'}</ul>
@@ -1285,6 +1317,9 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
               const expanded = list.classList.toggle('show-more');
               actionButton.textContent = expanded ? 'Show less' : 'Show more';
             }
+          }
+          if (action === 'fixSummary') {
+            vscode.postMessage({ type: 'fixSummary' });
           }
           if (action && action.startsWith('restore')) {
             vscode.postMessage({ type: action });
@@ -1641,6 +1676,141 @@ function uniqueStrings(values: string[]): string[] {
   }
 
   return result;
+}
+
+interface SummaryCorrectionEntry {
+  corrections: string[];
+  updatedAt: number;
+}
+
+type SummaryCorrectionStore = Record<string, SummaryCorrectionEntry>;
+
+function summaryCorrectionsKey(root: string): string {
+  return `${KEY_SUMMARY_CORRECTIONS_PREFIX}.${Buffer.from(root).toString('base64url')}`;
+}
+
+function summarizeCorrectionsFingerprint(corrections: string[]): string {
+  if (corrections.length === 0) {
+    return '';
+  }
+
+  return createHash('sha1').update(corrections.join('\n')).digest('hex');
+}
+
+function readSummaryCorrectionStore(context: vscode.ExtensionContext, root: string): SummaryCorrectionStore {
+  const raw = context.workspaceState.get<Record<string, unknown>>(summaryCorrectionsKey(root), {});
+  const normalized: SummaryCorrectionStore = {};
+
+  for (const [contextHash, value] of Object.entries(raw)) {
+    if (!contextHash.trim() || !value || typeof value !== 'object') {
+      continue;
+    }
+
+    const entry = value as { corrections?: unknown; updatedAt?: unknown };
+    const corrections = Array.isArray(entry.corrections)
+      ? uniqueStrings(entry.corrections.filter((item): item is string => typeof item === 'string')).slice(0, 5)
+      : [];
+    if (corrections.length === 0) {
+      continue;
+    }
+
+    normalized[contextHash] = {
+      corrections,
+      updatedAt: typeof entry.updatedAt === 'number' ? entry.updatedAt : 0,
+    };
+  }
+
+  return normalized;
+}
+
+function getSummaryCorrectionsForContext(
+  context: vscode.ExtensionContext,
+  root: string,
+  contextHash: string
+): string[] {
+  const store = readSummaryCorrectionStore(context, root);
+  return store[contextHash]?.corrections ?? [];
+}
+
+async function persistSummaryCorrection(
+  context: vscode.ExtensionContext,
+  root: string,
+  contextHash: string,
+  correction: string
+): Promise<void> {
+  const store = readSummaryCorrectionStore(context, root);
+  const existing = store[contextHash]?.corrections ?? [];
+  store[contextHash] = {
+    corrections: uniqueStrings([correction, ...existing]).slice(0, 5),
+    updatedAt: Date.now(),
+  };
+
+  const trimmedEntries = Object.entries(store)
+    .sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
+    .slice(0, 40);
+  const trimmed = Object.fromEntries(trimmedEntries);
+
+  await context.workspaceState.update(summaryCorrectionsKey(root), trimmed);
+}
+
+async function clearSummaryCorrections(context: vscode.ExtensionContext, root: string): Promise<void> {
+  await context.workspaceState.update(summaryCorrectionsKey(root), undefined);
+}
+
+async function captureSummaryCorrection(context: vscode.ExtensionContext): Promise<void> {
+  const summary = state.panelSummary;
+  const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
+  if (!summary || !workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: no active summary context is available for correction.');
+    return;
+  }
+
+  const reason = await vscode.window.showQuickPick(
+    [
+      { label: 'Wrong intent', value: 'wrong intent' },
+      { label: 'Wrong next step', value: 'wrong next step' },
+      { label: 'Missing evidence', value: 'missing evidence' },
+      { label: 'Other', value: 'other' },
+    ],
+    {
+      title: 'TaCoS: Fix Summary',
+      placeHolder: 'What needs fixing?',
+      ignoreFocusOut: true,
+    }
+  );
+  if (!reason) {
+    return;
+  }
+
+  const rawCorrection = await vscode.window.showInputBox({
+    title: 'TaCoS: Add Correction',
+    prompt: 'One-line correction TaCoS should respect for this context',
+    placeHolder: 'Example: Intent is parser stabilization, not release prep',
+    ignoreFocusOut: true,
+  });
+  if (!rawCorrection?.trim()) {
+    return;
+  }
+
+  const redacted = redactText(
+    `${reason.value}: ${rawCorrection.trim()}`,
+    workspaceRoot,
+    getConfig().redactionPatterns
+  ).trim();
+  if (!redacted) {
+    void vscode.window.showWarningMessage('TaCoS: correction was empty after redaction and was not saved.');
+    return;
+  }
+
+  const capped = redacted.length > 280 ? `${redacted.slice(0, 279)}…` : redacted;
+  await persistSummaryCorrection(context, workspaceRoot, summary.contextHash, capped);
+  const action = await vscode.window.showInformationMessage(
+    'TaCoS: correction saved and will be applied to future summaries for this context.',
+    'Regenerate now'
+  );
+  if (action === 'Regenerate now') {
+    await triggerSummary(context, 'manual');
+  }
 }
 
 async function setPaused(value: boolean): Promise<void> {

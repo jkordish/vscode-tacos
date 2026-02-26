@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { validateOpenAiSummaryPayload } from '../src/llm';
+import { buildSummaryContextPrompt, validateOpenAiSummaryPayload } from '../src/llm';
 import type { SummaryEvidenceItem } from '../src/types';
 
 describe('validateOpenAiSummaryPayload', () => {
@@ -126,5 +126,44 @@ describe('validateOpenAiSummaryPayload', () => {
         '/workspace'
       )
     ).toThrow();
+  });
+});
+
+describe('buildSummaryContextPrompt', () => {
+  it('includes user corrections when present', () => {
+    const prompt = buildSummaryContextPrompt(
+      {
+        workspaceRoot: '/workspace/repo',
+        workspaceName: 'repo',
+        branch: 'main',
+        gitStatus: '',
+        gitDiffStat: '',
+        gitDiff: '',
+        gitLog: '',
+        changedFiles: [],
+        openFiles: [],
+        recentFiles: [],
+        recentTerminal: [],
+        recentDebug: [],
+        recentUrls: [],
+        doneItems: [],
+        failingCommand: undefined,
+      },
+      {
+        intent: 'intent',
+        nextSteps: ['step 1', 'step 2'],
+        topFiles: [],
+        links: [],
+        detailsMarkdown: 'details',
+        codexPrompt: 'prompt',
+        contextHash: 'hash',
+        generatedAt: 1,
+        source: 'local',
+        userCorrections: ['wrong intent: focus is parser fix'],
+      }
+    );
+
+    expect(prompt).toContain('User corrections (must respect)');
+    expect(prompt).toContain('wrong intent: focus is parser fix');
   });
 });

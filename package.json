@@ -36,6 +36,7 @@
     "onCommand:tacos.addCheckpointNote",
     "onCommand:tacos.clearCheckpointNote",
     "onCommand:tacos.configureAiProvider",
+    "onCommand:tacos.clearCorrections",
     "onCommand:tacos.setOpenAiApiKey",
     "onCommand:tacos.clearOpenAiApiKey"
   ],
@@ -93,6 +94,10 @@
       {
         "command": "tacos.configureAiProvider",
         "title": "TaCoS: Configure AI Provider"
+      },
+      {
+        "command": "tacos.clearCorrections",
+        "title": "TaCoS: Clear Summary Corrections"
       },
       {
         "command": "tacos.setOpenAiApiKey",

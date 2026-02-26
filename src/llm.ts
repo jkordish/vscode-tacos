@@ -240,6 +240,11 @@ export function buildSummaryContextPrompt(signals: ResumeSignals, base: ResumeSu
           .join('\n')
       : '- (none)';
 
+  const correctionLines =
+    base.userCorrections && base.userCorrections.length > 0
+      ? ['', 'User corrections (must respect):', ...base.userCorrections.map((item) => `- ${item}`)]
+      : [];
+
   return [
     'Summarize this resume context:',
     '',
@@ -254,6 +259,7 @@ export function buildSummaryContextPrompt(signals: ResumeSignals, base: ResumeSu
     '',
     `Done items (avoid repeating): ${signals.doneItems.join(' | ') || '(none)'}`,
     `Latest failing command: ${signals.failingCommand ?? '(none)'}`,
+    ...correctionLines,
   ].join('\n');
 }
 

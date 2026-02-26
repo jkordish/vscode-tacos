@@ -84,6 +84,8 @@ export interface ResumeSummary {
   topFiles: string[];
   links: SummaryLink[];
   evidenceCatalog?: SummaryEvidenceItem[];
+  userCorrections?: string[];
+  correctionsFingerprint?: string;
   detailsMarkdown: string;
   codexPrompt: string;
   contextHash: string;
