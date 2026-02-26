@@ -35,6 +35,16 @@ describe('buildResumeSummary', () => {
     expect(summary.nextSteps.length).toBeGreaterThanOrEqual(2);
     expect(summary.nextSteps.length).toBeLessThanOrEqual(3);
     expect(summary.links.length).toBeLessThanOrEqual(3);
+    expect(summary.evidenceCatalog?.length ?? 0).toBeGreaterThan(0);
+    expect(summary.nextStepEvidenceIds?.length).toBe(summary.nextSteps.length);
     expect(summary.intent.length).toBeGreaterThan(0);
+  });
+
+  it('builds file/url evidence IDs from trusted extension-generated data', () => {
+    const summary = buildResumeSummary(sampleSignals());
+    const evidence = summary.evidenceCatalog ?? [];
+
+    expect(evidence.some((item) => item.id === 'file:src/extension.ts')).toBe(true);
+    expect(evidence.some((item) => item.id === 'url:https://github.com/org/repo/pull/1')).toBe(true);
   });
 });

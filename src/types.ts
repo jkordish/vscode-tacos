@@ -56,11 +56,23 @@ export interface SummaryLink {
   kind: 'file' | 'url';
 }
 
+export type SummaryEvidenceKind = 'file' | 'url' | 'commit' | 'branch' | 'terminal' | 'task' | 'debug';
+
+export interface SummaryEvidenceItem {
+  id: string;
+  kind: SummaryEvidenceKind;
+  label: string;
+  target?: string;
+  meta?: Record<string, string | number | boolean>;
+}
+
 export interface ResumeSummary {
   intent: string;
   nextSteps: string[];
+  nextStepEvidenceIds?: string[][];
   topFiles: string[];
   links: SummaryLink[];
+  evidenceCatalog?: SummaryEvidenceItem[];
   detailsMarkdown: string;
   codexPrompt: string;
   contextHash: string;

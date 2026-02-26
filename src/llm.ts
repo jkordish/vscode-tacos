@@ -1,19 +1,25 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'node:url';
-import { inferUntrustedLinkKind, normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
-import type { ExtensionConfig, ResumeSummary, ResumeSignals, SummaryLink } from './types';
-
-interface OpenAiLink {
-  label: string;
-  target: string;
-  kind?: unknown;
-}
+import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
+import type { ExtensionConfig, ResumeSummary, ResumeSignals, SummaryEvidenceItem, SummaryLink } from './types';
 
 interface OpenAiSummaryPayload {
   intent: unknown;
   next_steps: unknown;
-  links: unknown;
+  top_links: unknown;
+}
+
+interface OpenAiNextStep {
+  text: unknown;
+  evidence_ids: unknown;
+}
+
+interface ValidatedOpenAiSummaryPayload {
+  intent: string;
+  nextSteps: string[];
+  nextStepEvidenceIds: string[][];
+  links: SummaryLink[];
 }
 
 function trimToMax(value: string, max = 300): string {
@@ -35,51 +41,50 @@ function uniqueBy<T>(values: T[], key: (value: T) => string): T[] {
   return result;
 }
 
-function normalizeLinks(links: OpenAiLink[], workspaceRoot: string): SummaryLink[] {
-  const normalized: SummaryLink[] = [];
-
-  for (const item of links) {
-    if (!item || typeof item !== 'object') {
-      continue;
+function toOpenableLink(item: SummaryEvidenceItem, workspaceRoot: string): SummaryLink | undefined {
+  if (item.kind === 'url') {
+    if (typeof item.target !== 'string') {
+      return undefined;
     }
 
-    const label = typeof item.label === 'string' ? trimToMax(item.label, 160) : '';
-    const rawTarget = typeof item.target === 'string' ? item.target.trim() : '';
-    if (!label || !rawTarget) {
-      continue;
-    }
-
-    const kind = item.kind === 'file' || item.kind === 'url' ? item.kind : inferUntrustedLinkKind(rawTarget);
-    if (kind === 'url') {
-      const target = normalizeHttpUrl(rawTarget);
-      if (!target) {
-        continue;
-      }
-
-      normalized.push({ label, target, kind });
-      continue;
-    }
-
-    const target = resolveFileTargetInWorkspace(rawTarget, workspaceRoot);
+    const target = normalizeHttpUrl(item.target);
     if (!target) {
-      continue;
+      return undefined;
     }
 
-    normalized.push({ label, target, kind: 'file' });
+    return {
+      label: trimToMax(item.label, 160),
+      target,
+      kind: 'url',
+    };
   }
 
-  return uniqueBy(normalized, (link) => `${link.kind}:${link.target}`).slice(0, 3);
+  if (item.kind === 'file') {
+    if (typeof item.target !== 'string') {
+      return undefined;
+    }
+
+    const target = resolveFileTargetInWorkspace(item.target, workspaceRoot);
+    if (!target) {
+      return undefined;
+    }
+
+    return {
+      label: trimToMax(item.label, 160),
+      target,
+      kind: 'file',
+    };
+  }
+
+  return undefined;
 }
 
-function parseStringArray(value: unknown, min: number, max: number): string[] {
+function parseNextSteps(value: unknown, min: number, max: number): OpenAiNextStep[] {
   if (!Array.isArray(value)) {
     throw new Error('next_steps must be an array');
   }
 
-  const items = value
-    .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => trimToMax(entry, 240))
-    .filter(Boolean);
+  const items = value.filter((entry): entry is OpenAiNextStep => Boolean(entry) && typeof entry === 'object');
 
   if (items.length < min || items.length > max) {
     throw new Error(`next_steps must include ${min}-${max} items`);
@@ -90,8 +95,9 @@ function parseStringArray(value: unknown, min: number, max: number): string[] {
 
 export function validateOpenAiSummaryPayload(
   payload: unknown,
+  evidenceCatalog: SummaryEvidenceItem[],
   workspaceRoot: string
-): { intent: string; nextSteps: string[]; links: SummaryLink[] } {
+): ValidatedOpenAiSummaryPayload {
   if (!payload || typeof payload !== 'object') {
     throw new Error('summary payload must be an object');
   }
@@ -101,16 +107,76 @@ export function validateOpenAiSummaryPayload(
     throw new Error('intent must be a non-empty string');
   }
 
-  const nextSteps = parseStringArray(typed.next_steps, 2, 3);
-  if (!Array.isArray(typed.links)) {
-    throw new Error('links must be an array');
+  const nextStepEntries = parseNextSteps(typed.next_steps, 2, 3);
+  const nextSteps: string[] = [];
+  for (const step of nextStepEntries) {
+    if (typeof step.text !== 'string' || !step.text.trim()) {
+      throw new Error('next_steps entries must each include a non-empty text field');
+    }
+
+    nextSteps.push(trimToMax(step.text, 240));
+  }
+  if (!Array.isArray(typed.top_links)) {
+    throw new Error('top_links must be an array');
   }
 
-  const links = normalizeLinks(typed.links as OpenAiLink[], workspaceRoot);
+  const evidenceById = new Map(evidenceCatalog.map((item) => [item.id, item] as const));
+  const topLinkIds = uniqueBy(
+    typed.top_links
+      .filter((entry): entry is string => typeof entry === 'string')
+      .map((entry) => entry.trim())
+      .filter((entry) => {
+        const evidence = evidenceById.get(entry);
+        return Boolean(evidence) && (evidence?.kind === 'file' || evidence?.kind === 'url');
+      }),
+    (value) => value
+  ).slice(0, 3);
+
+  const links = uniqueBy(
+    topLinkIds
+      .map((id) => evidenceById.get(id))
+      .filter((item): item is SummaryEvidenceItem => Boolean(item))
+      .map((item) => toOpenableLink(item, workspaceRoot))
+      .filter((link): link is SummaryLink => Boolean(link)),
+    (link) => `${link.kind}:${link.target}`
+  ).slice(0, 3);
+
+  const fallbackEvidenceId = evidenceCatalog[0]?.id;
+  const nextStepEvidenceIds: string[][] = [];
+
+  for (let index = 0; index < nextSteps.length; index += 1) {
+    const step = nextStepEntries[index];
+    const providedEvidenceIds = Array.isArray(step?.evidence_ids) ? step.evidence_ids : [];
+    const normalizedEvidenceIds = uniqueBy(
+      providedEvidenceIds
+        .filter((value): value is string => typeof value === 'string')
+        .map((value) => value.trim())
+        .filter((value) => evidenceById.has(value)),
+      (value) => value
+    ).slice(0, 3);
+
+    if (normalizedEvidenceIds.length > 0) {
+      nextStepEvidenceIds.push(normalizedEvidenceIds);
+      continue;
+    }
+
+    if (topLinkIds[index]) {
+      nextStepEvidenceIds.push([topLinkIds[index]]);
+      continue;
+    }
+
+    if (fallbackEvidenceId) {
+      nextStepEvidenceIds.push([fallbackEvidenceId]);
+      continue;
+    }
+
+    nextStepEvidenceIds.push([]);
+  }
 
   return {
     intent: trimToMax(typed.intent, 500),
     nextSteps,
+    nextStepEvidenceIds,
     links,
   };
 }
@@ -155,12 +221,25 @@ function buildSystemPrompt(): string {
     'You summarize a developer\'s paused task from IDE evidence.',
     'Be concise, avoid speculation, and return JSON only.',
     'Output schema:',
-    '{"intent": string, "next_steps": string[2..3], "links": [{"label": string, "target": string, "kind": "file"|"url"}] (<=3)}',
+    '{"intent": string, "next_steps": [{"text": string, "evidence_ids": string[]} (2..3)], "top_links": string[] (<=3)}',
+    'You may only return evidence IDs explicitly listed in the evidence catalog.',
+    'Do not invent paths, URLs, or IDs.',
     'Use evidence directly and avoid repeating done items as next steps.',
   ].join('\n');
 }
 
 function buildUserPrompt(signals: ResumeSignals, base: ResumeSummary): string {
+  const evidenceCatalog = base.evidenceCatalog ?? [];
+  const evidenceLines =
+    evidenceCatalog.length > 0
+      ? evidenceCatalog
+          .map((item) => {
+            const target = typeof item.target === 'string' ? ` | target=${item.target}` : '';
+            return `- id=${item.id} | kind=${item.kind} | label=${item.label}${target}`;
+          })
+          .join('\n')
+      : '- (none)';
+
   return [
     'Summarize this resume context:',
     '',
@@ -169,6 +248,9 @@ function buildUserPrompt(signals: ResumeSignals, base: ResumeSummary): string {
     '',
     'Evidence:',
     base.detailsMarkdown,
+    '',
+    'Evidence catalog (use IDs from this list only):',
+    evidenceLines,
     '',
     `Done items (avoid repeating): ${signals.doneItems.join(' | ') || '(none)'}`,
     `Latest failing command: ${signals.failingCommand ?? '(none)'}`,
@@ -235,28 +317,30 @@ function jsonSchema() {
     schema: {
       type: 'object',
       additionalProperties: false,
-      required: ['intent', 'next_steps', 'links'],
+      required: ['intent', 'next_steps', 'top_links'],
       properties: {
         intent: { type: 'string' },
         next_steps: {
           type: 'array',
           minItems: 2,
           maxItems: 3,
-          items: { type: 'string' },
-        },
-        links: {
-          type: 'array',
-          maxItems: 3,
           items: {
             type: 'object',
             additionalProperties: false,
-            required: ['label', 'target', 'kind'],
+            required: ['text', 'evidence_ids'],
             properties: {
-              label: { type: 'string' },
-              target: { type: 'string' },
-              kind: { type: 'string', enum: ['file', 'url'] },
+              text: { type: 'string' },
+              evidence_ids: {
+                type: 'array',
+                items: { type: 'string' },
+              },
             },
           },
+        },
+        top_links: {
+          type: 'array',
+          maxItems: 3,
+          items: { type: 'string' },
         },
       },
     },
@@ -265,7 +349,7 @@ function jsonSchema() {
 
 function buildOpenAiSummary(
   base: ResumeSummary,
-  validated: { intent: string; nextSteps: string[]; links: SummaryLink[] }
+  validated: ValidatedOpenAiSummaryPayload
 ): ResumeSummary {
   const topFiles = uniqueBy(
     validated.links.filter((link) => link.kind === 'file').map((link) => link.label),
@@ -281,7 +365,14 @@ function buildOpenAiSummary(
     `- ${validated.intent}`,
     '',
     '## Next steps',
-    ...validated.nextSteps.map((step) => `- ${step}`),
+    ...validated.nextSteps.map((step, index) => {
+      const evidenceIds = validated.nextStepEvidenceIds[index] ?? [];
+      if (evidenceIds.length === 0) {
+        return `- ${step}`;
+      }
+
+      return `- ${step} (evidence: ${evidenceIds.join(', ')})`;
+    }),
     '',
     '## Top links/files',
     ...(links.length > 0 ? links.map((link) => `- [${link.kind}] ${link.label} -> ${link.target}`) : ['- None returned']),
@@ -295,8 +386,10 @@ function buildOpenAiSummary(
     source: 'openai',
     intent: validated.intent,
     nextSteps: validated.nextSteps,
+    nextStepEvidenceIds: validated.nextStepEvidenceIds,
     topFiles,
     links,
+    evidenceCatalog: base.evidenceCatalog,
     detailsMarkdown: details,
     generatedAt: Date.now(),
   };
@@ -349,7 +442,7 @@ export async function tryGenerateOpenAiSummary(
 
     const content = extractResponseText(responsePayload);
     const parsed = JSON.parse(content) as unknown;
-    const validated = validateOpenAiSummaryPayload(parsed, signals.workspaceRoot);
+    const validated = validateOpenAiSummaryPayload(parsed, base.evidenceCatalog ?? [], signals.workspaceRoot);
     return buildOpenAiSummary(base, validated);
   } catch (error) {
     log(`OpenAI summary failed: ${(error as Error).message}`);
