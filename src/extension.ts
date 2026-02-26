@@ -22,6 +22,7 @@ import {
   resolveFileTargetInWorkspace,
 } from './pathSafety';
 import { redactList, redactText } from './redaction';
+import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability } from './restoreSafety';
 import { buildResumeSummary } from './summary';
 import { buildTimelineGroups } from './timeline';
@@ -120,6 +121,7 @@ interface RuntimeState {
   terminalHooks: vscode.Disposable[];
   refinementSequence: number;
   activeRefinementSequence?: number;
+  activeRefinementContextHash?: string;
   autoSummaryInFlight: boolean;
   lastAutoFocusTriggerAt: number;
   meaningfulActivitySinceCheckpointPrompt: boolean;
@@ -151,6 +153,7 @@ export function activate(context: vscode.ExtensionContext): void {
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
     refinementSequence: 0,
+    activeRefinementContextHash: undefined,
     autoSummaryInFlight: false,
     lastAutoFocusTriggerAt: 0,
     meaningfulActivitySinceCheckpointPrompt: false,
@@ -715,6 +718,7 @@ async function triggerSummary(
   }
 
   state.activeRefinementSequence = undefined;
+  state.activeRefinementContextHash = undefined;
   const prepared = await prepareTriggerSummary(context, root, reason);
 
   await context.workspaceState.update(KEY_LAST_SUMMARY_AT, Date.now());
@@ -820,13 +824,21 @@ async function refineSummaryInBackground(
   const sequence = state.refinementSequence + 1;
   state.refinementSequence = sequence;
   state.activeRefinementSequence = sequence;
+  state.activeRefinementContextHash = prepared.localSummary.contextHash;
   rerenderPanel();
 
-  const refined = await generateAiSummary(prepared);
+  let refined: ResumeSummary | undefined;
+  try {
+    refined = await generateAiSummary(prepared);
+  } catch (error) {
+    state.output.appendLine(`TaCoS: AI refinement failed: ${(error as Error).message}`);
+    refined = undefined;
+  }
 
   if (!refined) {
     if (state.activeRefinementSequence === sequence) {
       state.activeRefinementSequence = undefined;
+      state.activeRefinementContextHash = undefined;
       rerenderPanel();
     }
     return;
@@ -836,6 +848,7 @@ async function refineSummaryInBackground(
     return;
   }
   state.activeRefinementSequence = undefined;
+  state.activeRefinementContextHash = undefined;
 
   await context.workspaceState.update(prepared.cacheKey, refined);
 
@@ -1439,9 +1452,13 @@ function renderWebview(
   const localGeneratedAtLabel = summary.localGeneratedAt
     ? formatTimestamp(summary.localGeneratedAt)
     : undefined;
+  const refinementActive = isRefinementActiveForSummary(
+    state.activeRefinementContextHash,
+    summary.contextHash,
+  );
   const statusHint =
     summary.source === 'local'
-      ? state.activeRefinementSequence
+      ? refinementActive
         ? 'AI refinement in progress.'
         : 'Running local-only summary.'
       : localGeneratedAtLabel
