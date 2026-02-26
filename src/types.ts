@@ -5,6 +5,8 @@ export interface ExtensionConfig {
   enabled: boolean;
   showOnFocus: boolean;
   pauseSummaries: boolean;
+  showTimeline: boolean;
+  promptCheckpointOnBlur: boolean;
   minIdleMinutes: number;
   cooldownMinutes: number;
   idleMinutes: number;
@@ -60,12 +62,21 @@ export interface SummaryLink {
   kind: 'file' | 'url';
 }
 
-export type SummaryEvidenceKind = 'file' | 'url' | 'commit' | 'branch' | 'terminal' | 'task' | 'debug';
+export type SummaryEvidenceKind =
+  | 'file'
+  | 'url'
+  | 'commit'
+  | 'branch'
+  | 'git'
+  | 'terminal'
+  | 'task'
+  | 'debug';
 
 export interface SummaryEvidenceItem {
   id: string;
   kind: SummaryEvidenceKind;
   label: string;
+  capturedAt?: number;
   target?: string;
   meta?: Record<string, string | number | boolean>;
 }
@@ -89,6 +100,7 @@ export interface ResumeSummary {
   detailsMarkdown: string;
   codexPrompt: string;
   contextHash: string;
+  localGeneratedAt?: number;
   generatedAt: number;
   source: SummaryProvider;
 }

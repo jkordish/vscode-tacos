@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
 import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
-import type { ResumeMode, ResumeSignals, ResumeSummary, SummaryEvidenceItem, SummaryLink } from './types';
+import type {
+  ResumeMode,
+  ResumeSignals,
+  ResumeSummary,
+  SummaryEvidenceItem,
+  SummaryLink,
+} from './types';
 
 function dedupe(values: string[], limit: number): string[] {
   const seen = new Set<string>();
@@ -25,7 +31,9 @@ function stableStringify(value: unknown): string {
   }
 
   if (value && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
     return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(',')}}`;
   }
 
@@ -71,7 +79,9 @@ function buildIntent(signals: ResumeSignals, topFiles: string[]): string {
   }
 
   if (parts.length === 0) {
-    parts.push('You were actively editing this workspace and can continue from your latest file changes.');
+    parts.push(
+      'You were actively editing this workspace and can continue from your latest file changes.',
+    );
   }
 
   return parts.slice(0, 3).join(' ');
@@ -122,13 +132,20 @@ function addEvidenceItem(catalog: SummaryEvidenceItem[], item: SummaryEvidenceIt
     return;
   }
 
-  catalog.push(item);
+  catalog.push({
+    ...item,
+    capturedAt: item.capturedAt ?? Date.now() - catalog.length * 30_000,
+  });
 }
 
 function buildEvidenceCatalog(signals: ResumeSignals, topFiles: string[]): SummaryEvidenceItem[] {
   const catalog: SummaryEvidenceItem[] = [];
+  const now = Date.now();
 
-  for (const relative of dedupe([...topFiles, ...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles], 8)) {
+  for (const [index, relative] of dedupe(
+    [...topFiles, ...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles],
+    8,
+  ).entries()) {
     const resolved = resolveFileTargetInWorkspace(relative, signals.workspaceRoot);
     if (!resolved) {
       continue;
@@ -138,12 +155,13 @@ function buildEvidenceCatalog(signals: ResumeSignals, topFiles: string[]): Summa
       id: `file:${relative}`,
       kind: 'file',
       label: relative,
+      capturedAt: now - index * 45_000,
       target: resolved,
       meta: { relativePath: relative },
     });
   }
 
-  for (const rawUrl of dedupe(signals.recentUrls, 5)) {
+  for (const [index, rawUrl] of dedupe(signals.recentUrls, 5).entries()) {
     const safeUrl = normalizeHttpUrl(rawUrl);
     if (!safeUrl) {
       continue;
@@ -153,6 +171,7 @@ function buildEvidenceCatalog(signals: ResumeSignals, topFiles: string[]): Summa
       id: `url:${safeUrl}`,
       kind: 'url',
       label: rawUrl,
+      capturedAt: now - index * 60_000,
       target: safeUrl,
     });
   }
@@ -162,6 +181,21 @@ function buildEvidenceCatalog(signals: ResumeSignals, topFiles: string[]): Summa
       id: `branch:${signals.branch.trim()}`,
       kind: 'branch',
       label: signals.branch.trim(),
+      capturedAt: now,
+    });
+  }
+
+  const firstStatusLine = signals.gitStatus
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (firstStatusLine) {
+    addEvidenceItem(catalog, {
+      id: `git:${hashIdFragment(firstStatusLine)}`,
+      kind: 'git',
+      label: 'git status snapshot',
+      capturedAt: now,
+      meta: { statusLine: firstStatusLine },
     });
   }
 
@@ -171,6 +205,7 @@ function buildEvidenceCatalog(signals: ResumeSignals, topFiles: string[]): Summa
       id: `commit:${hashIdFragment(firstCommitLine)}`,
       kind: 'commit',
       label: firstCommitLine.trim(),
+      capturedAt: now - 15_000,
       meta: { preview: true },
     });
   }
@@ -180,31 +215,35 @@ function buildEvidenceCatalog(signals: ResumeSignals, topFiles: string[]): Summa
       id: `terminal:${hashIdFragment(signals.failingCommand)}`,
       kind: 'terminal',
       label: signals.failingCommand,
+      capturedAt: now,
       meta: { failing: true },
     });
   }
 
-  for (const terminalEntry of dedupe(signals.recentTerminal, 4)) {
+  for (const [index, terminalEntry] of dedupe(signals.recentTerminal, 4).entries()) {
     addEvidenceItem(catalog, {
       id: `terminal:${hashIdFragment(terminalEntry)}`,
       kind: 'terminal',
       label: terminalEntry,
+      capturedAt: now - index * 45_000,
     });
   }
 
-  for (const debugEntry of dedupe(signals.recentDebug, 3)) {
+  for (const [index, debugEntry] of dedupe(signals.recentDebug, 3).entries()) {
     addEvidenceItem(catalog, {
       id: `debug:${hashIdFragment(debugEntry)}`,
       kind: 'debug',
       label: debugEntry,
+      capturedAt: now - index * 60_000,
     });
   }
 
-  for (const doneItem of dedupe(signals.doneItems, 3)) {
+  for (const [index, doneItem] of dedupe(signals.doneItems, 3).entries()) {
     addEvidenceItem(catalog, {
       id: `task:${hashIdFragment(doneItem)}`,
       kind: 'task',
       label: doneItem,
+      capturedAt: now - index * 60_000,
     });
   }
 
@@ -214,7 +253,11 @@ function buildEvidenceCatalog(signals: ResumeSignals, topFiles: string[]): Summa
 function buildLinksFromEvidence(evidenceCatalog: SummaryEvidenceItem[]): SummaryLink[] {
   const links: SummaryLink[] = [];
   for (const item of evidenceCatalog) {
-    if ((item.kind !== 'file' && item.kind !== 'url') || typeof item.target !== 'string' || !item.target) {
+    if (
+      (item.kind !== 'file' && item.kind !== 'url') ||
+      typeof item.target !== 'string' ||
+      !item.target
+    ) {
       continue;
     }
 
@@ -232,7 +275,10 @@ function buildLinksFromEvidence(evidenceCatalog: SummaryEvidenceItem[]): Summary
   return links;
 }
 
-function buildStepEvidenceIds(nextSteps: string[], evidenceCatalog: SummaryEvidenceItem[]): string[][] {
+function buildStepEvidenceIds(
+  nextSteps: string[],
+  evidenceCatalog: SummaryEvidenceItem[],
+): string[][] {
   const evidenceIds = evidenceCatalog.map((item) => item.id);
   if (evidenceIds.length === 0) {
     return nextSteps.map(() => []);
@@ -242,7 +288,10 @@ function buildStepEvidenceIds(nextSteps: string[], evidenceCatalog: SummaryEvide
 }
 
 export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
-  const topFiles = dedupe([...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles], 3);
+  const topFiles = dedupe(
+    [...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles],
+    3,
+  );
   const recentFilesSnapshot = dedupe([...signals.openFiles, ...signals.recentFiles], 10);
   const nextSteps = buildNextSteps(signals, topFiles).slice(0, 3);
   const mode = detectResumeMode(signals);
@@ -273,7 +322,9 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     `- ${mode}`,
     '',
     '## Top links',
-    ...(signals.recentUrls.length > 0 ? dedupe(signals.recentUrls, 3).map((url) => `- ${url}`) : ['- None captured']),
+    ...(signals.recentUrls.length > 0
+      ? dedupe(signals.recentUrls, 3).map((url) => `- ${url}`)
+      : ['- None captured']),
     '',
     '## Evidence catalog',
     ...evidenceLines,
@@ -282,7 +333,9 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     `**Workspace:** ${signals.workspaceName}`,
     signals.branch ? `**Branch:** ${signals.branch}` : '',
     signals.gitLog ? `\n**Recent commits:**\n\n\`\`\`\n${signals.gitLog}\n\`\`\`` : '',
-    signals.gitStatus ? `\n**git status --porcelain:**\n\n\`\`\`\n${signals.gitStatus}\n\`\`\`` : '',
+    signals.gitStatus
+      ? `\n**git status --porcelain:**\n\n\`\`\`\n${signals.gitStatus}\n\`\`\``
+      : '',
     signals.gitDiffStat ? `\n**git diff --stat:**\n\n\`\`\`\n${signals.gitDiffStat}\n\`\`\`` : '',
     signals.gitDiff ? `\n**git diff (truncated):**\n\n\`\`\`\n${signals.gitDiff}\n\`\`\`` : '',
     signals.recentTerminal.length > 0

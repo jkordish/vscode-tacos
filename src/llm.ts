@@ -2,7 +2,13 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'node:url';
 import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
-import type { ExtensionConfig, ResumeSummary, ResumeSignals, SummaryEvidenceItem, SummaryLink } from './types';
+import type {
+  ExtensionConfig,
+  ResumeSummary,
+  ResumeSignals,
+  SummaryEvidenceItem,
+  SummaryLink,
+} from './types';
 
 interface OpenAiSummaryPayload {
   intent: unknown;
@@ -84,7 +90,9 @@ function parseNextSteps(value: unknown, min: number, max: number): OpenAiNextSte
     throw new Error('next_steps must be an array');
   }
 
-  const items = value.filter((entry): entry is OpenAiNextStep => Boolean(entry) && typeof entry === 'object');
+  const items = value.filter(
+    (entry): entry is OpenAiNextStep => Boolean(entry) && typeof entry === 'object',
+  );
 
   if (items.length < min || items.length > max) {
     throw new Error(`next_steps must include ${min}-${max} items`);
@@ -96,7 +104,7 @@ function parseNextSteps(value: unknown, min: number, max: number): OpenAiNextSte
 export function validateOpenAiSummaryPayload(
   payload: unknown,
   evidenceCatalog: SummaryEvidenceItem[],
-  workspaceRoot: string
+  workspaceRoot: string,
 ): ValidatedOpenAiSummaryPayload {
   if (!payload || typeof payload !== 'object') {
     throw new Error('summary payload must be an object');
@@ -129,7 +137,7 @@ export function validateOpenAiSummaryPayload(
         const evidence = evidenceById.get(entry);
         return Boolean(evidence) && (evidence?.kind === 'file' || evidence?.kind === 'url');
       }),
-    (value) => value
+    (value) => value,
   ).slice(0, 3);
 
   const links = uniqueBy(
@@ -138,7 +146,7 @@ export function validateOpenAiSummaryPayload(
       .filter((item): item is SummaryEvidenceItem => Boolean(item))
       .map((item) => toOpenableLink(item, workspaceRoot))
       .filter((link): link is SummaryLink => Boolean(link)),
-    (link) => `${link.kind}:${link.target}`
+    (link) => `${link.kind}:${link.target}`,
   ).slice(0, 3);
 
   const fallbackEvidenceId = evidenceCatalog[0]?.id;
@@ -152,7 +160,7 @@ export function validateOpenAiSummaryPayload(
         .filter((value): value is string => typeof value === 'string')
         .map((value) => value.trim())
         .filter((value) => evidenceById.has(value)),
-      (value) => value
+      (value) => value,
     ).slice(0, 3);
 
     if (normalizedEvidenceIds.length > 0) {
@@ -190,7 +198,9 @@ function extractResponseText(responsePayload: unknown): string {
 
   const choices = anyPayload.choices;
   if (Array.isArray(choices) && choices.length > 0) {
-    const message = (choices[0] as Record<string, unknown>).message as Record<string, unknown> | undefined;
+    const message = (choices[0] as Record<string, unknown>).message as
+      | Record<string, unknown>
+      | undefined;
     const content = message?.content;
     if (typeof content === 'string') {
       return content;
@@ -218,7 +228,7 @@ function extractResponseText(responsePayload: unknown): string {
 
 export function buildSummaryInstructionsPrompt(): string {
   return [
-    'You summarize a developer\'s paused task from IDE evidence.',
+    "You summarize a developer's paused task from IDE evidence.",
     'Be concise, avoid speculation, and return JSON only.',
     'Output schema:',
     '{"intent": string, "next_steps": [{"text": string, "evidence_ids": string[]} (2..3)], "top_links": string[] (<=3)}',
@@ -235,7 +245,10 @@ export function buildSummaryContextPrompt(signals: ResumeSignals, base: ResumeSu
       ? evidenceCatalog
           .map((item) => {
             // Do not expose local absolute file paths in model prompts.
-            const target = item.kind === 'url' && typeof item.target === 'string' ? ` | target=${item.target}` : '';
+            const target =
+              item.kind === 'url' && typeof item.target === 'string'
+                ? ` | target=${item.target}`
+                : '';
             return `- id=${item.id} | kind=${item.kind} | label=${item.label}${target}`;
           })
           .join('\n')
@@ -264,7 +277,12 @@ export function buildSummaryContextPrompt(signals: ResumeSignals, base: ResumeSu
   ].join('\n');
 }
 
-async function postJson(url: string, headers: Record<string, string>, body: unknown, timeoutMs: number): Promise<unknown> {
+async function postJson(
+  url: string,
+  headers: Record<string, string>,
+  body: unknown,
+  timeoutMs: number,
+): Promise<unknown> {
   const parsed = new URL(url);
   const isHttps = parsed.protocol === 'https:';
   const client = isHttps ? https : http;
@@ -304,7 +322,7 @@ async function postJson(url: string, headers: Record<string, string>, body: unkn
             reject(new Error(`Failed parsing OpenAI JSON response: ${(error as Error).message}`));
           }
         });
-      }
+      },
     );
 
     req.setTimeout(timeoutMs, () => {
@@ -358,11 +376,11 @@ export function buildAiSummary(
   base: ResumeSummary,
   validated: ValidatedOpenAiSummaryPayload,
   source: Extract<ResumeSummary['source'], 'openai' | 'vscode-lm'>,
-  sourceLabel: string
+  sourceLabel: string,
 ): ResumeSummary {
   const topFiles = uniqueBy(
     validated.links.filter((link) => link.kind === 'file').map((link) => link.label),
-    (value) => value
+    (value) => value,
   )
     .slice(0, 3)
     .concat(base.topFiles)
@@ -384,7 +402,9 @@ export function buildAiSummary(
     }),
     '',
     '## Top links/files',
-    ...(links.length > 0 ? links.map((link) => `- [${link.kind}] ${link.label} -> ${link.target}`) : ['- None returned']),
+    ...(links.length > 0
+      ? links.map((link) => `- [${link.kind}] ${link.label} -> ${link.target}`)
+      : ['- None returned']),
     '',
     '---',
     base.detailsMarkdown,
@@ -393,6 +413,7 @@ export function buildAiSummary(
   return {
     ...base,
     source,
+    localGeneratedAt: base.localGeneratedAt ?? base.generatedAt,
     intent: validated.intent,
     nextSteps: validated.nextSteps,
     nextStepEvidenceIds: validated.nextStepEvidenceIds,
@@ -409,7 +430,7 @@ export async function tryGenerateOpenAiSummary(
   base: ResumeSummary,
   config: ExtensionConfig,
   apiKey: string,
-  log: (message: string) => void
+  log: (message: string) => void,
 ): Promise<ResumeSummary | undefined> {
   if (!apiKey) {
     log('OpenAI mode requested but no API key was found. Falling back to local summary.');
@@ -446,12 +467,16 @@ export async function tryGenerateOpenAiSummary(
         'Content-Type': 'application/json',
       },
       requestBody,
-      config.openaiTimeoutMs
+      config.openaiTimeoutMs,
     );
 
     const content = extractResponseText(responsePayload);
     const parsed = JSON.parse(content) as unknown;
-    const validated = validateOpenAiSummaryPayload(parsed, base.evidenceCatalog ?? [], signals.workspaceRoot);
+    const validated = validateOpenAiSummaryPayload(
+      parsed,
+      base.evidenceCatalog ?? [],
+      signals.workspaceRoot,
+    );
     return buildAiSummary(base, validated, 'openai', 'OpenAI');
   } catch (error) {
     log(`OpenAI summary failed: ${(error as Error).message}`);

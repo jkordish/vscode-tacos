@@ -1,5 +1,9 @@
 import * as path from 'node:path';
-import { isPathWithinWorkspaceRoot, normalizeHttpUrl, resolveFileTargetInWorkspace } from '../src/pathSafety';
+import {
+  isPathWithinWorkspaceRoot,
+  normalizeHttpUrl,
+  resolveFileTargetInWorkspace,
+} from '../src/pathSafety';
 
 describe('pathSafety', () => {
   it('allows only http/https URLs', () => {
@@ -14,14 +18,22 @@ describe('pathSafety', () => {
 
   it('resolves file targets only when they stay in the workspace root', () => {
     const root = '/workspace/repo';
-    expect(resolveFileTargetInWorkspace('src/extension.ts', root)).toBe(path.resolve(root, 'src/extension.ts'));
+    expect(resolveFileTargetInWorkspace('src/extension.ts', root)).toBe(
+      path.resolve(root, 'src/extension.ts'),
+    );
     expect(resolveFileTargetInWorkspace('../secret.env', root)).toBeUndefined();
     expect(resolveFileTargetInWorkspace('/etc/passwd', root)).toBeUndefined();
+    expect(resolveFileTargetInWorkspace('file:///tmp/secret', root)).toBeUndefined();
+    expect(
+      resolveFileTargetInWorkspace('vscode://file/workspace/repo/src/index.ts', root),
+    ).toBeUndefined();
   });
 
   it('allows absolute paths only when they remain in the workspace root', () => {
     const root = '/workspace/repo';
-    expect(resolveFileTargetInWorkspace('/workspace/repo/src/index.ts', root)).toBe('/workspace/repo/src/index.ts');
+    expect(resolveFileTargetInWorkspace('/workspace/repo/src/index.ts', root)).toBe(
+      '/workspace/repo/src/index.ts',
+    );
     expect(resolveFileTargetInWorkspace('/workspace/other/index.ts', root)).toBeUndefined();
   });
 
@@ -34,13 +46,23 @@ describe('pathSafety', () => {
       isPathWithinWorkspaceRoot(root, inside, {
         pathApi: path.win32,
         platform: 'win32',
-      })
+      }),
     ).toBe(true);
     expect(
       isPathWithinWorkspaceRoot(root, outside, {
         pathApi: path.win32,
         platform: 'win32',
-      })
+      }),
     ).toBe(false);
+  });
+
+  it('blocks Windows traversal that escapes the workspace root', () => {
+    const root = 'C:\\Repo';
+    const resolved = resolveFileTargetInWorkspace('src\\..\\..\\secret.txt', root, {
+      pathApi: path.win32,
+      platform: 'win32',
+    });
+
+    expect(resolved).toBeUndefined();
   });
 });

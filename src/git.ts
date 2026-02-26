@@ -3,11 +3,36 @@ import { promisify } from 'node:util';
 import type { ExtensionConfig, GitSnapshot } from './types';
 
 const execFileAsync = promisify(execFile);
+const GIT_CACHE_TTL_MS = 20_000;
+const GIT_COMMAND_TIMEOUT_MS = 2_000;
+
+interface GitCacheEntry {
+  snapshot: GitSnapshot;
+  fetchedAt: number;
+  inFlight?: Promise<GitSnapshot>;
+}
+
+const gitSnapshotCache = new Map<string, GitCacheEntry>();
+
+function emptySnapshot(): GitSnapshot {
+  return {
+    isRepo: false,
+    branch: '',
+    status: '',
+    diffStat: '',
+    diff: '',
+    log: '',
+    changedFiles: [],
+    hasUncommitted: false,
+    hasConflicts: false,
+  };
+}
 
 async function runGit(root: string, args: string[]): Promise<string> {
   const { stdout } = await execFileAsync('git', ['-C', root, ...args], {
     encoding: 'utf8',
     maxBuffer: 8 * 1024 * 1024,
+    timeout: GIT_COMMAND_TIMEOUT_MS,
   });
 
   return (stdout ?? '').toString().trimEnd();
@@ -43,17 +68,48 @@ function detectConflicts(statusOutput: string): boolean {
 }
 
 export async function collectGit(root: string, config: ExtensionConfig): Promise<GitSnapshot> {
-  const snapshot: GitSnapshot = {
-    isRepo: false,
-    branch: '',
-    status: '',
-    diffStat: '',
-    diff: '',
-    log: '',
-    changedFiles: [],
-    hasUncommitted: false,
-    hasConflicts: false,
-  };
+  const cacheKey = `${root}|diff:${config.includeDiff ? '1' : '0'}|max:${config.maxDiffChars}`;
+  const cached = gitSnapshotCache.get(cacheKey);
+  const now = Date.now();
+
+  if (cached && now - cached.fetchedAt < GIT_CACHE_TTL_MS) {
+    return cached.snapshot;
+  }
+
+  if (cached?.inFlight) {
+    return cached.snapshot;
+  }
+
+  if (cached) {
+    cached.inFlight = collectGitUncached(root, config)
+      .then((freshSnapshot) => {
+        gitSnapshotCache.set(cacheKey, {
+          snapshot: freshSnapshot,
+          fetchedAt: Date.now(),
+        });
+        return freshSnapshot;
+      })
+      .catch(() => {
+        gitSnapshotCache.set(cacheKey, {
+          snapshot: cached.snapshot,
+          fetchedAt: cached.fetchedAt,
+        });
+        return cached.snapshot;
+      });
+    gitSnapshotCache.set(cacheKey, cached);
+    return cached.snapshot;
+  }
+
+  const initial = await collectGitUncached(root, config);
+  gitSnapshotCache.set(cacheKey, {
+    snapshot: initial,
+    fetchedAt: Date.now(),
+  });
+  return initial;
+}
+
+async function collectGitUncached(root: string, config: ExtensionConfig): Promise<GitSnapshot> {
+  const snapshot = emptySnapshot();
 
   try {
     snapshot.branch = (await runGit(root, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim();
@@ -62,37 +118,26 @@ export async function collectGit(root: string, config: ExtensionConfig): Promise
     return snapshot;
   }
 
-  try {
-    snapshot.status = await runGit(root, ['status', '--porcelain=v1', '-uall']);
-    snapshot.hasUncommitted = snapshot.status.trim().length > 0;
-    snapshot.hasConflicts = detectConflicts(snapshot.status);
-  } catch {
-    // Ignore optional command failures.
-  }
+  const [status, diffStat, log, diff] = await Promise.all([
+    runGit(root, ['status', '--porcelain=v1', '-uall']).catch(() => ''),
+    runGit(root, ['diff', '--stat']).catch(() => ''),
+    runGit(root, ['log', '-n', '6', '--oneline', '--decorate']).catch(() => ''),
+    config.includeDiff && config.maxDiffChars > 0
+      ? runGit(root, ['diff', '--unified=0', '--no-color']).catch(() => '')
+      : Promise.resolve(''),
+  ]);
 
-  try {
-    snapshot.diffStat = await runGit(root, ['diff', '--stat']);
-    snapshot.changedFiles = parseDiffStatFiles(snapshot.diffStat);
-  } catch {
-    // Ignore optional command failures.
-  }
-
-  try {
-    snapshot.log = await runGit(root, ['log', '-n', '6', '--oneline', '--decorate']);
-  } catch {
-    // Ignore optional command failures.
-  }
-
-  if (config.includeDiff && config.maxDiffChars > 0) {
-    try {
-      const rawDiff = await runGit(root, ['diff', '--unified=0', '--no-color']);
-      snapshot.diff =
-        rawDiff.length > config.maxDiffChars
-          ? `${rawDiff.slice(0, config.maxDiffChars)}\n…(truncated)…`
-          : rawDiff;
-    } catch {
-      // Ignore optional command failures.
-    }
+  snapshot.status = status;
+  snapshot.hasUncommitted = snapshot.status.trim().length > 0;
+  snapshot.hasConflicts = detectConflicts(snapshot.status);
+  snapshot.diffStat = diffStat;
+  snapshot.changedFiles = parseDiffStatFiles(snapshot.diffStat);
+  snapshot.log = log;
+  if (diff) {
+    snapshot.diff =
+      diff.length > config.maxDiffChars
+        ? `${diff.slice(0, config.maxDiffChars)}\n…(truncated)…`
+        : diff;
   }
 
   return snapshot;

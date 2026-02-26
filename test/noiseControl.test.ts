@@ -1,4 +1,4 @@
-import { shouldAutoTriggerSummary } from '../src/noiseControl';
+import { shouldAutoTriggerSummary, shouldPromptCheckpointOnBlur } from '../src/noiseControl';
 
 describe('shouldAutoTriggerSummary', () => {
   it('blocks triggers when idle, project switch, and significant-change gates are all false', () => {
@@ -69,5 +69,49 @@ describe('shouldAutoTriggerSummary', () => {
     });
 
     expect(result).toBe(false);
+  });
+});
+
+describe('shouldPromptCheckpointOnBlur', () => {
+  it('blocks prompt when there was no meaningful activity', () => {
+    expect(
+      shouldPromptCheckpointOnBlur({
+        now: 100_000,
+        lastSummaryAt: 0,
+        lastCheckpointPromptAt: 0,
+        minIdleMinutes: 10,
+        cooldownMinutes: 5,
+        promptCooldownMinutes: 45,
+        meaningfulChangeSinceLastPrompt: false,
+      }),
+    ).toBe(false);
+  });
+
+  it('blocks repeated prompts inside checkpoint cooldown window', () => {
+    expect(
+      shouldPromptCheckpointOnBlur({
+        now: 60 * 60_000,
+        lastSummaryAt: 0,
+        lastCheckpointPromptAt: 30 * 60_000,
+        minIdleMinutes: 10,
+        cooldownMinutes: 5,
+        promptCooldownMinutes: 45,
+        meaningfulChangeSinceLastPrompt: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('allows prompt when meaningful activity exists and cooldowns are satisfied', () => {
+    expect(
+      shouldPromptCheckpointOnBlur({
+        now: 120 * 60_000,
+        lastSummaryAt: 10 * 60_000,
+        lastCheckpointPromptAt: 50 * 60_000,
+        minIdleMinutes: 10,
+        cooldownMinutes: 5,
+        promptCooldownMinutes: 45,
+        meaningfulChangeSinceLastPrompt: true,
+      }),
+    ).toBe(true);
   });
 });

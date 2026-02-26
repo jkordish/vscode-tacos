@@ -46,7 +46,9 @@ describe('buildResumeSummary', () => {
     const evidence = summary.evidenceCatalog ?? [];
 
     expect(evidence.some((item) => item.id === 'file:src/extension.ts')).toBe(true);
-    expect(evidence.some((item) => item.id === 'url:https://github.com/org/repo/pull/1')).toBe(true);
+    expect(evidence.some((item) => item.id === 'url:https://github.com/org/repo/pull/1')).toBe(
+      true,
+    );
   });
 
   it('marks mode as coding when no debug/failing signals exist', () => {

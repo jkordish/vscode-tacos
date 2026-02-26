@@ -9,10 +9,15 @@ import { sanitizeActivityForPersistence } from './activityPersistence';
 import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
-import { shouldAutoTriggerSummary } from './noiseControl';
-import { isPathWithinWorkspaceRoot, normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
+import { shouldAutoTriggerSummary, shouldPromptCheckpointOnBlur } from './noiseControl';
+import {
+  isPathWithinWorkspaceRoot,
+  normalizeHttpUrl,
+  resolveFileTargetInWorkspace,
+} from './pathSafety';
 import { redactList, redactText } from './redaction';
 import { buildResumeSummary } from './summary';
+import { buildTimelineGroups } from './timeline';
 import type {
   ExtensionConfig,
   MetricRecord,
@@ -24,6 +29,8 @@ import type {
   VscodeLmModelSelector,
 } from './types';
 import { tryGenerateVscodeLmSummary, type VscodeLmModelLike } from './vscodeLm';
+import { parseWebviewMessage } from './webviewMessages';
+import { buildWebviewCspMetaTag, escapeHtml } from './webviewSecurity';
 
 const KEY_LAST_BLUR_AT = 'tacos.lastBlurAt';
 const KEY_LAST_SUMMARY_AT = 'tacos.lastSummaryAt';
@@ -39,9 +46,13 @@ const KEY_LAST_FAILING_COMMAND = 'tacos.lastFailingCommand';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
 const KEY_SUMMARY_CORRECTIONS_PREFIX = 'tacos.summaryCorrections';
 const KEY_VSCODE_LM_SELECTOR = 'tacos.vscodeLmSelector';
+const KEY_ONBOARDING_NOTICE_SHOWN = 'tacos.onboardingNoticeShown';
+const KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX = 'tacos.lastCheckpointPromptAt';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
+const CHECKPOINT_PROMPT_COOLDOWN_MINUTES = 45;
+const FOCUS_TRIGGER_DEBOUNCE_MS = 1200;
 const execFileAsync = promisify(execFile);
 const markdownRenderer = new MarkdownIt({
   html: false,
@@ -52,7 +63,10 @@ const markdownRenderer = new MarkdownIt({
 class RingBuffer {
   private valuesList: string[] = [];
 
-  constructor(private readonly max: number, initial: string[] = []) {
+  constructor(
+    private readonly max: number,
+    initial: string[] = [],
+  ) {
     for (const value of initial) {
       this.push(value);
     }
@@ -98,6 +112,9 @@ interface RuntimeState {
   terminalHooks: vscode.Disposable[];
   refinementSequence: number;
   activeRefinementSequence?: number;
+  autoSummaryInFlight: boolean;
+  lastAutoFocusTriggerAt: number;
+  meaningfulActivitySinceCheckpointPrompt: boolean;
   pauseUntilRestart: boolean;
   vscodeLmModel?: VscodeLmModelLike;
   vscodeLmSelector?: VscodeLmModelSelector;
@@ -124,8 +141,13 @@ export function activate(context: vscode.ExtensionContext): void {
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
     refinementSequence: 0,
+    autoSummaryInFlight: false,
+    lastAutoFocusTriggerAt: 0,
+    meaningfulActivitySinceCheckpointPrompt: false,
     pauseUntilRestart: false,
-    vscodeLmSelector: context.globalState.get<VscodeLmModelSelector | undefined>(KEY_VSCODE_LM_SELECTOR),
+    vscodeLmSelector: context.globalState.get<VscodeLmModelSelector | undefined>(
+      KEY_VSCODE_LM_SELECTOR,
+    ),
     vscodeLmUnavailableNotified: false,
   };
 
@@ -147,7 +169,9 @@ export function activate(context: vscode.ExtensionContext): void {
       await context.workspaceState.update(KEY_LAST_SUMMARY_AT, Date.now());
       await vscode.env.clipboard.writeText(markdownSummary);
       await openSummaryEditor(markdownSummary);
-      void vscode.window.showInformationMessage('TaCoS: complete summary generated, copied, and opened in a new editor tab.');
+      void vscode.window.showInformationMessage(
+        'TaCoS: complete summary generated, copied, and opened in a new editor tab.',
+      );
     }),
     vscode.commands.registerCommand('tacos.copyPromptAndOpenCodex', async () => {
       const root = pickWorkspaceRoot();
@@ -169,7 +193,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(root));
       if (!cached) {
-        void vscode.window.showInformationMessage('TaCoS: No cached summary yet for this workspace.');
+        void vscode.window.showInformationMessage(
+          'TaCoS: No cached summary yet for this workspace.',
+        );
         return;
       }
 
@@ -191,7 +217,9 @@ export function activate(context: vscode.ExtensionContext): void {
       const config = getConfig();
       await setEnabled(!config.enabled);
       void vscode.window.showInformationMessage(
-        !config.enabled ? 'TaCoS: automatic summaries enabled.' : 'TaCoS: automatic summaries disabled.'
+        !config.enabled
+          ? 'TaCoS: automatic summaries enabled.'
+          : 'TaCoS: automatic summaries disabled.',
       );
     }),
     vscode.commands.registerCommand('tacos.pauseUntilRestart', async () => {
@@ -225,6 +253,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       state.recentUrls.push(value.trim());
+      markMeaningfulActivity();
       await persistActivity(context);
       void vscode.window.showInformationMessage('TaCoS: URL added to recent context.');
     }),
@@ -247,12 +276,40 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const sanitized = sanitizeCheckpointNote(note, root, getConfig().redactionPatterns);
       if (!sanitized) {
-        void vscode.window.showWarningMessage('TaCoS: note was empty after sanitization and was not saved.');
+        void vscode.window.showWarningMessage(
+          'TaCoS: note was empty after sanitization and was not saved.',
+        );
         return;
       }
 
       await context.workspaceState.update(checkpointStorageKey(root), sanitized);
       void vscode.window.showInformationMessage('TaCoS: checkpoint note saved for this workspace.');
+    }),
+    vscode.commands.registerCommand('tacos.addCheckpointNoteFromClipboard', async () => {
+      const root = pickWorkspaceRoot();
+      if (!root) {
+        void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+        return;
+      }
+
+      const clipboardValue = (await vscode.env.clipboard.readText()).trim();
+      if (!clipboardValue) {
+        void vscode.window.showWarningMessage(
+          'TaCoS: clipboard is empty; no checkpoint note was saved.',
+        );
+        return;
+      }
+
+      const sanitized = sanitizeCheckpointNote(clipboardValue, root, getConfig().redactionPatterns);
+      if (!sanitized) {
+        void vscode.window.showWarningMessage(
+          'TaCoS: clipboard note was empty after sanitization and was not saved.',
+        );
+        return;
+      }
+
+      await context.workspaceState.update(checkpointStorageKey(root), sanitized);
+      void vscode.window.showInformationMessage('TaCoS: checkpoint note saved from clipboard.');
     }),
     vscode.commands.registerCommand('tacos.clearCheckpointNote', async () => {
       const root = pickWorkspaceRoot();
@@ -262,10 +319,15 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       await clearCheckpointNote(context, root);
-      void vscode.window.showInformationMessage('TaCoS: checkpoint note cleared for this workspace.');
+      void vscode.window.showInformationMessage(
+        'TaCoS: checkpoint note cleared for this workspace.',
+      );
     }),
     vscode.commands.registerCommand('tacos.configureAiProvider', async () => {
       await configureAiProvider(context);
+    }),
+    vscode.commands.registerCommand('tacos.openPrivacySafety', async () => {
+      await openPrivacySafetyDoc(context);
     }),
     vscode.commands.registerCommand('tacos.clearCorrections', async () => {
       const root = pickWorkspaceRoot();
@@ -275,7 +337,9 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       await clearSummaryCorrections(context, root);
-      void vscode.window.showInformationMessage('TaCoS: saved summary corrections cleared for this workspace.');
+      void vscode.window.showInformationMessage(
+        'TaCoS: saved summary corrections cleared for this workspace.',
+      );
     }),
     vscode.commands.registerCommand('tacos.setOpenAiApiKey', async () => {
       const value = await vscode.window.showInputBox({
@@ -315,7 +379,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await fs.mkdir(outputDir, { recursive: true });
       await fs.writeFile(outputPath, JSON.stringify(metrics, null, 2), 'utf8');
       void vscode.window.showInformationMessage(`TaCoS: Exported metrics to ${outputPath}`);
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -328,8 +392,9 @@ export function activate(context: vscode.ExtensionContext): void {
       const root = pickWorkspaceRoot();
       const relative = root ? toRelativePath(uri.fsPath, root) : uri.fsPath;
       state.recentFiles.push(relative);
+      markMeaningfulActivity();
       await persistActivity(context);
-    })
+    }),
   );
 
   context.subscriptions.push(
@@ -339,19 +404,22 @@ export function activate(context: vscode.ExtensionContext): void {
         state.recentDebug.push(label);
         state.lastDebugConfigName = session.name;
         state.lastDebugWorkspaceRoot = session.workspaceFolder?.uri.fsPath;
+        markMeaningfulActivity();
         await persistActivity(context);
       }
-    })
+    }),
   );
 
   context.subscriptions.push(
     vscode.tasks.onDidStartTaskProcess((event) => {
       const task = event.execution.task;
       state.lastTaskName = task.name;
-      state.lastTaskWorkspaceRoot = task.scope && typeof task.scope === 'object' && 'uri' in task.scope
-        ? task.scope.uri.fsPath
-        : pickWorkspaceRoot();
-    })
+      state.lastTaskWorkspaceRoot =
+        task.scope && typeof task.scope === 'object' && 'uri' in task.scope
+          ? task.scope.uri.fsPath
+          : pickWorkspaceRoot();
+      markMeaningfulActivity();
+    }),
   );
 
   context.subscriptions.push(
@@ -372,28 +440,31 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      markMeaningfulActivity();
       state.metricSession.firstMeaningfulEditLagMs = Date.now() - state.metricSession.startedAt;
       await maybeFinalizeMetric(context);
-    })
+    }),
   );
 
   void applyWorkspaceTrust(context, vscode.workspace.isTrusted, true);
 
   const workspaceAny = vscode.workspace as typeof vscode.workspace & {
-    onDidChangeWorkspaceTrust?: (listener: (event: { isTrusted: boolean }) => unknown) => vscode.Disposable;
+    onDidChangeWorkspaceTrust?: (
+      listener: (event: { isTrusted: boolean }) => unknown,
+    ) => vscode.Disposable;
   };
 
   if (workspaceAny.onDidChangeWorkspaceTrust) {
     context.subscriptions.push(
       workspaceAny.onDidChangeWorkspaceTrust((event: { isTrusted: boolean }) => {
         void applyWorkspaceTrust(context, event.isTrusted, false);
-      })
+      }),
     );
   } else {
     context.subscriptions.push(
       vscode.workspace.onDidGrantWorkspaceTrust(() => {
         void applyWorkspaceTrust(context, true, false);
-      })
+      }),
     );
   }
   context.subscriptions.push({
@@ -406,13 +477,27 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.onDidChangeWindowState(async (windowState) => {
       const now = Date.now();
       if (!windowState.focused) {
+        const workspaceRoot = pickWorkspaceRoot() ?? '';
         await context.workspaceState.update(KEY_LAST_BLUR_AT, now);
-        await context.workspaceState.update(KEY_LAST_WORKSPACE_ON_BLUR, pickWorkspaceRoot() ?? '');
+        await context.workspaceState.update(KEY_LAST_WORKSPACE_ON_BLUR, workspaceRoot);
+        await maybePromptCheckpointOnBlur(context, now, workspaceRoot || undefined);
+        return;
+      }
+
+      if (
+        state.autoSummaryInFlight ||
+        now - state.lastAutoFocusTriggerAt < FOCUS_TRIGGER_DEBOUNCE_MS
+      ) {
         return;
       }
 
       const config = getConfig();
-      if (!config.enabled || state.pauseUntilRestart || !config.showOnFocus || config.pauseSummaries) {
+      if (
+        !config.enabled ||
+        state.pauseUntilRestart ||
+        !config.showOnFocus ||
+        config.pauseSummaries
+      ) {
         return;
       }
 
@@ -422,11 +507,17 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const lastBlurAt = context.workspaceState.get<number>(KEY_LAST_BLUR_AT, now);
-      const lastWorkspaceOnBlur = context.workspaceState.get<string>(KEY_LAST_WORKSPACE_ON_BLUR, '');
+      const lastWorkspaceOnBlur = context.workspaceState.get<string>(
+        KEY_LAST_WORKSPACE_ON_BLUR,
+        '',
+      );
       const projectSwitched = Boolean(lastWorkspaceOnBlur) && lastWorkspaceOnBlur !== root;
       const lastSummaryAt = context.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0);
       const fingerprint = computeAutoTriggerFingerprint(root);
-      const lastFingerprint = context.workspaceState.get<string>(autoTriggerFingerprintKey(root), '');
+      const lastFingerprint = context.workspaceState.get<string>(
+        autoTriggerFingerprintKey(root),
+        '',
+      );
       const significantChange = fingerprint !== lastFingerprint;
 
       const shouldTrigger = shouldAutoTriggerSummary({
@@ -442,11 +533,18 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      state.lastAutoFocusTriggerAt = now;
+      state.autoSummaryInFlight = true;
       await context.workspaceState.update(autoTriggerFingerprintKey(root), fingerprint);
-      await triggerSummary(context, 'focus');
-    })
+      try {
+        await triggerSummary(context, 'focus');
+      } finally {
+        state.autoSummaryInFlight = false;
+      }
+    }),
   );
 
+  void maybeShowOnboardingNotice(context);
   state.output.appendLine('TaCoS activated.');
 }
 
@@ -461,64 +559,68 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
   };
 
   if (!windowAny.onDidStartTerminalShellExecution || !windowAny.onDidEndTerminalShellExecution) {
-    state.output.appendLine('Terminal shell integration events are unavailable in this VS Code build.');
+    state.output.appendLine(
+      'Terminal shell integration events are unavailable in this VS Code build.',
+    );
     return [];
   }
 
-  const startDisposable =
-    windowAny.onDidStartTerminalShellExecution(async (event: any) => {
-      if (!vscode.workspace.isTrusted) {
-        return;
-      }
+  const startDisposable = windowAny.onDidStartTerminalShellExecution(async (event: any) => {
+    if (!vscode.workspace.isTrusted) {
+      return;
+    }
 
-      const command = String(event?.execution?.commandLine?.value ?? '').trim();
-      if (!command) {
-        return;
-      }
+    const command = String(event?.execution?.commandLine?.value ?? '').trim();
+    if (!command) {
+      return;
+    }
 
-      state.recentTerminal.push(command);
-      for (const url of extractUrls(command)) {
-        state.recentUrls.push(url);
-      }
+    state.recentTerminal.push(command);
+    markMeaningfulActivity();
+    for (const url of extractUrls(command)) {
+      state.recentUrls.push(url);
+    }
 
-      if (isTestOrBuildCommand(command) && state.metricSession && state.metricSession.firstRunLagMs === undefined) {
-        state.metricSession.firstRunLagMs = Date.now() - state.metricSession.startedAt;
-        await maybeFinalizeMetric(context);
+    if (
+      isTestOrBuildCommand(command) &&
+      state.metricSession &&
+      state.metricSession.firstRunLagMs === undefined
+    ) {
+      state.metricSession.firstRunLagMs = Date.now() - state.metricSession.startedAt;
+      await maybeFinalizeMetric(context);
+    }
+
+    await persistActivity(context);
+  });
+  const endDisposable = windowAny.onDidEndTerminalShellExecution(async (event: any) => {
+    if (!vscode.workspace.isTrusted) {
+      return;
+    }
+
+    const command = String(event?.execution?.commandLine?.value ?? '').trim();
+    const exitCode: number | undefined = event?.exitCode;
+    if (!command) {
+      return;
+    }
+
+    if (typeof exitCode === 'number' && exitCode !== 0 && isTestOrBuildCommand(command)) {
+      state.lastFailingCommand = command;
+      await persistActivity(context);
+    }
+
+    if (typeof exitCode === 'number' && exitCode === 0 && isTestOrBuildCommand(command)) {
+      state.doneItems.push(command);
+
+      if (
+        state.lastFailingCommand &&
+        doesCommandMatchStoredFailure(state.lastFailingCommand, command)
+      ) {
+        state.lastFailingCommand = undefined;
       }
 
       await persistActivity(context);
-    })
-  ;
-
-  const endDisposable =
-    windowAny.onDidEndTerminalShellExecution(async (event: any) => {
-      if (!vscode.workspace.isTrusted) {
-        return;
-      }
-
-      const command = String(event?.execution?.commandLine?.value ?? '').trim();
-      const exitCode: number | undefined = event?.exitCode;
-      if (!command) {
-        return;
-      }
-
-      if (typeof exitCode === 'number' && exitCode !== 0 && isTestOrBuildCommand(command)) {
-        state.lastFailingCommand = command;
-        await persistActivity(context);
-      }
-
-      if (typeof exitCode === 'number' && exitCode === 0 && isTestOrBuildCommand(command)) {
-        state.doneItems.push(command);
-
-        if (state.lastFailingCommand && doesCommandMatchStoredFailure(state.lastFailingCommand, command)) {
-          state.lastFailingCommand = undefined;
-        }
-
-        await persistActivity(context);
-      }
-    })
-  ;
-
+    }
+  });
   return [startDisposable, endDisposable];
 }
 
@@ -532,7 +634,7 @@ function clearTerminalHooks(): void {
 async function applyWorkspaceTrust(
   context: vscode.ExtensionContext,
   isTrusted: boolean,
-  initial: boolean
+  initial: boolean,
 ): Promise<void> {
   state.workspaceTrusted = isTrusted;
 
@@ -540,7 +642,9 @@ async function applyWorkspaceTrust(
   if (isTrusted) {
     state.terminalHooks = registerTerminalHooks(context);
     if (!initial) {
-      void vscode.window.showInformationMessage('TaCoS: workspace is trusted. Full context collection is enabled.');
+      void vscode.window.showInformationMessage(
+        'TaCoS: workspace is trusted. Full context collection is enabled.',
+      );
     }
     return;
   }
@@ -549,11 +653,11 @@ async function applyWorkspaceTrust(
   if (!alreadyShown) {
     await context.workspaceState.update(KEY_RESTRICTED_MODE_NOTICE_SHOWN, true);
     void vscode.window.showInformationMessage(
-      'TaCoS: Restricted Mode is active. Git commands and terminal command collection are disabled until you trust this workspace.'
+      'TaCoS: Restricted Mode is active. Git commands and terminal command collection are disabled until you trust this workspace.',
     );
   } else if (!initial) {
     void vscode.window.showInformationMessage(
-      'TaCoS: Restricted Mode is active. Git and terminal command collection are currently disabled.'
+      'TaCoS: Restricted Mode is active. Git and terminal command collection are currently disabled.',
     );
   }
 }
@@ -561,7 +665,7 @@ async function applyWorkspaceTrust(
 async function triggerSummary(
   context: vscode.ExtensionContext,
   reason: Exclude<TriggerReason, 'cached'>,
-  preferredWorkspaceRoot?: string
+  preferredWorkspaceRoot?: string,
 ): Promise<void> {
   const root = preferredWorkspaceRoot ?? pickWorkspaceRoot();
   if (!root) {
@@ -579,6 +683,7 @@ async function triggerSummary(
     workspaceRoot: root,
     checkpointNote: getCheckpointNote(context, root),
   });
+  state.meaningfulActivitySinceCheckpointPrompt = false;
 
   if (prepared.shouldRefineWithAi) {
     void refineSummaryInBackground(context, prepared);
@@ -607,7 +712,7 @@ interface PreparedTriggerSummary {
 async function applyBranchHistory(
   context: vscode.ExtensionContext,
   root: string,
-  summary: ResumeSummary
+  summary: ResumeSummary,
 ): Promise<ResumeSummary> {
   const previousBranch = context.workspaceState.get<string>(branchStateKey(root));
   if (summary.currentBranch && previousBranch && summary.currentBranch !== previousBranch) {
@@ -624,7 +729,7 @@ async function applyBranchHistory(
 async function prepareTriggerSummary(
   context: vscode.ExtensionContext,
   root: string,
-  reason: Exclude<TriggerReason, 'cached'>
+  reason: Exclude<TriggerReason, 'cached'>,
 ): Promise<PreparedTriggerSummary> {
   const config = getConfig();
   const providerPlan = await resolveProviderPlan(context, config, reason);
@@ -651,7 +756,8 @@ async function prepareTriggerSummary(
   }
 
   const summary = contextUnchanged && cached ? cached : localSummary;
-  const shouldRefineWithAi = providerPlan.activeProvider !== 'local' && summary.source !== providerPlan.activeProvider;
+  const shouldRefineWithAi =
+    providerPlan.activeProvider !== 'local' && summary.source !== providerPlan.activeProvider;
 
   return {
     root,
@@ -666,23 +772,38 @@ async function prepareTriggerSummary(
   };
 }
 
-async function refineSummaryInBackground(context: vscode.ExtensionContext, prepared: PreparedTriggerSummary): Promise<void> {
+async function refineSummaryInBackground(
+  context: vscode.ExtensionContext,
+  prepared: PreparedTriggerSummary,
+): Promise<void> {
   const sequence = state.refinementSequence + 1;
   state.refinementSequence = sequence;
   state.activeRefinementSequence = sequence;
 
   const refined = await generateAiSummary(prepared);
 
-  if (!refined || state.activeRefinementSequence !== sequence) {
+  if (!refined) {
+    if (state.activeRefinementSequence === sequence) {
+      state.activeRefinementSequence = undefined;
+    }
     return;
   }
+
+  if (state.activeRefinementSequence !== sequence) {
+    return;
+  }
+  state.activeRefinementSequence = undefined;
 
   await context.workspaceState.update(prepared.cacheKey, refined);
 
   if (state.panel && state.panelSummary?.contextHash === prepared.localSummary.contextHash) {
     state.panelSummary = refined;
     state.panel.title = 'TaCoS Resume Brief (Refined)';
-    state.panel.webview.html = renderWebview(state.panel.webview, refined, state.displayedCheckpointNote?.value);
+    state.panel.webview.html = renderWebview(
+      state.panel.webview,
+      refined,
+      state.displayedCheckpointNote?.value,
+    );
     return;
   }
 
@@ -692,7 +813,7 @@ async function refineSummaryInBackground(context: vscode.ExtensionContext, prepa
 async function generateSummary(
   context: vscode.ExtensionContext,
   root: string,
-  reason: Exclude<TriggerReason, 'cached'>
+  reason: Exclude<TriggerReason, 'cached'>,
 ): Promise<{ summary: ResumeSummary; triggerReason: TriggerReason }> {
   const prepared = await prepareTriggerSummary(context, root, reason);
   if (!prepared.shouldRefineWithAi) {
@@ -720,14 +841,14 @@ async function generateSummary(
 async function resolveProviderPlan(
   context: vscode.ExtensionContext,
   config: ExtensionConfig,
-  reason: Exclude<TriggerReason, 'cached'>
+  reason: Exclude<TriggerReason, 'cached'>,
 ): Promise<ProviderPlan> {
   const requestedProvider = config.summaryProvider;
 
   if (!state.workspaceTrusted || !vscode.workspace.isTrusted) {
     if (requestedProvider !== 'local' && reason === 'manual') {
       void vscode.window.showInformationMessage(
-        'TaCoS: AI refinement is disabled in Restricted Mode. Trust this workspace to enable AI providers.'
+        'TaCoS: AI refinement is disabled in Restricted Mode. Trust this workspace to enable AI providers.',
       );
     }
     return {
@@ -778,7 +899,7 @@ async function resolveProviderPlan(
   if (reason === 'manual') {
     const action = await vscode.window.showInformationMessage(
       'TaCoS: VS Code LM is configured but not available in this session. Run "TaCoS: Configure AI Provider" to re-select a model.',
-      'Configure AI Provider'
+      'Configure AI Provider',
     );
     if (action === 'Configure AI Provider') {
       await vscode.commands.executeCommand('tacos.configureAiProvider');
@@ -786,7 +907,7 @@ async function resolveProviderPlan(
   } else if (!state.vscodeLmUnavailableNotified) {
     state.vscodeLmUnavailableNotified = true;
     state.output.appendLine(
-      'TaCoS: VS Code LM is configured but unavailable for auto summaries in this session; falling back to local.'
+      'TaCoS: VS Code LM is configured but unavailable for auto summaries in this session; falling back to local.',
     );
   }
 
@@ -796,7 +917,9 @@ async function resolveProviderPlan(
   };
 }
 
-async function generateAiSummary(prepared: PreparedTriggerSummary): Promise<ResumeSummary | undefined> {
+async function generateAiSummary(
+  prepared: PreparedTriggerSummary,
+): Promise<ResumeSummary | undefined> {
   const log = (message: string): void => {
     state.output.appendLine(message);
   };
@@ -807,12 +930,17 @@ async function generateAiSummary(prepared: PreparedTriggerSummary): Promise<Resu
       prepared.localSummary,
       prepared.config,
       prepared.providerPlan.openAiApiKey ?? '',
-      log
+      log,
     );
   }
 
   if (prepared.providerPlan.activeProvider === 'vscode-lm' && prepared.providerPlan.vscodeLmModel) {
-    return tryGenerateVscodeLmSummary(prepared.signals, prepared.localSummary, prepared.providerPlan.vscodeLmModel, log);
+    return tryGenerateVscodeLmSummary(
+      prepared.signals,
+      prepared.localSummary,
+      prepared.providerPlan.vscodeLmModel,
+      log,
+    );
   }
 
   return undefined;
@@ -822,7 +950,7 @@ async function presentSummary(
   context: vscode.ExtensionContext,
   summary: ResumeSummary,
   triggerReason: TriggerReason,
-  options: PresentSummaryOptions = {}
+  options: PresentSummaryOptions = {},
 ): Promise<void> {
   const config = getConfig();
 
@@ -849,7 +977,7 @@ async function presentSummary(
     'Copy + Open Codex',
     'Copy next steps',
     'Copy summary',
-    actionPauseLabel
+    actionPauseLabel,
   );
 
   if (choice === 'Open details') {
@@ -869,7 +997,9 @@ async function presentSummary(
   }
 
   if (choice === 'Copy next steps') {
-    await vscode.env.clipboard.writeText(summary.nextSteps.map((step, index) => `${index + 1}. ${step}`).join('\n'));
+    await vscode.env.clipboard.writeText(
+      summary.nextSteps.map((step, index) => `${index + 1}. ${step}`).join('\n'),
+    );
     void vscode.window.showInformationMessage('TaCoS: next steps copied to clipboard.');
     return;
   }
@@ -883,7 +1013,7 @@ async function presentSummary(
   if (choice === actionPauseLabel) {
     await setPaused(!config.pauseSummaries);
     void vscode.window.showInformationMessage(
-      !config.pauseSummaries ? 'TaCoS: auto summaries paused.' : 'TaCoS: auto summaries resumed.'
+      !config.pauseSummaries ? 'TaCoS: auto summaries paused.' : 'TaCoS: auto summaries resumed.',
     );
   }
 }
@@ -891,7 +1021,7 @@ async function presentSummary(
 async function showDetailsPanel(
   context: vscode.ExtensionContext,
   summary: ResumeSummary,
-  options: Pick<PresentSummaryOptions, 'workspaceRoot' | 'checkpointNote'> = {}
+  options: Pick<PresentSummaryOptions, 'workspaceRoot' | 'checkpointNote'> = {},
 ): Promise<void> {
   const workspaceRoot = options.workspaceRoot ?? pickWorkspaceRoot();
   const checkpointNote = options.checkpointNote;
@@ -910,11 +1040,16 @@ async function showDetailsPanel(
   }
 
   if (!state.panel) {
-    state.panel = vscode.window.createWebviewPanel('tacos.details', 'TaCoS Resume Brief', vscode.ViewColumn.Beside, {
-      enableScripts: true,
-      retainContextWhenHidden: false,
-      localResourceRoots: [],
-    });
+    state.panel = vscode.window.createWebviewPanel(
+      'tacos.details',
+      'TaCoS Resume Brief',
+      vscode.ViewColumn.Beside,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: false,
+        localResourceRoots: [],
+      },
+    );
 
     state.panel.onDidDispose(() => {
       state.panel = undefined;
@@ -923,7 +1058,12 @@ async function showDetailsPanel(
       state.displayedCheckpointNote = undefined;
     });
 
-    state.panel.webview.onDidReceiveMessage(async (message: { type?: unknown; index?: unknown; evidenceId?: unknown }) => {
+    state.panel.webview.onDidReceiveMessage(async (rawMessage: unknown) => {
+      const message = parseWebviewMessage(rawMessage);
+      if (!message) {
+        return;
+      }
+
       if (message.type === 'fixSummary') {
         await captureSummaryCorrection(context);
         return;
@@ -936,10 +1076,13 @@ async function showDetailsPanel(
 
         await context.workspaceState.update(
           checkpointStorageKey(state.displayedCheckpointNote.workspaceRoot),
-          state.displayedCheckpointNote.value
+          state.displayedCheckpointNote.value,
         );
         state.displayedCheckpointNote.persisted = true;
-        void vscode.window.showInformationMessage('TaCoS: checkpoint note kept for the next resume.');
+        state.meaningfulActivitySinceCheckpointPrompt = false;
+        void vscode.window.showInformationMessage(
+          'TaCoS: checkpoint note kept for the next resume.',
+        );
         return;
       }
 
@@ -948,18 +1091,56 @@ async function showDetailsPanel(
           return;
         }
 
-        await context.workspaceState.update(checkpointStorageKey(state.displayedCheckpointNote.workspaceRoot), undefined);
+        await context.workspaceState.update(
+          checkpointStorageKey(state.displayedCheckpointNote.workspaceRoot),
+          undefined,
+        );
         state.displayedCheckpointNote = undefined;
         if (state.panel && state.panelSummary) {
-          state.panel.webview.html = renderWebview(state.panel.webview, state.panelSummary, undefined);
+          state.panel.webview.html = renderWebview(
+            state.panel.webview,
+            state.panelSummary,
+            undefined,
+          );
         }
         void vscode.window.showInformationMessage('TaCoS: checkpoint note cleared.');
         return;
       }
 
+      if (message.type === 'copyNextSteps') {
+        if (!state.panelSummary) {
+          return;
+        }
+
+        await vscode.env.clipboard.writeText(
+          state.panelSummary.nextSteps.map((step, index) => `${index + 1}. ${step}`).join('\n'),
+        );
+        void vscode.window.showInformationMessage('TaCoS: next steps copied to clipboard.');
+        return;
+      }
+
+      if (message.type === 'copySummary') {
+        if (!state.panelSummary) {
+          return;
+        }
+
+        await vscode.env.clipboard.writeText(formatPlainSummary(state.panelSummary));
+        void vscode.window.showInformationMessage('TaCoS: summary copied to clipboard.');
+        return;
+      }
+
+      if (message.type === 'copyPromptAndOpenCodex') {
+        if (!state.panelSummary) {
+          return;
+        }
+
+        await copyPromptAndOpenCodex(state.panelSummary);
+        return;
+      }
+
       if (message.type === 'blockedLink') {
         void vscode.window.showWarningMessage(
-          'TaCoS blocked a link that was not part of the validated summary link list.'
+          'TaCoS blocked a link that was not part of the validated summary link list.',
         );
         return;
       }
@@ -973,7 +1154,11 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'restoreOpenChangedFiles') {
-        const opened = await openChangedSummaryFiles(state.panelSummary, 6, state.panelWorkspaceRoot);
+        const opened = await openChangedSummaryFiles(
+          state.panelSummary,
+          6,
+          state.panelWorkspaceRoot,
+        );
         if (opened === 0) {
           void vscode.window.showInformationMessage('TaCoS: no changed files available to open.');
         }
@@ -1001,11 +1186,9 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'openEvidence') {
-        if (typeof message.evidenceId !== 'string') {
-          return;
-        }
-
-        const evidence = (state.panelSummary?.evidenceCatalog ?? []).find((item) => item.id === message.evidenceId);
+        const evidence = (state.panelSummary?.evidenceCatalog ?? []).find(
+          (item) => item.id === message.evidenceId,
+        );
         if (!evidence || (evidence.kind !== 'file' && evidence.kind !== 'url')) {
           void vscode.window.showWarningMessage('TaCoS blocked an unsupported evidence link.');
           return;
@@ -1015,7 +1198,7 @@ async function showDetailsPanel(
           const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
           if (!workspaceRoot) {
             void vscode.window.showWarningMessage(
-              'TaCoS blocked file evidence because no workspace root is available for validation.'
+              'TaCoS blocked file evidence because no workspace root is available for validation.',
             );
             return;
           }
@@ -1040,7 +1223,7 @@ async function showDetailsPanel(
         return;
       }
 
-      if (message.type !== 'openLink' || typeof message.index !== 'number' || !Number.isInteger(message.index)) {
+      if (message.type !== 'openLink') {
         return;
       }
 
@@ -1053,14 +1236,16 @@ async function showDetailsPanel(
         const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
         if (!workspaceRoot) {
           void vscode.window.showWarningMessage(
-            'TaCoS blocked file link because no workspace root is available for validation.'
+            'TaCoS blocked file link because no workspace root is available for validation.',
           );
           return;
         }
 
         const safeTarget = resolveFileTargetInWorkspace(link.target, workspaceRoot);
         if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
-          void vscode.window.showWarningMessage('TaCoS blocked an unsafe file link from the summary.');
+          void vscode.window.showWarningMessage(
+            'TaCoS blocked an unsafe file link from the summary.',
+          );
           return;
         }
 
@@ -1071,7 +1256,9 @@ async function showDetailsPanel(
       if (link.kind === 'url') {
         const safeUrl = normalizeHttpUrl(link.target);
         if (!safeUrl) {
-          void vscode.window.showWarningMessage('TaCoS blocked an unsafe external link from the summary.');
+          void vscode.window.showWarningMessage(
+            'TaCoS blocked an unsafe external link from the summary.',
+          );
           return;
         }
 
@@ -1081,13 +1268,28 @@ async function showDetailsPanel(
   }
 
   state.panel.title = 'TaCoS Resume Brief';
-  state.panel.webview.html = renderWebview(state.panel.webview, summary, state.displayedCheckpointNote?.value);
+  state.panel.webview.html = renderWebview(
+    state.panel.webview,
+    summary,
+    state.displayedCheckpointNote?.value,
+  );
   state.panel.reveal(vscode.ViewColumn.Beside, true);
 }
 
-function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpointNote?: string): string {
+function renderWebview(
+  webview: vscode.Webview,
+  summary: ResumeSummary,
+  checkpointNote?: string,
+): string {
   const nonce = createNonce();
-  const evidenceById = new Map((summary.evidenceCatalog ?? []).map((item) => [item.id, item] as const));
+  const cspMetaTag = buildWebviewCspMetaTag(webview.cspSource, nonce);
+  const config = getConfig();
+  const evidenceById = new Map(
+    (summary.evidenceCatalog ?? []).map((item) => [item.id, item] as const),
+  );
+  const timelineGroups = config.showTimeline
+    ? buildTimelineGroups(summary.evidenceCatalog ?? [], Date.now())
+    : [];
   const checkpointCard = checkpointNote
     ? `<div class="card">
       <h3>Your Note</h3>
@@ -1101,7 +1303,7 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
   const linkItems = summary.links
     .map(
       (link, index) =>
-        `<li><a href="#" data-idx="${index}">${escapeHtml(link.label)}</a> <span class="kind">(${escapeHtml(link.kind)})</span></li>`
+        `<li><a href="#" data-action="openLink" data-link-index="${index}">${escapeHtml(link.label)}</a> <span class="kind">(${escapeHtml(link.kind)})</span></li>`,
     )
     .join('');
 
@@ -1118,7 +1320,9 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
   const topFiles = summary.topFiles.map((file) => `<li>${escapeHtml(file)}</li>`).join('');
   const evidenceItems = (summary.evidenceCatalog ?? [])
     .map((item, index) => {
-      const target = item.target ? ` <span class="evidence-target">${escapeHtml(item.target)}</span>` : '';
+      const target = item.target
+        ? ` <span class="evidence-target">${escapeHtml(item.target)}</span>`
+        : '';
       const hiddenClass = index >= 5 ? 'extra-evidence' : '';
       return `<li class="${hiddenClass}"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> ${escapeHtml(item.label)} <code>${escapeHtml(item.id)}</code>${target}</li>`;
     })
@@ -1135,28 +1339,80 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
     summary.previousBranch !== summary.currentBranch;
   const hasFailingCommand = Boolean(state.lastFailingCommand ?? summary.lastFailingCommand);
   const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
+  const sourceLabel =
+    summary.source === 'local' ? 'Local summary (instant)' : 'Refined summary (AI)';
+  const generatedAtLabel = formatTimestamp(summary.generatedAt);
+  const localGeneratedAtLabel = summary.localGeneratedAt
+    ? formatTimestamp(summary.localGeneratedAt)
+    : undefined;
+  const statusHint =
+    summary.source === 'local'
+      ? state.activeRefinementSequence
+        ? 'AI refinement in progress.'
+        : 'Running local-only summary.'
+      : localGeneratedAtLabel
+        ? `Started local at ${localGeneratedAtLabel}.`
+        : 'AI refinement complete.';
+  const timelineGroupsHtml = timelineGroups
+    .map((group) => {
+      const items = group.rows
+        .map((row) => {
+          const label = row.clickable
+            ? `<a href="#" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}">${escapeHtml(row.label)}</a>`
+            : `<span>${escapeHtml(row.label)}</span>`;
+          const detail = row.detail
+            ? `<span class="timeline-detail">${escapeHtml(row.detail)}</span>`
+            : '';
+          return `<li><span class="timeline-time">${escapeHtml(row.relativeTime)}</span><div class="timeline-row">${label}${detail}</div></li>`;
+        })
+        .join('');
+      return `<section class="timeline-group"><h4>${escapeHtml(group.label)}</h4><ul>${items}</ul></section>`;
+    })
+    .join('');
+  const timelineCard = config.showTimeline
+    ? `<div class="card">
+      <h3>Timeline</h3>
+      <button type="button" class="secondary" data-action="toggleTimeline" aria-expanded="false" aria-controls="timeline-content">Show timeline</button>
+      <div id="timeline-content" hidden>
+        ${timelineGroupsHtml || '<p class="muted">No timeline entries captured yet.</p>'}
+      </div>
+    </div>`
+    : '';
 
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource}; script-src 'nonce-${nonce}';"
-    />
+    ${cspMetaTag}
     <style nonce="${nonce}">
       body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        color: var(--vscode-editor-foreground);
+        background: var(--vscode-editor-background);
+        font-family: var(--vscode-font-family);
+        font-size: var(--vscode-font-size);
         padding: 16px;
       }
       .card {
-        border: 1px solid rgba(127, 127, 127, 0.35);
+        border: 1px solid var(--vscode-panel-border);
         border-radius: 10px;
         padding: 14px;
         margin-bottom: 14px;
+        background: var(--vscode-editorWidget-background);
       }
       ul {
         padding-left: 20px;
+      }
+      h3 {
+        margin-top: 0;
+      }
+      h4 {
+        margin-bottom: 8px;
+      }
+      a {
+        color: var(--vscode-textLink-foreground);
+      }
+      a:hover {
+        color: var(--vscode-textLink-activeForeground);
       }
       pre {
         white-space: pre-wrap;
@@ -1179,11 +1435,17 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
       }
       .kind {
-        color: #8b8b8b;
+        color: var(--vscode-descriptionForeground);
       }
       .mode {
-        color: #8b8b8b;
+        color: var(--vscode-descriptionForeground);
         font-size: 13px;
+      }
+      .status-label {
+        font-weight: 600;
+      }
+      .status-detail {
+        margin-top: 6px;
       }
       .step-evidence {
         margin-top: 6px;
@@ -1193,7 +1455,7 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
       }
       .badge {
         display: inline-block;
-        border: 1px solid rgba(127, 127, 127, 0.4);
+        border: 1px solid var(--vscode-widget-border);
         border-radius: 999px;
         padding: 2px 8px;
         font-size: 12px;
@@ -1204,16 +1466,16 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
         cursor: pointer;
       }
       .badge.kind-url {
-        border-color: rgba(56, 132, 255, 0.5);
+        border-color: var(--vscode-textLink-foreground);
       }
       .badge.kind-file {
-        border-color: rgba(80, 190, 100, 0.45);
+        border-color: var(--vscode-charts-green);
       }
       .evidence-kind {
-        color: #8b8b8b;
+        color: var(--vscode-descriptionForeground);
       }
       .evidence-target {
-        color: #7a7a7a;
+        color: var(--vscode-descriptionForeground);
       }
       .extra-evidence {
         display: none;
@@ -1227,16 +1489,27 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
       .show-more-btn {
         margin-top: 8px;
       }
+      .muted {
+        color: var(--vscode-descriptionForeground);
+      }
       .restore-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
         gap: 8px;
       }
-      .restore-grid button {
-        border: 1px solid rgba(127, 127, 127, 0.45);
-        background: transparent;
+      button {
+        border: 1px solid var(--vscode-button-border, transparent);
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
         border-radius: 8px;
         padding: 8px 10px;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--vscode-editor-foreground);
+        border-color: var(--vscode-widget-border);
+      }
+      .restore-grid button {
         text-align: left;
         cursor: pointer;
       }
@@ -1245,7 +1518,7 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
         cursor: default;
       }
       .restore-note {
-        color: #8b8b8b;
+        color: var(--vscode-descriptionForeground);
         font-size: 12px;
         margin-top: 8px;
       }
@@ -1254,15 +1527,51 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
         gap: 8px;
       }
       .note-actions button {
-        border: 1px solid rgba(127, 127, 127, 0.45);
-        background: transparent;
         border-radius: 6px;
-        padding: 4px 8px;
+        padding: 6px 10px;
         cursor: pointer;
+      }
+      .timeline-group ul {
+        margin-top: 0;
+      }
+      .timeline-group li {
+        display: grid;
+        grid-template-columns: 70px 1fr;
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+      .timeline-time {
+        color: var(--vscode-descriptionForeground);
+        font-size: 12px;
+        padding-top: 2px;
+      }
+      .timeline-row {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .timeline-detail {
+        color: var(--vscode-descriptionForeground);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      .quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .quick-actions button {
+        min-width: 180px;
       }
     </style>
   </head>
   <body>
+    <div class="card">
+      <h3>Status</h3>
+      <div class="status-label">${escapeHtml(sourceLabel)} · ${escapeHtml(generatedAtLabel)}</div>
+      <div class="status-detail muted">${escapeHtml(statusHint)}</div>
+    </div>
+
     ${checkpointCard}
     <div class="card">
       <h3>Intent</h3>
@@ -1283,6 +1592,17 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
     <div class="card">
       <h3>Top Links / Files</h3>
       <ul>${linkItems || '<li>None captured</li>'}</ul>
+    </div>
+
+    ${timelineCard}
+
+    <div class="card">
+      <h3>Quick Actions</h3>
+      <div class="quick-actions">
+        <button type="button" data-action="copyNextSteps">Copy next steps</button>
+        <button type="button" data-action="copySummary">Copy summary</button>
+        <button type="button" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
+      </div>
     </div>
 
     <div class="card">
@@ -1326,49 +1646,95 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
 
     <script nonce="${nonce}">
       const vscode = acquireVsCodeApi();
+      const hostActions = new Set([
+        'fixSummary',
+        'checkpointKeep',
+        'checkpointClear',
+        'copyNextSteps',
+        'copySummary',
+        'copyPromptAndOpenCodex',
+        'restoreReopenFiles',
+        'restoreOpenChangedFiles',
+        'restoreRerunTask',
+        'restoreRerunDebug',
+        'restoreCheckoutPreviousBranch',
+        'restoreCopyFailingCommand'
+      ]);
+
+      function parseDatasetInteger(rawValue) {
+        if (typeof rawValue !== 'string') {
+          return undefined;
+        }
+        const parsed = Number(rawValue);
+        if (!Number.isInteger(parsed) || parsed < 0) {
+          return undefined;
+        }
+        return parsed;
+      }
+
       document.addEventListener('click', (event) => {
         const target = event.target;
-        if (!(target instanceof Element)) {
+        if (!(target instanceof HTMLElement)) {
           return;
         }
 
-        const anchor = target.closest('a');
-        const actionButton = target.closest('button[data-action]');
-        if (actionButton) {
+        const actionElement = target.closest('[data-action]');
+        if (actionElement instanceof HTMLElement) {
           event.preventDefault();
-          const action = actionButton.getAttribute('data-action');
-          if (action === 'checkpointKeep') {
-            vscode.postMessage({ type: 'checkpointKeep' });
+          const action = actionElement.dataset.action;
+          if (typeof action !== 'string' || !action) {
+            vscode.postMessage({ type: 'blockedLink' });
+            return;
           }
-          if (action === 'checkpointClear') {
-            vscode.postMessage({ type: 'checkpointClear' });
-          }
+
           if (action === 'toggleEvidenceMore') {
             const list = document.getElementById('evidence-list');
             if (list) {
               const expanded = list.classList.toggle('show-more');
-              actionButton.textContent = expanded ? 'Show less' : 'Show more';
+              actionElement.textContent = expanded ? 'Show less' : 'Show more';
             }
+            return;
           }
-          if (action === 'fixSummary') {
-            vscode.postMessage({ type: 'fixSummary' });
-          }
-          if (action && action.startsWith('restore')) {
-            vscode.postMessage({ type: action });
-          }
-          return;
-        }
 
-        if (!anchor) {
-          return;
-        }
+          if (action === 'toggleTimeline') {
+            const timeline = document.getElementById('timeline-content');
+            if (timeline) {
+              const isHidden = timeline.hasAttribute('hidden');
+              if (isHidden) {
+                timeline.removeAttribute('hidden');
+                actionElement.textContent = 'Hide timeline';
+                actionElement.setAttribute('aria-expanded', 'true');
+              } else {
+                timeline.setAttribute('hidden', 'true');
+                actionElement.textContent = 'Show timeline';
+                actionElement.setAttribute('aria-expanded', 'false');
+              }
+            }
+            return;
+          }
 
-        event.preventDefault();
-        const idxRaw = anchor.getAttribute('data-idx');
-        if (idxRaw === null) {
-          const evidenceId = anchor.getAttribute('data-evidence-id');
-          if (evidenceId) {
+          if (action === 'openEvidence') {
+            const evidenceId = actionElement.dataset.evidenceId?.trim();
+            if (!evidenceId) {
+              vscode.postMessage({ type: 'blockedLink' });
+              return;
+            }
             vscode.postMessage({ type: 'openEvidence', evidenceId });
+            return;
+          }
+
+          if (action === 'openLink') {
+            const index = parseDatasetInteger(actionElement.dataset.linkIndex);
+            if (index === undefined) {
+              vscode.postMessage({ type: 'blockedLink' });
+              return;
+            }
+            vscode.postMessage({ type: 'openLink', index });
+            return;
+          }
+
+          if (hostActions.has(action)) {
+            vscode.postMessage({ type: action });
             return;
           }
 
@@ -1376,11 +1742,11 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpoi
           return;
         }
 
-        const idx = Number(idxRaw);
-        if (!Number.isInteger(idx)) {
-          return;
+        const anchor = target.closest('a');
+        if (anchor) {
+          event.preventDefault();
+          vscode.postMessage({ type: 'blockedLink' });
         }
-        vscode.postMessage({ type: 'openLink', index: idx });
       });
     </script>
   </body>
@@ -1391,6 +1757,17 @@ function createNonce(): string {
   return randomBytes(18).toString('base64url');
 }
 
+function formatTimestamp(timestamp: number): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return 'unknown time';
+  }
+
+  return new Date(timestamp).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function renderStepEvidenceBadge(evidenceId: string, evidence?: SummaryEvidenceItem): string {
   if (!evidence) {
     return `<span class="badge">${escapeHtml(evidenceId)}</span>`;
@@ -1398,19 +1775,14 @@ function renderStepEvidenceBadge(evidenceId: string, evidence?: SummaryEvidenceI
 
   const label = `[${evidence.kind}] ${evidence.label}`;
   if (evidence.kind === 'file' || evidence.kind === 'url') {
-    return `<a href="#" class="badge clickable kind-${escapeHtml(evidence.kind)}" data-evidence-id="${escapeHtml(evidenceId)}">${escapeHtml(label)}</a>`;
+    return `<a href="#" class="badge clickable kind-${escapeHtml(evidence.kind)}" data-action="openEvidence" data-evidence-id="${escapeHtml(evidenceId)}">${escapeHtml(label)}</a>`;
   }
 
   return `<span class="badge">${escapeHtml(label)}</span>`;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+function markMeaningfulActivity(): void {
+  state.meaningfulActivitySinceCheckpointPrompt = true;
 }
 
 function formatPlainSummary(summary: ResumeSummary): string {
@@ -1419,7 +1791,9 @@ function formatPlainSummary(summary: ResumeSummary): string {
     'Next steps:',
     ...summary.nextSteps.map((step) => `- ${step}`),
     'Top files:',
-    ...(summary.topFiles.length > 0 ? summary.topFiles.map((file) => `- ${file}`) : ['- None captured']),
+    ...(summary.topFiles.length > 0
+      ? summary.topFiles.map((file) => `- ${file}`)
+      : ['- None captured']),
   ].join('\n');
 }
 
@@ -1428,13 +1802,15 @@ async function copyPromptAndOpenCodex(summary: ResumeSummary): Promise<void> {
   const openedCommand = await tryOpenCodexPanel(getConfig());
 
   if (openedCommand) {
-    void vscode.window.showInformationMessage(`TaCoS: prompt copied and opened Codex via \`${openedCommand}\`.`);
+    void vscode.window.showInformationMessage(
+      `TaCoS: prompt copied and opened Codex via \`${openedCommand}\`.`,
+    );
     return;
   }
 
   await vscode.commands.executeCommand('workbench.action.quickOpen', '>Codex');
   void vscode.window.showWarningMessage(
-    'TaCoS: prompt copied. Set `tacos.codexOpenCommand` to your Codex panel command id for one-click opening.'
+    'TaCoS: prompt copied. Set `tacos.codexOpenCommand` to your Codex panel command id for one-click opening.',
   );
 }
 
@@ -1498,20 +1874,23 @@ function formatMarkdownSummary(summary: ResumeSummary): string {
 async function reopenSummaryFiles(
   summary: ResumeSummary | undefined,
   limit: number,
-  preferredWorkspaceRoot?: string
+  preferredWorkspaceRoot?: string,
 ): Promise<number> {
   if (!summary) {
     return 0;
   }
 
-  const candidates = uniqueStrings([...(summary.recentFilesSnapshot ?? []), ...summary.topFiles]).slice(0, limit);
+  const candidates = uniqueStrings([
+    ...(summary.recentFilesSnapshot ?? []),
+    ...summary.topFiles,
+  ]).slice(0, limit);
   return openWorkspaceFiles(candidates, preferredWorkspaceRoot);
 }
 
 async function openChangedSummaryFiles(
   summary: ResumeSummary | undefined,
   limit: number,
-  preferredWorkspaceRoot?: string
+  preferredWorkspaceRoot?: string,
 ): Promise<number> {
   if (!summary) {
     return 0;
@@ -1520,7 +1899,10 @@ async function openChangedSummaryFiles(
   return openWorkspaceFiles(summary.topFiles.slice(0, limit), preferredWorkspaceRoot);
 }
 
-async function openWorkspaceFiles(paths: string[], preferredWorkspaceRoot?: string): Promise<number> {
+async function openWorkspaceFiles(
+  paths: string[],
+  preferredWorkspaceRoot?: string,
+): Promise<number> {
   const workspaceRoot = preferredWorkspaceRoot;
   if (!workspaceRoot) {
     void vscode.window.showWarningMessage('TaCoS: open a workspace folder to restore files.');
@@ -1560,7 +1942,9 @@ async function rerunLastTask(): Promise<void> {
   }
 
   if (!state.lastTaskName) {
-    void vscode.window.showInformationMessage('TaCoS: no recent VS Code task is available to rerun.');
+    void vscode.window.showInformationMessage(
+      'TaCoS: no recent VS Code task is available to rerun.',
+    );
     return;
   }
 
@@ -1579,7 +1963,9 @@ async function rerunLastTask(): Promise<void> {
   });
 
   if (!match) {
-    void vscode.window.showWarningMessage(`TaCoS: could not find task "${state.lastTaskName}" to rerun.`);
+    void vscode.window.showWarningMessage(
+      `TaCoS: could not find task "${state.lastTaskName}" to rerun.`,
+    );
     return;
   }
 
@@ -1599,20 +1985,24 @@ async function rerunLastDebugSession(): Promise<void> {
   }
 
   const folder = vscode.workspace.workspaceFolders?.find(
-    (entry) => entry.uri.fsPath === state.lastDebugWorkspaceRoot
+    (entry) => entry.uri.fsPath === state.lastDebugWorkspaceRoot,
   );
   const started = await vscode.debug.startDebugging(folder, state.lastDebugConfigName);
   if (!started) {
-    void vscode.window.showWarningMessage(`TaCoS: failed to start debug configuration "${state.lastDebugConfigName}".`);
+    void vscode.window.showWarningMessage(
+      `TaCoS: failed to start debug configuration "${state.lastDebugConfigName}".`,
+    );
     return;
   }
 
-  void vscode.window.showInformationMessage(`TaCoS: started debug configuration "${state.lastDebugConfigName}".`);
+  void vscode.window.showInformationMessage(
+    `TaCoS: started debug configuration "${state.lastDebugConfigName}".`,
+  );
 }
 
 async function checkoutPreviousBranch(
   summary: ResumeSummary | undefined,
-  preferredWorkspaceRoot?: string
+  preferredWorkspaceRoot?: string,
 ): Promise<void> {
   if (!vscode.workspace.isTrusted) {
     void vscode.window.showWarningMessage('TaCoS: checkout branch is disabled in Restricted Mode.');
@@ -1622,7 +2012,9 @@ async function checkoutPreviousBranch(
   const previousBranch = summary?.previousBranch?.trim() ?? '';
   const currentBranch = summary?.currentBranch?.trim() ?? '';
   if (!previousBranch || !currentBranch || previousBranch === currentBranch) {
-    void vscode.window.showInformationMessage('TaCoS: no previous branch is available to checkout.');
+    void vscode.window.showInformationMessage(
+      'TaCoS: no previous branch is available to checkout.',
+    );
     return;
   }
 
@@ -1635,7 +2027,7 @@ async function checkoutPreviousBranch(
   const choice = await vscode.window.showWarningMessage(
     `Checkout previous branch "${previousBranch}"?`,
     { modal: true },
-    'Checkout'
+    'Checkout',
   );
   if (choice !== 'Checkout') {
     return;
@@ -1648,7 +2040,9 @@ async function checkoutPreviousBranch(
     });
     void vscode.window.showInformationMessage(`TaCoS: checked out "${previousBranch}".`);
   } catch (error) {
-    void vscode.window.showErrorMessage(`TaCoS: failed to checkout "${previousBranch}": ${(error as Error).message}`);
+    void vscode.window.showErrorMessage(
+      `TaCoS: failed to checkout "${previousBranch}": ${(error as Error).message}`,
+    );
   }
 }
 
@@ -1689,16 +2083,20 @@ async function tryOpenCodexPanel(config: ExtensionConfig): Promise<string | unde
     .filter((id) => /(open|show|focus|panel|view)/i.test(id))
     .slice(0, 12);
 
-  const candidates = uniqueStrings([configured, ...builtInCandidates, ...inferredCandidates]).filter((id) =>
-    knownSet.has(id)
-  );
+  const candidates = uniqueStrings([
+    configured,
+    ...builtInCandidates,
+    ...inferredCandidates,
+  ]).filter((id) => knownSet.has(id));
 
   for (const commandId of candidates) {
     try {
       await vscode.commands.executeCommand(commandId);
       return commandId;
     } catch (error) {
-      state.output.appendLine(`Could not execute Codex command ${commandId}: ${(error as Error).message}`);
+      state.output.appendLine(
+        `Could not execute Codex command ${commandId}: ${(error as Error).message}`,
+      );
     }
   }
 
@@ -1740,7 +2138,10 @@ function summarizeCorrectionsFingerprint(corrections: string[]): string {
   return createHash('sha1').update(corrections.join('\n')).digest('hex');
 }
 
-function readSummaryCorrectionStore(context: vscode.ExtensionContext, root: string): SummaryCorrectionStore {
+function readSummaryCorrectionStore(
+  context: vscode.ExtensionContext,
+  root: string,
+): SummaryCorrectionStore {
   const raw = context.workspaceState.get<Record<string, unknown>>(summaryCorrectionsKey(root), {});
   const normalized: SummaryCorrectionStore = {};
 
@@ -1751,7 +2152,9 @@ function readSummaryCorrectionStore(context: vscode.ExtensionContext, root: stri
 
     const entry = value as { corrections?: unknown; updatedAt?: unknown };
     const corrections = Array.isArray(entry.corrections)
-      ? uniqueStrings(entry.corrections.filter((item): item is string => typeof item === 'string')).slice(0, 5)
+      ? uniqueStrings(
+          entry.corrections.filter((item): item is string => typeof item === 'string'),
+        ).slice(0, 5)
       : [];
     if (corrections.length === 0) {
       continue;
@@ -1769,7 +2172,7 @@ function readSummaryCorrectionStore(context: vscode.ExtensionContext, root: stri
 function getSummaryCorrectionsForContext(
   context: vscode.ExtensionContext,
   root: string,
-  contextHash: string
+  contextHash: string,
 ): string[] {
   const store = readSummaryCorrectionStore(context, root);
   return store[contextHash]?.corrections ?? [];
@@ -1779,7 +2182,7 @@ async function persistSummaryCorrection(
   context: vscode.ExtensionContext,
   root: string,
   contextHash: string,
-  correction: string
+  correction: string,
 ): Promise<void> {
   const store = readSummaryCorrectionStore(context, root);
   const existing = store[contextHash]?.corrections ?? [];
@@ -1796,7 +2199,10 @@ async function persistSummaryCorrection(
   await context.workspaceState.update(summaryCorrectionsKey(root), trimmed);
 }
 
-async function clearSummaryCorrections(context: vscode.ExtensionContext, root: string): Promise<void> {
+async function clearSummaryCorrections(
+  context: vscode.ExtensionContext,
+  root: string,
+): Promise<void> {
   await context.workspaceState.update(summaryCorrectionsKey(root), undefined);
 }
 
@@ -1804,7 +2210,9 @@ async function captureSummaryCorrection(context: vscode.ExtensionContext): Promi
   const summary = state.panelSummary;
   const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
   if (!summary || !workspaceRoot) {
-    void vscode.window.showInformationMessage('TaCoS: no active summary context is available for correction.');
+    void vscode.window.showInformationMessage(
+      'TaCoS: no active summary context is available for correction.',
+    );
     return;
   }
 
@@ -1819,7 +2227,7 @@ async function captureSummaryCorrection(context: vscode.ExtensionContext): Promi
       title: 'TaCoS: Fix Summary',
       placeHolder: 'What needs fixing?',
       ignoreFocusOut: true,
-    }
+    },
   );
   if (!reason) {
     return;
@@ -1838,10 +2246,12 @@ async function captureSummaryCorrection(context: vscode.ExtensionContext): Promi
   const redacted = redactText(
     `${reason.value}: ${rawCorrection.trim()}`,
     workspaceRoot,
-    getConfig().redactionPatterns
+    getConfig().redactionPatterns,
   ).trim();
   if (!redacted) {
-    void vscode.window.showWarningMessage('TaCoS: correction was empty after redaction and was not saved.');
+    void vscode.window.showWarningMessage(
+      'TaCoS: correction was empty after redaction and was not saved.',
+    );
     return;
   }
 
@@ -1849,7 +2259,7 @@ async function captureSummaryCorrection(context: vscode.ExtensionContext): Promi
   await persistSummaryCorrection(context, workspaceRoot, summary.contextHash, capped);
   const action = await vscode.window.showInformationMessage(
     'TaCoS: correction saved and will be applied to future summaries for this context.',
-    'Regenerate now'
+    'Regenerate now',
   );
   if (action === 'Regenerate now') {
     await triggerSummary(context, 'manual', workspaceRoot);
@@ -1902,18 +2312,23 @@ type VscodeWithLmApi = typeof vscode & {
   };
 };
 
-function getSelectChatModelsApi(): ((selector?: Record<string, string>) => Promise<unknown[]>) | undefined {
+function getSelectChatModelsApi():
+  | ((selector?: Record<string, string>) => Promise<unknown[]>)
+  | undefined {
   const selectChatModels = (vscode as VscodeWithLmApi).lm?.selectChatModels;
   return typeof selectChatModels === 'function' ? selectChatModels : undefined;
 }
 
 function toVscodeLmModels(available: unknown): VscodeLmModelLike[] {
   return (Array.isArray(available) ? available : []).filter((entry) =>
-    Boolean(entry && typeof entry === 'object' && 'sendRequest' in entry)
+    Boolean(entry && typeof entry === 'object' && 'sendRequest' in entry),
   ) as unknown as VscodeLmModelLike[];
 }
 
-function normalizeModelSelector(model: VscodeLmModelLike, fallbackVendor = 'copilot'): VscodeLmModelSelector {
+function normalizeModelSelector(
+  model: VscodeLmModelLike,
+  fallbackVendor = 'copilot',
+): VscodeLmModelSelector {
   return {
     vendor: model.vendor?.trim() || fallbackVendor,
     id: model.id?.trim() || undefined,
@@ -1958,7 +2373,7 @@ function modelMatchesSelector(model: VscodeLmModelLike, selector: VscodeLmModelS
 }
 
 async function restoreVscodeLmModelFromSelector(
-  context: vscode.ExtensionContext
+  context: vscode.ExtensionContext,
 ): Promise<VscodeLmModelLike | undefined> {
   const selector = state.vscodeLmSelector;
   if (!selector) {
@@ -1990,7 +2405,9 @@ async function restoreVscodeLmModelFromSelector(
     try {
       models.push(...toVscodeLmModels(await selectChatModels(query)));
     } catch (error) {
-      state.output.appendLine(`TaCoS: failed restoring VS Code LM with selector ${JSON.stringify(query)}: ${(error as Error).message}`);
+      state.output.appendLine(
+        `TaCoS: failed restoring VS Code LM with selector ${JSON.stringify(query)}: ${(error as Error).message}`,
+      );
     }
   }
 
@@ -2005,7 +2422,8 @@ async function restoreVscodeLmModelFromSelector(
     uniqueModels.push(model);
   }
 
-  const restored = uniqueModels.find((model) => modelMatchesSelector(model, selector)) ?? uniqueModels[0];
+  const restored =
+    uniqueModels.find((model) => modelMatchesSelector(model, selector)) ?? uniqueModels[0];
   if (!restored) {
     return undefined;
   }
@@ -2020,7 +2438,9 @@ async function restoreVscodeLmModelFromSelector(
 async function selectVscodeLmModel(): Promise<VscodeLmModelLike | undefined> {
   const selectChatModels = getSelectChatModelsApi();
   if (!selectChatModels) {
-    void vscode.window.showWarningMessage('TaCoS: this VS Code build does not expose the Language Model API.');
+    void vscode.window.showWarningMessage(
+      'TaCoS: this VS Code build does not expose the Language Model API.',
+    );
     return undefined;
   }
 
@@ -2028,7 +2448,7 @@ async function selectVscodeLmModel(): Promise<VscodeLmModelLike | undefined> {
 
   if (models.length === 0) {
     void vscode.window.showWarningMessage(
-      'TaCoS: no VS Code LM models are available. Ensure Copilot chat access is enabled and try again.'
+      'TaCoS: no VS Code LM models are available. Ensure Copilot chat access is enabled and try again.',
     );
     return undefined;
   }
@@ -2047,7 +2467,7 @@ async function selectVscodeLmModel(): Promise<VscodeLmModelLike | undefined> {
       title: 'TaCoS: Select VS Code LM Model',
       placeHolder: 'Choose a model for AI summary refinement',
       ignoreFocusOut: true,
-    }
+    },
   );
 
   return picked?.model;
@@ -2058,18 +2478,23 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
   const picked = await vscode.window.showQuickPick(
     [
       {
-        label: 'Local-only',
-        description: 'No network calls; uses deterministic local summarization',
+        label: 'Local-only (Recommended)',
+        description: 'No network calls',
+        detail: 'Fastest and most private. TaCoS renders from local/cached evidence only.',
         provider: 'local' as const,
       },
       {
         label: 'VS Code LM (Copilot)',
-        description: 'Use a selected VS Code Language Model, fallback to local if unavailable',
+        description: 'Uses VS Code Language Model API',
+        detail:
+          'Refines summaries asynchronously. Availability depends on VS Code LM access; falls back to local when unavailable.',
         provider: 'vscode-lm' as const,
       },
       {
         label: 'OpenAI (direct API)',
-        description: 'Use OpenAI API key from Secret Storage/env/settings',
+        description: 'Uses OpenAI-compatible endpoint',
+        detail:
+          'Requires API key. Sends redacted summary context for refinement only when enabled; unsafe links are still blocked.',
         provider: 'openai' as const,
       },
     ],
@@ -2077,7 +2502,7 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
       title: 'TaCoS: Configure AI Provider',
       placeHolder: `Current provider: ${describeProvider(config.summaryProvider)}`,
       ignoreFocusOut: true,
-    }
+    },
   );
 
   if (!picked) {
@@ -2091,12 +2516,21 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
   }
 
   if (picked.provider === 'openai') {
+    const consent = await vscode.window.showWarningMessage(
+      'OpenAI mode sends redacted task context to your configured endpoint in trusted workspaces. Continue?',
+      { modal: true },
+      'Continue',
+    );
+    if (consent !== 'Continue') {
+      return;
+    }
+
     await setSummaryProvider('openai');
     const key = await resolveOpenAiApiKey(context, getConfig());
     if (!key) {
       const action = await vscode.window.showInformationMessage(
         'TaCoS: OpenAI selected. Set an API key in Secret Storage to enable refinement.',
-        'Set API Key'
+        'Set API Key',
       );
       if (action === 'Set API Key') {
         await vscode.commands.executeCommand('tacos.setOpenAiApiKey');
@@ -2105,6 +2539,15 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
     }
 
     void vscode.window.showInformationMessage('TaCoS: provider set to OpenAI.');
+    return;
+  }
+
+  const lmConsent = await vscode.window.showInformationMessage(
+    'VS Code LM mode may send redacted context through VS Code model providers and only runs in trusted workspaces.',
+    { modal: true },
+    'Continue',
+  );
+  if (lmConsent !== 'Continue') {
     return;
   }
 
@@ -2119,10 +2562,15 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
   state.vscodeLmUnavailableNotified = false;
   await context.globalState.update(KEY_VSCODE_LM_SELECTOR, selector);
   await setSummaryProvider('vscode-lm');
-  void vscode.window.showInformationMessage(`TaCoS: provider set to VS Code LM (${modelLabel(model)}).`);
+  void vscode.window.showInformationMessage(
+    `TaCoS: provider set to VS Code LM (${modelLabel(model)}).`,
+  );
 }
 
-function hasExplicitConfigurationValue(config: vscode.WorkspaceConfiguration, key: string): boolean {
+function hasExplicitConfigurationValue(
+  config: vscode.WorkspaceConfiguration,
+  key: string,
+): boolean {
   const inspected = config.inspect<unknown>(key);
   if (!inspected) {
     return false;
@@ -2167,6 +2615,8 @@ function getConfig(): ExtensionConfig {
     enabled: config.get<boolean>('enabled', true),
     showOnFocus: config.get<boolean>('showOnFocus', true),
     pauseSummaries: config.get<boolean>('pauseSummaries', false),
+    showTimeline: config.get<boolean>('showTimeline', true),
+    promptCheckpointOnBlur: config.get<boolean>('promptCheckpointOnBlur', false),
     minIdleMinutes: Math.max(1, minIdleMinutes),
     cooldownMinutes: Math.max(1, cooldownMinutes),
     idleMinutes: idleMinutesLegacy,
@@ -2187,7 +2637,10 @@ function getConfig(): ExtensionConfig {
   };
 }
 
-async function resolveOpenAiApiKey(context: vscode.ExtensionContext, config: ExtensionConfig): Promise<string> {
+async function resolveOpenAiApiKey(
+  context: vscode.ExtensionContext,
+  config: ExtensionConfig,
+): Promise<string> {
   const secret = (await context.secrets.get(SECRET_OPENAI_API_KEY))?.trim() ?? '';
   if (secret) {
     return secret;
@@ -2237,7 +2690,7 @@ function isMeaningfulChange(changes: readonly vscode.TextDocumentContentChangeEv
 
 function isTestOrBuildCommand(command: string): boolean {
   return /\b(test|jest|vitest|pytest|go test|cargo test|npm\s+run\s+test|pnpm\s+test|yarn\s+test|build|compile|make\s+test|make\s+build)\b/i.test(
-    command
+    command,
   );
 }
 
@@ -2275,14 +2728,16 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
     .filter((document) => document.uri.scheme === 'file')
     .map((document) => toRelativePath(document.uri.fsPath, root));
 
-  const changedFromStatus = parsePorcelainPaths(git.status)
-    .map((file) => toRelativePath(path.isAbsolute(file) ? file : path.join(root, file), root));
+  const changedFromStatus = parsePorcelainPaths(git.status).map((file) =>
+    toRelativePath(path.isAbsolute(file) ? file : path.join(root, file), root),
+  );
 
   const allChangedFiles = [...git.changedFiles, ...changedFromStatus]
     .map((file) => toRelativePath(path.isAbsolute(file) ? file : path.join(root, file), root))
     .filter(Boolean);
 
-  const recentTerminal = isTrusted && config.includeTerminalHistory ? state.recentTerminal.values() : [];
+  const recentTerminal =
+    isTrusted && config.includeTerminalHistory ? state.recentTerminal.values() : [];
   const recentDebug = config.includeDebugHistory ? state.recentDebug.values() : [];
 
   return {
@@ -2334,7 +2789,7 @@ function computeAutoTriggerFingerprint(root: string): string {
       lastFailingCommand: state.lastFailingCommand,
     },
     root,
-    config.redactionPatterns
+    config.redactionPatterns,
   );
 
   return createHash('sha256')
@@ -2346,19 +2801,132 @@ function computeAutoTriggerFingerprint(root: string): string {
         redacted.recentDebug[0] ?? '',
         redacted.lastFailingCommand ?? '',
         redacted.doneItems[0] ?? '',
-      ].join('|')
+      ].join('|'),
     )
     .digest('hex');
 }
 
-function getCheckpointNote(context: vscode.ExtensionContext, workspaceRoot: string): string | undefined {
+function getCheckpointNote(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): string | undefined {
   return context.workspaceState.get<string>(checkpointStorageKey(workspaceRoot));
 }
 
-async function clearCheckpointNote(context: vscode.ExtensionContext, workspaceRoot: string): Promise<void> {
+async function clearCheckpointNote(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<void> {
   await context.workspaceState.update(checkpointStorageKey(workspaceRoot), undefined);
   if (state.displayedCheckpointNote?.workspaceRoot === workspaceRoot) {
     state.displayedCheckpointNote = undefined;
+  }
+}
+
+function checkpointPromptAtKey(workspaceRoot: string): string {
+  return `${KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+async function maybePromptCheckpointOnBlur(
+  context: vscode.ExtensionContext,
+  now: number,
+  workspaceRoot?: string,
+): Promise<void> {
+  const config = getConfig();
+  if (!config.promptCheckpointOnBlur) {
+    return;
+  }
+
+  const root = workspaceRoot ?? pickWorkspaceRoot();
+  if (!root) {
+    return;
+  }
+
+  const lastPromptAt = context.workspaceState.get<number>(checkpointPromptAtKey(root), 0);
+  const lastSummaryAt = context.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0);
+
+  const shouldPrompt = shouldPromptCheckpointOnBlur({
+    now,
+    lastSummaryAt,
+    lastCheckpointPromptAt: lastPromptAt,
+    minIdleMinutes: config.minIdleMinutes,
+    cooldownMinutes: config.cooldownMinutes,
+    promptCooldownMinutes: CHECKPOINT_PROMPT_COOLDOWN_MINUTES,
+    meaningfulChangeSinceLastPrompt: state.meaningfulActivitySinceCheckpointPrompt,
+  });
+  if (!shouldPrompt) {
+    return;
+  }
+
+  await context.workspaceState.update(checkpointPromptAtKey(root), now);
+  const action = await vscode.window.showInformationMessage(
+    'One-line next step for Future You (optional).',
+    'Add note',
+  );
+  if (action !== 'Add note') {
+    return;
+  }
+
+  const note = await vscode.window.showInputBox({
+    title: 'TaCoS: Future You Checkpoint',
+    prompt: 'One-line next step for Future You (optional)',
+    placeHolder: 'Example: Fix parser edge case and rerun npm test',
+    ignoreFocusOut: false,
+  });
+  if (!note) {
+    return;
+  }
+
+  const sanitized = sanitizeCheckpointNote(note, root, config.redactionPatterns);
+  if (!sanitized) {
+    void vscode.window.showWarningMessage(
+      'TaCoS: note was empty after sanitization and was not saved.',
+    );
+    return;
+  }
+
+  await context.workspaceState.update(checkpointStorageKey(root), sanitized);
+  state.meaningfulActivitySinceCheckpointPrompt = false;
+  void vscode.window.showInformationMessage('TaCoS: checkpoint note saved for this workspace.');
+}
+
+async function maybeShowOnboardingNotice(context: vscode.ExtensionContext): Promise<void> {
+  const shown = context.globalState.get<boolean>(KEY_ONBOARDING_NOTICE_SHOWN, false);
+  if (shown) {
+    return;
+  }
+
+  await context.globalState.update(KEY_ONBOARDING_NOTICE_SHOWN, true);
+  const action = await vscode.window.showInformationMessage(
+    'TaCoS collects local editor/git/terminal context. AI receives redacted context only when an AI provider is enabled.',
+    'Open Privacy & Safety',
+    'Pause Auto Summaries',
+  );
+  if (action === 'Open Privacy & Safety') {
+    await openPrivacySafetyDoc(context);
+    return;
+  }
+
+  if (action === 'Pause Auto Summaries') {
+    await setPaused(true);
+    void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
+  }
+}
+
+async function openPrivacySafetyDoc(context: vscode.ExtensionContext): Promise<void> {
+  try {
+    const readmeUri = vscode.Uri.joinPath(context.extensionUri, 'README.md');
+    const doc = await vscode.workspace.openTextDocument(readmeUri);
+    await vscode.window.showTextDocument(doc, {
+      preview: false,
+      viewColumn: vscode.ViewColumn.Beside,
+      preserveFocus: false,
+    });
+  } catch (error) {
+    state.output.appendLine(
+      `TaCoS: failed to open README privacy section: ${(error as Error).message}`,
+    );
+    void vscode.window.showWarningMessage('TaCoS: unable to open privacy docs.');
   }
 }
 
@@ -2379,7 +2947,7 @@ async function persistActivity(context: vscode.ExtensionContext): Promise<void> 
       lastFailingCommand: state.lastFailingCommand,
     },
     workspaceRoot,
-    config.redactionPatterns
+    config.redactionPatterns,
   );
 
   await Promise.all([
@@ -2417,7 +2985,8 @@ async function finalizeCurrentMetric(context: vscode.ExtensionContext): Promise<
   }
 
   const hasAnyMetric =
-    state.metricSession.firstMeaningfulEditLagMs !== undefined || state.metricSession.firstRunLagMs !== undefined;
+    state.metricSession.firstMeaningfulEditLagMs !== undefined ||
+    state.metricSession.firstRunLagMs !== undefined;
 
   if (!hasAnyMetric) {
     state.metricSession = undefined;

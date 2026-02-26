@@ -34,7 +34,11 @@ describe('validateOpenAiSummaryPayload', () => {
         { text: 'Run tests', evidence_ids: ['terminal:abc123'] },
         { text: 'Validate command wiring', evidence_ids: ['file:src/extension.ts'] },
       ],
-      top_links: ['file:src/extension.ts', 'url:https://github.com/org/repo/pull/1', 'terminal:abc123'],
+      top_links: [
+        'file:src/extension.ts',
+        'url:https://github.com/org/repo/pull/1',
+        'terminal:abc123',
+      ],
     };
 
     const parsed = validateOpenAiSummaryPayload(payload, evidenceCatalog, workspaceRoot);
@@ -67,7 +71,11 @@ describe('validateOpenAiSummaryPayload', () => {
       top_links: ['terminal:abc123', 'unknown:id', 'file:src/extension.ts'],
     };
 
-    const parsed = validateOpenAiSummaryPayload(payload, sampleEvidence(workspaceRoot), workspaceRoot);
+    const parsed = validateOpenAiSummaryPayload(
+      payload,
+      sampleEvidence(workspaceRoot),
+      workspaceRoot,
+    );
     expect(parsed.links).toEqual([
       {
         label: 'src/extension.ts',
@@ -110,11 +118,64 @@ describe('validateOpenAiSummaryPayload', () => {
         top_links: ['url:bad', 'file:outside', 'url:good'],
       },
       evidenceCatalog,
-      workspaceRoot
+      workspaceRoot,
     );
 
-    expect(parsed.links).toEqual([
-      { label: 'good', target: 'https://example.com/', kind: 'url' },
+    expect(parsed.links).toEqual([{ label: 'good', target: 'https://example.com/', kind: 'url' }]);
+  });
+
+  it('caps top links to max 3 even when more grounded links are provided', () => {
+    const workspaceRoot = '/workspace/repo';
+    const evidenceCatalog: SummaryEvidenceItem[] = [
+      {
+        id: 'file:src/a.ts',
+        kind: 'file',
+        label: 'src/a.ts',
+        target: path.resolve(workspaceRoot, 'src/a.ts'),
+      },
+      {
+        id: 'file:src/b.ts',
+        kind: 'file',
+        label: 'src/b.ts',
+        target: path.resolve(workspaceRoot, 'src/b.ts'),
+      },
+      {
+        id: 'url:https://example.com/1',
+        kind: 'url',
+        label: 'Doc 1',
+        target: 'https://example.com/1',
+      },
+      {
+        id: 'url:https://example.com/2',
+        kind: 'url',
+        label: 'Doc 2',
+        target: 'https://example.com/2',
+      },
+    ];
+
+    const parsed = validateOpenAiSummaryPayload(
+      {
+        intent: 'intent',
+        next_steps: [
+          { text: 'a', evidence_ids: [] },
+          { text: 'b', evidence_ids: [] },
+        ],
+        top_links: [
+          'file:src/a.ts',
+          'file:src/b.ts',
+          'url:https://example.com/1',
+          'url:https://example.com/2',
+        ],
+      },
+      evidenceCatalog,
+      workspaceRoot,
+    );
+
+    expect(parsed.links).toHaveLength(3);
+    expect(parsed.links.map((link) => `${link.kind}:${link.target}`)).toEqual([
+      `file:${path.resolve(workspaceRoot, 'src/a.ts')}`,
+      `file:${path.resolve(workspaceRoot, 'src/b.ts')}`,
+      'url:https://example.com/1',
     ]);
   });
 
@@ -123,8 +184,8 @@ describe('validateOpenAiSummaryPayload', () => {
       validateOpenAiSummaryPayload(
         { intent: '', next_steps: [], top_links: [] },
         sampleEvidence('/workspace'),
-        '/workspace'
-      )
+        '/workspace',
+      ),
     ).toThrow();
   });
 });
@@ -160,7 +221,7 @@ describe('buildSummaryContextPrompt', () => {
         generatedAt: 1,
         source: 'local',
         userCorrections: ['wrong intent: focus is parser fix'],
-      }
+      },
     );
 
     expect(prompt).toContain('User corrections (must respect)');
@@ -211,11 +272,13 @@ describe('buildSummaryContextPrompt', () => {
         contextHash: 'hash',
         generatedAt: 1,
         source: 'local',
-      }
+      },
     );
 
     expect(prompt).toContain('id=file:src/index.ts | kind=file | label=src/index.ts');
     expect(prompt).not.toContain(path.resolve(workspaceRoot, 'src/index.ts'));
-    expect(prompt).toContain('id=url:https://example.com/docs | kind=url | label=Docs | target=https://example.com/docs');
+    expect(prompt).toContain(
+      'id=url:https://example.com/docs | kind=url | label=Docs | target=https://example.com/docs',
+    );
   });
 });

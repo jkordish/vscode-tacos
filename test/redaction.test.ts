@@ -26,4 +26,20 @@ describe('redactText', () => {
     expect(output).toContain('<redacted>');
     expect(output).not.toContain('ABC-123');
   });
+
+  it('redacts common cloud/token/private-key patterns', () => {
+    const output = redactText(
+      [
+        'AKIA1234567890ABCDEF',
+        'ghp_abcdefghijklmnopqrstuvwxyz1234567890',
+        '-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----',
+      ].join('\n'),
+      '/workspace',
+    );
+
+    expect(output).toContain('<redacted>');
+    expect(output).not.toContain('AKIA1234567890ABCDEF');
+    expect(output).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz1234567890');
+    expect(output).not.toContain('BEGIN PRIVATE KEY');
+  });
 });

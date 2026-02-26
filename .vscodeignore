@@ -3,6 +3,9 @@ coverage/**
 docs/**
 src/**
 test/**
+.eslintrc.cjs
+.prettierignore
+.prettierrc.json
 **/*.map
 jest.config.cjs
 tsconfig.json

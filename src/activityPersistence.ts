@@ -12,7 +12,7 @@ export interface PersistedActivityState {
 export function sanitizeActivityForPersistence(
   activity: PersistedActivityState,
   workspaceRoot: string,
-  customPatterns: string[] = []
+  customPatterns: string[] = [],
 ): PersistedActivityState {
   return {
     recentFiles: redactList(activity.recentFiles, workspaceRoot, customPatterns),

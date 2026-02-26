@@ -2,13 +2,18 @@
   "name": "vscode-tacos",
   "displayName": "TaCoS Resume Brief",
   "description": "Auto task-context summaries when you resume work in VS Code.",
+  "license": "MIT",
   "version": "0.0.3",
   "publisher": "jkordish",
   "repository": {
     "type": "git",
     "url": "https://github.com/jkordish/vscode-tacos.git"
   },
-  "private": true,
+  "bugs": {
+    "url": "https://github.com/jkordish/vscode-tacos/issues"
+  },
+  "homepage": "https://github.com/jkordish/vscode-tacos#readme",
+  "icon": "assets/icon.png",
   "engines": {
     "vscode": "^1.96.0"
   },
@@ -25,7 +30,18 @@
     }
   },
   "categories": [
-    "Other"
+    "Other",
+    "Testing",
+    "SCM Providers"
+  ],
+  "keywords": [
+    "resume",
+    "context",
+    "productivity",
+    "git",
+    "ai",
+    "privacy",
+    "safety"
   ],
   "activationEvents": [
     "onStartupFinished",
@@ -40,8 +56,10 @@
     "onCommand:tacos.exportMetrics",
     "onCommand:tacos.addVisitedUrl",
     "onCommand:tacos.addCheckpointNote",
+    "onCommand:tacos.addCheckpointNoteFromClipboard",
     "onCommand:tacos.clearCheckpointNote",
     "onCommand:tacos.configureAiProvider",
+    "onCommand:tacos.openPrivacySafety",
     "onCommand:tacos.clearCorrections",
     "onCommand:tacos.setOpenAiApiKey",
     "onCommand:tacos.clearOpenAiApiKey"
@@ -94,12 +112,20 @@
         "title": "TaCoS: Add Checkpoint Note"
       },
       {
+        "command": "tacos.addCheckpointNoteFromClipboard",
+        "title": "TaCoS: Add Checkpoint Note from Clipboard"
+      },
+      {
         "command": "tacos.clearCheckpointNote",
         "title": "TaCoS: Clear Checkpoint Note"
       },
       {
         "command": "tacos.configureAiProvider",
         "title": "TaCoS: Configure AI Provider"
+      },
+      {
+        "command": "tacos.openPrivacySafety",
+        "title": "TaCoS: Privacy & Safety"
       },
       {
         "command": "tacos.clearCorrections",
@@ -131,6 +157,16 @@
           "type": "boolean",
           "default": false,
           "description": "Temporarily disable auto summaries without uninstalling the extension."
+        },
+        "tacos.showTimeline": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the optional timeline section in the details panel (collapsed by default)."
+        },
+        "tacos.promptCheckpointOnBlur": {
+          "type": "boolean",
+          "default": false,
+          "description": "Prompt for an optional one-line Future Me checkpoint note when VS Code loses focus after meaningful activity."
         },
         "tacos.minIdleMinutes": {
           "type": "number",
@@ -237,11 +273,17 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"{src,test}/**/*.ts\" \"*.{json,md,yml,yaml,cjs}\"",
+    "format:check": "prettier --check \"{src,test}/**/*.ts\" \"*.{json,md,yml,yaml,cjs}\"",
     "test": "jest --runInBand",
+    "test:integration": "echo \"TODO: wire @vscode/test-electron integration harness (activation + tacos.showNow command smoke).\"",
     "package:vsix": "vsce package",
     "vscode:prepublish": "npm run compile"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.24.1",
+    "@typescript-eslint/parser": "^8.24.1",
     "@swc/core": "^1.15.13",
     "@swc/jest": "^0.2.39",
     "@types/jest": "^30.0.0",
@@ -249,7 +291,10 @@
     "@types/node": "^20.17.30",
     "@types/vscode": "^1.96.0",
     "@vscode/vsce": "3.7.1",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.1",
     "jest": "^30.2.0",
+    "prettier": "^3.5.3",
     "typescript": "^5.7.3"
   },
   "dependencies": {

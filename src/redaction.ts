@@ -7,7 +7,7 @@ const DEFAULT_PATTERNS: RegExp[] = [
   /\b(?:sk|pk)_(?:live|test)_[A-Za-z0-9]{16,}\b/g,
   /\bgh[pousr]_[A-Za-z0-9]{20,}\b/gi,
   /\bBearer\s+[A-Za-z0-9._\-+/=]{12,}\b/gi,
-  /\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*['\"]?[A-Za-z0-9._\-+/=]{8,}['\"]?/gi,
+  /\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*['"]?[A-Za-z0-9._\-+/=]{8,}['"]?/gi,
 ];
 
 function escapeRegex(value: string): string {
@@ -26,7 +26,11 @@ function compileUserPatterns(patterns: string[]): RegExp[] {
   return compiled;
 }
 
-export function redactText(input: string, workspaceRoot: string, customPatterns: string[] = []): string {
+export function redactText(
+  input: string,
+  workspaceRoot: string,
+  customPatterns: string[] = [],
+): string {
   if (!input) {
     return input;
   }
@@ -56,6 +60,10 @@ export function redactText(input: string, workspaceRoot: string, customPatterns:
   return result;
 }
 
-export function redactList(values: string[], workspaceRoot: string, customPatterns: string[] = []): string[] {
+export function redactList(
+  values: string[],
+  workspaceRoot: string,
+  customPatterns: string[] = [],
+): string[] {
   return values.map((value) => redactText(value, workspaceRoot, customPatterns));
 }

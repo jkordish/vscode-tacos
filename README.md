@@ -1,14 +1,25 @@
 # vscode-tacos
 
-TaCoS is a VS Code extension that helps you resume work quickly with a local-first summary, evidence-backed next steps, and optional AI refinement.
+TaCoS is a VS Code extension that helps you resume work quickly with an instant local summary, evidence-backed next steps, and optional AI refinement.
+
+## Why TaCoS
+
+TaCoS is built around five non-negotiable principles:
+
+1. Local-first UX: useful summary now, optional AI refinement later.
+2. Untrusted model output: links/paths must be evidence-grounded and revalidated at click time.
+3. Privacy-first: redact before persistence, avoid storing sensitive command content, use SecretStorage for API keys.
+4. Workspace Trust aware: restricted mode disables risky collection/actions.
+5. Fast + quiet: cooldowns, debounce, context caching, and bounded expensive operations.
 
 ## What TaCoS Does
 
-- Detects likely resume moments (focus return, workspace switch, meaningful change).
-- Builds an evidence catalog from trusted extension-collected signals.
-- Shows a concise resume brief with intent, next steps, links, and restore actions.
-- Renders immediately from local/cached context, then optionally refines asynchronously with AI.
-- Lets you correct bad summaries so future summaries for the same context improve.
+- Detects resume moments (focus return, workspace switch, meaningful change).
+- Builds an evidence catalog from trusted extension-collected context.
+- Shows intent, next steps, top files/links, and restore actions.
+- Optionally shows a grouped timeline of recent evidence breadcrumbs.
+- Lets you add checkpoint notes (“Future You” hints) and reuse them on resume.
+- Supports local-only summaries and optional AI refinement (`vscode-lm` / `openai`).
 
 ## Commands
 
@@ -22,24 +33,26 @@ TaCoS is a VS Code extension that helps you resume work quickly with a local-fir
 - `TaCoS: Pause Summaries Until Restart`
 - `TaCoS: Add Recent URL`
 - `TaCoS: Add Checkpoint Note`
+- `TaCoS: Add Checkpoint Note from Clipboard`
 - `TaCoS: Clear Checkpoint Note`
 - `TaCoS: Configure AI Provider`
+- `TaCoS: Privacy & Safety`
 - `TaCoS: Clear Summary Corrections`
 - `TaCoS: Set OpenAI API Key`
 - `TaCoS: Clear OpenAI API Key`
 - `TaCoS: Export Local Metrics`
 
-## Configuration
-
-Settings namespace: `tacos`
+## Configuration (`tacos.*`)
 
 - `enabled` (default `true`)
 - `showOnFocus` (default `true`)
 - `pauseSummaries` (default `false`)
+- `showTimeline` (default `true`, rendered collapsed)
+- `promptCheckpointOnBlur` (default `false`)
 - `minIdleMinutes` (default `10`)
 - `cooldownMinutes` (default `5`)
-- `idleMinutes` (legacy, default `10`)
-- `cooldownSeconds` (legacy, default `30`)
+- `idleMinutes` (legacy compatibility)
+- `cooldownSeconds` (legacy compatibility)
 - `includeDiff` (default `false`)
 - `maxDiffChars` (default `6000`)
 - `includeTerminalHistory` (default `true`)
@@ -47,69 +60,78 @@ Settings namespace: `tacos`
 - `cacheIfContextUnchanged` (default `true`)
 - `redactionPatterns` (default `[]`)
 - `metricsEnabled` (default `true`)
-- `summaryProvider` (`local`, `vscode-lm`, or `openai`; default `local`)
+- `summaryProvider` (`local` | `vscode-lm` | `openai`, default `local`)
 - `openaiApiKey` (deprecated fallback only)
 - `openaiModel` (default `gpt-4.1-mini`)
 - `openaiBaseUrl` (default `https://api.openai.com/v1`)
 - `openaiTimeoutMs` (default `15000`)
 - `codexOpenCommand` (optional command id)
 
-## AI Providers
+## Provider Modes
 
-TaCoS supports three provider modes:
+- `local`: deterministic local summary only (no model call).
+- `vscode-lm`: optional async refinement through VS Code LM.
+- `openai`: optional async refinement through OpenAI-compatible API.
 
-- `local`: no external model call.
-- `vscode-lm`: uses a VS Code Language Model selected via `TaCoS: Configure AI Provider`.
-- `openai`: uses direct OpenAI API calls with strict JSON schema validation.
+Behavior:
 
-Provider behavior:
+- TaCoS renders local/cached summary immediately.
+- If AI mode is enabled and available, refinement updates in-place.
+- If AI is unavailable, TaCoS safely falls back to local summary.
 
-- Summaries appear immediately from local/cached context.
-- If `vscode-lm` or `openai` is configured and available, TaCoS refines in the background.
-- If configured AI is unavailable, TaCoS falls back to `local` safely.
-
-### OpenAI API Key Resolution Order
+OpenAI API key resolution order:
 
 1. VS Code Secret Storage (`TaCoS: Set OpenAI API Key`) (recommended)
 2. `OPENAI_API_KEY` environment variable
 3. `tacos.openaiApiKey` setting (deprecated fallback)
 
-## Security & Privacy
+## Privacy & Safety
 
-### Signals Collected
+### Signals collected
 
 - Editor/workspace signals: open files, recent files, active context metadata.
-- Git context (trusted workspaces only): branch, status, diff stat, optional capped diff/log.
-- Terminal shell integration signals (trusted workspaces only): recent commands and failures.
-- Debug/task context: recent debug sessions and last task/debug configuration names.
-- User-added URLs from `TaCoS: Add Recent URL`.
+- Git context (trusted mode only): branch, status, diff stat, optional capped diff/log.
+- Terminal shell integration (trusted mode only): recent commands/failures.
+- Debug/task context: recent sessions and recent execution hints.
+- User-added URLs.
+- Optional checkpoint notes entered by the user.
 
-Terminal capture depends on VS Code shell integration support.
+### Persisted locally
 
-### What Is Persisted Locally
-
-- Redacted activity snapshots: recent files/terminal/debug/URLs, done items, last failing command.
-- Resume summary cache per workspace root.
-- Workspace-scoped checkpoint note (one-line “future me” note).
-- Workspace-scoped summary corrections keyed by context hash.
+- Redacted activity snapshots.
+- Workspace summary cache.
+- Workspace-scoped checkpoint note.
+- Workspace-scoped correction hints keyed by context hash.
 - Optional local metrics history.
 
-### What Is Sent to AI
+### Sent to AI
 
-Only when an AI provider is enabled:
+Only if AI provider is enabled:
 
-- Redacted context summary and evidence catalog.
-- Structured prompt instructions and correction hints (if present).
+- Redacted summary context and evidence catalog.
+- Structured summarization instructions.
+- Optional correction hints.
 
-No telemetry is emitted by TaCoS.
+### Webview and link safety
 
-### Link and File Open Safety
+- Strict nonce-based CSP with default deny policy.
+- All model output treated as untrusted.
+- Link opens require evidence IDs emitted by TaCoS.
+- URLs restricted to `http`/`https`.
+- File paths must resolve inside workspace root.
+- Validation happens during provider parsing and again at click time.
 
-- All model output is treated as untrusted input.
-- Model links are grounded to extension-generated evidence IDs.
-- External URLs are allowlisted to `http`/`https` only.
-- File paths are resolved and must stay inside a workspace root.
-- Unsafe paths/protocols are dropped during validation and refused again at click time.
+## Timeline Mode
+
+When `tacos.showTimeline` is enabled, details panel includes a collapsed timeline grouped by:
+
+- files
+- terminal
+- debug/tasks
+- urls
+- git
+
+Only file/url evidence rows are clickable; other rows are informational.
 
 ## Workspace Trust (Restricted Mode)
 
@@ -117,36 +139,52 @@ TaCoS declares `untrustedWorkspaces: limited`.
 
 In Restricted Mode:
 
-- Git CLI collection is disabled.
-- Terminal shell command collection is disabled.
-- AI provider refinement is disabled (TaCoS uses local summaries only).
-- Risky restore actions that execute tooling are disabled.
-- Safe local summary behavior remains available.
+- git CLI collection is disabled
+- terminal command collection is disabled
+- AI refinement is disabled
+- risky restore actions (task/debug/checkout) are disabled
+- safe local summary still works
 
-When trust is granted, TaCoS re-enables full trusted behavior at runtime.
-
-## Manual Verification Checklist
-
-- Trusted workspace:
-  - make edits, run tests/tasks, run debug
-  - trigger resume and confirm immediate local summary
-  - confirm optional AI refinement updates in place
-  - verify evidence and restore actions work
-- Restricted Mode:
-  - confirm no git execution and no terminal scraping
-  - confirm safe-mode summary still works
-  - confirm risky restore actions are disabled
-- Safety:
-  - verify unsafe protocols/paths are blocked
-  - verify only workspace-contained file links are openable
+When trust is granted, full behavior is re-enabled safely.
 
 ## Development
 
 ```bash
 npm ci
 npm run compile
+npm run lint
+npm run format:check
 npm test
 npx @vscode/vsce package --no-dependencies
 ```
 
-Run extension host with `F5` in VS Code.
+Formatting:
+
+```bash
+npm run format
+```
+
+Integration test harness status:
+
+- Stub plan: `docs/integration-test-harness.md`
+- Script placeholder: `npm run test:integration`
+
+## Manual Smoke Checklist
+
+Trusted workspace:
+
+- edit files, run test/task, and trigger summary
+- confirm immediate local summary appears
+- confirm AI refinement updates in place (if enabled)
+- confirm evidence links open safely
+- confirm Restore Pack actions work as expected
+
+Restricted Mode:
+
+- confirm no git execution and no terminal scraping
+- confirm risky restore actions are disabled
+- confirm local summary still works
+
+## License
+
+MIT
