@@ -81,6 +81,8 @@ interface RuntimeState {
   metricSession?: MetricRecord;
   workspaceTrusted: boolean;
   terminalHooks: vscode.Disposable[];
+  refinementSequence: number;
+  activeRefinementSequence?: number;
 }
 
 let state: RuntimeState;
@@ -102,6 +104,7 @@ export function activate(context: vscode.ExtensionContext): void {
     lastFailingCommand: context.globalState.get<string>(KEY_LAST_FAILING_COMMAND),
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
+    refinementSequence: 0,
   };
 
   context.subscriptions.push(state.output);
@@ -509,15 +512,115 @@ async function triggerSummary(context: vscode.ExtensionContext, reason: Exclude<
     return;
   }
 
-  const { summary, triggerReason } = await generateSummary(context, root, reason);
+  state.activeRefinementSequence = undefined;
+  const prepared = await prepareTriggerSummary(context, root, reason);
 
   await context.workspaceState.update(KEY_LAST_SUMMARY_AT, Date.now());
 
-  await presentSummary(context, summary, triggerReason, {
+  await presentSummary(context, prepared.summary, prepared.triggerReason, {
     autoOpenDetails: reason === 'manual',
     workspaceRoot: root,
     checkpointNote: getCheckpointNote(context, root),
   });
+
+  if (prepared.shouldRefineWithOpenAi) {
+    void refineSummaryInBackground(context, prepared);
+  }
+}
+
+interface PreparedTriggerSummary {
+  root: string;
+  cacheKey: string;
+  triggerReason: TriggerReason;
+  summary: ResumeSummary;
+  localSummary: ResumeSummary;
+  signals: ResumeSignals;
+  config: ExtensionConfig;
+  openAiApiKey: string;
+  shouldRefineWithOpenAi: boolean;
+}
+
+async function applyBranchHistory(
+  context: vscode.ExtensionContext,
+  root: string,
+  summary: ResumeSummary
+): Promise<ResumeSummary> {
+  const previousBranch = context.workspaceState.get<string>(branchStateKey(root));
+  if (summary.currentBranch && previousBranch && summary.currentBranch !== previousBranch) {
+    summary.previousBranch = previousBranch;
+  }
+
+  if (summary.currentBranch) {
+    await context.workspaceState.update(branchStateKey(root), summary.currentBranch);
+  }
+
+  return summary;
+}
+
+async function prepareTriggerSummary(
+  context: vscode.ExtensionContext,
+  root: string,
+  reason: Exclude<TriggerReason, 'cached'>
+): Promise<PreparedTriggerSummary> {
+  const config = getConfig();
+  const openAiApiKey = await resolveOpenAiApiKey(context, config);
+  const signals = await collectSignals(root, config);
+  const localSummary = await applyBranchHistory(context, root, buildResumeSummary(signals));
+  const cacheKey = summaryCacheKey(root);
+  const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
+  const contextUnchanged =
+    config.cacheIfContextUnchanged && Boolean(cached) && cached?.contextHash === localSummary.contextHash;
+
+  if (!contextUnchanged) {
+    await context.workspaceState.update(cacheKey, localSummary);
+  }
+
+  const summary = contextUnchanged && cached ? cached : localSummary;
+  const shouldRefineWithOpenAi =
+    config.summaryProvider === 'openai' && Boolean(openAiApiKey) && summary.source !== 'openai';
+
+  return {
+    root,
+    cacheKey,
+    triggerReason: contextUnchanged && cached ? 'cached' : reason,
+    summary,
+    localSummary,
+    signals,
+    config,
+    openAiApiKey,
+    shouldRefineWithOpenAi,
+  };
+}
+
+async function refineSummaryInBackground(context: vscode.ExtensionContext, prepared: PreparedTriggerSummary): Promise<void> {
+  const sequence = state.refinementSequence + 1;
+  state.refinementSequence = sequence;
+  state.activeRefinementSequence = sequence;
+
+  const refined = await tryGenerateOpenAiSummary(
+    prepared.signals,
+    prepared.localSummary,
+    prepared.config,
+    prepared.openAiApiKey,
+    (message) => {
+      state.output.appendLine(message);
+    }
+  );
+
+  if (!refined || state.activeRefinementSequence !== sequence) {
+    return;
+  }
+
+  await context.workspaceState.update(prepared.cacheKey, refined);
+
+  if (state.panel && state.panelSummary?.contextHash === prepared.localSummary.contextHash) {
+    state.panelSummary = refined;
+    state.panel.title = 'TaCoS Resume Brief (Refined)';
+    state.panel.webview.html = renderWebview(state.panel.webview, refined, state.displayedCheckpointNote?.value);
+    return;
+  }
+
+  void vscode.window.showInformationMessage('TaCoS: refined summary is ready.');
 }
 
 async function generateSummary(
