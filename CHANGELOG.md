@@ -27,6 +27,7 @@ All notable changes to this project are documented in this file.
 - Webview click handling now uses explicit `data-action` routing and strict host-side message parsing.
 - Unsafe links and malformed webview messages are blocked/no-op by default.
 - Persisted terminal-derived fields are anonymized/fingerprinted to avoid storing raw commands.
+- Legacy persisted activity is migrated to sanitized/fingerprinted storage at startup.
 - Privacy & Safety command opens a dedicated markdown document shipped with the extension.
 
 ## [0.0.3] - 2026-02-25
