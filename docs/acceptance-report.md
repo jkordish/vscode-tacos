@@ -90,6 +90,7 @@ Status: Implemented
 - Redaction and persistence sanitization (no raw terminal persistence):
   - `src/redaction.ts`
   - `src/activityPersistence.ts`
+  - `src/extension.ts` (startup migration of legacy persisted activity into sanitized form)
   - `test/redaction.test.ts`
   - `test/activityPersistence.test.ts`
 - Noise control/cooldown behavior:
