@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
 import { sanitizeActivityForPersistence } from './activityPersistence';
+import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
 import { isPathWithinWorkspaceRoot, normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
@@ -69,6 +70,7 @@ interface RuntimeState {
   lastFailingCommand?: string;
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
+  displayedCheckpointNote?: { workspaceRoot: string; value: string; persisted: boolean };
   metricSession?: MetricRecord;
   workspaceTrusted: boolean;
   terminalHooks: vscode.Disposable[];
@@ -78,6 +80,8 @@ let state: RuntimeState;
 
 interface PresentSummaryOptions {
   autoOpenDetails?: boolean;
+  workspaceRoot?: string;
+  checkpointNote?: string;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -137,7 +141,11 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      await presentSummary(context, cached, 'cached', { autoOpenDetails: true });
+      await presentSummary(context, cached, 'cached', {
+        autoOpenDetails: true,
+        workspaceRoot: root,
+        checkpointNote: getCheckpointNote(context, root),
+      });
     }),
     vscode.commands.registerCommand('tacos.pauseSummaries', async () => {
       await setPaused(true);
@@ -176,6 +184,42 @@ export function activate(context: vscode.ExtensionContext): void {
       state.recentUrls.push(value.trim());
       await persistActivity(context);
       void vscode.window.showInformationMessage('TaCoS: URL added to recent context.');
+    }),
+    vscode.commands.registerCommand('tacos.addCheckpointNote', async () => {
+      const root = pickWorkspaceRoot();
+      if (!root) {
+        void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+        return;
+      }
+
+      const note = await vscode.window.showInputBox({
+        title: 'TaCoS: Add Checkpoint Note',
+        prompt: 'One-line next step for future you',
+        placeHolder: 'Example: Fix failing parser test and rerun npm test',
+        ignoreFocusOut: true,
+      });
+      if (!note) {
+        return;
+      }
+
+      const sanitized = sanitizeCheckpointNote(note, root, getConfig().redactionPatterns);
+      if (!sanitized) {
+        void vscode.window.showWarningMessage('TaCoS: note was empty after sanitization and was not saved.');
+        return;
+      }
+
+      await context.workspaceState.update(checkpointStorageKey(root), sanitized);
+      void vscode.window.showInformationMessage('TaCoS: checkpoint note saved for this workspace.');
+    }),
+    vscode.commands.registerCommand('tacos.clearCheckpointNote', async () => {
+      const root = pickWorkspaceRoot();
+      if (!root) {
+        void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+        return;
+      }
+
+      await clearCheckpointNote(context, root);
+      void vscode.window.showInformationMessage('TaCoS: checkpoint note cleared for this workspace.');
     }),
     vscode.commands.registerCommand('tacos.setOpenAiApiKey', async () => {
       const value = await vscode.window.showInputBox({
@@ -450,7 +494,11 @@ async function triggerSummary(context: vscode.ExtensionContext, reason: Exclude<
 
   await context.workspaceState.update(KEY_LAST_SUMMARY_AT, Date.now());
 
-  await presentSummary(context, summary, triggerReason, { autoOpenDetails: reason === 'manual' });
+  await presentSummary(context, summary, triggerReason, {
+    autoOpenDetails: reason === 'manual',
+    workspaceRoot: root,
+    checkpointNote: getCheckpointNote(context, root),
+  });
 }
 
 async function generateSummary(
@@ -512,7 +560,7 @@ async function presentSummary(
   }
 
   if (options.autoOpenDetails) {
-    showDetailsPanel(summary);
+    await showDetailsPanel(context, summary, options);
     return;
   }
 
@@ -528,7 +576,7 @@ async function presentSummary(
   );
 
   if (choice === 'Open details') {
-    showDetailsPanel(summary);
+    await showDetailsPanel(context, summary, options);
     return;
   }
 
@@ -563,8 +611,25 @@ async function presentSummary(
   }
 }
 
-function showDetailsPanel(summary: ResumeSummary): void {
+async function showDetailsPanel(
+  context: vscode.ExtensionContext,
+  summary: ResumeSummary,
+  options: Pick<PresentSummaryOptions, 'workspaceRoot' | 'checkpointNote'> = {}
+): Promise<void> {
+  const workspaceRoot = options.workspaceRoot ?? pickWorkspaceRoot();
+  const checkpointNote = options.checkpointNote;
   state.panelSummary = summary;
+
+  if (checkpointNote && workspaceRoot) {
+    state.displayedCheckpointNote = {
+      workspaceRoot,
+      value: checkpointNote,
+      persisted: false,
+    };
+    await context.workspaceState.update(checkpointStorageKey(workspaceRoot), undefined);
+  } else {
+    state.displayedCheckpointNote = undefined;
+  }
 
   if (!state.panel) {
     state.panel = vscode.window.createWebviewPanel('tacos.details', 'TaCoS Resume Brief', vscode.ViewColumn.Beside, {
@@ -576,9 +641,38 @@ function showDetailsPanel(summary: ResumeSummary): void {
     state.panel.onDidDispose(() => {
       state.panel = undefined;
       state.panelSummary = undefined;
+      state.displayedCheckpointNote = undefined;
     });
 
     state.panel.webview.onDidReceiveMessage(async (message: { type?: unknown; index?: unknown }) => {
+      if (message.type === 'checkpointKeep') {
+        if (!state.displayedCheckpointNote) {
+          return;
+        }
+
+        await context.workspaceState.update(
+          checkpointStorageKey(state.displayedCheckpointNote.workspaceRoot),
+          state.displayedCheckpointNote.value
+        );
+        state.displayedCheckpointNote.persisted = true;
+        void vscode.window.showInformationMessage('TaCoS: checkpoint note kept for the next resume.');
+        return;
+      }
+
+      if (message.type === 'checkpointClear') {
+        if (!state.displayedCheckpointNote) {
+          return;
+        }
+
+        await context.workspaceState.update(checkpointStorageKey(state.displayedCheckpointNote.workspaceRoot), undefined);
+        state.displayedCheckpointNote = undefined;
+        if (state.panel && state.panelSummary) {
+          state.panel.webview.html = renderWebview(state.panel.webview, state.panelSummary, undefined);
+        }
+        void vscode.window.showInformationMessage('TaCoS: checkpoint note cleared.');
+        return;
+      }
+
       if (message.type === 'blockedLink') {
         void vscode.window.showWarningMessage(
           'TaCoS blocked a link that was not part of the validated summary link list.'
@@ -627,12 +721,22 @@ function showDetailsPanel(summary: ResumeSummary): void {
   }
 
   state.panel.title = 'TaCoS Resume Brief';
-  state.panel.webview.html = renderWebview(state.panel.webview, summary);
+  state.panel.webview.html = renderWebview(state.panel.webview, summary, state.displayedCheckpointNote?.value);
   state.panel.reveal(vscode.ViewColumn.Beside, true);
 }
 
-function renderWebview(webview: vscode.Webview, summary: ResumeSummary): string {
+function renderWebview(webview: vscode.Webview, summary: ResumeSummary, checkpointNote?: string): string {
   const nonce = createNonce();
+  const checkpointCard = checkpointNote
+    ? `<div class="card">
+      <h3>Your Note</h3>
+      <p>${escapeHtml(checkpointNote)}</p>
+      <div class="note-actions">
+        <button type="button" data-action="checkpointKeep">Keep</button>
+        <button type="button" data-action="checkpointClear">Clear now</button>
+      </div>
+    </div>`
+    : '';
   const linkItems = summary.links
     .map(
       (link, index) =>
@@ -689,9 +793,21 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary): string 
       .kind {
         color: #8b8b8b;
       }
+      .note-actions {
+        display: flex;
+        gap: 8px;
+      }
+      .note-actions button {
+        border: 1px solid rgba(127, 127, 127, 0.45);
+        background: transparent;
+        border-radius: 6px;
+        padding: 4px 8px;
+        cursor: pointer;
+      }
     </style>
   </head>
   <body>
+    ${checkpointCard}
     <div class="card">
       <h3>Intent</h3>
       <p>${escapeHtml(summary.intent)}</p>
@@ -726,6 +842,19 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary): string 
         }
 
         const anchor = target.closest('a');
+        const actionButton = target.closest('button[data-action]');
+        if (actionButton) {
+          event.preventDefault();
+          const action = actionButton.getAttribute('data-action');
+          if (action === 'checkpointKeep') {
+            vscode.postMessage({ type: 'checkpointKeep' });
+          }
+          if (action === 'checkpointClear') {
+            vscode.postMessage({ type: 'checkpointClear' });
+          }
+          return;
+        }
+
         if (!anchor) {
           return;
         }
@@ -1050,6 +1179,17 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
 
 function summaryCacheKey(root: string): string {
   return `tacos.summary.${Buffer.from(root).toString('base64url')}`;
+}
+
+function getCheckpointNote(context: vscode.ExtensionContext, workspaceRoot: string): string | undefined {
+  return context.workspaceState.get<string>(checkpointStorageKey(workspaceRoot));
+}
+
+async function clearCheckpointNote(context: vscode.ExtensionContext, workspaceRoot: string): Promise<void> {
+  await context.workspaceState.update(checkpointStorageKey(workspaceRoot), undefined);
+  if (state.displayedCheckpointNote?.workspaceRoot === workspaceRoot) {
+    state.displayedCheckpointNote = undefined;
+  }
 }
 
 async function persistActivity(context: vscode.ExtensionContext): Promise<void> {

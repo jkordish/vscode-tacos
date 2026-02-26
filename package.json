@@ -31,6 +31,8 @@
     "onCommand:tacos.resumeSummaries",
     "onCommand:tacos.exportMetrics",
     "onCommand:tacos.addVisitedUrl",
+    "onCommand:tacos.addCheckpointNote",
+    "onCommand:tacos.clearCheckpointNote",
     "onCommand:tacos.setOpenAiApiKey",
     "onCommand:tacos.clearOpenAiApiKey"
   ],
@@ -68,6 +70,14 @@
       {
         "command": "tacos.addVisitedUrl",
         "title": "TaCoS: Add Recent URL"
+      },
+      {
+        "command": "tacos.addCheckpointNote",
+        "title": "TaCoS: Add Checkpoint Note"
+      },
+      {
+        "command": "tacos.clearCheckpointNote",
+        "title": "TaCoS: Clear Checkpoint Note"
       },
       {
         "command": "tacos.setOpenAiApiKey",
