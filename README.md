@@ -8,7 +8,7 @@ TaCoS is built around five non-negotiable principles:
 
 1. Local-first UX: useful summary now, optional AI refinement later.
 2. Untrusted model output: links/paths must be evidence-grounded and revalidated at click time.
-3. Privacy-first: redact before persistence, avoid storing sensitive command content, use SecretStorage for API keys.
+3. Privacy-first: redact before persistence, never persist raw terminal commands, use SecretStorage for API keys.
 4. Workspace Trust aware: restricted mode disables risky collection/actions.
 5. Fast + quiet: cooldowns, debounce, context caching, and bounded expensive operations.
 

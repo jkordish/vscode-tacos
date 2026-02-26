@@ -2922,14 +2922,24 @@ async function maybeShowOnboardingNotice(context: vscode.ExtensionContext): Prom
 }
 
 async function openPrivacySafetyDoc(context: vscode.ExtensionContext): Promise<void> {
+  const candidates = ['README.md', 'readme.md'];
   try {
-    const readmeUri = vscode.Uri.joinPath(context.extensionUri, 'README.md');
-    const doc = await vscode.workspace.openTextDocument(readmeUri);
-    await vscode.window.showTextDocument(doc, {
-      preview: false,
-      viewColumn: vscode.ViewColumn.Beside,
-      preserveFocus: false,
-    });
+    for (const candidate of candidates) {
+      try {
+        const readmeUri = vscode.Uri.joinPath(context.extensionUri, candidate);
+        const doc = await vscode.workspace.openTextDocument(readmeUri);
+        await vscode.window.showTextDocument(doc, {
+          preview: false,
+          viewColumn: vscode.ViewColumn.Beside,
+          preserveFocus: false,
+        });
+        return;
+      } catch {
+        // Try next candidate.
+      }
+    }
+
+    throw new Error('README file not found');
   } catch (error) {
     state.output.appendLine(
       `TaCoS: failed to open README privacy section: ${(error as Error).message}`,
