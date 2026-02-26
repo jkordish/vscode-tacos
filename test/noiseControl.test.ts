@@ -29,6 +29,34 @@ describe('shouldAutoTriggerSummary', () => {
     expect(result).toBe(true);
   });
 
+  it('allows trigger when workspace switched and cooldown passed', () => {
+    const result = shouldAutoTriggerSummary({
+      now: 20 * 60_000,
+      lastBlurAt: 19 * 60_000,
+      lastSummaryAt: 10 * 60_000,
+      minIdleMinutes: 10,
+      cooldownMinutes: 5,
+      projectSwitched: true,
+      significantChange: false,
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it('allows trigger when idle threshold is met and cooldown passed', () => {
+    const result = shouldAutoTriggerSummary({
+      now: 30 * 60_000,
+      lastBlurAt: 0,
+      lastSummaryAt: 20 * 60_000,
+      minIdleMinutes: 10,
+      cooldownMinutes: 5,
+      projectSwitched: false,
+      significantChange: false,
+    });
+
+    expect(result).toBe(true);
+  });
+
   it('blocks trigger within cooldown even if idle threshold is met', () => {
     const result = shouldAutoTriggerSummary({
       now: 12 * 60_000,
