@@ -558,8 +558,12 @@ async function applyWorkspaceTrust(
   }
 }
 
-async function triggerSummary(context: vscode.ExtensionContext, reason: Exclude<TriggerReason, 'cached'>): Promise<void> {
-  const root = pickWorkspaceRoot();
+async function triggerSummary(
+  context: vscode.ExtensionContext,
+  reason: Exclude<TriggerReason, 'cached'>,
+  preferredWorkspaceRoot?: string
+): Promise<void> {
+  const root = preferredWorkspaceRoot ?? pickWorkspaceRoot();
   if (!root) {
     void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
     return;
@@ -1517,7 +1521,7 @@ async function openChangedSummaryFiles(
 }
 
 async function openWorkspaceFiles(paths: string[], preferredWorkspaceRoot?: string): Promise<number> {
-  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  const workspaceRoot = preferredWorkspaceRoot;
   if (!workspaceRoot) {
     void vscode.window.showWarningMessage('TaCoS: open a workspace folder to restore files.');
     return 0;
@@ -1848,7 +1852,7 @@ async function captureSummaryCorrection(context: vscode.ExtensionContext): Promi
     'Regenerate now'
   );
   if (action === 'Regenerate now') {
-    await triggerSummary(context, 'manual');
+    await triggerSummary(context, 'manual', workspaceRoot);
   }
 }
 
@@ -2144,12 +2148,20 @@ function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('tacos');
   const idleMinutesLegacy = config.get<number>('idleMinutes', 10);
   const cooldownSecondsLegacy = config.get<number>('cooldownSeconds', 30);
+  const hasIdleMinutesOverride = hasExplicitConfigurationValue(config, 'idleMinutes');
+  const hasCooldownSecondsOverride = hasExplicitConfigurationValue(config, 'cooldownSeconds');
   const hasMinIdleMinutesOverride = hasExplicitConfigurationValue(config, 'minIdleMinutes');
   const hasCooldownMinutesOverride = hasExplicitConfigurationValue(config, 'cooldownMinutes');
-  const minIdleMinutes = hasMinIdleMinutesOverride ? config.get<number>('minIdleMinutes', 10) : idleMinutesLegacy;
+  const minIdleMinutes = hasMinIdleMinutesOverride
+    ? config.get<number>('minIdleMinutes', 10)
+    : hasIdleMinutesOverride
+      ? idleMinutesLegacy
+      : 10;
   const cooldownMinutes = hasCooldownMinutesOverride
     ? config.get<number>('cooldownMinutes', 5)
-    : Math.max(1, Math.round(cooldownSecondsLegacy / 60));
+    : hasCooldownSecondsOverride
+      ? Math.max(1, Math.round(cooldownSecondsLegacy / 60))
+      : 5;
 
   return {
     enabled: config.get<boolean>('enabled', true),
@@ -2307,17 +2319,36 @@ function autoTriggerFingerprintKey(root: string): string {
 }
 
 function computeAutoTriggerFingerprint(root: string): string {
-  const activeFile = vscode.window.activeTextEditor?.document?.uri.fsPath
+  const config = getConfig();
+  const activeFileRaw = vscode.window.activeTextEditor?.document?.uri.fsPath
     ? toRelativePath(vscode.window.activeTextEditor.document.uri.fsPath, root)
     : '';
-  return [
-    activeFile,
-    state.recentFiles.values()[0] ?? '',
-    state.recentTerminal.values()[0] ?? '',
-    state.recentDebug.values()[0] ?? '',
-    state.lastFailingCommand ?? '',
-    state.doneItems.values()[0] ?? '',
-  ].join('|');
+  const activeFile = redactText(activeFileRaw, root, config.redactionPatterns);
+  const redacted = sanitizeActivityForPersistence(
+    {
+      recentFiles: state.recentFiles.values(),
+      recentTerminal: state.recentTerminal.values(),
+      recentDebug: state.recentDebug.values(),
+      recentUrls: [],
+      doneItems: state.doneItems.values(),
+      lastFailingCommand: state.lastFailingCommand,
+    },
+    root,
+    config.redactionPatterns
+  );
+
+  return createHash('sha256')
+    .update(
+      [
+        activeFile,
+        redacted.recentFiles[0] ?? '',
+        redacted.recentTerminal[0] ?? '',
+        redacted.recentDebug[0] ?? '',
+        redacted.lastFailingCommand ?? '',
+        redacted.doneItems[0] ?? '',
+      ].join('|')
+    )
+    .digest('hex');
 }
 
 function getCheckpointNote(context: vscode.ExtensionContext, workspaceRoot: string): string | undefined {
