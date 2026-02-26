@@ -678,6 +678,11 @@ async function tryOpenCodexPanel(config: ExtensionConfig): Promise<string | unde
 
   const configured = config.codexOpenCommand.trim();
   const builtInCandidates = [
+    // Official OpenAI Codex extension commands.
+    'chatgpt.openSidebar',
+    'chatgpt.newCodexPanel',
+    'chatgpt.newChat',
+
     'openai.codex.open',
     'openai.codex.openPanel',
     'openai.codex.focus',
@@ -840,12 +845,22 @@ function summaryCacheKey(root: string): string {
 }
 
 async function persistActivity(context: vscode.ExtensionContext): Promise<void> {
+  const config = getConfig();
+  const workspaceRoot = pickWorkspaceRoot() ?? '';
+  const redactionPatterns = config.redactionPatterns;
+
+  const recentFiles = redactList(state.recentFiles.values(), workspaceRoot, redactionPatterns);
+  const recentTerminal = redactList(state.recentTerminal.values(), workspaceRoot, redactionPatterns);
+  const recentDebug = redactList(state.recentDebug.values(), workspaceRoot, redactionPatterns);
+  const recentUrls = redactList(state.recentUrls.values(), workspaceRoot, redactionPatterns);
+  const doneItems = redactList(state.doneItems.values(), workspaceRoot, redactionPatterns);
+
   await Promise.all([
-    context.globalState.update(KEY_RECENT_FILES, state.recentFiles.values()),
-    context.globalState.update(KEY_RECENT_TERMINAL, state.recentTerminal.values()),
-    context.globalState.update(KEY_RECENT_DEBUG, state.recentDebug.values()),
-    context.globalState.update(KEY_RECENT_URLS, state.recentUrls.values()),
-    context.globalState.update(KEY_DONE_ITEMS, state.doneItems.values()),
+    context.globalState.update(KEY_RECENT_FILES, recentFiles),
+    context.globalState.update(KEY_RECENT_TERMINAL, recentTerminal),
+    context.globalState.update(KEY_RECENT_DEBUG, recentDebug),
+    context.globalState.update(KEY_RECENT_URLS, recentUrls),
+    context.globalState.update(KEY_DONE_ITEMS, doneItems),
   ]);
 }
 

@@ -2,7 +2,7 @@
   "name": "vscode-tacos",
   "displayName": "TaCoS Resume Brief",
   "description": "Auto task-context summaries when you resume work in VS Code.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "jkordish",
   "repository": {
     "type": "git",
