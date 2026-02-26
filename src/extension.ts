@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
@@ -28,7 +29,7 @@ const markdownRenderer = new MarkdownIt({
   html: false,
   linkify: false,
   typographer: false,
-});
+}).disable(['link', 'image']);
 
 class RingBuffer {
   private valuesList: string[] = [];
@@ -266,11 +267,23 @@ export function activate(context: vscode.ExtensionContext): void {
 
   void applyWorkspaceTrust(context, vscode.workspace.isTrusted, true);
 
-  context.subscriptions.push(
-    vscode.workspace.onDidGrantWorkspaceTrust(() => {
-      void applyWorkspaceTrust(context, true, false);
-    })
-  );
+  const workspaceAny = vscode.workspace as typeof vscode.workspace & {
+    onDidChangeWorkspaceTrust?: (listener: (event: { isTrusted: boolean }) => unknown) => vscode.Disposable;
+  };
+
+  if (workspaceAny.onDidChangeWorkspaceTrust) {
+    context.subscriptions.push(
+      workspaceAny.onDidChangeWorkspaceTrust((event: { isTrusted: boolean }) => {
+        void applyWorkspaceTrust(context, event.isTrusted, false);
+      })
+    );
+  } else {
+    context.subscriptions.push(
+      vscode.workspace.onDidGrantWorkspaceTrust(() => {
+        void applyWorkspaceTrust(context, true, false);
+      })
+    );
+  }
   context.subscriptions.push({
     dispose: () => {
       clearTerminalHooks();
@@ -378,7 +391,7 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       if (typeof exitCode === 'number' && exitCode === 0 && isTestOrBuildCommand(command)) {
         state.doneItems.push(command);
 
-        if (state.lastFailingCommand === command) {
+        if (state.lastFailingCommand && doesCommandMatchStoredFailure(state.lastFailingCommand, command)) {
           state.lastFailingCommand = undefined;
         }
 
@@ -566,6 +579,13 @@ function showDetailsPanel(summary: ResumeSummary): void {
     });
 
     state.panel.webview.onDidReceiveMessage(async (message: { type?: unknown; index?: unknown }) => {
+      if (message.type === 'blockedLink') {
+        void vscode.window.showWarningMessage(
+          'TaCoS blocked a link that was not part of the validated summary link list.'
+        );
+        return;
+      }
+
       if (message.type !== 'openLink' || typeof message.index !== 'number' || !Number.isInteger(message.index)) {
         return;
       }
@@ -630,9 +650,9 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary): string 
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; img-src ${webview.cspSource} https:; script-src 'nonce-${nonce}';"
+      content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource}; script-src 'nonce-${nonce}';"
     />
-    <style>
+    <style nonce="${nonce}">
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         padding: 16px;
@@ -699,25 +719,37 @@ function renderWebview(webview: vscode.Webview, summary: ResumeSummary): string 
 
     <script nonce="${nonce}">
       const vscode = acquireVsCodeApi();
-      for (const anchor of document.querySelectorAll('a[data-idx]')) {
-        anchor.addEventListener('click', (event) => {
-          event.preventDefault();
-          const idx = Number(anchor.getAttribute('data-idx'));
-          vscode.postMessage({ type: 'openLink', index: idx });
-        });
-      }
+      document.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+
+        const anchor = target.closest('a');
+        if (!anchor) {
+          return;
+        }
+
+        event.preventDefault();
+        const idxRaw = anchor.getAttribute('data-idx');
+        if (idxRaw === null) {
+          vscode.postMessage({ type: 'blockedLink' });
+          return;
+        }
+
+        const idx = Number(idxRaw);
+        if (!Number.isInteger(idx)) {
+          return;
+        }
+        vscode.postMessage({ type: 'openLink', index: idx });
+      });
     </script>
   </body>
 </html>`;
 }
 
 function createNonce(): string {
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let nonce = '';
-  for (let index = 0; index < 32; index += 1) {
-    nonce += alphabet[Math.floor(Math.random() * alphabet.length)];
-  }
-  return nonce;
+  return randomBytes(18).toString('base64url');
 }
 
 function escapeHtml(value: string): string {
@@ -949,6 +981,17 @@ function isTestOrBuildCommand(command: string): boolean {
   return /\b(test|jest|vitest|pytest|go test|cargo test|npm\s+run\s+test|pnpm\s+test|yarn\s+test|build|compile|make\s+test|make\s+build)\b/i.test(
     command
   );
+}
+
+function doesCommandMatchStoredFailure(stored: string, rawCommand: string): boolean {
+  if (stored === rawCommand) {
+    return true;
+  }
+
+  const config = getConfig();
+  const workspaceRoot = pickWorkspaceRoot() ?? '';
+  const redactedCommand = redactText(rawCommand, workspaceRoot, config.redactionPatterns);
+  return stored === redactedCommand;
 }
 
 async function collectSignals(root: string, config: ExtensionConfig): Promise<ResumeSignals> {
