@@ -19,6 +19,7 @@ import {
   resolveFileTargetInWorkspace,
 } from './pathSafety';
 import { redactList, redactText } from './redaction';
+import { computeRestoreAvailability } from './restoreSafety';
 import { buildResumeSummary } from './summary';
 import { buildTimelineGroups } from './timeline';
 import type {
@@ -1333,14 +1334,14 @@ function renderWebview(
   const hasExtraEvidence = (summary.evidenceCatalog?.length ?? 0) > 5;
   const mode = summary.mode ?? 'coding';
   const trusted = vscode.workspace.isTrusted;
-  const canRerunTask = trusted && Boolean(state.lastTaskName);
-  const canRerunDebug = trusted && Boolean(state.lastDebugConfigName);
-  const canCheckoutPreviousBranch =
-    trusted &&
-    Boolean(summary.previousBranch) &&
-    Boolean(summary.currentBranch) &&
-    summary.previousBranch !== summary.currentBranch;
-  const hasFailingCommand = Boolean(state.lastFailingCommand ?? summary.lastFailingCommand);
+  const availability = computeRestoreAvailability({
+    trusted,
+    hasLastTask: Boolean(state.lastTaskName),
+    hasLastDebug: Boolean(state.lastDebugConfigName),
+    hasFailingCommand: Boolean(state.lastFailingCommand ?? summary.lastFailingCommand),
+    currentBranch: summary.currentBranch,
+    previousBranch: summary.previousBranch,
+  });
   const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
   const sourceLabel =
     summary.source === 'local' ? 'Local summary (instant)' : 'Refined summary (AI)';
@@ -1613,10 +1614,10 @@ function renderWebview(
       <div class="restore-grid">
         <button type="button" data-action="restoreReopenFiles">Reopen files</button>
         <button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>
-        <button type="button" data-action="restoreRerunTask" ${canRerunTask ? '' : 'disabled'}>Rerun last task</button>
-        <button type="button" data-action="restoreRerunDebug" ${canRerunDebug ? '' : 'disabled'}>Rerun debug config</button>
-        <button type="button" data-action="restoreCheckoutPreviousBranch" ${canCheckoutPreviousBranch ? '' : 'disabled'}>Checkout previous branch</button>
-        <button type="button" data-action="restoreCopyFailingCommand" ${hasFailingCommand ? '' : 'disabled'}>Copy failing command</button>
+        <button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled'}>Rerun last task</button>
+        <button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled'}>Rerun debug config</button>
+        <button type="button" data-action="restoreCheckoutPreviousBranch" ${availability.canCheckoutPreviousBranch ? '' : 'disabled'}>Checkout previous branch</button>
+        <button type="button" data-action="restoreCopyFailingCommand" ${availability.canCopyFailingCommand ? '' : 'disabled'}>Copy failing command</button>
       </div>
       ${
         trusted
