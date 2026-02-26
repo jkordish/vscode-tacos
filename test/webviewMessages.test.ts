@@ -31,6 +31,12 @@ describe('parseWebviewMessage', () => {
       evidenceId: 'file:src/index.ts',
     });
 
+    const longEvidenceId = `url:https://example.com/${'a'.repeat(600)}`;
+    expect(parseWebviewMessage({ type: 'openEvidence', evidenceId: longEvidenceId })).toEqual({
+      type: 'openEvidence',
+      evidenceId: longEvidenceId,
+    });
+
     expect(parseWebviewMessage({ type: 'openEvidence', evidenceId: '' })).toBeUndefined();
     expect(parseWebviewMessage({ type: 'openEvidence', evidenceId: 123 })).toBeUndefined();
   });

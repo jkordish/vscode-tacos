@@ -50,7 +50,7 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
     }
 
     const evidenceId = raw.evidenceId.trim();
-    if (!evidenceId || evidenceId.length > 240) {
+    if (!evidenceId) {
       return undefined;
     }
 
