@@ -12,6 +12,7 @@ import {
   type PersistedActivityState,
 } from './activityPersistence';
 import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
+import { decideEditActivity } from './editActivity';
 import { isSummaryLinkEvidenceGrounded } from './evidenceSafety';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
@@ -438,23 +439,21 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(async (event) => {
-      if (!state.metricSession) {
-        return;
-      }
-
-      if (state.metricSession.firstMeaningfulEditLagMs !== undefined) {
-        return;
-      }
-
-      if (event.document.uri.scheme !== 'file') {
-        return;
-      }
-
-      if (!isMeaningfulChange(event.contentChanges)) {
+      const decision = decideEditActivity({
+        documentScheme: event.document.uri.scheme,
+        hasMeaningfulChange: isMeaningfulChange(event.contentChanges),
+        hasMetricSession: Boolean(state.metricSession),
+        hasCapturedFirstMeaningfulEdit: state.metricSession?.firstMeaningfulEditLagMs !== undefined,
+      });
+      if (!decision.shouldMarkMeaningfulActivity) {
         return;
       }
 
       markMeaningfulActivity();
+      if (!decision.shouldCaptureMetricLag || !state.metricSession) {
+        return;
+      }
+
       state.metricSession.firstMeaningfulEditLagMs = Date.now() - state.metricSession.startedAt;
       await maybeFinalizeMetric(context);
     }),

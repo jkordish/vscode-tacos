@@ -25,6 +25,7 @@ All notable changes to this project are documented in this file.
 - CI quality gates now enforce compile, lint, format-check, unit/integration tests, and VSIX packaging.
 - Added `npm run verify` and `npm run verify:quick` scripts for consistent local release gating.
 - Integration runner now cleans up temporary isolated-profile test directories after each run.
+- Meaningful edit activity tracking now updates independently of metric-session state for reliable blur checkpoint prompts.
 
 ### Security
 
