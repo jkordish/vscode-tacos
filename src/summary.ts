@@ -111,12 +111,33 @@ function buildNextSteps(signals: ResumeSignals, topFiles: string[]): string[] {
   return dedupe(next, 3).slice(0, 3);
 }
 
+function normalizeTerminalEntryForMode(rawEntry: string): string {
+  const entry = rawEntry.trim();
+  if (!entry) {
+    return '';
+  }
+
+  // Persisted terminal entries may be stored as
+  // `terminal:<safe_label>#<hash>`, where safe_label uses underscores.
+  if (entry.startsWith('terminal:')) {
+    const [, token = ''] = entry.split(':', 2);
+    const [label] = token.split('#', 1);
+    return label.replaceAll('_', ' ');
+  }
+
+  return entry;
+}
+
 function detectResumeMode(signals: ResumeSignals): ResumeMode {
   if (signals.failingCommand || signals.recentDebug.length > 0) {
     return 'debugging';
   }
 
-  if (signals.recentTerminal.some((command) => /\b(test|build|debug)\b/i.test(command))) {
+  if (
+    signals.recentTerminal.some((command) =>
+      /\b(test|build|debug)\b/i.test(normalizeTerminalEntryForMode(command)),
+    )
+  ) {
     return 'debugging';
   }
 

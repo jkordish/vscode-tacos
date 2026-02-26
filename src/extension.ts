@@ -6,7 +6,6 @@ import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
 import {
-  isPersistedTerminalCommandToken,
   persistTerminalCommandForStorage,
   sanitizeActivityForPersistence,
   type PersistedActivityState,
@@ -1259,7 +1258,7 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'restoreCopyFailingCommand') {
-        await copyFailingCommand(state.panelSummary);
+        await copyFailingCommand();
         return;
       }
 
@@ -1440,7 +1439,7 @@ function renderWebview(
     trusted,
     hasLastTask: Boolean(state.lastTaskName),
     hasLastDebug: Boolean(state.lastDebugConfigName),
-    hasFailingCommand: Boolean(getCopyableFailingCommand(summary)),
+    hasFailingCommand: Boolean(getCopyableFailingCommand()),
     currentBranch: summary.currentBranch,
     previousBranch: summary.previousBranch,
   });
@@ -2195,8 +2194,8 @@ async function checkoutPreviousBranch(
   }
 }
 
-async function copyFailingCommand(summary: ResumeSummary | undefined): Promise<void> {
-  const command = getCopyableFailingCommand(summary);
+async function copyFailingCommand(): Promise<void> {
+  const command = getCopyableFailingCommand();
   if (!command) {
     void vscode.window.showInformationMessage(
       'TaCoS: no copyable failing command is available (raw commands are not persisted).',
@@ -2208,18 +2207,9 @@ async function copyFailingCommand(summary: ResumeSummary | undefined): Promise<v
   void vscode.window.showInformationMessage('TaCoS: failing command copied to clipboard.');
 }
 
-function getCopyableFailingCommand(summary?: ResumeSummary): string | undefined {
+function getCopyableFailingCommand(): string | undefined {
   const raw = state.lastFailingCommandRaw?.trim();
-  if (raw) {
-    return raw;
-  }
-
-  const fallback = summary?.lastFailingCommand?.trim();
-  if (!fallback || isPersistedTerminalCommandToken(fallback)) {
-    return undefined;
-  }
-
-  return fallback;
+  return raw || undefined;
 }
 
 async function tryOpenCodexPanel(config: ExtensionConfig): Promise<string | undefined> {
@@ -2909,7 +2899,8 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
   const recentTerminal =
     isTrusted && config.includeTerminalHistory ? state.recentTerminal.values() : [];
   const recentDebug = config.includeDebugHistory ? state.recentDebug.values() : [];
-  const failingCommandRaw = state.lastFailingCommandRaw?.trim();
+  const failingCommand =
+    isTrusted && config.includeTerminalHistory ? state.lastFailingCommand?.trim() : undefined;
 
   return {
     workspaceRoot: root,
@@ -2925,9 +2916,7 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
     recentTerminal: redactList(recentTerminal, root, customPatterns),
     recentDebug: redactList(recentDebug, root, customPatterns),
     recentUrls: redactList(state.recentUrls.values(), root, customPatterns),
-    failingCommand: failingCommandRaw
-      ? redactText(failingCommandRaw, root, customPatterns)
-      : undefined,
+    failingCommand,
     doneItems: redactList(state.doneItems.values(), root, customPatterns),
   };
 }

@@ -61,6 +61,16 @@ describe('buildResumeSummary', () => {
     expect(summary.mode).toBe('coding');
   });
 
+  it('marks mode as debugging when terminal tokens indicate test/build/debug activity', () => {
+    const signals = sampleSignals();
+    signals.failingCommand = undefined;
+    signals.recentDebug = [];
+    signals.recentTerminal = ['terminal:npm_run_test#abcdef1234'];
+
+    const summary = buildResumeSummary(signals);
+    expect(summary.mode).toBe('debugging');
+  });
+
   it('does not include absolute file targets in details markdown evidence lines', () => {
     const summary = buildResumeSummary(sampleSignals());
 
