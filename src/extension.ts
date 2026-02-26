@@ -8,6 +8,7 @@ import MarkdownIt from 'markdown-it';
 import {
   persistTerminalCommandForStorage,
   sanitizeActivityForPersistence,
+  type PersistedActivityState,
 } from './activityPersistence';
 import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
 import { collectGit, parsePorcelainPaths } from './git';
@@ -134,14 +135,15 @@ interface PresentSummaryOptions {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  const persistedActivity = loadPersistedActivitySnapshot(context);
   state = {
     output: vscode.window.createOutputChannel('TaCoS'),
-    recentFiles: new RingBuffer(15, context.globalState.get<string[]>(KEY_RECENT_FILES, [])),
-    recentTerminal: new RingBuffer(15, context.globalState.get<string[]>(KEY_RECENT_TERMINAL, [])),
-    recentDebug: new RingBuffer(10, context.globalState.get<string[]>(KEY_RECENT_DEBUG, [])),
-    recentUrls: new RingBuffer(5, context.globalState.get<string[]>(KEY_RECENT_URLS, [])),
-    doneItems: new RingBuffer(10, context.globalState.get<string[]>(KEY_DONE_ITEMS, [])),
-    lastFailingCommand: context.globalState.get<string>(KEY_LAST_FAILING_COMMAND),
+    recentFiles: new RingBuffer(15, persistedActivity.sanitized.recentFiles),
+    recentTerminal: new RingBuffer(15, persistedActivity.sanitized.recentTerminal),
+    recentDebug: new RingBuffer(10, persistedActivity.sanitized.recentDebug),
+    recentUrls: new RingBuffer(5, persistedActivity.sanitized.recentUrls),
+    doneItems: new RingBuffer(10, persistedActivity.sanitized.doneItems),
+    lastFailingCommand: persistedActivity.sanitized.lastFailingCommand,
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
     refinementSequence: 0,
@@ -156,6 +158,7 @@ export function activate(context: vscode.ExtensionContext): void {
   };
 
   context.subscriptions.push(state.output);
+  void migrateLegacyPersistedActivityIfNeeded(context, persistedActivity);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('tacos.showNow', async () => {
@@ -2947,6 +2950,84 @@ async function openPrivacySafetyDoc(context: vscode.ExtensionContext): Promise<v
     );
     void vscode.window.showWarningMessage('TaCoS: unable to open privacy docs.');
   }
+}
+
+interface PersistedActivitySnapshot {
+  raw: PersistedActivityState;
+  sanitized: PersistedActivityState;
+}
+
+function getPersistedStringArray(
+  context: vscode.ExtensionContext,
+  key: string,
+  fallback: string[] = [],
+): string[] {
+  const stored = context.globalState.get<unknown>(key, fallback);
+  if (!Array.isArray(stored)) {
+    return [...fallback];
+  }
+
+  return stored.filter((value): value is string => typeof value === 'string');
+}
+
+function loadPersistedActivitySnapshot(
+  context: vscode.ExtensionContext,
+): PersistedActivitySnapshot {
+  const raw: PersistedActivityState = {
+    recentFiles: getPersistedStringArray(context, KEY_RECENT_FILES),
+    recentTerminal: getPersistedStringArray(context, KEY_RECENT_TERMINAL),
+    recentDebug: getPersistedStringArray(context, KEY_RECENT_DEBUG),
+    recentUrls: getPersistedStringArray(context, KEY_RECENT_URLS),
+    doneItems: getPersistedStringArray(context, KEY_DONE_ITEMS),
+    lastFailingCommand: context.globalState.get<string>(KEY_LAST_FAILING_COMMAND),
+  };
+
+  const config = getConfig();
+  const workspaceRoot = pickWorkspaceRoot() ?? '';
+  const sanitized = sanitizeActivityForPersistence(raw, workspaceRoot, config.redactionPatterns);
+  return { raw, sanitized };
+}
+
+function sameStringList(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+
+  return a.every((value, index) => value === b[index]);
+}
+
+function didPersistedActivityChange(
+  raw: PersistedActivityState,
+  sanitized: PersistedActivityState,
+): boolean {
+  return (
+    !sameStringList(raw.recentFiles, sanitized.recentFiles) ||
+    !sameStringList(raw.recentTerminal, sanitized.recentTerminal) ||
+    !sameStringList(raw.recentDebug, sanitized.recentDebug) ||
+    !sameStringList(raw.recentUrls, sanitized.recentUrls) ||
+    !sameStringList(raw.doneItems, sanitized.doneItems) ||
+    (raw.lastFailingCommand ?? '') !== (sanitized.lastFailingCommand ?? '')
+  );
+}
+
+async function migrateLegacyPersistedActivityIfNeeded(
+  context: vscode.ExtensionContext,
+  snapshot: PersistedActivitySnapshot,
+): Promise<void> {
+  if (!didPersistedActivityChange(snapshot.raw, snapshot.sanitized)) {
+    return;
+  }
+
+  await Promise.all([
+    context.globalState.update(KEY_RECENT_FILES, snapshot.sanitized.recentFiles),
+    context.globalState.update(KEY_RECENT_TERMINAL, snapshot.sanitized.recentTerminal),
+    context.globalState.update(KEY_RECENT_DEBUG, snapshot.sanitized.recentDebug),
+    context.globalState.update(KEY_RECENT_URLS, snapshot.sanitized.recentUrls),
+    context.globalState.update(KEY_DONE_ITEMS, snapshot.sanitized.doneItems),
+    context.globalState.update(KEY_LAST_FAILING_COMMAND, snapshot.sanitized.lastFailingCommand),
+  ]);
+
+  state.output.appendLine('TaCoS: migrated legacy persisted activity to sanitized storage.');
 }
 
 // SECURITY INVARIANT:
