@@ -4,6 +4,12 @@ describe('parseWebviewMessage', () => {
   it('accepts known simple host actions', () => {
     expect(parseWebviewMessage({ type: 'fixSummary' })).toEqual({ type: 'fixSummary' });
     expect(parseWebviewMessage({ type: 'copySummary' })).toEqual({ type: 'copySummary' });
+    expect(parseWebviewMessage({ type: 'refreshSummary' })).toEqual({
+      type: 'refreshSummary',
+    });
+    expect(parseWebviewMessage({ type: 'toggleAutoSummaries' })).toEqual({
+      type: 'toggleAutoSummaries',
+    });
     expect(parseWebviewMessage({ type: 'restoreReopenFiles' })).toEqual({
       type: 'restoreReopenFiles',
     });

@@ -5,6 +5,8 @@ const SIMPLE_MESSAGE_TYPES = [
   'copyNextSteps',
   'copySummary',
   'copyPromptAndOpenCodex',
+  'refreshSummary',
+  'toggleAutoSummaries',
   'blockedLink',
 ] as const;
 const RESTORE_MESSAGE_TYPES = [

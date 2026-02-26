@@ -1164,6 +1164,46 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'refreshSummary') {
+        const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
+        if (!workspaceRoot) {
+          void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+          return;
+        }
+
+        await triggerSummary(context, 'manual', workspaceRoot);
+        return;
+      }
+
+      if (message.type === 'toggleAutoSummaries') {
+        const config = getConfig();
+        if (!config.enabled) {
+          void vscode.window.showInformationMessage(
+            'TaCoS: summaries are disabled via tacos.enabled. Enable summaries in Settings first.',
+          );
+          return;
+        }
+
+        const wasPaused = config.pauseSummaries || state.pauseUntilRestart;
+        if (wasPaused) {
+          state.pauseUntilRestart = false;
+          await setPaused(false);
+          void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
+        } else {
+          await setPaused(true);
+          void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
+        }
+
+        if (state.panel && state.panelSummary) {
+          state.panel.webview.html = renderWebview(
+            state.panel.webview,
+            state.panelSummary,
+            state.displayedCheckpointNote?.value,
+          );
+        }
+        return;
+      }
+
       if (message.type === 'blockedLink') {
         void vscode.window.showWarningMessage(
           'TaCoS blocked a link that was not part of the validated summary link list.',
@@ -1379,6 +1419,27 @@ function renderWebview(
       : localGeneratedAtLabel
         ? `Started local at ${localGeneratedAtLabel}.`
         : 'AI refinement complete.';
+  const autoSummariesDisabled = !config.enabled;
+  const autoSummariesPaused =
+    !autoSummariesDisabled && (config.pauseSummaries || state.pauseUntilRestart);
+  const autoSummaryStatusLabel = autoSummariesDisabled
+    ? 'Auto summaries disabled'
+    : autoSummariesPaused
+      ? 'Auto summaries paused'
+      : 'Auto summaries active';
+  const autoSummaryStatusDetail = autoSummariesDisabled
+    ? 'Enable tacos.enabled in settings to restore automatic summaries.'
+    : state.pauseUntilRestart
+      ? 'Paused until restart.'
+      : config.pauseSummaries
+        ? 'Paused in settings.'
+        : 'Runs on focus after idle and cooldown checks.';
+  const autoSummaryToggleLabel = autoSummariesPaused
+    ? 'Resume auto summaries'
+    : 'Pause auto summaries';
+  const autoSummaryToggleDisabledAttr = autoSummariesDisabled
+    ? 'disabled aria-disabled="true"'
+    : '';
   const timelineGroupsHtml = timelineGroups
     .map((group) => {
       const items = group.rows
@@ -1473,6 +1534,12 @@ function renderWebview(
       .status-detail {
         margin-top: 6px;
       }
+      .status-actions {
+        margin-top: 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
       .step-evidence {
         margin-top: 6px;
         display: flex;
@@ -1529,6 +1596,10 @@ function renderWebview(
         color: var(--vscode-button-foreground);
         border-radius: 8px;
         padding: 8px 10px;
+      }
+      button:focus-visible {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
       }
       button.secondary {
         background: transparent;
@@ -1596,6 +1667,12 @@ function renderWebview(
       <h3>Status</h3>
       <div class="status-label">${escapeHtml(sourceLabel)} · ${escapeHtml(generatedAtLabel)}</div>
       <div class="status-detail muted">${escapeHtml(statusHint)}</div>
+      <div class="status-detail"><strong>${escapeHtml(autoSummaryStatusLabel)}</strong></div>
+      <div class="status-detail muted">${escapeHtml(autoSummaryStatusDetail)}</div>
+      <div class="status-actions">
+        <button type="button" data-action="refreshSummary">Refresh summary now</button>
+        <button type="button" class="secondary" data-action="toggleAutoSummaries" ${autoSummaryToggleDisabledAttr}>${escapeHtml(autoSummaryToggleLabel)}</button>
+      </div>
     </div>
 
     ${checkpointCard}
@@ -1679,6 +1756,8 @@ function renderWebview(
         'copyNextSteps',
         'copySummary',
         'copyPromptAndOpenCodex',
+        'refreshSummary',
+        'toggleAutoSummaries',
         'restoreReopenFiles',
         'restoreOpenChangedFiles',
         'restoreRerunTask',

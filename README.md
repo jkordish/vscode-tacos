@@ -17,6 +17,7 @@ TaCoS is built around five non-negotiable principles:
 - Detects resume moments (focus return, workspace switch, meaningful change).
 - Builds an evidence catalog from trusted extension-collected context.
 - Shows intent, next steps, top files/links, and restore actions.
+- Adds panel status controls to refresh immediately and pause/resume auto summaries.
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.
 - Lets you add checkpoint notes (“Future You” hints) and reuse them on resume.
 - Supports local-only summaries and optional AI refinement (`vscode-lm` / `openai`).
