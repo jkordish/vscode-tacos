@@ -29,6 +29,8 @@ TaCoS is a VS Code extension scaffold that auto-generates a resume brief when yo
 - `TaCoS: Pause Auto Summaries`
 - `TaCoS: Resume Auto Summaries`
 - `TaCoS: Add Recent URL`
+- `TaCoS: Set OpenAI API Key`
+- `TaCoS: Clear OpenAI API Key`
 - `TaCoS: Export Local Metrics`
 
 `TaCoS: Resume Summary Quick` runs the full flow behind the scenes: generate the complete summary response, copy it, and open a new untitled editor tab prefilled with that summary.
@@ -49,7 +51,7 @@ Settings namespace: `tacos`
 - `redactionPatterns` (default `[]`)
 - `metricsEnabled` (default `true`)
 - `summaryProvider` (`local` or `openai`, default `local`)
-- `openaiApiKey` (default `""`, falls back to `OPENAI_API_KEY`)
+- `openaiApiKey` (default `""`, deprecated fallback; prefer Secret Storage command)
 - `openaiModel` (default `gpt-4.1-mini`)
 - `openaiBaseUrl` (default `https://api.openai.com/v1`)
 - `openaiTimeoutMs` (default `15000`)
@@ -64,15 +66,40 @@ Settings namespace: `tacos`
 
 ## Enabling OpenAI Summaries
 
-Set these in VS Code settings (`settings.json`):
+Preferred key setup:
 
-```json
-{
-  "tacos.summaryProvider": "openai",
-  "tacos.openaiApiKey": "YOUR_API_KEY",
-  "tacos.openaiModel": "gpt-5.2"
-}
-```
+1. Run `TaCoS: Set OpenAI API Key` to store the key in VS Code Secret Storage.
+2. Set `tacos.summaryProvider` to `openai`.
+3. Optionally set `tacos.openaiModel`.
+
+Key resolution order:
+1. Secret Storage (`TaCoS: Set OpenAI API Key`)
+2. `OPENAI_API_KEY` environment variable
+3. Deprecated `tacos.openaiApiKey` setting
+
+## Security & Privacy
+
+- Signals collected:
+  - Local editor/workspace signals like open files, recent files, debug sessions, and optional git snapshots.
+  - Terminal command history only when shell integration is available and the workspace is trusted.
+  - User-added URLs from `TaCoS: Add Recent URL`.
+- Persisted locally:
+  - Recent files, terminal/debug/url history, done items, last failing command, summary cache, and optional local metrics.
+  - Activity persistence is redacted before storage.
+- Sent to OpenAI (only when `summaryProvider` is `openai`):
+  - Redacted summary context text (intent evidence, git/editor signals, recent activity) and schema instructions.
+  - No telemetry is emitted by the extension.
+- Link opening restrictions:
+  - External links are limited to `http`/`https`.
+  - File links are resolved and validated to remain within the active workspace root.
+  - Unsafe links are blocked.
+- Workspace Trust behavior:
+  - In Restricted Mode (untrusted workspace), TaCoS does not run git commands and does not collect terminal shell command signals.
+  - Trust changes are handled at runtime, re-enabling full collection once trusted.
+- OpenAI key storage:
+  - Recommended: use `TaCoS: Set OpenAI API Key` (Secret Storage).
+  - You can clear it anytime with `TaCoS: Clear OpenAI API Key`.
+  - The settings-based key is supported only as a backward-compatible fallback.
 
 ## Development
 

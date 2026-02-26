@@ -12,6 +12,12 @@
   "engines": {
     "vscode": "^1.96.0"
   },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "TaCoS disables git execution and terminal command collection in Restricted Mode until the workspace is trusted."
+    }
+  },
   "categories": [
     "Other"
   ],
@@ -24,7 +30,9 @@
     "onCommand:tacos.pauseSummaries",
     "onCommand:tacos.resumeSummaries",
     "onCommand:tacos.exportMetrics",
-    "onCommand:tacos.addVisitedUrl"
+    "onCommand:tacos.addVisitedUrl",
+    "onCommand:tacos.setOpenAiApiKey",
+    "onCommand:tacos.clearOpenAiApiKey"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -60,6 +68,14 @@
       {
         "command": "tacos.addVisitedUrl",
         "title": "TaCoS: Add Recent URL"
+      },
+      {
+        "command": "tacos.setOpenAiApiKey",
+        "title": "TaCoS: Set OpenAI API Key"
+      },
+      {
+        "command": "tacos.clearOpenAiApiKey",
+        "title": "TaCoS: Clear OpenAI API Key"
       }
     ],
     "configuration": {
@@ -138,7 +154,7 @@
         "tacos.openaiApiKey": {
           "type": "string",
           "default": "",
-          "description": "Optional API key for direct OpenAI summaries. If empty, OPENAI_API_KEY env var is used."
+          "description": "Deprecated fallback API key location. Prefer `TaCoS: Set OpenAI API Key` (Secret Storage) or OPENAI_API_KEY environment variable."
         },
         "tacos.openaiModel": {
           "type": "string",
