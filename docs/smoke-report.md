@@ -14,6 +14,7 @@ All of the following passed on branch `feature/epic-must-have-tracking`:
 Integration note:
 
 - `npm run test:integration` now executes both trusted and restricted suites.
+- Restricted suite runs under a fresh test profile with workspace-trust settings, but local-folder trust may still evaluate as trusted on some host builds.
 
 ## Trusted / Restricted Manual Smoke
 

@@ -22,8 +22,8 @@ The harness launches Extension Development Host runs against `test/fixtures/work
    - extension `jkordish.vscode-tacos` activates
    - `tacos.slash` opens markdown summary output
    - `tacos.showLastSummary` executes without throwing
-2. Restricted suite (`--disable-workspace-trust`):
-   - executes against restricted-mode launch args
+2. Restricted suite (dedicated user-data profile with trust settings):
+   - executes against a fresh profile configured for restricted startup prompts
    - `tacos.slash` still works
    - summary source remains local-only (`- Source: local`)
 
@@ -37,5 +37,5 @@ The harness launches Extension Development Host runs against `test/fixtures/work
 
 - Integration tests require launching a VS Code/Electron instance.
 - Runner prefers a local VS Code executable (`VSCODE_TEST_BINARY` or common OS install paths) to avoid network download flakiness.
-- Workspace trust semantics can vary by host build; final restricted-mode behavior must still be validated via manual smoke runbook.
+- Workspace trust semantics can vary by host build and local-folder policies; final restricted-mode behavior must still be validated via manual smoke runbook.
 - Keep this suite minimal and deterministic; most safety logic remains covered by unit tests.

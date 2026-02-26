@@ -1,5 +1,6 @@
 const path = require('node:path');
 const fs = require('node:fs');
+const os = require('node:os');
 const { runTests } = require('@vscode/test-electron');
 
 function resolveLocalVscodeExecutable() {
@@ -36,9 +37,30 @@ async function runSuite(name, extensionTestsPath, launchArgs, vscodeExecutablePa
   });
 }
 
+function writeJsonFile(filePath, value) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(value, null, 2), 'utf8');
+}
+
+function prepareRestrictedUserDataDir() {
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vscode-tacos-restricted-'));
+  const settingsPath = path.join(userDataDir, 'User', 'settings.json');
+
+  writeJsonFile(settingsPath, {
+    // Keep workspace trust enabled and default new folders to Restricted Mode in test profile.
+    'security.workspace.trust.enabled': true,
+    'security.workspace.trust.startupPrompt': 'never',
+    'security.workspace.trust.emptyWindow': false,
+    'security.workspace.trust.banner': 'never',
+  });
+
+  return userDataDir;
+}
+
 async function main() {
   const fixtureWorkspace = path.resolve(__dirname, '..', 'fixtures', 'workspace');
   const vscodeExecutablePath = resolveLocalVscodeExecutable();
+  const restrictedUserDataDir = prepareRestrictedUserDataDir();
 
   await runSuite(
     'trusted',
@@ -50,7 +72,7 @@ async function main() {
   await runSuite(
     'restricted',
     path.resolve(__dirname, 'suite', 'restricted.js'),
-    [fixtureWorkspace, '--disable-extensions', '--disable-workspace-trust'],
+    [fixtureWorkspace, '--disable-extensions', '--user-data-dir', restrictedUserDataDir],
     vscodeExecutablePath,
   );
 }
