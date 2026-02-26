@@ -8,6 +8,7 @@ All of the following passed on branch `feature/epic-must-have-tracking`:
 - `npm run lint`
 - `npm run format:check`
 - `npm test`
+- `npm run test:integration`
 - `npx @vscode/vsce package --no-dependencies`
 
 ## Trusted / Restricted Manual Smoke

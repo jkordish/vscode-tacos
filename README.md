@@ -155,6 +155,7 @@ npm run compile
 npm run lint
 npm run format:check
 npm test
+npm run test:integration
 npx @vscode/vsce package --no-dependencies
 ```
 
@@ -166,8 +167,8 @@ npm run format
 
 Integration test harness status:
 
-- Stub plan: `docs/integration-test-harness.md`
-- Script placeholder: `npm run test:integration`
+- Runbook: `docs/integration-test-harness.md`
+- Command: `npm run test:integration`
 
 ## Manual Smoke Checklist
 

@@ -1,20 +1,35 @@
-# Integration Test Harness (Stub)
+# Integration Test Harness
 
-This repository currently uses fast unit tests for safety-critical logic.
+This repository includes a minimal VS Code integration harness using [`@vscode/test-electron`](https://github.com/microsoft/vscode-test).
 
-## Planned Integration Harness
+## Command
 
-Target stack:
-- [`@vscode/test-electron`](https://github.com/microsoft/vscode-test)
+```bash
+npm run test:integration
+```
 
-Minimum scenario to automate:
-1. Launch Extension Development Host.
-2. Activate `vscode-tacos` extension.
-3. Execute `tacos.showNow`.
-4. Assert TaCoS webview panel appears and renders summary content.
+Optional override if your VS Code binary is in a custom location:
 
-## Suggested Next Steps
+```bash
+VSCODE_TEST_BINARY=/absolute/path/to/Code npm run test:integration
+```
 
-1. Add a fixture workspace under `test/fixtures/`.
-2. Add `test/integration/run.ts` with VS Code test bootstrap.
-3. Add CI job (optional matrix) for integration smoke runs.
+## What It Verifies
+
+The harness launches an Extension Development Host against `test/fixtures/workspace` and verifies:
+
+1. extension `jkordish.vscode-tacos` activates
+2. `tacos.slash` runs and opens markdown summary output
+3. `tacos.showLastSummary` executes without throwing
+
+## Files
+
+- Runner: `test/integration/runTest.js`
+- Suite: `test/integration/suite/index.js`
+- Fixture workspace: `test/fixtures/workspace/`
+
+## Notes
+
+- Integration tests require launching a VS Code/Electron instance.
+- Runner prefers a local VS Code executable (`VSCODE_TEST_BINARY` or common OS install paths) to avoid network download flakiness.
+- Keep this suite minimal and deterministic; most safety logic remains covered by unit tests.

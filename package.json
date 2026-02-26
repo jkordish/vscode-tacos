@@ -277,7 +277,7 @@
     "format": "prettier --write \"{src,test}/**/*.ts\" \"*.{json,md,yml,yaml,cjs}\"",
     "format:check": "prettier --check \"{src,test}/**/*.ts\" \"*.{json,md,yml,yaml,cjs}\"",
     "test": "jest --runInBand",
-    "test:integration": "echo \"TODO: wire @vscode/test-electron integration harness (activation + tacos.showNow command smoke).\"",
+    "test:integration": "node ./test/integration/runTest.js",
     "package:vsix": "vsce package",
     "vscode:prepublish": "npm run compile"
   },
@@ -290,6 +290,7 @@
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^20.17.30",
     "@types/vscode": "^1.96.0",
+    "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "3.7.1",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^10.1.1",
