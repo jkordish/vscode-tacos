@@ -13,7 +13,7 @@ export interface ExtensionConfig {
   redactionPatterns: string[];
   metricsEnabled: boolean;
   summaryProvider: 'local' | 'openai';
-  openaiApiKey: string;
+  openaiApiKeySetting: string;
   openaiModel: string;
   openaiBaseUrl: string;
   openaiTimeoutMs: number;

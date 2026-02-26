@@ -1,9 +1,12 @@
+import { randomBytes } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
+import { sanitizeActivityForPersistence } from './activityPersistence';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
+import { isPathWithinWorkspaceRoot, normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
 import { redactList, redactText } from './redaction';
 import { buildResumeSummary } from './summary';
 import type { ExtensionConfig, MetricRecord, ResumeSignals, ResumeSummary, TriggerReason } from './types';
@@ -18,13 +21,15 @@ const KEY_RECENT_DEBUG = 'tacos.recentDebug';
 const KEY_RECENT_URLS = 'tacos.recentUrls';
 const KEY_DONE_ITEMS = 'tacos.doneItems';
 const KEY_LAST_FAILING_COMMAND = 'tacos.lastFailingCommand';
+const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
+const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
 const markdownRenderer = new MarkdownIt({
   html: false,
   linkify: false,
   typographer: false,
-});
+}).disable(['link', 'image']);
 
 class RingBuffer {
   private valuesList: string[] = [];
@@ -65,6 +70,8 @@ interface RuntimeState {
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
   metricSession?: MetricRecord;
+  workspaceTrusted: boolean;
+  terminalHooks: vscode.Disposable[];
 }
 
 let state: RuntimeState;
@@ -82,6 +89,8 @@ export function activate(context: vscode.ExtensionContext): void {
     recentUrls: new RingBuffer(5, context.globalState.get<string[]>(KEY_RECENT_URLS, [])),
     doneItems: new RingBuffer(10, context.globalState.get<string[]>(KEY_DONE_ITEMS, [])),
     lastFailingCommand: context.globalState.get<string>(KEY_LAST_FAILING_COMMAND),
+    workspaceTrusted: vscode.workspace.isTrusted,
+    terminalHooks: [],
   };
 
   context.subscriptions.push(state.output);
@@ -168,6 +177,31 @@ export function activate(context: vscode.ExtensionContext): void {
       await persistActivity(context);
       void vscode.window.showInformationMessage('TaCoS: URL added to recent context.');
     }),
+    vscode.commands.registerCommand('tacos.setOpenAiApiKey', async () => {
+      const value = await vscode.window.showInputBox({
+        title: 'TaCoS: Set OpenAI API Key',
+        prompt: 'Enter your OpenAI API key. It will be stored in VS Code Secret Storage.',
+        password: true,
+        ignoreFocusOut: true,
+      });
+
+      if (!value) {
+        return;
+      }
+
+      const trimmed = value.trim();
+      if (!trimmed) {
+        void vscode.window.showWarningMessage('TaCoS: API key was empty, nothing was saved.');
+        return;
+      }
+
+      await context.secrets.store(SECRET_OPENAI_API_KEY, trimmed);
+      void vscode.window.showInformationMessage('TaCoS: OpenAI API key saved securely.');
+    }),
+    vscode.commands.registerCommand('tacos.clearOpenAiApiKey', async () => {
+      await context.secrets.delete(SECRET_OPENAI_API_KEY);
+      void vscode.window.showInformationMessage('TaCoS: stored OpenAI API key cleared.');
+    }),
     vscode.commands.registerCommand('tacos.exportMetrics', async () => {
       const root = pickWorkspaceRoot();
       if (!root) {
@@ -231,7 +265,30 @@ export function activate(context: vscode.ExtensionContext): void {
     })
   );
 
-  registerTerminalHooks(context);
+  void applyWorkspaceTrust(context, vscode.workspace.isTrusted, true);
+
+  const workspaceAny = vscode.workspace as typeof vscode.workspace & {
+    onDidChangeWorkspaceTrust?: (listener: (event: { isTrusted: boolean }) => unknown) => vscode.Disposable;
+  };
+
+  if (workspaceAny.onDidChangeWorkspaceTrust) {
+    context.subscriptions.push(
+      workspaceAny.onDidChangeWorkspaceTrust((event: { isTrusted: boolean }) => {
+        void applyWorkspaceTrust(context, event.isTrusted, false);
+      })
+    );
+  } else {
+    context.subscriptions.push(
+      vscode.workspace.onDidGrantWorkspaceTrust(() => {
+        void applyWorkspaceTrust(context, true, false);
+      })
+    );
+  }
+  context.subscriptions.push({
+    dispose: () => {
+      clearTerminalHooks();
+    },
+  });
 
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState(async (windowState) => {
@@ -278,7 +335,7 @@ export function deactivate(): void {
   // No-op.
 }
 
-function registerTerminalHooks(context: vscode.ExtensionContext): void {
+function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposable[] {
   const windowAny = vscode.window as unknown as {
     onDidStartTerminalShellExecution?: (listener: (event: any) => unknown) => vscode.Disposable;
     onDidEndTerminalShellExecution?: (listener: (event: any) => unknown) => vscode.Disposable;
@@ -286,11 +343,15 @@ function registerTerminalHooks(context: vscode.ExtensionContext): void {
 
   if (!windowAny.onDidStartTerminalShellExecution || !windowAny.onDidEndTerminalShellExecution) {
     state.output.appendLine('Terminal shell integration events are unavailable in this VS Code build.');
-    return;
+    return [];
   }
 
-  context.subscriptions.push(
+  const startDisposable =
     windowAny.onDidStartTerminalShellExecution(async (event: any) => {
+      if (!vscode.workspace.isTrusted) {
+        return;
+      }
+
       const command = String(event?.execution?.commandLine?.value ?? '').trim();
       if (!command) {
         return;
@@ -308,10 +369,14 @@ function registerTerminalHooks(context: vscode.ExtensionContext): void {
 
       await persistActivity(context);
     })
-  );
+  ;
 
-  context.subscriptions.push(
+  const endDisposable =
     windowAny.onDidEndTerminalShellExecution(async (event: any) => {
+      if (!vscode.workspace.isTrusted) {
+        return;
+      }
+
       const command = String(event?.execution?.commandLine?.value ?? '').trim();
       const exitCode: number | undefined = event?.exitCode;
       if (!command) {
@@ -320,22 +385,58 @@ function registerTerminalHooks(context: vscode.ExtensionContext): void {
 
       if (typeof exitCode === 'number' && exitCode !== 0 && isTestOrBuildCommand(command)) {
         state.lastFailingCommand = command;
-        await context.globalState.update(KEY_LAST_FAILING_COMMAND, command);
+        await persistActivity(context);
       }
 
       if (typeof exitCode === 'number' && exitCode === 0 && isTestOrBuildCommand(command)) {
         state.doneItems.push(command);
-        const updates: Thenable<unknown>[] = [context.globalState.update(KEY_DONE_ITEMS, state.doneItems.values())];
 
-        if (state.lastFailingCommand === command) {
+        if (state.lastFailingCommand && doesCommandMatchStoredFailure(state.lastFailingCommand, command)) {
           state.lastFailingCommand = undefined;
-          updates.push(context.globalState.update(KEY_LAST_FAILING_COMMAND, undefined));
         }
 
-        await Promise.all(updates);
+        await persistActivity(context);
       }
     })
-  );
+  ;
+
+  return [startDisposable, endDisposable];
+}
+
+function clearTerminalHooks(): void {
+  for (const disposable of state.terminalHooks) {
+    disposable.dispose();
+  }
+  state.terminalHooks = [];
+}
+
+async function applyWorkspaceTrust(
+  context: vscode.ExtensionContext,
+  isTrusted: boolean,
+  initial: boolean
+): Promise<void> {
+  state.workspaceTrusted = isTrusted;
+
+  clearTerminalHooks();
+  if (isTrusted) {
+    state.terminalHooks = registerTerminalHooks(context);
+    if (!initial) {
+      void vscode.window.showInformationMessage('TaCoS: workspace is trusted. Full context collection is enabled.');
+    }
+    return;
+  }
+
+  const alreadyShown = context.workspaceState.get<boolean>(KEY_RESTRICTED_MODE_NOTICE_SHOWN, false);
+  if (!alreadyShown) {
+    await context.workspaceState.update(KEY_RESTRICTED_MODE_NOTICE_SHOWN, true);
+    void vscode.window.showInformationMessage(
+      'TaCoS: Restricted Mode is active. Git commands and terminal command collection are disabled until you trust this workspace.'
+    );
+  } else if (!initial) {
+    void vscode.window.showInformationMessage(
+      'TaCoS: Restricted Mode is active. Git and terminal command collection are currently disabled.'
+    );
+  }
 }
 
 async function triggerSummary(context: vscode.ExtensionContext, reason: Exclude<TriggerReason, 'cached'>): Promise<void> {
@@ -358,6 +459,7 @@ async function generateSummary(
   reason: Exclude<TriggerReason, 'cached'>
 ): Promise<{ summary: ResumeSummary; triggerReason: TriggerReason }> {
   const config = getConfig();
+  const openAiApiKey = await resolveOpenAiApiKey(context, config);
   const signals = await collectSignals(root, config);
   const generatedLocal = buildResumeSummary(signals);
 
@@ -365,7 +467,7 @@ async function generateSummary(
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
   const desiredSource: ResumeSummary['source'] = config.summaryProvider === 'openai' ? 'openai' : 'local';
   const cachedSource: ResumeSummary['source'] = cached?.source ?? 'local';
-  const hasOpenAiKey = Boolean(config.openaiApiKey.trim() || process.env.OPENAI_API_KEY);
+  const hasOpenAiKey = Boolean(openAiApiKey);
   const canUseCached =
     config.cacheIfContextUnchanged &&
     Boolean(cached) &&
@@ -378,7 +480,7 @@ async function generateSummary(
 
   let summary = generatedLocal;
   if (desiredSource === 'openai') {
-    const openAiSummary = await tryGenerateOpenAiSummary(signals, generatedLocal, config, (message) => {
+    const openAiSummary = await tryGenerateOpenAiSummary(signals, generatedLocal, config, openAiApiKey, (message) => {
       state.output.appendLine(message);
     });
 
@@ -467,7 +569,8 @@ function showDetailsPanel(summary: ResumeSummary): void {
   if (!state.panel) {
     state.panel = vscode.window.createWebviewPanel('tacos.details', 'TaCoS Resume Brief', vscode.ViewColumn.Beside, {
       enableScripts: true,
-      retainContextWhenHidden: true,
+      retainContextWhenHidden: false,
+      localResourceRoots: [],
     });
 
     state.panel.onDidDispose(() => {
@@ -475,8 +578,15 @@ function showDetailsPanel(summary: ResumeSummary): void {
       state.panelSummary = undefined;
     });
 
-    state.panel.webview.onDidReceiveMessage(async (message: { type: string; index: number }) => {
-      if (message.type !== 'openLink') {
+    state.panel.webview.onDidReceiveMessage(async (message: { type?: unknown; index?: unknown }) => {
+      if (message.type === 'blockedLink') {
+        void vscode.window.showWarningMessage(
+          'TaCoS blocked a link that was not part of the validated summary link list.'
+        );
+        return;
+      }
+
+      if (message.type !== 'openLink' || typeof message.index !== 'number' || !Number.isInteger(message.index)) {
         return;
       }
 
@@ -486,20 +596,43 @@ function showDetailsPanel(summary: ResumeSummary): void {
       }
 
       if (link.kind === 'file') {
-        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(link.target));
+        const workspaceRoot = pickWorkspaceRoot();
+        if (!workspaceRoot) {
+          void vscode.window.showWarningMessage(
+            'TaCoS blocked file link because no workspace root is available for validation.'
+          );
+          return;
+        }
+
+        const safeTarget = resolveFileTargetInWorkspace(link.target, workspaceRoot);
+        if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
+          void vscode.window.showWarningMessage('TaCoS blocked an unsafe file link from the summary.');
+          return;
+        }
+
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(safeTarget));
         return;
       }
 
-      await vscode.env.openExternal(vscode.Uri.parse(link.target));
+      if (link.kind === 'url') {
+        const safeUrl = normalizeHttpUrl(link.target);
+        if (!safeUrl) {
+          void vscode.window.showWarningMessage('TaCoS blocked an unsafe external link from the summary.');
+          return;
+        }
+
+        await vscode.env.openExternal(vscode.Uri.parse(safeUrl));
+      }
     });
   }
 
   state.panel.title = 'TaCoS Resume Brief';
-  state.panel.webview.html = renderWebview(summary);
+  state.panel.webview.html = renderWebview(state.panel.webview, summary);
   state.panel.reveal(vscode.ViewColumn.Beside, true);
 }
 
-function renderWebview(summary: ResumeSummary): string {
+function renderWebview(webview: vscode.Webview, summary: ResumeSummary): string {
+  const nonce = createNonce();
   const linkItems = summary.links
     .map(
       (link, index) =>
@@ -515,7 +648,11 @@ function renderWebview(summary: ResumeSummary): string {
 <html>
   <head>
     <meta charset="utf-8" />
-    <style>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; img-src ${webview.cspSource}; script-src 'nonce-${nonce}';"
+    />
+    <style nonce="${nonce}">
       body {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         padding: 16px;
@@ -580,18 +717,39 @@ function renderWebview(summary: ResumeSummary): string {
       <div class="details-markdown">${detailsHtml}</div>
     </div>
 
-    <script>
+    <script nonce="${nonce}">
       const vscode = acquireVsCodeApi();
-      for (const anchor of document.querySelectorAll('a[data-idx]')) {
-        anchor.addEventListener('click', (event) => {
-          event.preventDefault();
-          const idx = Number(anchor.getAttribute('data-idx'));
-          vscode.postMessage({ type: 'openLink', index: idx });
-        });
-      }
+      document.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+
+        const anchor = target.closest('a');
+        if (!anchor) {
+          return;
+        }
+
+        event.preventDefault();
+        const idxRaw = anchor.getAttribute('data-idx');
+        if (idxRaw === null) {
+          vscode.postMessage({ type: 'blockedLink' });
+          return;
+        }
+
+        const idx = Number(idxRaw);
+        if (!Number.isInteger(idx)) {
+          return;
+        }
+        vscode.postMessage({ type: 'openLink', index: idx });
+      });
     </script>
   </body>
 </html>`;
+}
+
+function createNonce(): string {
+  return randomBytes(18).toString('base64url');
 }
 
 function escapeHtml(value: string): string {
@@ -763,12 +921,26 @@ function getConfig(): ExtensionConfig {
     redactionPatterns: config.get<string[]>('redactionPatterns', []),
     metricsEnabled: config.get<boolean>('metricsEnabled', true),
     summaryProvider: config.get<'local' | 'openai'>('summaryProvider', 'local'),
-    openaiApiKey: config.get<string>('openaiApiKey', ''),
+    openaiApiKeySetting: config.get<string>('openaiApiKey', ''),
     openaiModel: config.get<string>('openaiModel', 'gpt-4.1-mini'),
     openaiBaseUrl: config.get<string>('openaiBaseUrl', 'https://api.openai.com/v1'),
     openaiTimeoutMs: config.get<number>('openaiTimeoutMs', 15000),
     codexOpenCommand: config.get<string>('codexOpenCommand', ''),
   };
+}
+
+async function resolveOpenAiApiKey(context: vscode.ExtensionContext, config: ExtensionConfig): Promise<string> {
+  const secret = (await context.secrets.get(SECRET_OPENAI_API_KEY))?.trim() ?? '';
+  if (secret) {
+    return secret;
+  }
+
+  const env = process.env.OPENAI_API_KEY?.trim() ?? '';
+  if (env) {
+    return env;
+  }
+
+  return config.openaiApiKeySetting.trim();
 }
 
 function pickWorkspaceRoot(): string | undefined {
@@ -811,8 +983,34 @@ function isTestOrBuildCommand(command: string): boolean {
   );
 }
 
+function doesCommandMatchStoredFailure(stored: string, rawCommand: string): boolean {
+  if (stored === rawCommand) {
+    return true;
+  }
+
+  const config = getConfig();
+  const workspaceRoot = pickWorkspaceRoot() ?? '';
+  const redactedCommand = redactText(rawCommand, workspaceRoot, config.redactionPatterns);
+  return stored === redactedCommand;
+}
+
 async function collectSignals(root: string, config: ExtensionConfig): Promise<ResumeSignals> {
-  const git = await collectGit(root, config);
+  const isTrusted = vscode.workspace.isTrusted;
+  state.workspaceTrusted = isTrusted;
+
+  const git = isTrusted
+    ? await collectGit(root, config)
+    : {
+        isRepo: false,
+        branch: '',
+        status: '',
+        diffStat: '',
+        diff: '',
+        log: '',
+        changedFiles: [],
+        hasUncommitted: false,
+        hasConflicts: false,
+      };
   const customPatterns = config.redactionPatterns;
 
   const openFiles = vscode.workspace.textDocuments
@@ -826,7 +1024,7 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
     .map((file) => toRelativePath(path.isAbsolute(file) ? file : path.join(root, file), root))
     .filter(Boolean);
 
-  const recentTerminal = config.includeTerminalHistory ? state.recentTerminal.values() : [];
+  const recentTerminal = isTrusted && config.includeTerminalHistory ? state.recentTerminal.values() : [];
   const recentDebug = config.includeDebugHistory ? state.recentDebug.values() : [];
 
   return {
@@ -857,20 +1055,26 @@ function summaryCacheKey(root: string): string {
 async function persistActivity(context: vscode.ExtensionContext): Promise<void> {
   const config = getConfig();
   const workspaceRoot = pickWorkspaceRoot() ?? '';
-  const redactionPatterns = config.redactionPatterns;
-
-  const recentFiles = redactList(state.recentFiles.values(), workspaceRoot, redactionPatterns);
-  const recentTerminal = redactList(state.recentTerminal.values(), workspaceRoot, redactionPatterns);
-  const recentDebug = redactList(state.recentDebug.values(), workspaceRoot, redactionPatterns);
-  const recentUrls = redactList(state.recentUrls.values(), workspaceRoot, redactionPatterns);
-  const doneItems = redactList(state.doneItems.values(), workspaceRoot, redactionPatterns);
+  const persisted = sanitizeActivityForPersistence(
+    {
+      recentFiles: state.recentFiles.values(),
+      recentTerminal: state.recentTerminal.values(),
+      recentDebug: state.recentDebug.values(),
+      recentUrls: state.recentUrls.values(),
+      doneItems: state.doneItems.values(),
+      lastFailingCommand: state.lastFailingCommand,
+    },
+    workspaceRoot,
+    config.redactionPatterns
+  );
 
   await Promise.all([
-    context.globalState.update(KEY_RECENT_FILES, recentFiles),
-    context.globalState.update(KEY_RECENT_TERMINAL, recentTerminal),
-    context.globalState.update(KEY_RECENT_DEBUG, recentDebug),
-    context.globalState.update(KEY_RECENT_URLS, recentUrls),
-    context.globalState.update(KEY_DONE_ITEMS, doneItems),
+    context.globalState.update(KEY_RECENT_FILES, persisted.recentFiles),
+    context.globalState.update(KEY_RECENT_TERMINAL, persisted.recentTerminal),
+    context.globalState.update(KEY_RECENT_DEBUG, persisted.recentDebug),
+    context.globalState.update(KEY_RECENT_URLS, persisted.recentUrls),
+    context.globalState.update(KEY_DONE_ITEMS, persisted.doneItems),
+    context.globalState.update(KEY_LAST_FAILING_COMMAND, persisted.lastFailingCommand),
   ]);
 }
 

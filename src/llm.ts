@@ -1,7 +1,7 @@
 import * as http from 'node:http';
 import * as https from 'node:https';
-import * as path from 'node:path';
 import { URL } from 'node:url';
+import { inferUntrustedLinkKind, normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
 import type { ExtensionConfig, ResumeSummary, ResumeSignals, SummaryLink } from './types';
 
 interface OpenAiLink {
@@ -35,10 +35,6 @@ function uniqueBy<T>(values: T[], key: (value: T) => string): T[] {
   return result;
 }
 
-function inferLinkKind(target: string): 'file' | 'url' {
-  return /^https?:\/\//i.test(target) ? 'url' : 'file';
-}
-
 function normalizeLinks(links: OpenAiLink[], workspaceRoot: string): SummaryLink[] {
   const normalized: SummaryLink[] = [];
 
@@ -53,10 +49,23 @@ function normalizeLinks(links: OpenAiLink[], workspaceRoot: string): SummaryLink
       continue;
     }
 
-    const kind = item.kind === 'file' || item.kind === 'url' ? item.kind : inferLinkKind(rawTarget);
-    const target = kind === 'url' ? rawTarget : path.isAbsolute(rawTarget) ? rawTarget : path.join(workspaceRoot, rawTarget);
+    const kind = item.kind === 'file' || item.kind === 'url' ? item.kind : inferUntrustedLinkKind(rawTarget);
+    if (kind === 'url') {
+      const target = normalizeHttpUrl(rawTarget);
+      if (!target) {
+        continue;
+      }
 
-    normalized.push({ label, target, kind });
+      normalized.push({ label, target, kind });
+      continue;
+    }
+
+    const target = resolveFileTargetInWorkspace(rawTarget, workspaceRoot);
+    if (!target) {
+      continue;
+    }
+
+    normalized.push({ label, target, kind: 'file' });
   }
 
   return uniqueBy(normalized, (link) => `${link.kind}:${link.target}`).slice(0, 3);
@@ -297,9 +306,9 @@ export async function tryGenerateOpenAiSummary(
   signals: ResumeSignals,
   base: ResumeSummary,
   config: ExtensionConfig,
+  apiKey: string,
   log: (message: string) => void
 ): Promise<ResumeSummary | undefined> {
-  const apiKey = config.openaiApiKey.trim() || process.env.OPENAI_API_KEY || '';
   if (!apiKey) {
     log('OpenAI mode requested but no API key was found. Falling back to local summary.');
     return undefined;
