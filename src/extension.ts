@@ -69,6 +69,10 @@ interface RuntimeState {
 
 let state: RuntimeState;
 
+interface PresentSummaryOptions {
+  autoOpenDetails?: boolean;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   state = {
     output: vscode.window.createOutputChannel('TaCoS'),
@@ -124,7 +128,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      await presentSummary(context, cached, 'cached');
+      await presentSummary(context, cached, 'cached', { autoOpenDetails: true });
     }),
     vscode.commands.registerCommand('tacos.pauseSummaries', async () => {
       await setPaused(true);
@@ -345,7 +349,7 @@ async function triggerSummary(context: vscode.ExtensionContext, reason: Exclude<
 
   await context.workspaceState.update(KEY_LAST_SUMMARY_AT, Date.now());
 
-  await presentSummary(context, summary, triggerReason);
+  await presentSummary(context, summary, triggerReason, { autoOpenDetails: reason === 'manual' });
 }
 
 async function generateSummary(
@@ -390,7 +394,8 @@ async function generateSummary(
 async function presentSummary(
   context: vscode.ExtensionContext,
   summary: ResumeSummary,
-  triggerReason: TriggerReason
+  triggerReason: TriggerReason,
+  options: PresentSummaryOptions = {}
 ): Promise<void> {
   const config = getConfig();
 
@@ -402,6 +407,11 @@ async function presentSummary(
       workspaceRoot: root,
       trigger: triggerReason,
     };
+  }
+
+  if (options.autoOpenDetails) {
+    showDetailsPanel(summary);
+    return;
   }
 
   const actionPauseLabel = config.pauseSummaries ? 'Resume auto summaries' : 'Pause auto summaries';
