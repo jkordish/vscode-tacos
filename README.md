@@ -124,6 +124,7 @@ Only if AI provider is enabled:
 - Link opens require evidence IDs emitted by TaCoS.
 - URLs restricted to `http`/`https`.
 - File paths must resolve inside workspace root.
+- Summary link targets must also match evidence catalog entries at click time.
 - Validation happens during provider parsing and again at click time.
 
 ## Timeline Mode

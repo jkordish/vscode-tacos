@@ -12,6 +12,7 @@ import {
   type PersistedActivityState,
 } from './activityPersistence';
 import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
+import { isSummaryLinkEvidenceGrounded } from './evidenceSafety';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
 import { shouldAutoTriggerSummary, shouldPromptCheckpointOnBlur } from './noiseControl';
@@ -1298,10 +1299,18 @@ async function showDetailsPanel(
       }
 
       if (link.kind === 'file') {
+        const summary = state.panelSummary;
         const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
-        if (!workspaceRoot) {
+        if (!summary || !workspaceRoot) {
           void vscode.window.showWarningMessage(
             'TaCoS blocked file link because no workspace root is available for validation.',
+          );
+          return;
+        }
+
+        if (!isSummaryLinkEvidenceGrounded(summary, link, workspaceRoot)) {
+          void vscode.window.showWarningMessage(
+            'TaCoS blocked a file link that is not evidence-grounded.',
           );
           return;
         }
@@ -1319,6 +1328,14 @@ async function showDetailsPanel(
       }
 
       if (link.kind === 'url') {
+        const summary = state.panelSummary;
+        if (!summary || !isSummaryLinkEvidenceGrounded(summary, link)) {
+          void vscode.window.showWarningMessage(
+            'TaCoS blocked an external link that is not evidence-grounded.',
+          );
+          return;
+        }
+
         const safeUrl = normalizeHttpUrl(link.target);
         if (!safeUrl) {
           void vscode.window.showWarningMessage(
