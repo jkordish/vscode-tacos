@@ -30,8 +30,8 @@ Use this checklist to prepare, tag, and publish the `v0.5.0` release.
 
 ## 4) Verify Gates
 
-- [ ] `npm run verify`
-- [ ] Confirm CI checks are green on release prep PR.
+- [x] `npm run verify`
+- [x] Confirm CI checks are green on release prep PR.
 - [ ] Smoke-check key commands in VS Code:
   - `TaCoS: Test Sanitizer`
   - `TaCoS: Revoke AI Payload Consent`
@@ -47,10 +47,17 @@ Use this checklist to prepare, tag, and publish the `v0.5.0` release.
 
 ## 6) Tag + Publish
 
-- [ ] Merge release prep PR to `main`.
-- [ ] Create and push annotated tag `v0.5.0`.
-- [ ] Confirm GitHub Actions `Release VSIX` workflow succeeds for the `v0.5.0` tag.
-- [ ] Confirm release page has generated notes + attached VSIX artifact.
+- [x] Merge release prep PR to `main`.
+- [x] Create and push annotated tag `v0.5.0`.
+- [x] Confirm GitHub Actions `Release VSIX` workflow succeeds for the `v0.5.0` tag.
+- [x] Confirm release page has generated notes + attached VSIX artifact.
+
+Recorded after publish:
+
+- [x] `v0.5.0` release URL: `https://github.com/jkordish/vscode-tacos/releases/tag/v0.5.0`
+- [x] Published at (UTC): `2026-02-27T21:23:56Z`
+- [x] Release workflow run: `https://github.com/jkordish/vscode-tacos/actions/runs/22504332537`
+- [x] Attached artifact: `vscode-tacos-0.5.0.vsix`
 
 ## 7) Post-Release Observation
 
