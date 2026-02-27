@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
@@ -5171,20 +5172,73 @@ function inferTaskPartitionKey(branch: string): string | undefined {
   return undefined;
 }
 
-function resolveTaskPartitionKey(context: vscode.ExtensionContext, root: string): string {
+function resolveTaskPartitionKey(
+  context: vscode.ExtensionContext,
+  root: string,
+  scopeBranch?: string,
+): string {
   const manual = context.workspaceState.get<string>(taskPartitionStorageKey(root), '').trim();
   if (manual) {
     return manual;
   }
 
-  const branch = context.workspaceState.get<string>(branchStateKey(root), '').trim();
+  const branch = scopeBranch ?? resolveScopeBranch(context, root);
   const inferred = inferTaskPartitionKey(branch);
   return inferred ?? 'default';
 }
 
+function readBranchFromGitHead(workspaceRoot: string): string | undefined {
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  const gitEntry = path.join(workspaceRoot, '.git');
+  if (!existsSync(gitEntry)) {
+    return undefined;
+  }
+
+  try {
+    let gitDir = gitEntry;
+    const gitEntryStat = statSync(gitEntry);
+    if (gitEntryStat.isFile()) {
+      const pointer = readFileSync(gitEntry, 'utf8').trim();
+      const match = pointer.match(/^gitdir:\s*(.+)$/i);
+      if (!match?.[1]) {
+        return undefined;
+      }
+      gitDir = path.resolve(workspaceRoot, match[1].trim());
+    }
+
+    const headPath = path.join(gitDir, 'HEAD');
+    if (!existsSync(headPath)) {
+      return undefined;
+    }
+
+    const head = readFileSync(headPath, 'utf8').trim();
+    const branchRef = head.match(/^ref:\s*refs\/heads\/(.+)$/i);
+    if (!branchRef?.[1]) {
+      return undefined;
+    }
+
+    const branch = branchRef[1].trim();
+    return branch || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveScopeBranch(context: vscode.ExtensionContext, root: string): string {
+  const liveBranch = readBranchFromGitHead(root);
+  if (liveBranch) {
+    return liveBranch;
+  }
+
+  return context.workspaceState.get<string>(branchStateKey(root), '').trim() || 'default';
+}
+
 function partitionScope(context: vscode.ExtensionContext, root: string): string {
-  const branch = context.workspaceState.get<string>(branchStateKey(root), '').trim() || 'default';
-  const taskPartition = resolveTaskPartitionKey(context, root);
+  const branch = resolveScopeBranch(context, root);
+  const taskPartition = resolveTaskPartitionKey(context, root, branch);
   return `${root}::${branch}::${taskPartition}`;
 }
 
@@ -5282,6 +5336,15 @@ function collectWorkspaceScopedKeys(
   });
 }
 
+function collectWorkspacePartitionSummaryKeys(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): string[] {
+  return context.workspaceState
+    .keys()
+    .filter((key) => matchesEncodedWorkspaceKey(key, 'tacos.summary', workspaceRoot, true));
+}
+
 async function clearWorkspaceScopedState(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
@@ -5363,11 +5426,26 @@ async function applyRetentionPolicy(
     }
   }
 
-  const cachedSummary = context.workspaceState.get<ResumeSummary | undefined>(
-    summaryCacheKey(context, workspaceRoot),
-  );
-  if (cachedSummary && cachedSummary.generatedAt < cutoffAt) {
-    await context.workspaceState.update(summaryCacheKey(context, workspaceRoot), undefined);
+  const activeSummaryKey = summaryCacheKey(context, workspaceRoot);
+  const summaryKeys = collectWorkspacePartitionSummaryKeys(context, workspaceRoot);
+  const summaryPruneOps: Thenable<void>[] = [];
+  let clearedActiveSummary = false;
+  for (const key of summaryKeys) {
+    const cachedSummary = context.workspaceState.get<ResumeSummary | undefined>(key);
+    if (!cachedSummary || cachedSummary.generatedAt >= cutoffAt) {
+      continue;
+    }
+
+    summaryPruneOps.push(context.workspaceState.update(key, undefined));
+    if (key === activeSummaryKey) {
+      clearedActiveSummary = true;
+    }
+  }
+  if (summaryPruneOps.length > 0) {
+    await Promise.all(summaryPruneOps);
+  }
+  if (clearedActiveSummary && (state.panelWorkspaceRoot ?? pickWorkspaceRoot()) === workspaceRoot) {
+    state.scratchSummary = undefined;
   }
 
   const metricHistory = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
@@ -5678,10 +5756,9 @@ function isEmptyActivityState(activity: PersistedActivityState): boolean {
 }
 
 function scopedActivityStorageKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
-  const branch = context.workspaceState.get<string>(branchStateKey(workspaceRoot), '').trim();
-  const taskPartition = resolveTaskPartitionKey(context, workspaceRoot);
-  const branchScope = branch || 'default';
-  const scope = `${workspaceRoot}::${branchScope}::${taskPartition}`;
+  const branch = resolveScopeBranch(context, workspaceRoot);
+  const taskPartition = resolveTaskPartitionKey(context, workspaceRoot, branch);
+  const scope = `${workspaceRoot}::${branch}::${taskPartition}`;
   const normalizedScope = scope.trim() || '__no_workspace__';
   return `${KEY_ACTIVITY_STORAGE_PREFIX}.${Buffer.from(normalizedScope).toString('base64url')}`;
 }
