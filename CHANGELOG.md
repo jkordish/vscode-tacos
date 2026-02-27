@@ -32,6 +32,7 @@ All notable changes to this project are documented in this file.
 - Standup `Next` section now includes the active checkpoint note when available.
 - AI payload preview now explicitly labels whether checkpoint notes are included.
 - Retention policy now prunes old closed checkpoint notes (`done`/`dismissed`) while keeping open notes sticky.
+- Resume panel now shows the Scratchpad card only when scoped scratchpad content exists.
 - Local metrics now track checkpoint events (`noteCreated`, `noteMarkedDone`, `notePinned`) and
   resume lag cohorts (`resumeWithNote` vs without).
 

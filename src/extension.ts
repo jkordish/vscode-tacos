@@ -182,6 +182,7 @@ interface RuntimeState {
   panelPrimaryCheckpointNote?: CheckpointNote;
   panelCheckpointScope?: string;
   panelScratchpadPreviewLines: string[];
+  panelScratchpadExists: boolean;
   panelScratchpadHasContent: boolean;
   panelScratchpadScopeLabel?: string;
   lastTaskName?: string;
@@ -265,6 +266,7 @@ export function activate(context: vscode.ExtensionContext): void {
     panelPrimaryCheckpointNote: undefined,
     panelCheckpointScope: undefined,
     panelScratchpadPreviewLines: [],
+    panelScratchpadExists: false,
     panelScratchpadHasContent: false,
     panelScratchpadScopeLabel: undefined,
     lastTaskName: persistedTaskMetadata?.taskName,
@@ -2148,6 +2150,7 @@ async function showDetailsPanel(
       state.panelPrimaryCheckpointNote = undefined;
       state.panelCheckpointScope = undefined;
       state.panelScratchpadPreviewLines = [];
+      state.panelScratchpadExists = false;
       state.panelScratchpadHasContent = false;
       state.panelScratchpadScopeLabel = undefined;
     });
@@ -2660,6 +2663,7 @@ function renderWebview(
       : '';
   const scratchpadPreviewLines = state.panelScratchpadPreviewLines.slice(0, SCRATCHPAD_PREVIEW_MAX_LINES);
   const scratchpadScopeLabel = state.panelScratchpadScopeLabel?.trim() ?? '';
+  const showScratchpadCard = state.panelScratchpadExists || state.panelScratchpadHasContent;
   const scratchpadPreviewHtml =
     scratchpadPreviewLines.length > 0
       ? `<ul class="compact-list">${scratchpadPreviewLines
@@ -2670,7 +2674,8 @@ function renderWebview(
             ? 'Scratchpad has content, but no preview lines were detected.'
             : 'No scratchpad content yet.'
         }</p>`;
-  const scratchpadCard = `<div class="card">
+  const scratchpadCard = showScratchpadCard
+    ? `<div class="card">
       <h3>Scratchpad</h3>
       ${scratchpadScopeLabel ? `<p class="muted">${escapeHtml(scratchpadScopeLabel)}</p>` : ''}
       ${scratchpadPreviewHtml}
@@ -2679,7 +2684,8 @@ function renderWebview(
         <button type="button" class="secondary" data-action="appendScratchpad">Append</button>
         <button type="button" class="secondary" data-action="setScratchpadScope">Set Scope</button>
       </div>
-    </div>`;
+    </div>`
+    : '';
   const candidateIntentItems = (summary.candidateIntents ?? [])
     .map((candidate) => `<li>${escapeHtml(candidate)}</li>`)
     .join('');
@@ -6214,6 +6220,7 @@ function resetRuntimeWorkspaceState(): void {
   state.panelPrimaryCheckpointNote = undefined;
   state.panelCheckpointScope = undefined;
   state.panelScratchpadPreviewLines = [];
+  state.panelScratchpadExists = false;
   state.panelScratchpadHasContent = false;
   state.panelScratchpadScopeLabel = undefined;
   state.activeNudges = undefined;
@@ -6645,6 +6652,7 @@ async function refreshPanelCheckpointState(
     state.panelPrimaryCheckpointNote = undefined;
     state.panelCheckpointScope = undefined;
     state.panelScratchpadPreviewLines = [];
+    state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
     state.panelScratchpadScopeLabel = undefined;
     return;
@@ -7110,14 +7118,16 @@ async function refreshPanelScratchpadState(
   const root = pickWorkspaceRoot(workspaceRoot ?? state.panelWorkspaceRoot);
   if (!root) {
     state.panelScratchpadPreviewLines = [];
+    state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
     state.panelScratchpadScopeLabel = undefined;
     return;
   }
 
   const { uri, scopeState } = resolveScratchpadFileUri(context, root, state.panelSummary?.currentBranch);
+  const exists = await fileExists(uri);
   let content = '';
-  if (await fileExists(uri)) {
+  if (exists) {
     try {
       const bytes = await vscode.workspace.fs.readFile(uri);
       content = Buffer.from(bytes).toString('utf8');
@@ -7126,6 +7136,7 @@ async function refreshPanelScratchpadState(
     }
   }
 
+  state.panelScratchpadExists = exists;
   state.panelScratchpadHasContent = content.trim().length > 0;
   state.panelScratchpadPreviewLines = extractScratchpadPreviewLines(content);
   state.panelScratchpadScopeLabel = scratchpadScopeLabel(scopeState);
