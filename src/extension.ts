@@ -741,7 +741,11 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const { uri } = resolveScratchpadFileUri(context, workspaceRoot, state.panelSummary?.currentBranch);
+      const { uri } = resolveScratchpadFileUri(
+        context,
+        workspaceRoot,
+        state.panelSummary?.currentBranch,
+      );
       if (document.uri.toString() !== uri.toString()) {
         return;
       }
@@ -2662,7 +2666,10 @@ function renderWebview(
       </div>
     </div>`
       : '';
-  const scratchpadPreviewLines = state.panelScratchpadPreviewLines.slice(0, SCRATCHPAD_PREVIEW_MAX_LINES);
+  const scratchpadPreviewLines = state.panelScratchpadPreviewLines.slice(
+    0,
+    SCRATCHPAD_PREVIEW_MAX_LINES,
+  );
   const scratchpadScopeLabel = state.panelScratchpadScopeLabel?.trim() ?? '';
   const showScratchpadCard = state.panelScratchpadExists || state.panelScratchpadHasContent;
   const scratchpadPreviewHtml =
@@ -6251,7 +6258,10 @@ function resetRuntimeWorkspaceState(): void {
 }
 
 function isCheckpointScopeForWorkspace(scope: string, workspaceRoot: string): boolean {
-  return scope === workspaceGlobalCheckpointScope(workspaceRoot) || scope.startsWith(`${workspaceRoot}::`);
+  return (
+    scope === workspaceGlobalCheckpointScope(workspaceRoot) ||
+    scope.startsWith(`${workspaceRoot}::`)
+  );
 }
 
 async function pruneCheckpointNotesForWorkspace(
@@ -7127,7 +7137,11 @@ function resolveScratchpadFileUri(
 ): { uri: vscode.Uri; scopeState: ScratchpadScopeState } {
   const scopeState = resolveScratchpadScopeState(context, workspaceRoot, branchHint);
   const rootUri = resolveScratchpadStorageRootUri(context, workspaceRoot);
-  const uri = vscode.Uri.joinPath(rootUri, 'scratchpads', `${scratchpadScopeHash(scopeState.scope)}.md`);
+  const uri = vscode.Uri.joinPath(
+    rootUri,
+    'scratchpads',
+    `${scratchpadScopeHash(scopeState.scope)}.md`,
+  );
   return { uri, scopeState };
 }
 
@@ -7159,7 +7173,10 @@ async function ensureScratchpadDocument(
   return { document, uri, scopeState };
 }
 
-function extractScratchpadPreviewLines(rawContent: string, maxLines = SCRATCHPAD_PREVIEW_MAX_LINES): string[] {
+function extractScratchpadPreviewLines(
+  rawContent: string,
+  maxLines = SCRATCHPAD_PREVIEW_MAX_LINES,
+): string[] {
   if (!rawContent.trim()) {
     return [];
   }
@@ -7184,7 +7201,11 @@ async function refreshPanelScratchpadState(
     return;
   }
 
-  const { uri, scopeState } = resolveScratchpadFileUri(context, root, state.panelSummary?.currentBranch);
+  const { uri, scopeState } = resolveScratchpadFileUri(
+    context,
+    root,
+    state.panelSummary?.currentBranch,
+  );
   let exists = false;
   let sizeBytes = 0;
   try {
@@ -7255,7 +7276,10 @@ async function appendToScratchpadCommand(
     return;
   }
 
-  const selected = vscode.window.activeTextEditor?.document.getText(vscode.window.activeTextEditor.selection).trim() ?? '';
+  const selected =
+    vscode.window.activeTextEditor?.document
+      .getText(vscode.window.activeTextEditor.selection)
+      .trim() ?? '';
   const fallbackClipboard = selected ? '' : (await vscode.env.clipboard.readText()).trim();
   const sourceText = selected || fallbackClipboard;
   if (!sourceText) {

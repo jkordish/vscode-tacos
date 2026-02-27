@@ -116,7 +116,9 @@ export function sanitizeCheckpointNote(
     return undefined;
   }
 
-  const redacted = redactText(trimmed, workspaceRoot, redactionPatterns).replace(/\s+/g, ' ').trim();
+  const redacted = redactText(trimmed, workspaceRoot, redactionPatterns)
+    .replace(/\s+/g, ' ')
+    .trim();
   return redacted || undefined;
 }
 
