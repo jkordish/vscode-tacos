@@ -25,6 +25,9 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'restoreOpenProblems' })).toEqual({
       type: 'restoreOpenProblems',
     });
+    expect(parseWebviewMessage({ type: 'restoreWorkingSet' })).toEqual({
+      type: 'restoreWorkingSet',
+    });
   });
 
   it('validates openLink payload shape', () => {

@@ -22,6 +22,7 @@ const RESTORE_MESSAGE_TYPES = [
   'restoreOpenProblems',
   'restoreOpenDiagnosticFile',
   'restoreJumpToLastEdit',
+  'restoreWorkingSet',
 ] as const;
 
 type SimpleWebviewMessageType = (typeof SIMPLE_MESSAGE_TYPES)[number];

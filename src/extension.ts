@@ -67,6 +67,8 @@ const KEY_DONE_ITEMS = 'tacos.doneItems';
 const KEY_LAST_FAILING_COMMAND = 'tacos.lastFailingCommand';
 const KEY_RECENT_EDIT_LOCATIONS_PREFIX = 'tacos.recentEditLocations';
 const KEY_LAST_TASK_META_PREFIX = 'tacos.lastTaskMeta';
+const KEY_LAST_TERMINAL_CWD_PREFIX = 'tacos.lastTerminalCwd';
+const KEY_RESTORE_SEARCH_QUERY_PREFIX = 'tacos.restoreSearchQuery';
 const KEY_ACTIVITY_STORAGE_PREFIX = 'tacos.activityScoped';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
 const KEY_SUMMARY_CORRECTIONS_PREFIX = 'tacos.summaryCorrections';
@@ -143,6 +145,7 @@ interface RuntimeState {
   lastTaskWorkspaceRoot?: string;
   lastTaskExitCode?: number;
   lastTaskEndedAt?: number;
+  lastTerminalCwd?: string;
   lastDebugConfigName?: string;
   lastDebugWorkspaceRoot?: string;
   metricSession?: MetricRecord;
@@ -215,6 +218,7 @@ export function activate(context: vscode.ExtensionContext): void {
     lastTaskWorkspaceRoot: persistedTaskMetadata?.workspaceRoot,
     lastTaskExitCode: persistedTaskMetadata?.exitCode,
     lastTaskEndedAt: persistedTaskMetadata?.timestamp,
+    lastTerminalCwd: readPersistedTerminalCwd(context, initialWorkspaceRoot),
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
     refinementSequence: 0,
@@ -311,6 +315,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.generateStandupUpdate', async () => {
       await generateStandupUpdateCommand(context);
+    }),
+    vscode.commands.registerCommand('tacos.restoreWorkingSet', async () => {
+      await restoreWorkingSetCommand(context);
+    }),
+    vscode.commands.registerCommand('tacos.captureRestoreSearchQuery', async () => {
+      await captureRestoreSearchQuery(context);
     }),
     vscode.commands.registerCommand('tacos.jumpToLastEdit', async () => {
       await jumpToRecentEdit(context);
@@ -813,6 +823,11 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       workspaceRoot,
       config.redactionPatterns,
     );
+    const rawCwd = String(event?.execution?.cwd?.value ?? event?.execution?.cwd ?? '').trim();
+    if (workspaceRoot && rawCwd && isPathWithinWorkspaceRoot(workspaceRoot, rawCwd)) {
+      state.lastTerminalCwd = toRelativePath(rawCwd, workspaceRoot);
+      await persistTerminalCwd(context, workspaceRoot);
+    }
     if (config.includeTerminalHistory) {
       state.recentTerminal.push(sanitizedCommand);
       for (const url of extractUrls(command)) {
@@ -1629,6 +1644,7 @@ interface CompanionActionPick extends vscode.QuickPickItem {
     | 'showNow'
     | 'showLast'
     | 'standup'
+    | 'restoreWorkingSet'
     | 'jumpLastEdit'
     | 'copyPrompt'
     | 'togglePause'
@@ -1661,6 +1677,11 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'standup',
       label: 'Generate standup update',
       detail: 'Create concise Done/Next/Blockers output.',
+    },
+    {
+      id: 'restoreWorkingSet',
+      label: 'Restore working set',
+      detail: 'Preview and restore files, diff target, terminal cwd, and search query.',
     },
     {
       id: 'jumpLastEdit',
@@ -1752,6 +1773,9 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'standup') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.generateStandupUpdate');
+  } else if (picked.id === 'restoreWorkingSet') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.restoreWorkingSet');
   } else if (picked.id === 'jumpLastEdit') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.jumpToLastEdit');
@@ -2022,6 +2046,12 @@ async function showDetailsPanel(
       if (message.type === 'restoreJumpToLastEdit') {
         recordCompanionQuickAction();
         await jumpToRecentEdit(context, state.panelWorkspaceRoot);
+        return;
+      }
+
+      if (message.type === 'restoreWorkingSet') {
+        recordCompanionQuickAction();
+        await restoreWorkingSetCommand(context);
         return;
       }
 
@@ -2421,6 +2451,7 @@ function renderWebview(
       : '';
 
   const companionRestoreButtons = [
+    '<button type="button" data-action="restoreWorkingSet">Restore working set</button>',
     `<button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled aria-disabled="true"'}>Jump to last edit</button>`,
     '<button type="button" data-action="restoreReopenFiles">Reopen files</button>',
     '<button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>',
@@ -2957,6 +2988,7 @@ function renderWebview(
     <div class="card">
       <h3>Restore Pack</h3>
       <div class="restore-grid">
+        <button type="button" data-action="restoreWorkingSet">Restore working set</button>
         <button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled'}>Jump to last edit</button>
         <button type="button" data-action="restoreReopenFiles">Reopen files</button>
         <button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>
@@ -3011,6 +3043,7 @@ function renderWebview(
         'openPrivacySafety',
         'rateHelpfulness',
         'runNextStepAction',
+        'restoreWorkingSet',
         'restoreJumpToLastEdit',
         'restoreReopenFiles',
         'restoreOpenChangedFiles',
@@ -3242,6 +3275,168 @@ async function generateStandupUpdateCommand(context: vscode.ExtensionContext): P
       'TaCoS: standup update copied and opened in an editor tab.',
     );
   }
+}
+
+function terminalCwdStorageKey(workspaceRoot: string): string {
+  return `${KEY_LAST_TERMINAL_CWD_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function readPersistedTerminalCwd(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): string | undefined {
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  const value = context.workspaceState.get<string>(terminalCwdStorageKey(workspaceRoot), '').trim();
+  return value || undefined;
+}
+
+async function persistTerminalCwd(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<void> {
+  await context.workspaceState.update(terminalCwdStorageKey(workspaceRoot), state.lastTerminalCwd);
+}
+
+function restoreSearchQueryKey(workspaceRoot: string): string {
+  return `${KEY_RESTORE_SEARCH_QUERY_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function readPersistedRestoreSearchQuery(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): string | undefined {
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  const value = context.workspaceState.get<string>(restoreSearchQueryKey(workspaceRoot), '').trim();
+  return value || undefined;
+}
+
+async function captureRestoreSearchQuery(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const current = readPersistedRestoreSearchQuery(context, workspaceRoot) ?? '';
+  const input = await vscode.window.showInputBox({
+    title: 'TaCoS: Set Restore Search Query',
+    prompt: 'Optional query to re-open in Search during restore working set.',
+    placeHolder: 'Example: TODO auth middleware',
+    value: current,
+    ignoreFocusOut: true,
+  });
+  if (typeof input === 'undefined') {
+    return;
+  }
+
+  const nextValue = input.trim();
+  await context.workspaceState.update(
+    restoreSearchQueryKey(workspaceRoot),
+    nextValue ? nextValue : undefined,
+  );
+  void vscode.window.showInformationMessage(
+    nextValue
+      ? 'TaCoS: restore search query saved.'
+      : 'TaCoS: restore search query cleared.',
+  );
+}
+
+async function restoreWorkingSetCommand(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const summary =
+    state.panelSummary ??
+    state.scratchSummary ??
+    context.workspaceState.get<ResumeSummary>(summaryCacheKey(workspaceRoot));
+  if (!summary) {
+    void vscode.window.showInformationMessage('TaCoS: no summary context available to restore yet.');
+    return;
+  }
+
+  const filesToOpen = uniqueStrings([...(summary.recentFilesSnapshot ?? []), ...summary.topFiles]).slice(
+    0,
+    6,
+  );
+  const diffTarget = summary.topFiles[0];
+  const terminalCwd = state.lastTerminalCwd?.trim() || undefined;
+  const searchQuery = readPersistedRestoreSearchQuery(context, workspaceRoot);
+  const preview = [
+    `files: ${filesToOpen.length}`,
+    `diff target: ${diffTarget ? 'yes' : 'none'}`,
+    `terminal cwd: ${terminalCwd ? terminalCwd : 'none'}`,
+    `search query: ${searchQuery ? 'yes' : 'none'}`,
+  ].join(' • ');
+
+  const choice = await vscode.window.showInformationMessage(
+    `TaCoS restore preview (${preview})`,
+    { modal: true },
+    'Restore',
+  );
+  if (choice !== 'Restore') {
+    return;
+  }
+
+  const openedFiles = await openWorkspaceFiles(filesToOpen, workspaceRoot);
+  let openedDiff = false;
+  if (diffTarget) {
+    const safePath = resolveFileTargetInWorkspace(diffTarget, workspaceRoot);
+    if (safePath && isPathWithinWorkspaceRoot(workspaceRoot, safePath)) {
+      const diffUri = vscode.Uri.file(safePath);
+      try {
+        await vscode.commands.executeCommand('git.openChange', diffUri);
+        openedDiff = true;
+      } catch {
+        await vscode.commands.executeCommand('vscode.open', diffUri, {
+          preview: false,
+          preserveFocus: true,
+        });
+        openedDiff = true;
+      }
+    }
+  }
+
+  let openedTerminal = false;
+  if (terminalCwd) {
+    const safeCwd = resolveFileTargetInWorkspace(terminalCwd, workspaceRoot);
+    if (safeCwd && isPathWithinWorkspaceRoot(workspaceRoot, safeCwd)) {
+      try {
+        await vscode.commands.executeCommand('workbench.action.terminal.newWithCwd', {
+          cwd: safeCwd,
+        });
+        openedTerminal = true;
+      } catch {
+        const terminal = vscode.window.createTerminal({
+          name: 'TaCoS Restore',
+          cwd: safeCwd,
+        });
+        terminal.show(true);
+        openedTerminal = true;
+      }
+    }
+  }
+
+  let restoredSearch = false;
+  if (searchQuery) {
+    await vscode.commands.executeCommand('workbench.action.findInFiles', {
+      query: searchQuery,
+      triggerSearch: true,
+    });
+    restoredSearch = true;
+  }
+
+  void vscode.window.showInformationMessage(
+    `TaCoS: restored ${openedFiles} files${openedDiff ? ', diff target' : ''}${openedTerminal ? ', terminal cwd' : ''}${restoredSearch ? ', and search query' : ''}. Missing resources were skipped safely.`,
+  );
 }
 
 function formatMarkdownSummary(summary: ResumeSummary): string {
@@ -4946,6 +5141,8 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_LAST_AUTO_TRIGGER_FINGERPRINT, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_RECENT_EDIT_LOCATIONS_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_TASK_META_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_TERMINAL_CWD_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_RESTORE_SEARCH_QUERY_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_SUMMARY_CORRECTIONS_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, false) ||
@@ -4982,6 +5179,7 @@ function resetRuntimeWorkspaceState(): void {
   state.lastTaskWorkspaceRoot = undefined;
   state.lastTaskExitCode = undefined;
   state.lastTaskEndedAt = undefined;
+  state.lastTerminalCwd = undefined;
   state.lastDebugConfigName = undefined;
   state.lastDebugWorkspaceRoot = undefined;
   state.snoozeUntil = 0;

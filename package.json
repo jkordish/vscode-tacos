@@ -57,6 +57,8 @@
     "onCommand:tacos.pauseSummaries",
     "onCommand:tacos.snoozeAutoSummaries",
     "onCommand:tacos.generateStandupUpdate",
+    "onCommand:tacos.restoreWorkingSet",
+    "onCommand:tacos.captureRestoreSearchQuery",
     "onCommand:tacos.resumeSummaries",
     "onCommand:tacos.toggleEnabled",
     "onCommand:tacos.pauseUntilRestart",
@@ -125,6 +127,14 @@
       {
         "command": "tacos.generateStandupUpdate",
         "title": "TaCoS: Generate Standup Update"
+      },
+      {
+        "command": "tacos.restoreWorkingSet",
+        "title": "TaCoS: Restore Working Set"
+      },
+      {
+        "command": "tacos.captureRestoreSearchQuery",
+        "title": "TaCoS: Set Restore Search Query"
       },
       {
         "command": "tacos.resumeSummaries",
