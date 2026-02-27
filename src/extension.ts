@@ -140,6 +140,8 @@ interface PresentSummaryOptions {
   checkpointNote?: string;
 }
 
+type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt';
+
 export function activate(context: vscode.ExtensionContext): void {
   const persistedActivity = loadPersistedActivitySnapshot(context);
   state = {
@@ -172,6 +174,12 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('tacos.showNow', async () => {
       await triggerSummary(context, 'manual');
+    }),
+    vscode.commands.registerCommand('tacos.__test.getFocusPresentationMode', async () => {
+      const mode = resolveSummaryPresentationMode(getConfig(), {
+        autoOpenDetails: false,
+      });
+      return mode;
     }),
     vscode.commands.registerCommand('tacos.slash', async () => {
       const root = pickWorkspaceRoot();
@@ -1003,6 +1011,7 @@ async function presentSummary(
   options: PresentSummaryOptions = {},
 ): Promise<void> {
   const config = getConfig();
+  const presentationMode = resolveSummaryPresentationMode(config, options);
 
   if (config.metricsEnabled) {
     await finalizeCurrentMetric(context);
@@ -1016,12 +1025,12 @@ async function presentSummary(
 
   updateSummaryScratchpad(summary, options.workspaceRoot);
 
-  if (options.autoOpenDetails) {
+  if (presentationMode === 'auto-open-details') {
     await showDetailsPanel(context, summary, options);
     return;
   }
 
-  if (config.autoRefreshInBackground) {
+  if (presentationMode === 'background') {
     const statusMessage = state.panel
       ? `TaCoS (${summary.source}): summary refreshed in details panel.`
       : `TaCoS (${summary.source}): summary refreshed in background scratch pad.`;
@@ -1076,6 +1085,21 @@ async function presentSummary(
       !config.pauseSummaries ? 'TaCoS: auto summaries paused.' : 'TaCoS: auto summaries resumed.',
     );
   }
+}
+
+function resolveSummaryPresentationMode(
+  config: ExtensionConfig,
+  options: Pick<PresentSummaryOptions, 'autoOpenDetails'>,
+): SummaryPresentationMode {
+  if (options.autoOpenDetails) {
+    return 'auto-open-details';
+  }
+
+  if (config.autoRefreshInBackground) {
+    return 'background';
+  }
+
+  return 'prompt';
 }
 
 async function showDetailsPanel(
@@ -1469,6 +1493,60 @@ function renderWebview(
     currentBranch: summary.currentBranch,
     previousBranch: summary.previousBranch,
   });
+  const companionNextSteps = summary.nextSteps
+    .slice(0, 3)
+    .map((step) => `<li>${escapeHtml(step)}</li>`)
+    .join('');
+  const switchedBranches =
+    Boolean(summary.currentBranch) &&
+    Boolean(summary.previousBranch) &&
+    summary.currentBranch !== summary.previousBranch;
+
+  let blockerTitle = 'No active blocker';
+  let blockerDetail = 'Continue with the first suggested next step.';
+  let blockerActionLabel: string | undefined;
+  let blockerAction: string | undefined;
+  let blockerActionDisabled = false;
+
+  if (!trusted) {
+    blockerTitle = 'Workspace is in Restricted Mode';
+    blockerDetail =
+      'Task/debug reruns and branch checkout are disabled until workspace trust is granted.';
+  } else if (summary.lastFailingCommand) {
+    blockerTitle = 'Last command failed';
+    blockerDetail = summary.lastFailingCommand;
+    if (availability.canCopyFailingCommand) {
+      blockerActionLabel = 'Copy failing command';
+      blockerAction = 'restoreCopyFailingCommand';
+    } else if (availability.canRerunTask) {
+      blockerActionLabel = 'Rerun last task';
+      blockerAction = 'restoreRerunTask';
+    }
+  } else if (switchedBranches) {
+    blockerTitle = 'Branch context changed';
+    blockerDetail = `You moved from ${summary.previousBranch} to ${summary.currentBranch}.`;
+    blockerActionLabel = 'Checkout previous branch';
+    blockerAction = 'restoreCheckoutPreviousBranch';
+    blockerActionDisabled = !availability.canCheckoutPreviousBranch;
+  } else if (summary.nextSteps.length === 0) {
+    blockerTitle = 'No next steps available';
+    blockerDetail = 'Refresh summary to regenerate guidance.';
+    blockerActionLabel = 'Refresh summary';
+    blockerAction = 'refreshSummary';
+  }
+
+  const blockerActionHtml =
+    blockerAction && blockerActionLabel
+      ? `<button type="button" class="secondary" data-action="${escapeHtml(blockerAction)}" ${blockerActionDisabled ? 'disabled aria-disabled="true"' : ''}>${escapeHtml(blockerActionLabel)}</button>`
+      : '';
+
+  const companionRestoreButtons = [
+    '<button type="button" data-action="restoreReopenFiles">Reopen files</button>',
+    '<button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>',
+    `<button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled aria-disabled="true"'}>Rerun task</button>`,
+    `<button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled aria-disabled="true"'}>Rerun debug</button>`,
+  ].join('');
+
   const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
   const sourceLabel =
     summary.source === 'local' ? 'Local summary (instant)' : 'Refined summary (AI)';
@@ -1729,6 +1807,38 @@ function renderWebview(
       .quick-actions button {
         min-width: 180px;
       }
+      .companion-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 10px;
+      }
+      .companion-block {
+        border: 1px solid var(--vscode-widget-border);
+        border-radius: 8px;
+        padding: 10px;
+        background: var(--vscode-editor-background);
+      }
+      .companion-block h4 {
+        margin-top: 0;
+        margin-bottom: 6px;
+      }
+      .companion-primary {
+        margin: 0 0 8px 0;
+        font-weight: 600;
+        line-height: 1.4;
+      }
+      .compact-list {
+        margin: 0 0 10px 0;
+        padding-left: 18px;
+      }
+      .companion-restore-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .companion-restore-grid button {
+        text-align: left;
+      }
     </style>
   </head>
   <body>
@@ -1745,6 +1855,32 @@ function renderWebview(
     </div>
 
     ${checkpointCard}
+    <div class="card">
+      <h3>Companion Home</h3>
+      <div class="companion-grid">
+        <section class="companion-block">
+          <h4>Now</h4>
+          <p class="companion-primary">${escapeHtml(summary.intent)}</p>
+          <p class="muted">Mode: ${escapeHtml(mode)}</p>
+        </section>
+        <section class="companion-block">
+          <h4>Next</h4>
+          <ul class="compact-list">${companionNextSteps || '<li>No next steps captured yet.</li>'}</ul>
+          <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
+        </section>
+        <section class="companion-block">
+          <h4>Blocked</h4>
+          <p class="companion-primary">${escapeHtml(blockerTitle)}</p>
+          <p class="muted">${escapeHtml(blockerDetail)}</p>
+          ${blockerActionHtml}
+        </section>
+        <section class="companion-block">
+          <h4>Restore</h4>
+          <div class="companion-restore-grid">${companionRestoreButtons}</div>
+        </section>
+      </div>
+    </div>
+
     <div class="card">
       <h3>Intent</h3>
       <p>${escapeHtml(summary.intent)}</p>

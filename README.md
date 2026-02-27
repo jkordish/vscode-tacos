@@ -179,6 +179,7 @@ Integration test harness status:
 - Runbook: `docs/integration-test-harness.md`
 - Command: `npm run test:integration`
 - Full phase-to-file acceptance mapping: `docs/acceptance-report.md`
+- Companion v1 design and rollout spec: `docs/companion-v1-spec.md`
 
 ## Manual Smoke Checklist
 

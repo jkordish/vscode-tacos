@@ -102,6 +102,25 @@ Expected:
 Result: `PASS / FAIL`
 Notes: `__________`
 
+### A7. UX friction checks (notification and click budget)
+
+Steps:
+1. Set `tacos.autoRefreshInBackground=true`.
+2. Cause at least 3 focus-triggered refresh opportunities (blur/focus cycles with meaningful activity).
+3. Count how many times you must click `Open details` to see updated state.
+4. Repeat with `tacos.autoRefreshInBackground=false`.
+
+Expected:
+- With background mode enabled, updated state should require `0` forced `Open details` clicks.
+- With background mode disabled, prompt flow should still be available.
+- No repeated notification spam while idle (cooldown/debounce still honored).
+
+Record:
+- Background mode forced-click count: `__________`
+- Prompt mode forced-click count: `__________`
+- Interruption score (1 low friction - 5 high friction): `__________`
+- Notes: `__________`
+
 ## Part B - Restricted Mode
 
 ### B1. Enter restricted mode
