@@ -218,10 +218,20 @@
           "default": true,
           "description": "Track local resumption/edit lag metrics in workspace state."
         },
+        "tacos.uiSurface": {
+          "type": "string",
+          "enum": [
+            "statusbar",
+            "notification",
+            "silent"
+          ],
+          "default": "statusbar",
+          "description": "Primary UI surface for focus-triggered summaries. `statusbar` is ambient (default), `notification` shows actionable toasts, and `silent` only updates cached/status context."
+        },
         "tacos.autoRefreshInBackground": {
           "type": "boolean",
           "default": true,
-          "description": "When enabled, focus-triggered summaries refresh a background scratch summary (and update an open details panel) without prompting to Open details."
+          "description": "Legacy compatibility toggle for focus presentation mode. Prefer `tacos.uiSurface` for new setups."
         },
         "tacos.companionNudgesEnabled": {
           "type": "boolean",

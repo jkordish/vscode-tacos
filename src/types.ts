@@ -1,6 +1,7 @@
 export type TriggerReason = 'focus' | 'manual' | 'cached';
 export type SummaryProvider = 'local' | 'vscode-lm' | 'openai';
 export type CompanionNudgeAggressiveness = 'low' | 'balanced' | 'high';
+export type UiSurface = 'statusbar' | 'notification' | 'silent';
 
 export interface ExtensionConfig {
   enabled: boolean;
@@ -17,6 +18,7 @@ export interface ExtensionConfig {
   cacheIfContextUnchanged: boolean;
   redactionPatterns: string[];
   metricsEnabled: boolean;
+  uiSurface: UiSurface;
   autoRefreshInBackground: boolean;
   companionNudgesEnabled: boolean;
   companionNudgeAggressiveness: CompanionNudgeAggressiveness;

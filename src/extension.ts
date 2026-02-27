@@ -150,7 +150,7 @@ interface PresentSummaryOptions {
   checkpointNote?: string;
 }
 
-type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt';
+type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt' | 'silent';
 type CompanionRuntimeMode = 'active' | 'paused' | 'restricted' | 'disabled';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -500,6 +500,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const affectsStatus =
         affectsPanel ||
         event.affectsConfiguration('tacos.summaryProvider') ||
+        event.affectsConfiguration('tacos.uiSurface') ||
         event.affectsConfiguration('tacos.autoRefreshInBackground') ||
         affectsNudges;
 
@@ -1080,10 +1081,10 @@ async function presentSummary(
   }
 
   if (presentationMode === 'background') {
-    const statusMessage = state.panel
-      ? `TaCoS (${summary.source}): summary refreshed in details panel.`
-      : `TaCoS (${summary.source}): summary refreshed in background scratch pad.`;
-    void vscode.window.setStatusBarMessage(statusMessage, 3500);
+    return;
+  }
+
+  if (presentationMode === 'silent') {
     return;
   }
 
@@ -1190,11 +1191,15 @@ function resolveSummaryPresentationMode(
     return 'auto-open-details';
   }
 
-  if (config.autoRefreshInBackground) {
-    return 'background';
+  if (config.uiSurface === 'silent') {
+    return 'silent';
   }
 
-  return 'prompt';
+  if (config.uiSurface === 'notification') {
+    return 'prompt';
+  }
+
+  return 'background';
 }
 
 function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeMode {
@@ -1342,6 +1347,7 @@ function updateCompanionStatusBar(): void {
         : mode === 'paused'
           ? 'paused'
           : 'disabled';
+  const topStep = summary?.nextSteps[0]?.trim();
   const blockerCount = summary?.lastFailingCommand ? 1 : 0;
   const blockerSuffix = blockerCount > 0 ? ` · ${blockerCount} blocker` : '';
   state.statusBar.text = `${modeIcon} TaCoS: ${statusHeadline}${blockerSuffix}`;
@@ -1354,7 +1360,10 @@ function updateCompanionStatusBar(): void {
   state.statusBar.tooltip = [
     'TaCoS Companion',
     `Mode: ${modeLabel}`,
+    `Surface: ${config.uiSurface}`,
     `Provider: ${describeProvider(config.summaryProvider)}`,
+    summary ? `Intent: ${summarizeForStatusBar(summary.intent, 120)}` : 'Intent: (none yet)',
+    topStep ? `Next: ${summarizeForStatusBar(topStep, 120)}` : 'Next: (none yet)',
     summary
       ? `Last summary: ${summary.source} at ${formatTimestamp(summary.generatedAt)}`
       : 'No summary yet.',
@@ -3453,6 +3462,46 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
   );
 }
 
+function hasExplicitConfigValue<T>(
+  inspected:
+    | {
+        globalValue?: T;
+        workspaceValue?: T;
+        workspaceFolderValue?: T;
+      }
+    | undefined,
+): boolean {
+  if (!inspected) {
+    return false;
+  }
+
+  return (
+    typeof inspected.globalValue !== 'undefined' ||
+    typeof inspected.workspaceValue !== 'undefined' ||
+    typeof inspected.workspaceFolderValue !== 'undefined'
+  );
+}
+
+function resolveUiSurfaceConfig(
+  config: vscode.WorkspaceConfiguration,
+): ExtensionConfig['uiSurface'] {
+  const uiSurfaceInspect = config.inspect<ExtensionConfig['uiSurface']>('uiSurface');
+  const hasExplicitUiSurface = hasExplicitConfigValue(uiSurfaceInspect);
+  const configuredUiSurface = config.get<ExtensionConfig['uiSurface']>('uiSurface', 'statusbar');
+
+  if (hasExplicitUiSurface) {
+    return configuredUiSurface;
+  }
+
+  const autoRefreshInspect = config.inspect<boolean>('autoRefreshInBackground');
+  const hasExplicitAutoRefresh = hasExplicitConfigValue(autoRefreshInspect);
+  if (!hasExplicitAutoRefresh) {
+    return configuredUiSurface;
+  }
+
+  return config.get<boolean>('autoRefreshInBackground', true) ? 'statusbar' : 'notification';
+}
+
 function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('tacos');
 
@@ -3471,6 +3520,7 @@ function getConfig(): ExtensionConfig {
     cacheIfContextUnchanged: config.get<boolean>('cacheIfContextUnchanged', true),
     redactionPatterns: config.get<string[]>('redactionPatterns', []),
     metricsEnabled: config.get<boolean>('metricsEnabled', true),
+    uiSurface: resolveUiSurfaceConfig(config),
     autoRefreshInBackground: config.get<boolean>('autoRefreshInBackground', true),
     companionNudgesEnabled: config.get<boolean>('companionNudgesEnabled', true),
     companionNudgeAggressiveness: config.get<ExtensionConfig['companionNudgeAggressiveness']>(
