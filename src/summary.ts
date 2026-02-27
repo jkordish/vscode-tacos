@@ -336,13 +336,53 @@ function buildStepEvidenceIds(
   return nextSteps.map((_, index) => [evidenceIds[Math.min(index, evidenceIds.length - 1)]]);
 }
 
+function buildCandidateIntents(signals: ResumeSignals, topFiles: string[]): string[] {
+  const candidates = dedupe(
+    [
+      topFiles[0] ? `Continue edits around ${topFiles[0]}.` : '',
+      signals.branch ? `Continue work on branch ${signals.branch}.` : '',
+      signals.recentDebug[0] ? `Resume debugging flow from ${signals.recentDebug[0]}.` : '',
+      signals.recentTerminal[0] ? 'Resume validation by rerunning your latest command flow.' : '',
+      'Open your latest file and capture a one-line checkpoint for intent.',
+    ],
+    2,
+  );
+  return candidates.slice(0, 2);
+}
+
+function isLowConfidenceSummary(signals: ResumeSignals, topFiles: string[]): boolean {
+  const signalStrength =
+    (topFiles.length > 0 ? 1 : 0) +
+    (signals.changedFiles.length > 0 ? 1 : 0) +
+    (signals.recentTerminal.length > 0 ? 1 : 0) +
+    (signals.recentDebug.length > 0 ? 1 : 0) +
+    (signals.doneItems.length > 0 ? 1 : 0) +
+    (signals.failingCommand ? 1 : 0);
+  return signalStrength < 2;
+}
+
+function buildLowConfidenceNextSteps(topFiles: string[]): string[] {
+  const focusTarget = topFiles[0]
+    ? `Open ${topFiles[0]} and confirm the intended change path.`
+    : 'Open your latest edited file and identify the next safe change.';
+  return [
+    'Unclear intent (low evidence). Add a one-line checkpoint note before proceeding.',
+    focusTarget,
+    'Run one focused test/build step to rebuild context and confidence.',
+  ];
+}
+
 export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
   const topFiles = dedupe(
     [...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles],
     3,
   );
   const recentFilesSnapshot = dedupe([...signals.openFiles, ...signals.recentFiles], 10);
-  const nextSteps = buildNextSteps(signals, topFiles).slice(0, 3);
+  const lowConfidence = isLowConfidenceSummary(signals, topFiles);
+  const candidateIntents = buildCandidateIntents(signals, topFiles);
+  const nextSteps = lowConfidence
+    ? buildLowConfidenceNextSteps(topFiles)
+    : buildNextSteps(signals, topFiles).slice(0, 3);
   const doneSinceLastResume = buildDoneSinceLastResume(signals);
   const pendingBlocked = buildPendingBlocked(signals, topFiles);
   const recommendedFirstAction = nextSteps[0] ?? pendingBlocked[0];
@@ -359,10 +399,20 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
       })
     : ['- None captured'];
 
-  const intent = buildIntent(signals, topFiles);
+  const intent = lowConfidence ? 'Unclear intent (low evidence).' : buildIntent(signals, topFiles);
   const detailsSections = [
     '## Intent',
     `- ${intent}`,
+    ...(lowConfidence
+      ? [
+          '',
+          '## Confidence',
+          '- Low confidence: evidence is sparse or ambiguous.',
+          '- Candidate intents:',
+          ...candidateIntents.map((candidate) => `  - ${candidate}`),
+          '- Suggested action: add a one-line checkpoint note.',
+        ]
+      : []),
     '',
     '## Next steps',
     ...nextSteps.map((step) => `- ${step}`),
@@ -432,6 +482,8 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     doneSinceLastResume,
     pendingBlocked,
     recommendedFirstAction,
+    lowConfidence,
+    candidateIntents,
     mode,
     currentBranch: signals.branch || undefined,
     lastFailingCommand: signals.failingCommand,

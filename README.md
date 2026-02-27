@@ -27,6 +27,7 @@ TaCoS is built around five non-negotiable principles:
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.
 - Lets you add checkpoint notes (“Future You” hints) and reuse them on resume.
 - Supports local-only summaries and optional AI refinement (`vscode-lm` / `openai`).
+- Marks low-confidence context explicitly and suggests safe clarification steps.
 
 ## Commands
 

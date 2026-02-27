@@ -28,6 +28,10 @@ function hasTarget(item: SummaryEvidenceItem): boolean {
 export function buildNextStepActions(
   input: BuildNextStepActionsInput,
 ): Array<NextStepAction | undefined> {
+  if (input.summary.lowConfidence) {
+    return input.summary.nextSteps.map(() => undefined);
+  }
+
   const evidenceById = new Map(
     (input.summary.evidenceCatalog ?? []).map((item) => [item.id, item] as const),
   );

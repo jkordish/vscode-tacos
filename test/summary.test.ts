@@ -89,4 +89,23 @@ describe('buildResumeSummary', () => {
     expect(summary.detailsMarkdown).toContain('## Session recap');
     expect(summary.detailsMarkdown).toContain('Recommended first action');
   });
+
+  it('marks low-confidence summaries explicitly when evidence is sparse', () => {
+    const signals = sampleSignals();
+    signals.changedFiles = [];
+    signals.openFiles = [];
+    signals.recentFiles = [];
+    signals.recentTerminal = [];
+    signals.recentDebug = [];
+    signals.doneItems = [];
+    signals.failingCommand = undefined;
+    signals.recentUrls = [];
+
+    const summary = buildResumeSummary(signals);
+    expect(summary.lowConfidence).toBe(true);
+    expect(summary.intent).toBe('Unclear intent (low evidence).');
+    expect(summary.candidateIntents?.length ?? 0).toBeGreaterThan(0);
+    expect(summary.nextSteps[0]).toContain('Unclear intent');
+    expect(summary.links.length).toBe(0);
+  });
 });

@@ -99,6 +99,8 @@ export interface ResumeSummary {
   doneSinceLastResume?: string[];
   pendingBlocked?: string[];
   recommendedFirstAction?: string;
+  lowConfidence?: boolean;
+  candidateIntents?: string[];
   mode?: ResumeMode;
   currentBranch?: string;
   previousBranch?: string;

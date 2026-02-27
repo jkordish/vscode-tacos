@@ -127,4 +127,28 @@ describe('buildNextStepActions', () => {
     expect(actions[0]).toBeUndefined();
     expect(actions[1]).toBeUndefined();
   });
+
+  it('gates all step actions when summary confidence is low', () => {
+    const summary = baseSummary({
+      lowConfidence: true,
+      nextStepEvidenceIds: [['file:src/extension.ts']],
+      evidenceCatalog: [
+        {
+          id: 'file:src/extension.ts',
+          kind: 'file',
+          label: 'src/extension.ts',
+          target: '/workspace/src/extension.ts',
+        },
+      ],
+    });
+
+    const actions = buildNextStepActions({
+      summary,
+      canRerunTask: true,
+      canRerunDebug: true,
+      canCopyFailingCommand: true,
+    });
+
+    expect(actions).toEqual([undefined, undefined]);
+  });
 });

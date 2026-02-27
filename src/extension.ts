@@ -2197,6 +2197,17 @@ function renderWebview(
       </div>
     </div>`
     : '';
+  const candidateIntentItems = (summary.candidateIntents ?? [])
+    .map((candidate) => `<li>${escapeHtml(candidate)}</li>`)
+    .join('');
+  const confidenceCard = summary.lowConfidence
+    ? `<div class="card">
+      <h3>Low Confidence</h3>
+      <p class="muted">Unclear intent (low evidence). Add one line of context before continuing.</p>
+      <ul class="compact-list">${candidateIntentItems || '<li>No strong candidates captured.</li>'}</ul>
+      <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add one-line checkpoint</button>
+    </div>`
+    : '';
   const linkItems = summary.links
     .map(
       (link, index) =>
@@ -2291,6 +2302,11 @@ function renderWebview(
     blockerTitle = 'Workspace is in Restricted Mode';
     blockerDetail =
       'Task/debug reruns and branch checkout are disabled until workspace trust is granted.';
+  } else if (summary.lowConfidence) {
+    blockerTitle = 'Low-confidence resume context';
+    blockerDetail = 'Evidence is sparse. Add a one-line checkpoint before taking risky actions.';
+    blockerActionLabel = 'Add checkpoint';
+    blockerAction = 'sessionAddCheckpoint';
   } else if (hasFailingTask) {
     blockerTitle = 'Last task failed';
     blockerDetail = `${state.lastTaskName} exited with code ${state.lastTaskExitCode}.`;
@@ -2829,6 +2845,8 @@ function renderWebview(
       <p>${escapeHtml(summary.intent)}</p>
       <p class="mode">Mode: ${escapeHtml(mode)}</p>
     </div>
+
+    ${confidenceCard}
 
     <div class="card">
       <h3>Next Steps</h3>
