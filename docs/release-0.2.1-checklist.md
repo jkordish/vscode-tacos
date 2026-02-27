@@ -20,14 +20,14 @@ Use this checklist to publish the `v0.2.1` stabilization release and start the p
 
 ## 3) Versioning + Changelog
 
-- [ ] Update `package.json` version to `0.2.1`.
-- [ ] Add `v0.2.1` section to `CHANGELOG.md` with stabilization highlights.
-- [ ] Confirm release notes reference all included stabilization PRs/issues.
+- [x] Update `package.json` version to `0.2.1`.
+- [x] Add `v0.2.1` section to `CHANGELOG.md` with stabilization highlights.
+- [x] Confirm release notes reference all included stabilization PRs/issues.
 
 ## 4) Verify Gates
 
-- [ ] `npm run verify`
-- [ ] Confirm CI checks are green on release branch.
+- [x] `npm run verify`
+- [x] Confirm CI checks are green on release branch.
 - [ ] Smoke check critical commands:
   - `TaCoS: Resume Summary Quick`
   - `TaCoS: Restore Working Set`
@@ -36,16 +36,16 @@ Use this checklist to publish the `v0.2.1` stabilization release and start the p
 
 ## 5) Tag + Publish
 
-- [ ] Merge release prep PR to `main`.
-- [ ] Create and push tag `v0.2.1`.
-- [ ] Publish GitHub release artifact/notes.
+- [x] Merge release prep PR to `main`.
+- [x] Create and push tag `v0.2.1`.
+- [x] Publish GitHub release artifact/notes.
 
 ## 6) Regression Window Anchor (Required)
 
 Regression-window start time is the published timestamp of the `v0.2.1` tag/release on GitHub.
 
-Record after publish:
+Recorded after publish:
 
-- [ ] `v0.2.1` release URL: `TBD`
-- [ ] Published at (UTC): `TBD`
-- [ ] Regression window end (UTC + 14 days): `TBD`
+- [x] `v0.2.1` release URL: `https://github.com/jkordish/vscode-tacos/releases/tag/v0.2.1`
+- [x] Published at (UTC): `2026-02-27T18:23:26Z`
+- [x] Regression window end (UTC + 14 days): `2026-03-13T18:23:26Z`
