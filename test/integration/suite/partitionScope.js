@@ -30,6 +30,21 @@ async function run() {
   await vscode.commands.executeCommand('tacos.__test.setPersistedBranch', 'feature/no-ticket');
   const fallback = await vscode.commands.executeCommand('tacos.__test.getPartitionScopeSnapshot');
   assert.equal(fallback?.resolvedTaskPartition, 'default');
+
+  await vscode.commands.executeCommand('tacos.__test.setPersistedBranch', '');
+  const noBranchFallback = await vscode.commands.executeCommand(
+    'tacos.__test.getPartitionScopeSnapshot',
+  );
+  assert.equal(
+    noBranchFallback?.scopeBranch,
+    'default',
+    'Expected default scope branch when live and persisted branch values are unavailable.',
+  );
+  assert.equal(
+    noBranchFallback?.resolvedTaskPartition,
+    'default',
+    'Expected default partition when no branch inference or manual key is available.',
+  );
 }
 
 module.exports = {
