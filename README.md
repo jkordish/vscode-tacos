@@ -2,6 +2,11 @@
 
 TaCoS is a VS Code extension that helps you resume work quickly with an instant local summary, evidence-backed next steps, and optional AI refinement.
 
+## Start Here
+
+- [5-minute Quickstart](docs/quickstart.md)
+- [Privacy & Safety](docs/privacy-safety.md)
+
 ## Why TaCoS
 
 TaCoS is built around five non-negotiable principles:
