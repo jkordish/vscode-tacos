@@ -21,6 +21,7 @@ TaCoS is built around five non-negotiable principles:
 - Shows a status bar companion entry with quick actions.
 - Adds panel status controls to refresh immediately and pause/resume auto summaries.
 - Includes a Trust Center card that summarizes tracking mode and privacy posture.
+- Adds trust cues (`Based on: X files • Y runs • branch Z`) with a "Why am I seeing this?" drill-down.
 - Adds a session recap card (`Done`, `Pending/blocked`, `Recommended first action`) with one-click checkpoint capture.
 - Shows confidence-gated companion nudges with cooldown and quiet-hours suppression.
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.

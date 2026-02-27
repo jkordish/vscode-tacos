@@ -36,6 +36,7 @@ import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability } from './restoreSafety';
 import { buildResumeSummary } from './summary';
 import { buildTimelineGroups } from './timeline';
+import { buildTrustCue } from './trustCue';
 import type {
   ExtensionConfig,
   MetricRecord,
@@ -1552,6 +1553,7 @@ function updateCompanionStatusBar(): void {
   const topStep = summary?.nextSteps[0]?.trim();
   const blockerCount = summary?.lastFailingCommand ? 1 : 0;
   const blockerSuffix = blockerCount > 0 ? ` · ${blockerCount} blocker` : '';
+  const trustCue = buildTrustCue(summary);
   state.statusBar.text = `${modeIcon} TaCoS: ${statusHeadline}${blockerSuffix}`;
   state.statusBar.backgroundColor =
     mode === 'restricted'
@@ -1566,6 +1568,7 @@ function updateCompanionStatusBar(): void {
     `Provider: ${describeProvider(config.summaryProvider)}`,
     `Privacy preset: ${PRIVACY_PRESET_LABELS[config.privacyPreset]}`,
     `Retention: ${RETENTION_POLICY_LABELS[config.retentionPolicy]}`,
+    trustCue.headline,
     summary ? `Intent: ${summarizeForStatusBar(summary.intent, 120)}` : 'Intent: (none yet)',
     topStep ? `Next: ${summarizeForStatusBar(topStep, 120)}` : 'Next: (none yet)',
     summary
@@ -2219,6 +2222,7 @@ function renderWebview(
     (state.lastTaskExitCode ?? 0) !== 0;
   const canOpenProblems = diagnostics.errorCount > 0 || diagnostics.warningCount > 0;
   const canOpenDiagnosticFile = Boolean(diagnostics.top);
+  const trustCue = buildTrustCue(summary);
   const nextStepActions = buildNextStepActions({
     summary,
     canRerunTask: availability.canRerunTask,
@@ -2378,6 +2382,7 @@ function renderWebview(
         : 'Redacted summary context and evidence when AI refinement runs.';
   const storedLocallyLabel =
     'Redacted activity snapshots, summary cache, checkpoint notes, and local metrics.';
+  const trustCueDetails = trustCue.details.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const autoSummaryStatusLabel = autoSummariesDisabled
     ? 'Auto summaries disabled'
     : autoSummariesPaused
@@ -2779,6 +2784,11 @@ function renderWebview(
       <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(trustTrackingLabel)}</div>
       <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(storedLocallyLabel)}</div>
       <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(sentToAiLabel)}</div>
+      <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(trustCue.headline.replace('Based on: ', ''))}</div>
+      <details>
+        <summary><strong>Why am I seeing this?</strong></summary>
+        <ul class="compact-list">${trustCueDetails || '<li>No evidence counts yet.</li>'}</ul>
+      </details>
       <div class="status-actions">
         <button type="button" class="secondary" data-action="toggleAutoSummaries" ${autoSummaryToggleDisabledAttr}>${escapeHtml(autoSummaryToggleLabel)}</button>
         <button type="button" class="secondary" data-action="openPrivacySafety">Open Privacy & Safety</button>
