@@ -64,6 +64,11 @@ import { isInQuietHours } from './quietHours';
 import { redactList, redactText } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability, type RestoreAvailability } from './restoreSafety';
+import {
+  SCRATCHPAD_FILES_SEGMENT,
+  scratchpadFileNameForScope,
+  workspaceScratchpadRootSegments,
+} from './scratchpadStorage';
 import { resolveScopeBranch as resolveScopeBranchFromInputs } from './scopeBranch';
 import { buildResumeSummary } from './summary';
 import { buildStandupUpdate } from './standup';
@@ -5786,12 +5791,9 @@ async function clearScratchpadStorageForWorkspace(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
 ): Promise<void> {
-  const scratchpadsDir = vscode.Uri.joinPath(
-    resolveScratchpadStorageRootUri(context, workspaceRoot),
-    'scratchpads',
-  );
+  const workspaceScratchpadRoot = resolveScratchpadStorageRootUri(context, workspaceRoot);
   try {
-    await vscode.workspace.fs.delete(scratchpadsDir, { recursive: true, useTrash: false });
+    await vscode.workspace.fs.delete(workspaceScratchpadRoot, { recursive: true, useTrash: false });
   } catch {
     // Ignore missing scratchpad storage paths.
   }
@@ -7111,22 +7113,31 @@ function scratchpadScopeLabel(scopeState: ScratchpadScopeState): string {
   return `Scope: ${scopeState.branch} / ${scopeState.partition}`;
 }
 
-function scratchpadScopeHash(scope: string): string {
-  return createHash('sha256').update(scope).digest('hex').slice(0, 24);
-}
-
 function resolveScratchpadStorageRootUri(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
 ): vscode.Uri {
+  const segments = workspaceScratchpadRootSegments(workspaceRoot);
   if (context.storageUri) {
-    return context.storageUri;
+    return vscode.Uri.joinPath(context.storageUri, ...segments);
   }
 
+  return vscode.Uri.joinPath(context.globalStorageUri, ...segments);
+}
+
+function resolveLegacyScratchpadFileUri(
+  context: vscode.ExtensionContext,
+  scope: string,
+): vscode.Uri | undefined {
+  if (!context.storageUri) {
+    return undefined;
+  }
+
+  // Pre-v0.4.0 layout stored scoped files directly under storageUri/scratchpads.
   return vscode.Uri.joinPath(
-    context.globalStorageUri,
-    'workspaces',
-    createHash('sha256').update(workspaceRoot).digest('hex').slice(0, 16),
+    context.storageUri,
+    SCRATCHPAD_FILES_SEGMENT,
+    scratchpadFileNameForScope(scope),
   );
 }
 
@@ -7139,8 +7150,8 @@ function resolveScratchpadFileUri(
   const rootUri = resolveScratchpadStorageRootUri(context, workspaceRoot);
   const uri = vscode.Uri.joinPath(
     rootUri,
-    'scratchpads',
-    `${scratchpadScopeHash(scopeState.scope)}.md`,
+    SCRATCHPAD_FILES_SEGMENT,
+    scratchpadFileNameForScope(scopeState.scope),
   );
   return { uri, scopeState };
 }
@@ -7160,9 +7171,10 @@ async function ensureScratchpadDocument(
   branchHint?: string,
 ): Promise<{ document: vscode.TextDocument; uri: vscode.Uri; scopeState: ScratchpadScopeState }> {
   const { uri, scopeState } = resolveScratchpadFileUri(context, workspaceRoot, branchHint);
+  await migrateLegacyScratchpadFileIfNeeded(context, workspaceRoot, scopeState.scope, uri);
   const scratchpadsDir = vscode.Uri.joinPath(
     resolveScratchpadStorageRootUri(context, workspaceRoot),
-    'scratchpads',
+    SCRATCHPAD_FILES_SEGMENT,
   );
   await vscode.workspace.fs.createDirectory(scratchpadsDir);
   if (!(await fileExists(uri))) {
@@ -7171,6 +7183,39 @@ async function ensureScratchpadDocument(
 
   const document = await vscode.workspace.openTextDocument(uri);
   return { document, uri, scopeState };
+}
+
+async function migrateLegacyScratchpadFileIfNeeded(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  scope: string,
+  targetUri: vscode.Uri,
+): Promise<void> {
+  const legacyUri = resolveLegacyScratchpadFileUri(context, scope);
+  if (!legacyUri) {
+    return;
+  }
+
+  if (await fileExists(targetUri)) {
+    return;
+  }
+  if (!(await fileExists(legacyUri))) {
+    return;
+  }
+
+  const scratchpadsDir = vscode.Uri.joinPath(
+    resolveScratchpadStorageRootUri(context, workspaceRoot),
+    SCRATCHPAD_FILES_SEGMENT,
+  );
+  await vscode.workspace.fs.createDirectory(scratchpadsDir);
+
+  try {
+    const bytes = await vscode.workspace.fs.readFile(legacyUri);
+    await vscode.workspace.fs.writeFile(targetUri, bytes);
+    await vscode.workspace.fs.delete(legacyUri, { recursive: false, useTrash: false });
+  } catch {
+    // Keep legacy file intact on migration errors.
+  }
 }
 
 function extractScratchpadPreviewLines(
@@ -7206,6 +7251,7 @@ async function refreshPanelScratchpadState(
     root,
     state.panelSummary?.currentBranch,
   );
+  await migrateLegacyScratchpadFileIfNeeded(context, root, scopeState.scope, uri);
   let exists = false;
   let sizeBytes = 0;
   try {
