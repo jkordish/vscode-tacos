@@ -85,8 +85,10 @@ describe('buildResumeSummary', () => {
     const summary = buildResumeSummary(sampleSignals());
 
     expect(summary.doneSinceLastResume).toEqual(['npm run build']);
+    expect(summary.changesSinceLastResume?.[0]).toContain('Diffstat:');
     expect(summary.pendingBlocked?.[0]).toContain('Failing command still unresolved');
     expect(summary.detailsMarkdown).toContain('## Session recap');
+    expect(summary.detailsMarkdown).toContain('Changes since last resume');
     expect(summary.detailsMarkdown).toContain('Recommended first action');
   });
 

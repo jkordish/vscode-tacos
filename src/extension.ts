@@ -2516,6 +2516,13 @@ function renderWebview(
       </div>
     </div>`
       : '';
+  const changesSinceItems = (summary.changesSinceLastResume ?? [])
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join('');
+  const changesSinceCard = `<div class="card">
+      <h3>Changes Since Last Time</h3>
+      <ul class="compact-list">${changesSinceItems || '<li>No changes captured.</li>'}</ul>
+    </div>`;
   const nudgeCard =
     primaryNudge || secondaryNudge || nudgeSuppressionLabel
       ? `<div class="card">
@@ -2863,6 +2870,7 @@ function renderWebview(
 
     ${checkpointCard}
     ${recapCard}
+    ${changesSinceCard}
     ${nudgeCard}
     <div class="card">
       <h3>Companion Home</h3>

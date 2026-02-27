@@ -23,6 +23,7 @@ TaCoS is built around five non-negotiable principles:
 - Includes a Trust Center card that summarizes tracking mode and privacy posture.
 - Adds trust cues (`Based on: X files • Y runs • branch Z`) with a "Why am I seeing this?" drill-down.
 - Adds a session recap card (`Done`, `Pending/blocked`, `Recommended first action`) with one-click checkpoint capture.
+- Adds a compact `Changes Since Last Time` card (diffstat, runs, blockers, key files/links).
 - Shows confidence-gated companion nudges with cooldown and quiet-hours suppression.
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.
 - Lets you add checkpoint notes (“Future You” hints) and reuse them on resume.

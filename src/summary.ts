@@ -139,6 +139,41 @@ function buildPendingBlocked(signals: ResumeSignals, topFiles: string[]): string
   return dedupe(pending, 3).slice(0, 3);
 }
 
+function buildChangesSinceLastResume(signals: ResumeSignals, topFiles: string[]): string[] {
+  const changes: string[] = [];
+  const diffStatLine = signals.gitDiffStat
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (diffStatLine) {
+    changes.push(`Diffstat: ${diffStatLine}`);
+  }
+
+  const runs = dedupe(signals.recentTerminal, 2);
+  if (runs.length > 0) {
+    changes.push(`Runs: ${runs.join(' | ')}`);
+  }
+
+  if (signals.failingCommand) {
+    changes.push(`Blocker: ${signals.failingCommand}`);
+  }
+
+  if (topFiles.length > 0) {
+    changes.push(`Key files: ${topFiles.slice(0, 2).join(', ')}`);
+  }
+
+  const links = dedupe(signals.recentUrls, 2);
+  if (links.length > 0) {
+    changes.push(`Key links: ${links.join(', ')}`);
+  }
+
+  if (changes.length === 0) {
+    changes.push('No recent changes captured.');
+  }
+
+  return changes.slice(0, 5);
+}
+
 function normalizeTerminalEntryForMode(rawEntry: string): string {
   const entry = rawEntry.trim();
   if (!entry) {
@@ -384,6 +419,7 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     ? buildLowConfidenceNextSteps(topFiles)
     : buildNextSteps(signals, topFiles).slice(0, 3);
   const doneSinceLastResume = buildDoneSinceLastResume(signals);
+  const changesSinceLastResume = buildChangesSinceLastResume(signals, topFiles);
   const pendingBlocked = buildPendingBlocked(signals, topFiles);
   const recommendedFirstAction = nextSteps[0] ?? pendingBlocked[0];
   const mode = detectResumeMode(signals);
@@ -422,6 +458,8 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     ...(doneSinceLastResume.length > 0
       ? doneSinceLastResume.map((item) => `  - ${item}`)
       : ['  - None captured']),
+    '- Changes since last resume:',
+    ...changesSinceLastResume.map((item) => `  - ${item}`),
     '- Pending / blocked:',
     ...(pendingBlocked.length > 0
       ? pendingBlocked.map((item) => `  - ${item}`)
@@ -480,6 +518,7 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     nextSteps,
     nextStepEvidenceIds,
     doneSinceLastResume,
+    changesSinceLastResume,
     pendingBlocked,
     recommendedFirstAction,
     lowConfidence,

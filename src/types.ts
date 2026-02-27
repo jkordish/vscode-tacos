@@ -98,6 +98,7 @@ export interface ResumeSummary {
   nextSteps: string[];
   nextStepEvidenceIds?: string[][];
   doneSinceLastResume?: string[];
+  changesSinceLastResume?: string[];
   pendingBlocked?: string[];
   recommendedFirstAction?: string;
   lowConfidence?: boolean;
