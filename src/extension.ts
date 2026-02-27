@@ -36,6 +36,7 @@ import { redactList, redactText } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability } from './restoreSafety';
 import { buildResumeSummary } from './summary';
+import { buildStandupUpdate } from './standup';
 import { buildTimelineGroups } from './timeline';
 import { buildTrustCue } from './trustCue';
 import type {
@@ -307,6 +308,9 @@ export function activate(context: vscode.ExtensionContext): void {
         workspaceRoot: root,
         checkpointNote: getCheckpointNote(context, root),
       });
+    }),
+    vscode.commands.registerCommand('tacos.generateStandupUpdate', async () => {
+      await generateStandupUpdateCommand(context);
     }),
     vscode.commands.registerCommand('tacos.jumpToLastEdit', async () => {
       await jumpToRecentEdit(context);
@@ -1102,6 +1106,14 @@ async function generateSummary(
     };
   }
 
+  const hasConsent = await ensureAiPayloadConsent(context, prepared);
+  if (!hasConsent) {
+    return {
+      summary: prepared.summary,
+      triggerReason: prepared.triggerReason,
+    };
+  }
+
   const refined = await generateAiSummary(prepared);
   if (!refined) {
     return {
@@ -1616,6 +1628,7 @@ interface CompanionActionPick extends vscode.QuickPickItem {
   id:
     | 'showNow'
     | 'showLast'
+    | 'standup'
     | 'jumpLastEdit'
     | 'copyPrompt'
     | 'togglePause'
@@ -1643,6 +1656,11 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'showLast',
       label: 'Show last summary',
       detail: 'Open the latest cached TaCoS summary.',
+    },
+    {
+      id: 'standup',
+      label: 'Generate standup update',
+      detail: 'Create concise Done/Next/Blockers output.',
     },
     {
       id: 'jumpLastEdit',
@@ -1731,6 +1749,9 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'showLast') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.showLastSummary');
+  } else if (picked.id === 'standup') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.generateStandupUpdate');
   } else if (picked.id === 'jumpLastEdit') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.jumpToLastEdit');
@@ -3185,6 +3206,42 @@ async function openSummaryEditor(content: string): Promise<void> {
     viewColumn: vscode.ViewColumn.Beside,
     preserveFocus: false,
   });
+}
+
+async function generateStandupUpdateCommand(context: vscode.ExtensionContext): Promise<void> {
+  const root = pickWorkspaceRoot();
+  if (!root) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(root));
+  const summary = cached ?? (await generateSummary(context, root, 'manual')).summary;
+  const standup = buildStandupUpdate(summary, path.basename(root), Date.now());
+  const action = await vscode.window.showInformationMessage(
+    'TaCoS: standup update generated.',
+    'Copy',
+    'Open',
+    'Copy + Open',
+  );
+  if (action === 'Copy') {
+    await vscode.env.clipboard.writeText(standup);
+    void vscode.window.showInformationMessage('TaCoS: standup update copied to clipboard.');
+    return;
+  }
+
+  if (action === 'Open') {
+    await openSummaryEditor(standup);
+    return;
+  }
+
+  if (action === 'Copy + Open') {
+    await vscode.env.clipboard.writeText(standup);
+    await openSummaryEditor(standup);
+    void vscode.window.showInformationMessage(
+      'TaCoS: standup update copied and opened in an editor tab.',
+    );
+  }
 }
 
 function formatMarkdownSummary(summary: ResumeSummary): string {

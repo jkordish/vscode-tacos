@@ -36,6 +36,7 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Show Resume Brief Now`
 - `TaCoS: Copy Prompt and Open Codex`
 - `TaCoS: Show Last Summary`
+- `TaCoS: Generate Standup Update`
 - `TaCoS: Jump to Last Edit`
 - `TaCoS: Set Privacy Preset`
 - `TaCoS: Set Retention Policy`
