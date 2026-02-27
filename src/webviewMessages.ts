@@ -8,6 +8,7 @@ const SIMPLE_MESSAGE_TYPES = [
   'refreshSummary',
   'toggleAutoSummaries',
   'openPrivacySafety',
+  'rateHelpfulness',
   'sessionAddCheckpoint',
   'blockedLink',
 ] as const;

@@ -3,15 +3,23 @@ import type { MetricRecord } from './types';
 const CSV_HEADERS = [
   'startedAtMs',
   'startedAtIso',
+  'sessionDate',
   'workspaceRoot',
   'trigger',
+  'uiSurface',
+  'interruptionEvent',
   'firstMeaningfulEditLagMs',
   'firstRunLagMs',
+  'firstActionLagMs',
   'companionFirstActionLagMs',
   'companionPromptImpressions',
   'companionForcedOpenDetailsClicks',
   'companionQuickActionsTaken',
   'companionNudgeImpressions',
+  'helpfulnessRating',
+  'pauseActions',
+  'snoozeActions',
+  'disableActions',
   'companionActionFollowThroughRate',
   'companionForcedOpenRate',
 ] as const;
@@ -37,14 +45,26 @@ function toRatio(numerator: number, denominator: number): string {
 }
 
 export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
+  if (!Number.isFinite(metric.startedAt) || !metric.workspaceRoot.trim()) {
+    return false;
+  }
+
   return (
+    metric.trigger === 'focus' ||
+    metric.trigger === 'manual' ||
+    metric.trigger === 'cached' ||
     metric.firstMeaningfulEditLagMs !== undefined ||
     metric.firstRunLagMs !== undefined ||
+    metric.firstActionLagMs !== undefined ||
     metric.companionFirstActionLagMs !== undefined ||
     (metric.companionPromptImpressions ?? 0) > 0 ||
     (metric.companionForcedOpenDetailsClicks ?? 0) > 0 ||
     (metric.companionQuickActionsTaken ?? 0) > 0 ||
-    (metric.companionNudgeImpressions ?? 0) > 0
+    (metric.companionNudgeImpressions ?? 0) > 0 ||
+    typeof metric.helpfulnessRating === 'number' ||
+    (metric.pauseActions ?? 0) > 0 ||
+    (metric.snoozeActions ?? 0) > 0 ||
+    (metric.disableActions ?? 0) > 0
   );
 }
 
@@ -55,18 +75,27 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
     const prompts = metric.companionPromptImpressions ?? 0;
     const forcedOpens = metric.companionForcedOpenDetailsClicks ?? 0;
     const quickActions = metric.companionQuickActionsTaken ?? 0;
+    const sessionDate = new Date(metric.startedAt).toISOString().slice(0, 10);
     const fields = [
       String(metric.startedAt),
       new Date(metric.startedAt).toISOString(),
+      sessionDate,
       metric.workspaceRoot,
       metric.trigger,
+      metric.uiSurface ?? '',
+      toOptionalNumber(metric.interruptionEvent),
       toOptionalNumber(metric.firstMeaningfulEditLagMs),
       toOptionalNumber(metric.firstRunLagMs),
+      toOptionalNumber(metric.firstActionLagMs),
       toOptionalNumber(metric.companionFirstActionLagMs),
       toOptionalNumber(metric.companionPromptImpressions),
       toOptionalNumber(metric.companionForcedOpenDetailsClicks),
       toOptionalNumber(metric.companionQuickActionsTaken),
       toOptionalNumber(metric.companionNudgeImpressions),
+      toOptionalNumber(metric.helpfulnessRating),
+      toOptionalNumber(metric.pauseActions),
+      toOptionalNumber(metric.snoozeActions),
+      toOptionalNumber(metric.disableActions),
       toRatio(quickActions, prompts),
       toRatio(forcedOpens, prompts),
     ];

@@ -13,6 +13,9 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'openPrivacySafety' })).toEqual({
       type: 'openPrivacySafety',
     });
+    expect(parseWebviewMessage({ type: 'rateHelpfulness' })).toEqual({
+      type: 'rateHelpfulness',
+    });
     expect(parseWebviewMessage({ type: 'sessionAddCheckpoint' })).toEqual({
       type: 'sessionAddCheckpoint',
     });

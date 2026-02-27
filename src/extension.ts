@@ -318,9 +318,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.revokeAiPayloadConsent', async () => {
       await revokeAiPayloadConsent(context);
     }),
+    vscode.commands.registerCommand('tacos.rateSummaryHelpfulness', async () => {
+      await promptSummaryHelpfulnessRating();
+    }),
     vscode.commands.registerCommand('tacos.pauseSummaries', async () => {
       state.pauseUntilRestart = false;
       await setPaused(true);
+      recordMetricCounter('pauseActions');
       updateCompanionStatusBar();
       void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
     }),
@@ -333,6 +337,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.toggleEnabled', async () => {
       const config = getConfig();
       await setEnabled(!config.enabled);
+      if (config.enabled) {
+        recordMetricCounter('disableActions');
+      }
       void vscode.window.showInformationMessage(
         !config.enabled
           ? 'TaCoS: automatic summaries enabled.'
@@ -341,6 +348,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.pauseUntilRestart', async () => {
       state.pauseUntilRestart = true;
+      recordMetricCounter('snoozeActions');
       updateCompanionStatusBar();
       rerenderPanel();
       void vscode.window.showInformationMessage('TaCoS: summaries paused until VS Code restarts.');
@@ -504,6 +512,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.debug.onDidStartDebugSession(async (session) => {
       const label = session?.name ? `${session.type}: ${session.name}` : session.type;
       if (label) {
+        recordFirstActionLag();
         state.recentDebug.push(label);
         state.lastDebugConfigName = session.name;
         state.lastDebugWorkspaceRoot = session.workspaceFolder?.uri.fsPath;
@@ -516,6 +525,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.tasks.onDidStartTaskProcess((event) => {
       const task = event.execution.task;
+      recordFirstActionLag();
       state.lastTaskName = task.name;
       state.lastTaskWorkspaceRoot = taskWorkspaceRoot(task) ?? pickWorkspaceRoot();
       markMeaningfulActivity();
@@ -788,6 +798,7 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       state.metricSession &&
       state.metricSession.firstRunLagMs === undefined
     ) {
+      recordFirstActionLag();
       state.metricSession.firstRunLagMs = Date.now() - state.metricSession.startedAt;
       await maybeFinalizeMetric(context);
     }
@@ -1206,6 +1217,8 @@ async function presentSummary(
       startedAt: Date.now(),
       workspaceRoot: root,
       trigger: triggerReason,
+      uiSurface: config.uiSurface,
+      interruptionEvent: triggerReason === 'focus' && config.uiSurface === 'notification' ? 1 : 0,
     };
   }
 
@@ -1276,6 +1289,9 @@ async function presentSummary(
   if (choice === actionPauseLabel) {
     recordCompanionQuickAction();
     await setPaused(!config.pauseSummaries);
+    if (!config.pauseSummaries) {
+      recordMetricCounter('pauseActions');
+    }
     void vscode.window.showInformationMessage(
       !config.pauseSummaries ? 'TaCoS: auto summaries paused.' : 'TaCoS: auto summaries resumed.',
     );
@@ -1356,11 +1372,20 @@ function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeM
   return 'active';
 }
 
+function recordFirstActionLag(): void {
+  if (!state.metricSession || state.metricSession.firstActionLagMs !== undefined) {
+    return;
+  }
+
+  state.metricSession.firstActionLagMs = Date.now() - state.metricSession.startedAt;
+}
+
 function recordCompanionFirstActionLag(): void {
   if (!state.metricSession || state.metricSession.companionFirstActionLagMs !== undefined) {
     return;
   }
 
+  recordFirstActionLag();
   state.metricSession.companionFirstActionLagMs = Date.now() - state.metricSession.startedAt;
 }
 
@@ -1400,6 +1425,45 @@ function recordCompanionNudgeImpression(): void {
 
   state.metricSession.companionNudgeImpressions =
     (state.metricSession.companionNudgeImpressions ?? 0) + 1;
+}
+
+function recordMetricCounter(
+  field: 'pauseActions' | 'snoozeActions' | 'disableActions',
+): void {
+  if (!state.metricSession) {
+    return;
+  }
+
+  state.metricSession[field] = (state.metricSession[field] ?? 0) + 1;
+}
+
+async function promptSummaryHelpfulnessRating(): Promise<void> {
+  if (!state.metricSession) {
+    void vscode.window.showInformationMessage(
+      'TaCoS: generate or refresh a summary first to record helpfulness for this session.',
+    );
+    return;
+  }
+
+  type HelpfulnessPick = vscode.QuickPickItem & { rating: 1 | 2 | 3 | 4 | 5 };
+  const picks: HelpfulnessPick[] = [
+    { rating: 5, label: '5 - Very helpful' },
+    { rating: 4, label: '4 - Helpful' },
+    { rating: 3, label: '3 - Mixed' },
+    { rating: 2, label: '2 - Not very helpful' },
+    { rating: 1, label: '1 - Not helpful' },
+  ];
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Rate Summary Helpfulness',
+    placeHolder: 'Optional local rating',
+    ignoreFocusOut: true,
+  });
+  if (!picked || !state.metricSession) {
+    return;
+  }
+
+  state.metricSession.helpfulnessRating = picked.rating;
+  void vscode.window.showInformationMessage(`TaCoS: helpfulness rating saved (${picked.rating}/5).`);
 }
 
 function nudgeActionLabel(action: string): string {
@@ -1525,7 +1589,8 @@ interface CompanionActionPick extends vscode.QuickPickItem {
     | 'setPrivacyPreset'
     | 'setRetentionPolicy'
     | 'forgetWorkspace'
-    | 'revokeAiConsent';
+    | 'revokeAiConsent'
+    | 'rateHelpfulness';
 }
 
 async function showCompanionActions(context: vscode.ExtensionContext): Promise<void> {
@@ -1581,6 +1646,11 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'revokeAiConsent',
       label: 'Revoke AI payload consent',
       detail: 'Require payload review before the next AI send.',
+    },
+    {
+      id: 'rateHelpfulness',
+      label: 'Rate summary helpfulness',
+      detail: 'Optional local rating for TaCoS quality metrics.',
     },
   ];
 
@@ -1643,6 +1713,9 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'revokeAiConsent') {
     recordCompanionQuickAction();
     await revokeAiPayloadConsent(context);
+  } else if (picked.id === 'rateHelpfulness') {
+    recordCompanionQuickAction();
+    await promptSummaryHelpfulnessRating();
   } else if (picked.id === 'enable') {
     recordCompanionQuickAction();
     await setEnabled(true);
@@ -1656,6 +1729,7 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
     } else {
       state.pauseUntilRestart = false;
       await setPaused(true);
+      recordMetricCounter('pauseActions');
       void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
     }
     rerenderPanel();
@@ -1829,6 +1903,7 @@ async function showDetailsPanel(
           void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
         } else {
           await setPaused(true);
+          recordMetricCounter('pauseActions');
           void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
         }
 
@@ -1840,6 +1915,12 @@ async function showDetailsPanel(
       if (message.type === 'openPrivacySafety') {
         recordCompanionQuickAction();
         await openPrivacySafetyDoc(context);
+        return;
+      }
+
+      if (message.type === 'rateHelpfulness') {
+        recordCompanionQuickAction();
+        await promptSummaryHelpfulnessRating();
         return;
       }
 
@@ -2761,6 +2842,7 @@ function renderWebview(
       <div class="quick-actions">
         <button type="button" data-action="copyNextSteps">Copy next steps</button>
         <button type="button" data-action="copySummary">Copy summary</button>
+        <button type="button" data-action="rateHelpfulness">Rate helpfulness</button>
         <button type="button" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
       </div>
     </div>
@@ -2820,6 +2902,7 @@ function renderWebview(
         'refreshSummary',
         'toggleAutoSummaries',
         'openPrivacySafety',
+        'rateHelpfulness',
         'runNextStepAction',
         'restoreJumpToLastEdit',
         'restoreReopenFiles',

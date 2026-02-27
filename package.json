@@ -53,6 +53,7 @@
     "onCommand:tacos.setRetentionPolicy",
     "onCommand:tacos.forgetWorkspaceNow",
     "onCommand:tacos.revokeAiPayloadConsent",
+    "onCommand:tacos.rateSummaryHelpfulness",
     "onCommand:tacos.pauseSummaries",
     "onCommand:tacos.resumeSummaries",
     "onCommand:tacos.toggleEnabled",
@@ -106,6 +107,10 @@
       {
         "command": "tacos.revokeAiPayloadConsent",
         "title": "TaCoS: Revoke AI Payload Consent"
+      },
+      {
+        "command": "tacos.rateSummaryHelpfulness",
+        "title": "TaCoS: Rate Summary Helpfulness"
       },
       {
         "command": "tacos.pauseSummaries",

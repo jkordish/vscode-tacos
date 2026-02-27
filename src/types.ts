@@ -121,13 +121,20 @@ export interface MetricRecord {
   startedAt: number;
   workspaceRoot: string;
   trigger: TriggerReason;
+  uiSurface?: UiSurface;
+  interruptionEvent?: number;
   firstMeaningfulEditLagMs?: number;
   firstRunLagMs?: number;
+  firstActionLagMs?: number;
   companionFirstActionLagMs?: number;
   companionPromptImpressions?: number;
   companionForcedOpenDetailsClicks?: number;
   companionQuickActionsTaken?: number;
   companionNudgeImpressions?: number;
+  helpfulnessRating?: 1 | 2 | 3 | 4 | 5;
+  pauseActions?: number;
+  snoozeActions?: number;
+  disableActions?: number;
 }
 
 export interface VscodeLmModelSelector {

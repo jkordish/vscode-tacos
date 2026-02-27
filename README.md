@@ -38,6 +38,7 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Set Retention Policy`
 - `TaCoS: Forget This Workspace Now`
 - `TaCoS: Revoke AI Payload Consent`
+- `TaCoS: Rate Summary Helpfulness`
 - `TaCoS: Pause Auto Summaries`
 - `TaCoS: Resume Auto Summaries`
 - `TaCoS: Toggle Summaries Enabled`
@@ -106,6 +107,10 @@ Key companion fields:
 - `companionForcedOpenDetailsClicks`: forced-click count when prompt mode is used.
 - `companionQuickActionsTaken`: panel/status-bar follow-through actions.
 - `companionFirstActionLagMs`: ms from summary display to first companion action.
+- `firstActionLagMs`: ms from summary display to first task/test/debug/companion action.
+- `interruptionEvent`: `1` for focus-triggered notification-mode prompts; else `0`.
+- `helpfulnessRating`: optional local user rating (`1`-`5`) via command.
+- `pauseActions` / `snoozeActions` / `disableActions`: local opt-out interaction counters.
 - `companionActionFollowThroughRate` (CSV): quick actions ÷ prompt impressions.
 - `companionForcedOpenRate` (CSV): forced opens ÷ prompt impressions.
 
