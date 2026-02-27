@@ -54,6 +54,7 @@ const KEY_RECENT_DEBUG = 'tacos.recentDebug';
 const KEY_RECENT_URLS = 'tacos.recentUrls';
 const KEY_DONE_ITEMS = 'tacos.doneItems';
 const KEY_LAST_FAILING_COMMAND = 'tacos.lastFailingCommand';
+const KEY_ACTIVITY_STORAGE_PREFIX = 'tacos.activityScoped';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
 const KEY_SUMMARY_CORRECTIONS_PREFIX = 'tacos.summaryCorrections';
 const KEY_VSCODE_LM_SELECTOR = 'tacos.vscodeLmSelector';
@@ -3834,6 +3835,9 @@ async function openPrivacySafetyDoc(context: vscode.ExtensionContext): Promise<v
 }
 
 interface PersistedActivitySnapshot {
+  workspaceRoot: string;
+  storageKey: string;
+  usedLegacyGlobalState: boolean;
   raw: PersistedActivityState;
   sanitized: PersistedActivityState;
 }
@@ -3851,10 +3855,48 @@ function getPersistedStringArray(
   return stored.filter((value): value is string => typeof value === 'string');
 }
 
-function loadPersistedActivitySnapshot(
+function getWorkspacePersistedStringArray(
+  stored: Record<string, unknown>,
+  key: keyof PersistedActivityState,
+): string[] {
+  const value = stored[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+function readScopedActivityState(
   context: vscode.ExtensionContext,
-): PersistedActivitySnapshot {
-  const raw: PersistedActivityState = {
+  storageKey: string,
+): PersistedActivityState {
+  const raw = context.workspaceState.get<unknown>(storageKey);
+  if (!raw || typeof raw !== 'object') {
+    return {
+      recentFiles: [],
+      recentTerminal: [],
+      recentDebug: [],
+      recentUrls: [],
+      doneItems: [],
+      lastFailingCommand: undefined,
+    };
+  }
+
+  const stored = raw as Record<string, unknown>;
+  return {
+    recentFiles: getWorkspacePersistedStringArray(stored, 'recentFiles'),
+    recentTerminal: getWorkspacePersistedStringArray(stored, 'recentTerminal'),
+    recentDebug: getWorkspacePersistedStringArray(stored, 'recentDebug'),
+    recentUrls: getWorkspacePersistedStringArray(stored, 'recentUrls'),
+    doneItems: getWorkspacePersistedStringArray(stored, 'doneItems'),
+    lastFailingCommand:
+      typeof stored.lastFailingCommand === 'string' ? stored.lastFailingCommand : undefined,
+  };
+}
+
+function readLegacyGlobalActivityState(context: vscode.ExtensionContext): PersistedActivityState {
+  return {
     recentFiles: getPersistedStringArray(context, KEY_RECENT_FILES),
     recentTerminal: getPersistedStringArray(context, KEY_RECENT_TERMINAL),
     recentDebug: getPersistedStringArray(context, KEY_RECENT_DEBUG),
@@ -3862,11 +3904,45 @@ function loadPersistedActivitySnapshot(
     doneItems: getPersistedStringArray(context, KEY_DONE_ITEMS),
     lastFailingCommand: context.globalState.get<string>(KEY_LAST_FAILING_COMMAND),
   };
+}
+
+function isEmptyActivityState(activity: PersistedActivityState): boolean {
+  return (
+    activity.recentFiles.length === 0 &&
+    activity.recentTerminal.length === 0 &&
+    activity.recentDebug.length === 0 &&
+    activity.recentUrls.length === 0 &&
+    activity.doneItems.length === 0 &&
+    !activity.lastFailingCommand?.trim()
+  );
+}
+
+function scopedActivityStorageKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
+  const branch = context.workspaceState.get<string>(branchStateKey(workspaceRoot), '').trim();
+  const scope = branch ? `${workspaceRoot}::${branch}` : workspaceRoot;
+  const normalizedScope = scope.trim() || '__no_workspace__';
+  return `${KEY_ACTIVITY_STORAGE_PREFIX}.${Buffer.from(normalizedScope).toString('base64url')}`;
+}
+
+function loadPersistedActivitySnapshot(
+  context: vscode.ExtensionContext,
+): PersistedActivitySnapshot {
+  const workspaceRoot = pickWorkspaceRoot() ?? '';
+  const storageKey = scopedActivityStorageKey(context, workspaceRoot);
+  const scopedRaw = readScopedActivityState(context, storageKey);
+  const legacyRaw = readLegacyGlobalActivityState(context);
+  const usedLegacyGlobalState = isEmptyActivityState(scopedRaw) && !isEmptyActivityState(legacyRaw);
+  const raw = usedLegacyGlobalState ? legacyRaw : scopedRaw;
 
   const config = getConfig();
-  const workspaceRoot = pickWorkspaceRoot() ?? '';
   const sanitized = sanitizeActivityForPersistence(raw, workspaceRoot, config.redactionPatterns);
-  return { raw, sanitized };
+  return {
+    workspaceRoot,
+    storageKey,
+    usedLegacyGlobalState,
+    raw,
+    sanitized,
+  };
 }
 
 function sameStringList(a: string[], b: string[]): boolean {
@@ -3895,26 +3971,29 @@ async function migrateLegacyPersistedActivityIfNeeded(
   context: vscode.ExtensionContext,
   snapshot: PersistedActivitySnapshot,
 ): Promise<void> {
-  if (!didPersistedActivityChange(snapshot.raw, snapshot.sanitized)) {
+  if (!snapshot.usedLegacyGlobalState && !didPersistedActivityChange(snapshot.raw, snapshot.sanitized)) {
     return;
   }
 
+  await context.workspaceState.update(snapshot.storageKey, snapshot.sanitized);
+
   await Promise.all([
-    context.globalState.update(KEY_RECENT_FILES, snapshot.sanitized.recentFiles),
-    context.globalState.update(KEY_RECENT_TERMINAL, snapshot.sanitized.recentTerminal),
-    context.globalState.update(KEY_RECENT_DEBUG, snapshot.sanitized.recentDebug),
-    context.globalState.update(KEY_RECENT_URLS, snapshot.sanitized.recentUrls),
-    context.globalState.update(KEY_DONE_ITEMS, snapshot.sanitized.doneItems),
-    context.globalState.update(KEY_LAST_FAILING_COMMAND, snapshot.sanitized.lastFailingCommand),
+    context.globalState.update(KEY_RECENT_FILES, undefined),
+    context.globalState.update(KEY_RECENT_TERMINAL, undefined),
+    context.globalState.update(KEY_RECENT_DEBUG, undefined),
+    context.globalState.update(KEY_RECENT_URLS, undefined),
+    context.globalState.update(KEY_DONE_ITEMS, undefined),
+    context.globalState.update(KEY_LAST_FAILING_COMMAND, undefined),
   ]);
 
-  state.output.appendLine('TaCoS: migrated legacy persisted activity to sanitized storage.');
+  state.output.appendLine(
+    `TaCoS: migrated legacy persisted activity to workspace-scoped sanitized storage (${snapshot.storageKey}).`,
+  );
 }
 
 // SECURITY INVARIANT:
-// ONLY this function may persist activity-derived string keys:
-// KEY_RECENT_FILES, KEY_RECENT_TERMINAL, KEY_RECENT_DEBUG, KEY_RECENT_URLS, KEY_DONE_ITEMS, KEY_LAST_FAILING_COMMAND.
-// It must redact before writing to storage.
+// ONLY this function may persist activity-derived state.
+// It must redact before writing and must write only to workspaceState scoped storage.
 async function persistActivity(context: vscode.ExtensionContext): Promise<void> {
   const config = getConfig();
   const workspaceRoot = pickWorkspaceRoot() ?? '';
@@ -3931,14 +4010,8 @@ async function persistActivity(context: vscode.ExtensionContext): Promise<void> 
     config.redactionPatterns,
   );
 
-  await Promise.all([
-    context.globalState.update(KEY_RECENT_FILES, persisted.recentFiles),
-    context.globalState.update(KEY_RECENT_TERMINAL, persisted.recentTerminal),
-    context.globalState.update(KEY_RECENT_DEBUG, persisted.recentDebug),
-    context.globalState.update(KEY_RECENT_URLS, persisted.recentUrls),
-    context.globalState.update(KEY_DONE_ITEMS, persisted.doneItems),
-    context.globalState.update(KEY_LAST_FAILING_COMMAND, persisted.lastFailingCommand),
-  ]);
+  const storageKey = scopedActivityStorageKey(context, workspaceRoot);
+  await context.workspaceState.update(storageKey, persisted);
 }
 
 async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<void> {
