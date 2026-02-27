@@ -49,6 +49,9 @@
     "onCommand:tacos.copyPromptAndOpenCodex",
     "onCommand:tacos.showLastSummary",
     "onCommand:tacos.jumpToLastEdit",
+    "onCommand:tacos.setPrivacyPreset",
+    "onCommand:tacos.setRetentionPolicy",
+    "onCommand:tacos.forgetWorkspaceNow",
     "onCommand:tacos.pauseSummaries",
     "onCommand:tacos.resumeSummaries",
     "onCommand:tacos.toggleEnabled",
@@ -86,6 +89,18 @@
       {
         "command": "tacos.jumpToLastEdit",
         "title": "TaCoS: Jump to Last Edit"
+      },
+      {
+        "command": "tacos.setPrivacyPreset",
+        "title": "TaCoS: Set Privacy Preset"
+      },
+      {
+        "command": "tacos.setRetentionPolicy",
+        "title": "TaCoS: Set Retention Policy"
+      },
+      {
+        "command": "tacos.forgetWorkspaceNow",
+        "title": "TaCoS: Forget This Workspace Now"
       },
       {
         "command": "tacos.pauseSummaries",
@@ -197,12 +212,12 @@
         },
         "tacos.includeTerminalHistory": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Include recent terminal commands when shell integration is available."
         },
         "tacos.includeDebugHistory": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Include recent debug sessions in context collection."
         },
         "tacos.cacheIfContextUnchanged": {
@@ -217,6 +232,27 @@
             "type": "string"
           },
           "description": "Additional regex patterns to redact from collected context."
+        },
+        "tacos.privacyPreset": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "balanced",
+            "max-context"
+          ],
+          "default": "minimal",
+          "description": "Privacy behavior preset. `minimal` (default) limits context collection, `balanced` enables terminal/debug context locally, `max-context` enables richer local context."
+        },
+        "tacos.retentionPolicy": {
+          "type": "string",
+          "enum": [
+            "1d",
+            "7d",
+            "30d",
+            "forever"
+          ],
+          "default": "7d",
+          "description": "How long TaCoS keeps workspace-scoped context and metrics before pruning."
         },
         "tacos.metricsEnabled": {
           "type": "boolean",

@@ -69,6 +69,7 @@ const KEY_VSCODE_LM_SELECTOR = 'tacos.vscodeLmSelector';
 const KEY_ONBOARDING_NOTICE_SHOWN = 'tacos.onboardingNoticeShown';
 const KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX = 'tacos.lastCheckpointPromptAt';
 const KEY_LAST_NUDGE_AT_PREFIX = 'tacos.lastNudgeAt';
+const KEY_WORKSPACE_ACTIVITY_AT_PREFIX = 'tacos.workspaceActivityAt';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
@@ -151,6 +152,7 @@ interface RuntimeState {
   vscodeLmModel?: VscodeLmModelLike;
   vscodeLmSelector?: VscodeLmModelSelector;
   vscodeLmUnavailableNotified: boolean;
+  applyingPrivacyPreset: boolean;
 }
 
 let state: RuntimeState;
@@ -218,6 +220,7 @@ export function activate(context: vscode.ExtensionContext): void {
       KEY_VSCODE_LM_SELECTOR,
     ),
     vscodeLmUnavailableNotified: false,
+    applyingPrivacyPreset: false,
   };
 
   state.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 80);
@@ -228,6 +231,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(state.output);
   void migrateLegacyPersistedActivityIfNeeded(context, persistedActivity);
+  void applyRetentionPolicy(context, initialWorkspaceRoot);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('tacos.showNow', async () => {
@@ -299,6 +303,15 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.jumpToLastEdit', async () => {
       await jumpToRecentEdit(context);
+    }),
+    vscode.commands.registerCommand('tacos.setPrivacyPreset', async () => {
+      await promptAndApplyPrivacyPreset(context);
+    }),
+    vscode.commands.registerCommand('tacos.setRetentionPolicy', async () => {
+      await promptAndSetRetentionPolicy(context);
+    }),
+    vscode.commands.registerCommand('tacos.forgetWorkspaceNow', async () => {
+      await forgetWorkspaceNow(context);
     }),
     vscode.commands.registerCommand('tacos.pauseSummaries', async () => {
       state.pauseUntilRestart = false;
@@ -581,12 +594,22 @@ export function activate(context: vscode.ExtensionContext): void {
         event.affectsConfiguration('tacos.companionNudgeAggressiveness') ||
         event.affectsConfiguration('tacos.companionNudgeQuietHours') ||
         event.affectsConfiguration('tacos.companionNudgeCooldownMinutes');
+      const affectsPrivacyPreset = event.affectsConfiguration('tacos.privacyPreset');
+      const affectsRetention = event.affectsConfiguration('tacos.retentionPolicy');
       const affectsStatus =
         affectsPanel ||
         event.affectsConfiguration('tacos.summaryProvider') ||
         event.affectsConfiguration('tacos.uiSurface') ||
         event.affectsConfiguration('tacos.autoRefreshInBackground') ||
         affectsNudges;
+
+      if (affectsPrivacyPreset && !state.applyingPrivacyPreset) {
+        await applyPrivacyPreset(getConfig().privacyPreset, context);
+      }
+
+      if (affectsRetention) {
+        await applyRetentionPolicy(context, pickWorkspaceRoot() ?? '');
+      }
 
       if (affectsNudges && state.scratchSummary) {
         await updateActiveNudges(
@@ -604,7 +627,7 @@ export function activate(context: vscode.ExtensionContext): void {
         updateCompanionStatusBar();
       }
 
-      if (!affectsPanel && !affectsStatus) {
+      if (!affectsPanel && !affectsStatus && !affectsRetention && !affectsPrivacyPreset) {
         return;
       }
     }),
@@ -747,11 +770,13 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       workspaceRoot,
       config.redactionPatterns,
     );
-    state.recentTerminal.push(sanitizedCommand);
-    markMeaningfulActivity();
-    for (const url of extractUrls(command)) {
-      state.recentUrls.push(url);
+    if (config.includeTerminalHistory) {
+      state.recentTerminal.push(sanitizedCommand);
+      for (const url of extractUrls(command)) {
+        state.recentUrls.push(url);
+      }
     }
+    markMeaningfulActivity();
 
     if (
       isTestOrBuildCommand(command) &&
@@ -782,13 +807,23 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       config.redactionPatterns,
     );
 
-    if (typeof exitCode === 'number' && exitCode !== 0 && isTestOrBuildCommand(command)) {
+    if (
+      config.includeTerminalHistory &&
+      typeof exitCode === 'number' &&
+      exitCode !== 0 &&
+      isTestOrBuildCommand(command)
+    ) {
       state.lastFailingCommandRaw = command;
       state.lastFailingCommand = sanitizedCommand;
       await persistActivity(context);
     }
 
-    if (typeof exitCode === 'number' && exitCode === 0 && isTestOrBuildCommand(command)) {
+    if (
+      config.includeTerminalHistory &&
+      typeof exitCode === 'number' &&
+      exitCode === 0 &&
+      isTestOrBuildCommand(command)
+    ) {
       state.doneItems.push(sanitizedCommand);
 
       if (
@@ -862,6 +897,7 @@ async function triggerSummary(
   const prepared = await prepareTriggerSummary(context, root, reason);
 
   await context.workspaceState.update(KEY_LAST_SUMMARY_AT, Date.now());
+  await touchWorkspaceActivity(context, root);
 
   await presentSummary(context, prepared.summary, prepared.triggerReason, {
     autoOpenDetails: reason === 'manual',
@@ -1446,6 +1482,8 @@ function updateCompanionStatusBar(): void {
     `Mode: ${modeLabel}`,
     `Surface: ${config.uiSurface}`,
     `Provider: ${describeProvider(config.summaryProvider)}`,
+    `Privacy preset: ${PRIVACY_PRESET_LABELS[config.privacyPreset]}`,
+    `Retention: ${RETENTION_POLICY_LABELS[config.retentionPolicy]}`,
     summary ? `Intent: ${summarizeForStatusBar(summary.intent, 120)}` : 'Intent: (none yet)',
     topStep ? `Next: ${summarizeForStatusBar(topStep, 120)}` : 'Next: (none yet)',
     summary
@@ -1465,7 +1503,10 @@ interface CompanionActionPick extends vscode.QuickPickItem {
     | 'togglePause'
     | 'enable'
     | 'openPrivacy'
-    | 'configureProvider';
+    | 'configureProvider'
+    | 'setPrivacyPreset'
+    | 'setRetentionPolicy'
+    | 'forgetWorkspace';
 }
 
 async function showCompanionActions(context: vscode.ExtensionContext): Promise<void> {
@@ -1501,6 +1542,21 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'openPrivacy',
       label: 'Open Privacy & Safety',
       detail: 'Review what TaCoS stores and sends.',
+    },
+    {
+      id: 'setPrivacyPreset',
+      label: 'Set privacy preset',
+      detail: `Current: ${PRIVACY_PRESET_LABELS[config.privacyPreset]}.`,
+    },
+    {
+      id: 'setRetentionPolicy',
+      label: 'Set retention policy',
+      detail: `Current: ${RETENTION_POLICY_LABELS[config.retentionPolicy]}.`,
+    },
+    {
+      id: 'forgetWorkspace',
+      label: 'Forget this workspace now',
+      detail: 'Clear TaCoS workspace-scoped data immediately.',
     },
   ];
 
@@ -1551,6 +1607,15 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'openPrivacy') {
     recordCompanionQuickAction();
     await openPrivacySafetyDoc(context);
+  } else if (picked.id === 'setPrivacyPreset') {
+    recordCompanionQuickAction();
+    await promptAndApplyPrivacyPreset(context);
+  } else if (picked.id === 'setRetentionPolicy') {
+    recordCompanionQuickAction();
+    await promptAndSetRetentionPolicy(context);
+  } else if (picked.id === 'forgetWorkspace') {
+    recordCompanionQuickAction();
+    await forgetWorkspaceNow(context);
   } else if (picked.id === 'enable') {
     recordCompanionQuickAction();
     await setEnabled(true);
@@ -3247,6 +3312,7 @@ async function persistRecentEditLocations(
     recentEditLocationsStorageKey(workspaceRoot),
     state.recentEditLocations.slice(0, 15),
   );
+  await touchWorkspaceActivity(context, workspaceRoot);
 }
 
 async function jumpToRecentEdit(
@@ -3363,6 +3429,7 @@ async function persistTaskMetadata(context: vscode.ExtensionContext): Promise<vo
   const taskName = state.lastTaskName?.trim();
   if (!taskName || !Number.isInteger(state.lastTaskExitCode) || !Number.isFinite(state.lastTaskEndedAt)) {
     await context.workspaceState.update(taskMetadataStorageKey(workspaceRoot), undefined);
+    await touchWorkspaceActivity(context, workspaceRoot);
     return;
   }
 
@@ -3373,6 +3440,7 @@ async function persistTaskMetadata(context: vscode.ExtensionContext): Promise<vo
     timestamp: state.lastTaskEndedAt ?? Date.now(),
   };
   await context.workspaceState.update(taskMetadataStorageKey(workspaceRoot), payload);
+  await touchWorkspaceActivity(context, workspaceRoot);
 }
 
 async function rerunLastTask(): Promise<void> {
@@ -4028,6 +4096,188 @@ function resolveUiSurfaceConfig(
   return config.get<boolean>('autoRefreshInBackground', true) ? 'statusbar' : 'notification';
 }
 
+const PRIVACY_PRESET_LABELS: Record<ExtensionConfig['privacyPreset'], string> = {
+  minimal: 'Minimal',
+  balanced: 'Balanced',
+  'max-context': 'Max Context',
+};
+
+const PRIVACY_PRESET_DETAILS: Record<ExtensionConfig['privacyPreset'], string> = {
+  minimal: 'No diff, no terminal/debug history, local summary only.',
+  balanced: 'Terminal/debug context enabled, no diff, local summary only.',
+  'max-context': 'Terminal/debug + diff enabled, local summary only.',
+};
+
+const RETENTION_POLICY_LABELS: Record<ExtensionConfig['retentionPolicy'], string> = {
+  '1d': '1 day',
+  '7d': '7 days',
+  '30d': '30 days',
+  forever: 'Forever',
+};
+
+const PRIVACY_PRESET_PROFILES: Record<
+  ExtensionConfig['privacyPreset'],
+  {
+    includeDiff: boolean;
+    includeTerminalHistory: boolean;
+    includeDebugHistory: boolean;
+    summaryProvider: SummaryProvider;
+  }
+> = {
+  minimal: {
+    includeDiff: false,
+    includeTerminalHistory: false,
+    includeDebugHistory: false,
+    summaryProvider: 'local',
+  },
+  balanced: {
+    includeDiff: false,
+    includeTerminalHistory: true,
+    includeDebugHistory: true,
+    summaryProvider: 'local',
+  },
+  'max-context': {
+    includeDiff: true,
+    includeTerminalHistory: true,
+    includeDebugHistory: true,
+    summaryProvider: 'local',
+  },
+};
+
+function retentionPolicyToMs(
+  retentionPolicy: ExtensionConfig['retentionPolicy'],
+): number | undefined {
+  if (retentionPolicy === '1d') {
+    return 24 * 60 * 60 * 1000;
+  }
+  if (retentionPolicy === '7d') {
+    return 7 * 24 * 60 * 60 * 1000;
+  }
+  if (retentionPolicy === '30d') {
+    return 30 * 24 * 60 * 60 * 1000;
+  }
+  return undefined;
+}
+
+async function promptAndApplyPrivacyPreset(context: vscode.ExtensionContext): Promise<void> {
+  type PresetPick = vscode.QuickPickItem & { preset: ExtensionConfig['privacyPreset'] };
+  const current = getConfig().privacyPreset;
+  const picks: PresetPick[] = (['minimal', 'balanced', 'max-context'] as const).map((preset) => ({
+    preset,
+    label: PRIVACY_PRESET_LABELS[preset],
+    detail: PRIVACY_PRESET_DETAILS[preset],
+    description: preset === current ? 'Current' : undefined,
+  }));
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Privacy Preset',
+    placeHolder: 'Choose a preset',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  await applyPrivacyPreset(picked.preset, context);
+  rerenderPanel();
+  updateCompanionStatusBar();
+  void vscode.window.showInformationMessage(
+    `TaCoS: privacy preset set to ${PRIVACY_PRESET_LABELS[picked.preset]}.`,
+  );
+}
+
+async function promptAndSetRetentionPolicy(context: vscode.ExtensionContext): Promise<void> {
+  type RetentionPick = vscode.QuickPickItem & { policy: ExtensionConfig['retentionPolicy'] };
+  const current = getConfig().retentionPolicy;
+  const picks: RetentionPick[] = (['1d', '7d', '30d', 'forever'] as const).map((policy) => ({
+    policy,
+    label: RETENTION_POLICY_LABELS[policy],
+    description: policy === current ? 'Current' : undefined,
+  }));
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Retention Policy',
+    placeHolder: 'Choose how long workspace context is kept',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  const config = vscode.workspace.getConfiguration('tacos');
+  await config.update('retentionPolicy', picked.policy, vscode.ConfigurationTarget.Global);
+  await applyRetentionPolicy(context, pickWorkspaceRoot() ?? '');
+  rerenderPanel();
+  void vscode.window.showInformationMessage(
+    `TaCoS: retention policy set to ${RETENTION_POLICY_LABELS[picked.policy]}.`,
+  );
+}
+
+async function applyPrivacyPreset(
+  preset: ExtensionConfig['privacyPreset'],
+  context?: vscode.ExtensionContext,
+): Promise<void> {
+  const profile = PRIVACY_PRESET_PROFILES[preset];
+  const config = vscode.workspace.getConfiguration('tacos');
+
+  state.applyingPrivacyPreset = true;
+  try {
+    await Promise.all([
+      config.update('privacyPreset', preset, vscode.ConfigurationTarget.Global),
+      config.update('includeDiff', profile.includeDiff, vscode.ConfigurationTarget.Global),
+      config.update(
+        'includeTerminalHistory',
+        profile.includeTerminalHistory,
+        vscode.ConfigurationTarget.Global,
+      ),
+      config.update('includeDebugHistory', profile.includeDebugHistory, vscode.ConfigurationTarget.Global),
+      config.update('summaryProvider', profile.summaryProvider, vscode.ConfigurationTarget.Global),
+    ]);
+  } finally {
+    state.applyingPrivacyPreset = false;
+  }
+
+  if (!context) {
+    return;
+  }
+
+  if (!profile.includeTerminalHistory) {
+    state.recentTerminal = new RingBuffer(15);
+    state.doneItems = new RingBuffer(10);
+    state.lastFailingCommand = undefined;
+    state.lastFailingCommandRaw = undefined;
+    state.recentUrls = new RingBuffer(5);
+  }
+  if (!profile.includeDebugHistory) {
+    state.recentDebug = new RingBuffer(10);
+  }
+
+  await persistActivity(context);
+}
+
+async function forgetWorkspaceNow(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const choice = await vscode.window.showWarningMessage(
+    `Forget all TaCoS state for this workspace (${path.basename(workspaceRoot)})?`,
+    { modal: true },
+    'Forget',
+  );
+  if (choice !== 'Forget') {
+    return;
+  }
+
+  await clearWorkspaceScopedState(context, workspaceRoot);
+  resetRuntimeWorkspaceState();
+  rerenderPanel();
+  updateCompanionStatusBar();
+  void vscode.window.showInformationMessage('TaCoS: forgot workspace-scoped data.');
+}
+
 function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('tacos');
 
@@ -4041,10 +4291,12 @@ function getConfig(): ExtensionConfig {
     cooldownMinutes: Math.max(1, config.get<number>('cooldownMinutes', 5)),
     includeDiff: config.get<boolean>('includeDiff', false),
     maxDiffChars: config.get<number>('maxDiffChars', 6000),
-    includeTerminalHistory: config.get<boolean>('includeTerminalHistory', true),
-    includeDebugHistory: config.get<boolean>('includeDebugHistory', true),
+    includeTerminalHistory: config.get<boolean>('includeTerminalHistory', false),
+    includeDebugHistory: config.get<boolean>('includeDebugHistory', false),
     cacheIfContextUnchanged: config.get<boolean>('cacheIfContextUnchanged', true),
     redactionPatterns: config.get<string[]>('redactionPatterns', []),
+    privacyPreset: config.get<ExtensionConfig['privacyPreset']>('privacyPreset', 'minimal'),
+    retentionPolicy: config.get<ExtensionConfig['retentionPolicy']>('retentionPolicy', '7d'),
     metricsEnabled: config.get<boolean>('metricsEnabled', true),
     uiSurface: resolveUiSurfaceConfig(config),
     autoRefreshInBackground: config.get<boolean>('autoRefreshInBackground', true),
@@ -4201,6 +4453,171 @@ function branchStateKey(root: string): string {
 
 function autoTriggerFingerprintKey(root: string): string {
   return `${KEY_LAST_AUTO_TRIGGER_FINGERPRINT}.${Buffer.from(root).toString('base64url')}`;
+}
+
+function workspaceActivityKey(root: string): string {
+  return `${KEY_WORKSPACE_ACTIVITY_AT_PREFIX}.${Buffer.from(root).toString('base64url')}`;
+}
+
+async function touchWorkspaceActivity(
+  context: vscode.ExtensionContext,
+  workspaceRoot?: string,
+): Promise<void> {
+  const root = workspaceRoot ?? pickWorkspaceRoot();
+  if (!root) {
+    return;
+  }
+
+  await context.workspaceState.update(workspaceActivityKey(root), Date.now());
+}
+
+function decodeBase64UrlToken(token: string): string | undefined {
+  try {
+    return Buffer.from(token, 'base64url').toString('utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+function matchesEncodedWorkspaceKey(
+  key: string,
+  prefix: string,
+  workspaceRoot: string,
+  allowScopedWorkspace: boolean,
+): boolean {
+  const keyPrefix = `${prefix}.`;
+  if (!key.startsWith(keyPrefix)) {
+    return false;
+  }
+
+  const decoded = decodeBase64UrlToken(key.slice(keyPrefix.length));
+  if (!decoded) {
+    return false;
+  }
+
+  if (decoded === workspaceRoot) {
+    return true;
+  }
+
+  return allowScopedWorkspace && decoded.startsWith(`${workspaceRoot}::`);
+}
+
+function collectWorkspaceScopedKeys(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): string[] {
+  const keys = context.workspaceState.keys();
+  return keys.filter((key) => {
+    if (key === KEY_LAST_SUMMARY_AT || key === KEY_LAST_BLUR_AT || key === KEY_LAST_WORKSPACE_ON_BLUR) {
+      return true;
+    }
+
+    if (key === KEY_METRIC_HISTORY) {
+      return true;
+    }
+
+    return (
+      matchesEncodedWorkspaceKey(key, 'tacos.summary', workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, 'tacos.branch', workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_AUTO_TRIGGER_FINGERPRINT, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_RECENT_EDIT_LOCATIONS_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_TASK_META_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_SUMMARY_CORRECTIONS_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_WORKSPACE_ACTIVITY_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_ACTIVITY_STORAGE_PREFIX, workspaceRoot, true) ||
+      matchesEncodedWorkspaceKey(key, 'tacos.checkpointNote', workspaceRoot, false)
+    );
+  });
+}
+
+async function clearWorkspaceScopedState(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<void> {
+  const keys = collectWorkspaceScopedKeys(context, workspaceRoot);
+  if (keys.length === 0) {
+    return;
+  }
+
+  await Promise.all(keys.map((key) => context.workspaceState.update(key, undefined)));
+}
+
+function resetRuntimeWorkspaceState(): void {
+  state.recentFiles = new RingBuffer(15);
+  state.recentEditLocations = [];
+  state.recentTerminal = new RingBuffer(15);
+  state.recentDebug = new RingBuffer(10);
+  state.recentUrls = new RingBuffer(5);
+  state.doneItems = new RingBuffer(10);
+  state.lastFailingCommand = undefined;
+  state.lastFailingCommandRaw = undefined;
+  state.lastTaskName = undefined;
+  state.lastTaskWorkspaceRoot = undefined;
+  state.lastTaskExitCode = undefined;
+  state.lastTaskEndedAt = undefined;
+  state.lastDebugConfigName = undefined;
+  state.lastDebugWorkspaceRoot = undefined;
+  state.displayedCheckpointNote = undefined;
+  state.activeNudges = undefined;
+  state.scratchSummary = undefined;
+  if (state.panel) {
+    state.panel.dispose();
+  }
+}
+
+async function applyRetentionPolicy(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<void> {
+  if (!workspaceRoot) {
+    return;
+  }
+
+  const cutoffWindowMs = retentionPolicyToMs(getConfig().retentionPolicy);
+  if (!cutoffWindowMs) {
+    return;
+  }
+
+  const cutoffAt = Date.now() - cutoffWindowMs;
+  const lastActivityAt = context.workspaceState.get<number>(workspaceActivityKey(workspaceRoot), 0);
+  if (lastActivityAt > 0 && lastActivityAt < cutoffAt) {
+    await clearWorkspaceScopedState(context, workspaceRoot);
+    resetRuntimeWorkspaceState();
+    return;
+  }
+
+  const recentEditLocations = readRecentEditLocations(context, workspaceRoot);
+  const prunedEditLocations = recentEditLocations.filter((entry) => entry.timestamp >= cutoffAt);
+  if (prunedEditLocations.length !== recentEditLocations.length) {
+    await context.workspaceState.update(recentEditLocationsStorageKey(workspaceRoot), prunedEditLocations);
+    if ((state.panelWorkspaceRoot ?? pickWorkspaceRoot()) === workspaceRoot) {
+      state.recentEditLocations = prunedEditLocations;
+    }
+  }
+
+  const taskMetadata = readPersistedTaskMetadata(context, workspaceRoot);
+  if (taskMetadata && taskMetadata.timestamp < cutoffAt) {
+    await context.workspaceState.update(taskMetadataStorageKey(workspaceRoot), undefined);
+    if ((state.lastTaskWorkspaceRoot ?? workspaceRoot) === workspaceRoot) {
+      state.lastTaskName = undefined;
+      state.lastTaskWorkspaceRoot = undefined;
+      state.lastTaskExitCode = undefined;
+      state.lastTaskEndedAt = undefined;
+    }
+  }
+
+  const cachedSummary = context.workspaceState.get<ResumeSummary | undefined>(summaryCacheKey(workspaceRoot));
+  if (cachedSummary && cachedSummary.generatedAt < cutoffAt) {
+    await context.workspaceState.update(summaryCacheKey(workspaceRoot), undefined);
+  }
+
+  const metricHistory = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
+  const prunedMetrics = metricHistory.filter((metric) => metric.startedAt >= cutoffAt);
+  if (prunedMetrics.length !== metricHistory.length) {
+    await context.workspaceState.update(KEY_METRIC_HISTORY, prunedMetrics);
+  }
 }
 
 function computeAutoTriggerFingerprint(root: string): string {
@@ -4588,6 +5005,7 @@ async function persistActivity(context: vscode.ExtensionContext): Promise<void> 
 
   const storageKey = scopedActivityStorageKey(context, workspaceRoot);
   await context.workspaceState.update(storageKey, persisted);
+  await touchWorkspaceActivity(context, workspaceRoot);
 }
 
 async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<void> {

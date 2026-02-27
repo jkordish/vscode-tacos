@@ -2,6 +2,8 @@ export type TriggerReason = 'focus' | 'manual' | 'cached';
 export type SummaryProvider = 'local' | 'vscode-lm' | 'openai';
 export type CompanionNudgeAggressiveness = 'low' | 'balanced' | 'high';
 export type UiSurface = 'statusbar' | 'notification' | 'silent';
+export type PrivacyPreset = 'minimal' | 'balanced' | 'max-context';
+export type RetentionPolicy = '1d' | '7d' | '30d' | 'forever';
 
 export interface ExtensionConfig {
   enabled: boolean;
@@ -17,6 +19,8 @@ export interface ExtensionConfig {
   includeDebugHistory: boolean;
   cacheIfContextUnchanged: boolean;
   redactionPatterns: string[];
+  privacyPreset: PrivacyPreset;
+  retentionPolicy: RetentionPolicy;
   metricsEnabled: boolean;
   uiSurface: UiSurface;
   autoRefreshInBackground: boolean;

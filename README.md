@@ -33,6 +33,10 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Show Resume Brief Now`
 - `TaCoS: Copy Prompt and Open Codex`
 - `TaCoS: Show Last Summary`
+- `TaCoS: Jump to Last Edit`
+- `TaCoS: Set Privacy Preset`
+- `TaCoS: Set Retention Policy`
+- `TaCoS: Forget This Workspace Now`
 - `TaCoS: Pause Auto Summaries`
 - `TaCoS: Resume Auto Summaries`
 - `TaCoS: Toggle Summaries Enabled`
@@ -69,10 +73,12 @@ Then it falls back to `tacos.codexOpenCommand`, then legacy/inferred Codex comma
 - `cooldownMinutes` (default `5`)
 - `includeDiff` (default `false`)
 - `maxDiffChars` (default `6000`)
-- `includeTerminalHistory` (default `true`)
-- `includeDebugHistory` (default `true`)
+- `includeTerminalHistory` (default `false`)
+- `includeDebugHistory` (default `false`)
 - `cacheIfContextUnchanged` (default `true`)
 - `redactionPatterns` (default `[]`)
+- `privacyPreset` (`minimal` | `balanced` | `max-context`, default `minimal`)
+- `retentionPolicy` (`1d` | `7d` | `30d` | `forever`, default `7d`)
 - `metricsEnabled` (default `true`)
 - `uiSurface` (`statusbar` | `notification` | `silent`, default `statusbar`)
 - `autoRefreshInBackground` (legacy compatibility toggle; prefer `uiSurface`)
@@ -137,6 +143,12 @@ OpenAI API key resolution order:
 - Workspace-scoped checkpoint note.
 - Workspace-scoped correction hints keyed by context hash.
 - Optional local metrics history.
+- Workspace-scoped retention metadata and task blocker metadata.
+
+Retention + forget controls:
+
+- `tacos.retentionPolicy` prunes stale workspace data (`1d`, `7d`, `30d`, `forever`).
+- `TaCoS: Forget This Workspace Now` clears workspace-scoped TaCoS state immediately.
 
 ### Sent to AI
 
