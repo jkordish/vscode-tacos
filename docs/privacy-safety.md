@@ -46,6 +46,8 @@ In Restricted Mode:
 
 - All model output is treated as untrusted.
 - AI payload send requires redacted preview + explicit consent per workspace.
+- AI send is fail-closed: strict sanitizer blocks payload send when high-risk patterns are detected.
+- Checkpoint notes are excluded from AI payloads by default unless explicitly opted in.
 - Scratchpad content is excluded from AI payloads by default.
 - Links are evidence-grounded and validated before rendering and again at click time.
 - File links must resolve within workspace root.
@@ -62,3 +64,4 @@ In Restricted Mode:
 - Set retention policy: `TaCoS: Set Retention Policy`
 - Forget workspace state: `TaCoS: Forget This Workspace Now`
 - Revoke AI payload consent: `TaCoS: Revoke AI Payload Consent`
+- Test sanitization locally: `TaCoS: Test Sanitizer`

@@ -2,6 +2,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import { URL } from 'node:url';
 import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
+import { redactTextWithReport, type RedactionReport } from './redaction';
 import type {
   ExtensionConfig,
   ResumeSummary,
@@ -9,6 +10,12 @@ import type {
   SummaryEvidenceItem,
   SummaryLink,
 } from './types';
+
+export interface StrictSanitizedSummaryContext {
+  originalPrompt: string;
+  sanitizedPrompt: string;
+  report: RedactionReport;
+}
 
 interface OpenAiSummaryPayload {
   intent: unknown;
@@ -311,6 +318,22 @@ export function buildSummaryContextPrompt(signals: ResumeSignals, base: ResumeSu
   ].join('\n');
 }
 
+export function buildStrictSanitizedSummaryContext(
+  signals: ResumeSignals,
+  base: ResumeSummary,
+  customPatterns: string[] = [],
+): StrictSanitizedSummaryContext {
+  const originalPrompt = buildSummaryContextPrompt(signals, base);
+  const strict = redactTextWithReport(originalPrompt, signals.workspaceRoot, customPatterns, {
+    mode: 'ai-send',
+  });
+  return {
+    originalPrompt,
+    sanitizedPrompt: strict.text,
+    report: strict.report,
+  };
+}
+
 async function postJson(
   url: string,
   headers: Record<string, string>,
@@ -475,7 +498,13 @@ export async function tryGenerateOpenAiSummary(
   const endpoint = `${baseUrl}/chat/completions`;
 
   const systemPrompt = buildSummaryInstructionsPrompt();
-  const contextPrompt = buildSummaryContextPrompt(signals, base);
+  const strictContext = buildStrictSanitizedSummaryContext(signals, base, config.redactionPatterns);
+  if (strictContext.report.highRiskDetected) {
+    log(
+      `OpenAI summary blocked by strict sanitizer (replacements=${strictContext.report.totalReplacements}).`,
+    );
+    return undefined;
+  }
 
   const requestSummary = async (responseFormat: OpenAiResponseFormat): Promise<ResumeSummary> => {
     const requestBody = {
@@ -488,7 +517,7 @@ export async function tryGenerateOpenAiSummary(
         },
         {
           role: 'user',
-          content: contextPrompt,
+          content: strictContext.sanitizedPrompt,
         },
       ],
       response_format: responseFormat,

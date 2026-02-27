@@ -1,5 +1,9 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { redactText } from './redaction';
+import {
+  createEmptyRedactionReport,
+  redactTextWithReport,
+  type RedactionReport,
+} from './redaction';
 
 export type CheckpointNoteStatus = 'open' | 'done' | 'dismissed';
 export type CheckpointNoteScope = 'partition' | 'workspace';
@@ -16,6 +20,11 @@ export interface CheckpointNote {
   status: CheckpointNoteStatus;
   pinned?: boolean;
   scope?: CheckpointNoteScope;
+}
+
+export interface SanitizedCheckpointNoteResult {
+  text?: string;
+  report: RedactionReport;
 }
 
 const LEGACY_KEY_PREFIX = 'tacos.checkpointNote.';
@@ -111,15 +120,28 @@ export function sanitizeCheckpointNote(
   workspaceRoot: string,
   redactionPatterns: string[] = [],
 ): string | undefined {
+  return sanitizeCheckpointNoteWithReport(rawNote, workspaceRoot, redactionPatterns).text;
+}
+
+export function sanitizeCheckpointNoteWithReport(
+  rawNote: string,
+  workspaceRoot: string,
+  redactionPatterns: string[] = [],
+): SanitizedCheckpointNoteResult {
   const trimmed = rawNote.trim();
   if (!trimmed) {
-    return undefined;
+    return {
+      text: undefined,
+      report: createEmptyRedactionReport(),
+    };
   }
 
-  const redacted = redactText(trimmed, workspaceRoot, redactionPatterns)
-    .replace(/\s+/g, ' ')
-    .trim();
-  return redacted || undefined;
+  const redacted = redactTextWithReport(trimmed, workspaceRoot, redactionPatterns);
+  const normalized = redacted.text.replace(/\s+/g, ' ').trim();
+  return {
+    text: normalized || undefined,
+    report: redacted.report,
+  };
 }
 
 export function createCheckpointNote(

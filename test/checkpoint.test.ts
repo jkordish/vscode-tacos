@@ -5,6 +5,7 @@ import {
   parseCheckpointNotes,
   pruneCheckpointNotesForCutoff,
   sanitizeCheckpointNote,
+  sanitizeCheckpointNoteWithReport,
   sortCheckpointNotes,
 } from '../src/checkpoint';
 
@@ -40,6 +41,21 @@ describe('checkpoint helpers', () => {
     );
 
     expect(sanitized).toBe('Fix parser edge case and rerun tests before merge');
+  });
+
+  it('returns checkpoint sanitization report metadata', () => {
+    const result = sanitizeCheckpointNoteWithReport(
+      'token=super-secret-token-value from /workspace/repo',
+      '/workspace/repo',
+    );
+
+    expect(result.text).toContain('<redacted>');
+    expect(result.text).toContain('<workspace>');
+    expect(result.report.totalReplacements).toBeGreaterThan(0);
+    expect(result.report.totalCharsReplaced).toBeGreaterThan(0);
+    expect(result.report.highRiskDetected).toBe(true);
+    expect(result.report.categoryCounts.generic_secret_assignment).toBeGreaterThan(0);
+    expect(result.report.categoryCounts.workspace_path).toBeGreaterThan(0);
   });
 
   it('builds scoped storage keys for checkpoint note arrays', () => {

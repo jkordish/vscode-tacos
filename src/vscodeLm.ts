@@ -1,6 +1,6 @@
 import {
   buildAiSummary,
-  buildSummaryContextPrompt,
+  buildStrictSanitizedSummaryContext,
   buildSummaryInstructionsPrompt,
   validateOpenAiSummaryPayload,
 } from './llm';
@@ -168,13 +168,22 @@ export async function tryGenerateVscodeLmSummary(
   signals: ResumeSignals,
   base: ResumeSummary,
   model: VscodeLmModelLike,
+  customPatterns: string[],
   log: (message: string) => void,
 ): Promise<ResumeSummary | undefined> {
+  const strictContext = buildStrictSanitizedSummaryContext(signals, base, customPatterns);
+  if (strictContext.report.highRiskDetected) {
+    log(
+      `VS Code LM summary blocked by strict sanitizer (replacements=${strictContext.report.totalReplacements}).`,
+    );
+    return undefined;
+  }
+
   const prompt = [
     buildSummaryInstructionsPrompt(),
     'Return only JSON that matches the schema exactly.',
     '',
-    buildSummaryContextPrompt(signals, base),
+    strictContext.sanitizedPrompt,
   ].join('\n');
 
   try {

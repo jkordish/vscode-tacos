@@ -6,7 +6,24 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
-- No notable changes yet.
+- Security-first sanitization and trust controls for notes/scratchpad AI flows:
+  - Redaction engine v2 with mode-aware sanitization and structured redaction reporting.
+  - Strict AI-boundary sanitizer with fail-closed high-risk detection across provider send paths.
+  - Safe-by-default AI inclusion settings (`tacos.aiIncludeCheckpointNotes=false`, `tacos.aiIncludeScratchpad=false`).
+  - `TaCoS: Test Sanitizer` local-only command for transparent sanitizer validation.
+  - Aggregate-only local metrics counters for sanitizer events and blocked/allowed AI sends.
+  - Privacy-safe issue templates for sanitization bugs and AI opt-in trust UX feedback.
+
+### Changed
+
+- AI payload preview now explicitly shows checkpoint/scratchpad inclusion flags plus redaction report summary.
+- AI payload consent is signature-scoped to provider and inclusion choices to prevent silent scope expansion.
+- Checkpoint note and scratchpad flows now surface redaction-change notifications without exposing secret values.
+
+### Security
+
+- AI send/copy boundaries now enforce strict sanitization and block high-risk payloads before provider/paste boundaries.
+- Custom `tacos.redactionPatterns` handling now applies bounded guardrails with validation reporting.
 
 ## [0.4.0] - 2026-02-27
 
