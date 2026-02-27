@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- No notable changes yet.
+
+## [0.5.0] - 2026-02-27
+
+### Added
+
 - Security-first sanitization and trust controls for notes/scratchpad AI flows:
   - Redaction engine v2 with mode-aware sanitization and structured redaction reporting.
   - Strict AI-boundary sanitizer with fail-closed high-risk detection across provider send paths.
