@@ -2204,7 +2204,7 @@ async function showDetailsPanel(
 
       if (message.type === 'appendScratchpad') {
         recordCompanionQuickAction();
-        await appendToScratchpadCommand(context);
+        await appendToScratchpadCommand(context, state.panelWorkspaceRoot);
         await refreshPanelScratchpadState(context, state.panelWorkspaceRoot);
         rerenderPanel();
         return;
@@ -2212,7 +2212,7 @@ async function showDetailsPanel(
 
       if (message.type === 'setScratchpadScope') {
         recordCompanionQuickAction();
-        await setScratchpadScopeCommand(context);
+        await setScratchpadScopeCommand(context, state.panelWorkspaceRoot);
         await refreshPanelScratchpadState(context, state.panelWorkspaceRoot);
         rerenderPanel();
         return;
@@ -6682,11 +6682,7 @@ async function clearCheckpointNotesInScope(
   workspaceRoot: string,
 ): Promise<number> {
   await migrateLegacyCheckpointNoteIfNeeded(context, workspaceRoot);
-  const scopeState = resolveCheckpointScopeState(
-    context,
-    workspaceRoot,
-    state.panelSummary?.currentBranch,
-  );
+  const scopeState = resolveCheckpointScopeState(context, workspaceRoot);
   const existing = readCheckpointNotesForScope(context, scopeState.scope);
   await context.workspaceState.update(checkpointNotesStorageKey(scopeState.scope), undefined);
   return existing.length;
@@ -7246,8 +7242,11 @@ function buildScratchpadAppendChunk(rawText: string): string {
   return `--- ${timestamp} ---\n${text}\n`;
 }
 
-async function appendToScratchpadCommand(context: vscode.ExtensionContext): Promise<void> {
-  const workspaceRoot = pickWorkspaceRoot();
+async function appendToScratchpadCommand(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!workspaceRoot) {
     void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
     return;
@@ -7286,8 +7285,11 @@ async function appendToScratchpadCommand(context: vscode.ExtensionContext): Prom
   void vscode.window.showInformationMessage('TaCoS: appended to scratchpad.');
 }
 
-async function setScratchpadScopeCommand(context: vscode.ExtensionContext): Promise<void> {
-  const workspaceRoot = pickWorkspaceRoot();
+async function setScratchpadScopeCommand(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!workspaceRoot) {
     void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
     return;
