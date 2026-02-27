@@ -48,6 +48,16 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Clear OpenAI API Key`
 - `TaCoS: Export Local Metrics`
 
+### Codex / ChatGPT Interop
+
+`TaCoS: Copy Prompt and Open Codex` now tries known OpenAI ChatGPT extension commands first:
+
+1. `chatgpt.newCodexPanel`
+2. `chatgpt.openSidebar`
+3. `chatgpt.newChat`
+
+Then it falls back to `tacos.codexOpenCommand`, then legacy/inferred Codex command IDs.
+
 ## Configuration (`tacos.*`)
 
 - `enabled` (default `true`)
@@ -121,7 +131,7 @@ OpenAI API key resolution order:
 
 ### Persisted locally
 
-- Redacted activity snapshots.
+- Redacted activity snapshots (workspace + branch scoped; never raw terminal command lines).
 - Workspace summary cache.
 - Workspace-scoped checkpoint note.
 - Workspace-scoped correction hints keyed by context hash.

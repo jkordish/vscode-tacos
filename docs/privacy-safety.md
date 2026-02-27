@@ -31,6 +31,7 @@ In Restricted Mode:
 ## Data Persistence
 
 - Activity data is redacted before persistence.
+- Activity snapshots are stored in workspace-scoped storage (keyed by workspace + branch scope).
 - Raw terminal commands are not persisted; terminal-derived fields are anonymized/fingerprinted.
 - API keys are stored in VS Code Secret Storage.
 - Metric export writes only local `.tacos/metrics.json` and `.tacos/metrics.csv` files inside the workspace.
