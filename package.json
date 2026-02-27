@@ -380,6 +380,7 @@
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"{src,test}/**/*.ts\" \"*.{json,md,yml,yaml,cjs}\"",
     "format:check": "prettier --check \"{src,test}/**/*.ts\" \"*.{json,md,yml,yaml,cjs}\"",
+    "metrics:summary": "node ./scripts/metrics-summary.mjs",
     "test": "jest --runInBand",
     "test:integration": "node ./test/integration/runTest.js",
     "verify:quick": "npm run format:check && npm run lint && npm run compile && npm test",

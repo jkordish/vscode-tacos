@@ -115,6 +115,11 @@ Run `TaCoS: Export Local Metrics` to write:
 - `.tacos/metrics.json` (raw session records)
 - `.tacos/metrics.csv` (dashboard-friendly fields + derived rates)
 
+Docs:
+
+- `docs/metrics.md` (data dictionary + export workflow)
+- `docs/metrics-baseline.md` (dogfooding baseline template)
+
 Key companion fields:
 
 - `companionPromptImpressions`: prompt fallback impressions per session.
