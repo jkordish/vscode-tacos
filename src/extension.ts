@@ -37,6 +37,11 @@ import {
   normalizeHttpUrl,
   resolveFileTargetInWorkspace,
 } from './pathSafety';
+import {
+  buildPartitionScope,
+  inferTaskPartitionKey,
+  resolveTaskPartitionKey as resolveTaskPartitionFromInputs,
+} from './partitionScope';
 import { isInQuietHours } from './quietHours';
 import { redactList, redactText } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
@@ -5153,38 +5158,17 @@ function taskPartitionStorageKey(root: string): string {
   return `${KEY_TASK_PARTITION_PREFIX}.${Buffer.from(root).toString('base64url')}`;
 }
 
-function inferTaskPartitionKey(branch: string): string | undefined {
-  const normalized = branch.trim();
-  if (!normalized) {
-    return undefined;
-  }
-
-  const ticketMatch = normalized.match(/([A-Z]{2,}-\d+)/);
-  if (ticketMatch?.[1]) {
-    return ticketMatch[1];
-  }
-
-  const issueMatch = normalized.match(/#(\d{2,})/);
-  if (issueMatch?.[1]) {
-    return `issue-${issueMatch[1]}`;
-  }
-
-  return undefined;
-}
-
 function resolveTaskPartitionKey(
   context: vscode.ExtensionContext,
   root: string,
   scopeBranch?: string,
 ): string {
-  const manual = context.workspaceState.get<string>(taskPartitionStorageKey(root), '').trim();
-  if (manual) {
-    return manual;
-  }
-
+  const manual = context.workspaceState.get<string>(taskPartitionStorageKey(root), '');
   const branch = scopeBranch ?? resolveScopeBranch(context, root);
-  const inferred = inferTaskPartitionKey(branch);
-  return inferred ?? 'default';
+  return resolveTaskPartitionFromInputs({
+    manualTaskPartition: manual,
+    scopeBranch: branch,
+  });
 }
 
 function readBranchFromGitHead(workspaceRoot: string): string | undefined {
@@ -5239,7 +5223,7 @@ function resolveScopeBranch(context: vscode.ExtensionContext, root: string): str
 function partitionScope(context: vscode.ExtensionContext, root: string): string {
   const branch = resolveScopeBranch(context, root);
   const taskPartition = resolveTaskPartitionKey(context, root, branch);
-  return `${root}::${branch}::${taskPartition}`;
+  return buildPartitionScope(root, branch, taskPartition);
 }
 
 function summaryCacheKey(context: vscode.ExtensionContext, root: string): string {
@@ -5762,7 +5746,7 @@ function isEmptyActivityState(activity: PersistedActivityState): boolean {
 function scopedActivityStorageKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
   const branch = resolveScopeBranch(context, workspaceRoot);
   const taskPartition = resolveTaskPartitionKey(context, workspaceRoot, branch);
-  const scope = `${workspaceRoot}::${branch}::${taskPartition}`;
+  const scope = buildPartitionScope(workspaceRoot, branch, taskPartition);
   const normalizedScope = scope.trim() || '__no_workspace__';
   return `${KEY_ACTIVITY_STORAGE_PREFIX}.${Buffer.from(normalizedScope).toString('base64url')}`;
 }
