@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
+import { buildAiPayloadPreviewMarkdown } from './aiPayloadPreview';
 import { type CompanionNudgeDecision, chooseCompanionNudges } from './companionNudges';
 import {
   persistTerminalCommandForStorage,
@@ -70,6 +71,7 @@ const KEY_ONBOARDING_NOTICE_SHOWN = 'tacos.onboardingNoticeShown';
 const KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX = 'tacos.lastCheckpointPromptAt';
 const KEY_LAST_NUDGE_AT_PREFIX = 'tacos.lastNudgeAt';
 const KEY_WORKSPACE_ACTIVITY_AT_PREFIX = 'tacos.workspaceActivityAt';
+const KEY_AI_PAYLOAD_CONSENT_PREFIX = 'tacos.aiPayloadConsent';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
@@ -312,6 +314,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.forgetWorkspaceNow', async () => {
       await forgetWorkspaceNow(context);
+    }),
+    vscode.commands.registerCommand('tacos.revokeAiPayloadConsent', async () => {
+      await revokeAiPayloadConsent(context);
     }),
     vscode.commands.registerCommand('tacos.pauseSummaries', async () => {
       state.pauseUntilRestart = false;
@@ -1003,6 +1008,19 @@ async function refineSummaryInBackground(
   state.activeRefinementContextHash = prepared.localSummary.contextHash;
   rerenderPanel();
 
+  const hasConsent = await ensureAiPayloadConsent(context, prepared);
+  if (!hasConsent) {
+    if (state.activeRefinementSequence === sequence) {
+      state.activeRefinementSequence = undefined;
+      state.activeRefinementContextHash = undefined;
+      rerenderPanel();
+    }
+    void vscode.window.showInformationMessage(
+      'TaCoS: AI refinement skipped because payload send was not approved.',
+    );
+    return;
+  }
+
   let refined: ResumeSummary | undefined;
   try {
     refined = await generateAiSummary(prepared);
@@ -1506,7 +1524,8 @@ interface CompanionActionPick extends vscode.QuickPickItem {
     | 'configureProvider'
     | 'setPrivacyPreset'
     | 'setRetentionPolicy'
-    | 'forgetWorkspace';
+    | 'forgetWorkspace'
+    | 'revokeAiConsent';
 }
 
 async function showCompanionActions(context: vscode.ExtensionContext): Promise<void> {
@@ -1557,6 +1576,11 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'forgetWorkspace',
       label: 'Forget this workspace now',
       detail: 'Clear TaCoS workspace-scoped data immediately.',
+    },
+    {
+      id: 'revokeAiConsent',
+      label: 'Revoke AI payload consent',
+      detail: 'Require payload review before the next AI send.',
     },
   ];
 
@@ -1616,6 +1640,9 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'forgetWorkspace') {
     recordCompanionQuickAction();
     await forgetWorkspaceNow(context);
+  } else if (picked.id === 'revokeAiConsent') {
+    recordCompanionQuickAction();
+    await revokeAiPayloadConsent(context);
   } else if (picked.id === 'enable') {
     recordCompanionQuickAction();
     await setEnabled(true);
@@ -4278,6 +4305,103 @@ async function forgetWorkspaceNow(context: vscode.ExtensionContext): Promise<voi
   void vscode.window.showInformationMessage('TaCoS: forgot workspace-scoped data.');
 }
 
+function aiPayloadConsentKey(workspaceRoot: string): string {
+  return `${KEY_AI_PAYLOAD_CONSENT_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function hasAiPayloadConsent(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): boolean {
+  return context.workspaceState.get<boolean>(aiPayloadConsentKey(workspaceRoot), false);
+}
+
+async function setAiPayloadConsent(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  allowed: boolean,
+): Promise<void> {
+  await context.workspaceState.update(aiPayloadConsentKey(workspaceRoot), allowed ? true : undefined);
+}
+
+async function revokeAiPayloadConsent(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  await setAiPayloadConsent(context, workspaceRoot, false);
+  void vscode.window.showInformationMessage('TaCoS: AI payload consent revoked for this workspace.');
+}
+
+async function ensureAiPayloadConsent(
+  context: vscode.ExtensionContext,
+  prepared: PreparedTriggerSummary,
+): Promise<boolean> {
+  if (hasAiPayloadConsent(context, prepared.root)) {
+    return true;
+  }
+
+  const previewMarkdown = buildAiPayloadPreviewMarkdown({
+    provider: prepared.providerPlan.activeProvider,
+    workspaceName: path.basename(prepared.root),
+    generatedAt: Date.now(),
+    signals: prepared.signals,
+    summary: {
+      intent: prepared.localSummary.intent,
+      nextSteps: prepared.localSummary.nextSteps,
+      topFiles: prepared.localSummary.topFiles,
+      links: prepared.localSummary.links,
+      evidenceCatalog: prepared.localSummary.evidenceCatalog,
+    },
+  });
+
+  const doc = await vscode.workspace.openTextDocument({
+    language: 'markdown',
+    content: previewMarkdown,
+  });
+  await vscode.window.showTextDocument(doc, {
+    preview: false,
+    viewColumn: vscode.ViewColumn.Beside,
+    preserveFocus: false,
+  });
+
+  type ConsentPick = vscode.QuickPickItem & { id: 'once' | 'always' | 'deny' };
+  const picks: ConsentPick[] = [
+    {
+      id: 'once',
+      label: 'Send once',
+      detail: 'Allow this one AI refinement send.',
+    },
+    {
+      id: 'always',
+      label: 'Always allow in this workspace',
+      detail: 'Remember consent locally for this workspace.',
+    },
+    {
+      id: 'deny',
+      label: 'Do not send',
+      detail: 'Keep local summary only for now.',
+    },
+  ];
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Review AI Payload',
+    placeHolder: 'Choose whether to send this redacted payload',
+    ignoreFocusOut: true,
+  });
+  if (!picked || picked.id === 'deny') {
+    return false;
+  }
+
+  if (picked.id === 'always') {
+    await setAiPayloadConsent(context, prepared.root, true);
+  }
+
+  return true;
+}
+
 function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('tacos');
 
@@ -4526,6 +4650,7 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_WORKSPACE_ACTIVITY_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_AI_PAYLOAD_CONSENT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_ACTIVITY_STORAGE_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, 'tacos.checkpointNote', workspaceRoot, false)
     );

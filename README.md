@@ -37,6 +37,7 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Set Privacy Preset`
 - `TaCoS: Set Retention Policy`
 - `TaCoS: Forget This Workspace Now`
+- `TaCoS: Revoke AI Payload Consent`
 - `TaCoS: Pause Auto Summaries`
 - `TaCoS: Resume Auto Summaries`
 - `TaCoS: Toggle Summaries Enabled`
@@ -157,6 +158,7 @@ Only if AI provider is enabled:
 - Redacted summary context and evidence catalog.
 - Structured summarization instructions.
 - Optional correction hints.
+- Payload preview + explicit consent (`Send once` / `Always allow in workspace`) are required before send.
 
 ### Privacy Doc
 

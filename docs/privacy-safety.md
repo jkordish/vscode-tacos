@@ -42,6 +42,7 @@ In Restricted Mode:
 ## AI Safety Model
 
 - All model output is treated as untrusted.
+- AI payload send requires redacted preview + explicit consent per workspace.
 - Links are evidence-grounded and validated before rendering and again at click time.
 - File links must resolve within workspace root.
 - External URLs are limited to `http`/`https`.
@@ -55,3 +56,4 @@ In Restricted Mode:
 - Set privacy preset: `TaCoS: Set Privacy Preset`
 - Set retention policy: `TaCoS: Set Retention Policy`
 - Forget workspace state: `TaCoS: Forget This Workspace Now`
+- Revoke AI payload consent: `TaCoS: Revoke AI Payload Consent`

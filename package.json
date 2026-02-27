@@ -52,6 +52,7 @@
     "onCommand:tacos.setPrivacyPreset",
     "onCommand:tacos.setRetentionPolicy",
     "onCommand:tacos.forgetWorkspaceNow",
+    "onCommand:tacos.revokeAiPayloadConsent",
     "onCommand:tacos.pauseSummaries",
     "onCommand:tacos.resumeSummaries",
     "onCommand:tacos.toggleEnabled",
@@ -101,6 +102,10 @@
       {
         "command": "tacos.forgetWorkspaceNow",
         "title": "TaCoS: Forget This Workspace Now"
+      },
+      {
+        "command": "tacos.revokeAiPayloadConsent",
+        "title": "TaCoS: Revoke AI Payload Consent"
       },
       {
         "command": "tacos.pauseSummaries",
