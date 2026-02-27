@@ -24,6 +24,7 @@ import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
 import { buildMetricsCsv, hasAnyRecordedMetric } from './metrics';
 import { shouldAutoTriggerSummary, shouldPromptCheckpointOnBlur } from './noiseControl';
+import { buildNextStepActions } from './nextStepActions';
 import {
   isPathWithinWorkspaceRoot,
   normalizeHttpUrl,
@@ -1706,6 +1707,20 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'runNextStepAction') {
+        if (!state.panelSummary) {
+          return;
+        }
+
+        recordCompanionQuickAction();
+        await runNextStepAction(
+          state.panelSummary,
+          message.stepIndex,
+          state.panelWorkspaceRoot,
+        );
+        return;
+      }
+
       if (message.type === 'blockedLink') {
         void vscode.window.showWarningMessage(
           'TaCoS blocked a link that was not part of the validated summary link list.',
@@ -1957,14 +1972,36 @@ function renderWebview(
     )
     .join('');
 
+  const mode = summary.mode ?? 'coding';
+  const trusted = vscode.workspace.isTrusted;
+  const availability = computeRestoreAvailability({
+    trusted,
+    hasLastTask: Boolean(state.lastTaskName),
+    hasLastDebug: Boolean(state.lastDebugConfigName),
+    hasFailingCommand: Boolean(getCopyableFailingCommand()),
+    hasRecentEditLocation: state.recentEditLocations.length > 0,
+    currentBranch: summary.currentBranch,
+    previousBranch: summary.previousBranch,
+  });
+  const nextStepActions = buildNextStepActions({
+    summary,
+    canRerunTask: availability.canRerunTask,
+    canRerunDebug: availability.canRerunDebug,
+    canCopyFailingCommand: availability.canCopyFailingCommand,
+  });
   const nextSteps = summary.nextSteps
     .map((step, index) => {
       const evidenceIds = summary.nextStepEvidenceIds?.[index] ?? [];
       const badges = evidenceIds
         .map((evidenceId) => renderStepEvidenceBadge(evidenceId, evidenceById.get(evidenceId)))
         .join('');
+      const action = nextStepActions[index];
+      const actionButton = action
+        ? `<button type="button" class="secondary step-action" data-action="runNextStepAction" data-step-index="${index}">${escapeHtml(action.label)}</button>`
+        : '';
       const badgeRow = badges ? `<div class="step-evidence">${badges}</div>` : '';
-      return `<li>${escapeHtml(step)}${badgeRow}</li>`;
+      const actionRow = actionButton ? `<div class="step-actions">${actionButton}</div>` : '';
+      return `<li>${escapeHtml(step)}${badgeRow}${actionRow}</li>`;
     })
     .join('');
   const topFiles = summary.topFiles
@@ -1983,17 +2020,6 @@ function renderWebview(
     })
     .join('');
   const hasExtraEvidence = (summary.evidenceCatalog?.length ?? 0) > 5;
-  const mode = summary.mode ?? 'coding';
-  const trusted = vscode.workspace.isTrusted;
-  const availability = computeRestoreAvailability({
-    trusted,
-    hasLastTask: Boolean(state.lastTaskName),
-    hasLastDebug: Boolean(state.lastDebugConfigName),
-    hasFailingCommand: Boolean(getCopyableFailingCommand()),
-    hasRecentEditLocation: state.recentEditLocations.length > 0,
-    currentBranch: summary.currentBranch,
-    previousBranch: summary.previousBranch,
-  });
   const companionNextSteps = summary.nextSteps
     .slice(0, 3)
     .map((step) => `<li>${escapeHtml(step)}</li>`)
@@ -2309,6 +2335,13 @@ function renderWebview(
         gap: 6px;
         flex-wrap: wrap;
       }
+      .step-actions {
+        margin-top: 8px;
+      }
+      .step-action {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
       .badge {
         display: inline-block;
         border: 1px solid var(--vscode-widget-border);
@@ -2614,6 +2647,7 @@ function renderWebview(
         'refreshSummary',
         'toggleAutoSummaries',
         'openPrivacySafety',
+        'runNextStepAction',
         'restoreJumpToLastEdit',
         'restoreReopenFiles',
         'restoreOpenChangedFiles',
@@ -2702,6 +2736,16 @@ function renderWebview(
               return;
             }
             vscode.postMessage({ type: 'openTopFile', index });
+            return;
+          }
+
+          if (action === 'runNextStepAction') {
+            const stepIndex = parseDatasetInteger(actionElement.dataset.stepIndex);
+            if (stepIndex === undefined) {
+              vscode.postMessage({ type: 'blockedLink' });
+              return;
+            }
+            vscode.postMessage({ type: 'runNextStepAction', stepIndex });
             return;
           }
 
@@ -2896,6 +2940,90 @@ async function openWorkspaceFiles(
   }
 
   return opened;
+}
+
+async function runNextStepAction(
+  summary: ResumeSummary,
+  stepIndex: number,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  if (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= summary.nextSteps.length) {
+    void vscode.window.showWarningMessage('TaCoS blocked an invalid next-step action target.');
+    return;
+  }
+
+  const availability = computeRestoreAvailability({
+    trusted: vscode.workspace.isTrusted,
+    hasLastTask: Boolean(state.lastTaskName),
+    hasLastDebug: Boolean(state.lastDebugConfigName),
+    hasFailingCommand: Boolean(getCopyableFailingCommand()),
+    hasRecentEditLocation: state.recentEditLocations.length > 0,
+    currentBranch: summary.currentBranch,
+    previousBranch: summary.previousBranch,
+  });
+  const actions = buildNextStepActions({
+    summary,
+    canRerunTask: availability.canRerunTask,
+    canRerunDebug: availability.canRerunDebug,
+    canCopyFailingCommand: availability.canCopyFailingCommand,
+  });
+  const action = actions[stepIndex];
+  if (!action) {
+    void vscode.window.showInformationMessage(
+      'TaCoS: this step has no verified clickable action yet. Use evidence links to continue.',
+    );
+    return;
+  }
+
+  const evidence = (summary.evidenceCatalog ?? []).find((item) => item.id === action.evidenceId);
+  if (!evidence) {
+    void vscode.window.showWarningMessage('TaCoS blocked a stale next-step action.');
+    return;
+  }
+
+  if (action.kind === 'copyFailingCommand') {
+    await copyFailingCommand();
+    return;
+  }
+
+  if (action.kind === 'rerunTask') {
+    await rerunLastTask();
+    return;
+  }
+
+  if (action.kind === 'rerunDebug') {
+    await rerunLastDebugSession();
+    return;
+  }
+
+  if (action.kind === 'openFile') {
+    const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+    if (!workspaceRoot) {
+      void vscode.window.showWarningMessage(
+        'TaCoS blocked file action because no workspace root is available for validation.',
+      );
+      return;
+    }
+
+    const safeTarget = resolveFileTargetInWorkspace(evidence.target ?? '', workspaceRoot);
+    if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
+      void vscode.window.showWarningMessage('TaCoS blocked an unsafe next-step file target.');
+      return;
+    }
+
+    await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(safeTarget));
+    return;
+  }
+
+  if (action.kind === 'openUrl') {
+    const safeUrl = normalizeHttpUrl(evidence.target ?? '');
+    if (!safeUrl) {
+      void vscode.window.showWarningMessage('TaCoS blocked an unsafe next-step URL.');
+      return;
+    }
+
+    await vscode.env.openExternal(vscode.Uri.parse(safeUrl));
+  }
 }
 
 function recentEditLocationsStorageKey(workspaceRoot: string): string {

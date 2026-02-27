@@ -27,6 +27,7 @@ type RestoreWebviewMessageType = (typeof RESTORE_MESSAGE_TYPES)[number];
 export type WebviewMessage =
   | { type: SimpleWebviewMessageType }
   | { type: RestoreWebviewMessageType }
+  | { type: 'runNextStepAction'; stepIndex: number }
   | { type: 'openEvidence'; evidenceId: string }
   | { type: 'openTopFile'; index: number }
   | { type: 'openLink'; index: number };
@@ -83,6 +84,18 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
     }
 
     return { type: 'openTopFile', index: raw.index };
+  }
+
+  if (raw.type === 'runNextStepAction') {
+    if (typeof raw.stepIndex !== 'number' || !Number.isInteger(raw.stepIndex)) {
+      return undefined;
+    }
+
+    if (raw.stepIndex < 0 || raw.stepIndex > 200) {
+      return undefined;
+    }
+
+    return { type: 'runNextStepAction', stepIndex: raw.stepIndex };
   }
 
   return undefined;

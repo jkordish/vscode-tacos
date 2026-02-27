@@ -41,6 +41,16 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'openTopFile', index: '3' })).toBeUndefined();
   });
 
+  it('validates runNextStepAction payload shape', () => {
+    expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: 1 })).toEqual({
+      type: 'runNextStepAction',
+      stepIndex: 1,
+    });
+    expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: -1 })).toBeUndefined();
+    expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: 2.1 })).toBeUndefined();
+    expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: '1' })).toBeUndefined();
+  });
+
   it('validates openEvidence payload shape', () => {
     expect(parseWebviewMessage({ type: 'openEvidence', evidenceId: 'file:src/index.ts' })).toEqual({
       type: 'openEvidence',
