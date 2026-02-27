@@ -3941,7 +3941,7 @@ function readPersistedTaskMetadata(
 }
 
 async function persistTaskMetadata(context: vscode.ExtensionContext): Promise<void> {
-  const workspaceRoot = pickWorkspaceRoot() ?? '';
+  const workspaceRoot = state.lastTaskWorkspaceRoot ?? pickWorkspaceRoot() ?? '';
   if (!workspaceRoot) {
     return;
   }
@@ -5397,8 +5397,13 @@ async function applyRetentionPolicy(
 
   const cutoffAt = Date.now() - cutoffWindowMs;
   const lastActivityAt = context.workspaceState.get<number>(workspaceActivityKey(workspaceRoot), 0);
+  const metricHistory = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
   if (lastActivityAt > 0 && lastActivityAt < cutoffAt) {
     await clearWorkspaceScopedState(context, workspaceRoot);
+    const prunedMetrics = pruneMetricsForWorkspace(metricHistory, workspaceRoot, cutoffAt);
+    if (prunedMetrics.length !== metricHistory.length) {
+      await context.workspaceState.update(KEY_METRIC_HISTORY, prunedMetrics);
+    }
     resetRuntimeWorkspaceState();
     return;
   }
@@ -5448,7 +5453,6 @@ async function applyRetentionPolicy(
     state.scratchSummary = undefined;
   }
 
-  const metricHistory = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
   const prunedMetrics = pruneMetricsForWorkspace(metricHistory, workspaceRoot, cutoffAt);
   if (prunedMetrics.length !== metricHistory.length) {
     await context.workspaceState.update(KEY_METRIC_HISTORY, prunedMetrics);
