@@ -25,6 +25,7 @@ import { isSummaryLinkEvidenceGrounded } from './evidenceSafety';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
 import {
+  buildMetricsBaselineSnapshotMarkdown,
   buildMetricsCsv,
   hasAnyRecordedMetric,
   pruneMetricsForWorkspace,
@@ -628,6 +629,9 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage(
         `TaCoS: exported metrics to ${jsonPath} and ${csvPath}.`,
       );
+    }),
+    vscode.commands.registerCommand('tacos.copyMetricsBaselineSnapshot', async () => {
+      await copyMetricsBaselineSnapshot(context);
     }),
     vscode.commands.registerCommand('tacos.copyDiagnostics', async () => {
       await copyDiagnosticsBundle(context);
@@ -6568,6 +6572,24 @@ async function copyDiagnosticsBundle(context: vscode.ExtensionContext): Promise<
   });
   await vscode.env.clipboard.writeText(diagnostics);
   void vscode.window.showInformationMessage('TaCoS: diagnostics copied to clipboard.');
+}
+
+async function copyMetricsBaselineSnapshot(context: vscode.ExtensionContext): Promise<void> {
+  const metrics = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
+  if (metrics.length === 0) {
+    void vscode.window.showInformationMessage(
+      'TaCoS: no local metrics found yet. Run a few sessions first, then try again.',
+    );
+    return;
+  }
+
+  const markdown = buildMetricsBaselineSnapshotMarkdown(metrics, {
+    generatedAt: Date.now(),
+  });
+  await vscode.env.clipboard.writeText(markdown);
+  void vscode.window.showInformationMessage(
+    'TaCoS: metrics baseline snapshot copied to clipboard.',
+  );
 }
 
 async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<void> {

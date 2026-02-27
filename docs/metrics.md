@@ -10,6 +10,19 @@ TaCoS metrics are local-only. No telemetry upload or external analytics pipeline
 - `.tacos/metrics.json` (raw local records)
 - `.tacos/metrics.csv` (dashboard-friendly CSV)
 
+## Copy Baseline Snapshot
+
+1. Open Command Palette.
+2. Run `TaCoS: Copy Metrics Baseline Snapshot`.
+3. Paste the markdown snapshot into `docs/metrics-baseline.md` or an issue comment.
+
+The copied snapshot includes:
+- lag p50/p95 for `firstMeaningfulEditLagMs`, `firstRunLagMs`, and `firstActionLagMs`
+- prompt/nudge/forced-open totals and rates
+- dogfooding gate status (`>=30` sessions and `>=3` workspaces)
+
+The snapshot is aggregate-only and excludes raw workspace paths.
+
 ## CSV Data Dictionary
 
 | Column | Type | Description |

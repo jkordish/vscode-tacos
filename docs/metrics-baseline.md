@@ -11,15 +11,16 @@ Before marking the epic gate complete:
 
 ## How To Generate Baseline Summary
 
-1. Run `TaCoS: Export Local Metrics` in VS Code.
-2. From repo root, run:
+1. Run `TaCoS: Copy Metrics Baseline Snapshot` in VS Code.
+2. Paste clipboard output into the "Current Baseline Snapshot" section below.
+3. Optionally export raw files for deeper analysis with `TaCoS: Export Local Metrics`.
+4. Optional CLI summary (from repo root):
 
 ```bash
 npm run metrics:summary -- .tacos/metrics.csv
 ```
 
-3. Paste the generated markdown snapshot into the "Current Baseline Snapshot" section below.
-4. Update the date and notes.
+5. Update the date and notes.
 
 ## Current Baseline Snapshot
 

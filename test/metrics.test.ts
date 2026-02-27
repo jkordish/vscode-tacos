@@ -1,4 +1,5 @@
 import {
+  buildMetricsBaselineSnapshotMarkdown,
   buildMetricsCsv,
   hasAnyRecordedMetric,
   pruneMetricsForWorkspace,
@@ -105,5 +106,84 @@ describe('workspace metric helpers', () => {
         trigger: 'cached',
       },
     ]);
+  });
+});
+
+describe('buildMetricsBaselineSnapshotMarkdown', () => {
+  it('includes lag quantiles, rates, and dogfooding gate status', () => {
+    const markdown = buildMetricsBaselineSnapshotMarkdown(
+      [
+        {
+          startedAt: Date.UTC(2026, 1, 1, 10, 0, 0),
+          workspaceRoot: '/workspace/a',
+          trigger: 'focus',
+          firstMeaningfulEditLagMs: 1000,
+          firstRunLagMs: 2000,
+          firstActionLagMs: 1500,
+          companionPromptImpressions: 2,
+          companionForcedOpenDetailsClicks: 1,
+          companionNudgeImpressions: 1,
+        },
+        {
+          startedAt: Date.UTC(2026, 1, 1, 10, 5, 0),
+          workspaceRoot: '/workspace/b',
+          trigger: 'manual',
+          firstMeaningfulEditLagMs: 2000,
+          firstRunLagMs: 4000,
+          firstActionLagMs: 2500,
+          companionPromptImpressions: 3,
+          companionForcedOpenDetailsClicks: 1,
+          companionNudgeImpressions: 2,
+        },
+        {
+          startedAt: Date.UTC(2026, 1, 1, 10, 10, 0),
+          workspaceRoot: '/workspace/c',
+          trigger: 'cached',
+          firstMeaningfulEditLagMs: 3000,
+          firstActionLagMs: 3500,
+        },
+      ],
+      { generatedAt: Date.UTC(2026, 1, 1, 12, 0, 0) },
+    );
+
+    expect(markdown).toContain('# TaCoS Metrics Baseline Snapshot');
+    expect(markdown).toContain('Date: `2026-02-01T12:00:00.000Z`');
+    expect(markdown).toContain(
+      'Dogfooding gate (`>=30 sessions` and `>=3 workspaces`): not yet met',
+    );
+    expect(markdown).toContain('| `firstMeaningfulEditLagMs` | 3 | 2000 (2.0s) | 2900 (2.9s) |');
+    expect(markdown).toContain('| `firstRunLagMs` | 2 | 3000 (3.0s) | 3900 (3.9s) |');
+    expect(markdown).toContain('| `firstActionLagMs` | 3 | 2500 (2.5s) | 3400 (3.4s) |');
+    expect(markdown).toContain('| Prompt impressions (total) | 5 |');
+    expect(markdown).toContain('| Prompt impressions per session | 1.67 |');
+    expect(markdown).toContain('| Forced-open details clicks (total) | 2 |');
+    expect(markdown).toContain('| Forced-open rate (`forced/prompt`) | 0.4000 |');
+    expect(markdown).toContain('| Nudge impressions (total) | 3 |');
+    expect(markdown).toContain('| Nudge impressions per session | 1.00 |');
+  });
+
+  it('stays privacy-safe and marks gate as met for qualifying dogfooding sample', () => {
+    const metrics: MetricRecord[] = Array.from({ length: 30 }, (_, index) => ({
+      startedAt: Date.UTC(2026, 1, 10, 9, index, 0),
+      workspaceRoot: `/Users/private/workspace-${index % 3}`,
+      trigger: 'focus',
+      firstMeaningfulEditLagMs: 2000 + index,
+      firstRunLagMs: 4000 + index,
+      firstActionLagMs: 2500 + index,
+      companionPromptImpressions: 1,
+      companionForcedOpenDetailsClicks: index % 2,
+      companionNudgeImpressions: index % 3,
+    }));
+
+    const markdown = buildMetricsBaselineSnapshotMarkdown(metrics, {
+      generatedAt: Date.UTC(2026, 1, 15, 12, 0, 0),
+    });
+
+    expect(markdown).toContain('Dogfooding gate (`>=30 sessions` and `>=3 workspaces`): met');
+    expect(markdown).toContain('- Sessions: 30');
+    expect(markdown).toContain('- Distinct workspaces: 3');
+    expect(markdown).not.toContain('/Users/private/workspace-0');
+    expect(markdown).not.toContain('/Users/private/workspace-1');
+    expect(markdown).not.toContain('/Users/private/workspace-2');
   });
 });

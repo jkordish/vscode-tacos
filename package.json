@@ -66,6 +66,7 @@
     "onCommand:tacos.toggleEnabled",
     "onCommand:tacos.pauseUntilRestart",
     "onCommand:tacos.exportMetrics",
+    "onCommand:tacos.copyMetricsBaselineSnapshot",
     "onCommand:tacos.copyDiagnostics",
     "onCommand:tacos.addVisitedUrl",
     "onCommand:tacos.addCheckpointNote",
@@ -167,6 +168,10 @@
       {
         "command": "tacos.exportMetrics",
         "title": "TaCoS: Export Local Metrics"
+      },
+      {
+        "command": "tacos.copyMetricsBaselineSnapshot",
+        "title": "TaCoS: Copy Metrics Baseline Snapshot"
       },
       {
         "command": "tacos.copyDiagnostics",
