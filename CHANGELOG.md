@@ -8,6 +8,28 @@ All notable changes to this project are documented in this file.
 
 - No notable changes yet.
 
+## [0.3.0] - 2026-02-27
+
+### Added
+
+- Guided first-run setup flow:
+  - `TaCoS: Run Setup Checklist`
+  - `TaCoS: Reset Setup Checklist`
+- Selective restore presets with dry-run confirmation for working set restore:
+  - `Files only`
+  - `Files + terminal`
+  - `Full restore`
+- `TaCoS: Copy Metrics Baseline Snapshot` command for privacy-safe local markdown summaries.
+- Companion nudge explainability in the panel:
+  - `Why this nudge?` rationale when nudges appear
+  - `Why no nudge right now?` suppression rationale when nudges are hidden
+- `v0.3.0` release checklist document (`docs/release-0.3.0-checklist.md`).
+
+### Changed
+
+- Metrics baseline docs now include an explicit post-implementation snapshot section and updated generation flow.
+- Metrics docs and README command lists include the new baseline snapshot command.
+
 ## [0.2.1] - 2026-02-27
 
 ### Added
