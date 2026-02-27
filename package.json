@@ -51,6 +51,8 @@
     "onCommand:tacos.jumpToLastEdit",
     "onCommand:tacos.setPrivacyPreset",
     "onCommand:tacos.setRetentionPolicy",
+    "onCommand:tacos.openSetupChecklist",
+    "onCommand:tacos.resetSetupChecklist",
     "onCommand:tacos.forgetWorkspaceNow",
     "onCommand:tacos.revokeAiPayloadConsent",
     "onCommand:tacos.rateSummaryHelpfulness",
@@ -105,6 +107,14 @@
       {
         "command": "tacos.setRetentionPolicy",
         "title": "TaCoS: Set Retention Policy"
+      },
+      {
+        "command": "tacos.openSetupChecklist",
+        "title": "TaCoS: Run Setup Checklist"
+      },
+      {
+        "command": "tacos.resetSetupChecklist",
+        "title": "TaCoS: Reset Setup Checklist"
       },
       {
         "command": "tacos.forgetWorkspaceNow",

@@ -88,6 +88,7 @@ const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
 const KEY_SUMMARY_CORRECTIONS_PREFIX = 'tacos.summaryCorrections';
 const KEY_VSCODE_LM_SELECTOR = 'tacos.vscodeLmSelector';
 const KEY_ONBOARDING_NOTICE_SHOWN = 'tacos.onboardingNoticeShown';
+const KEY_SETUP_CHECKLIST_COMPLETED_PREFIX = 'tacos.setupChecklistCompleted';
 const KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX = 'tacos.lastCheckpointPromptAt';
 const KEY_LAST_NUDGE_AT_PREFIX = 'tacos.lastNudgeAt';
 const KEY_WORKSPACE_ACTIVITY_AT_PREFIX = 'tacos.workspaceActivityAt';
@@ -432,6 +433,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.setRetentionPolicy', async () => {
       await promptAndSetRetentionPolicy(context);
+    }),
+    vscode.commands.registerCommand('tacos.openSetupChecklist', async () => {
+      await runSetupChecklist(context);
+    }),
+    vscode.commands.registerCommand('tacos.resetSetupChecklist', async () => {
+      await resetSetupChecklist(context);
     }),
     vscode.commands.registerCommand('tacos.forgetWorkspaceNow', async () => {
       await forgetWorkspaceNow(context);
@@ -1759,6 +1766,7 @@ interface CompanionActionPick extends vscode.QuickPickItem {
     | 'enable'
     | 'openPrivacy'
     | 'configureProvider'
+    | 'setupChecklist'
     | 'setPrivacyPreset'
     | 'setRetentionPolicy'
     | 'forgetWorkspace'
@@ -1814,6 +1822,11 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'configureProvider',
       label: 'Configure AI provider',
       detail: 'Switch between local, VS Code LM, and OpenAI providers.',
+    },
+    {
+      id: 'setupChecklist',
+      label: 'Run setup checklist',
+      detail: 'Guided first-run setup for privacy, provider mode, and trust expectations.',
     },
     {
       id: 'openPrivacy',
@@ -1903,6 +1916,9 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'configureProvider') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.configureAiProvider');
+  } else if (picked.id === 'setupChecklist') {
+    recordCompanionQuickAction();
+    await runSetupChecklist(context);
   } else if (picked.id === 'openPrivacy') {
     recordCompanionQuickAction();
     await openPrivacySafetyDoc(context);
@@ -5673,6 +5689,7 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_WORKSPACE_ACTIVITY_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_SETUP_CHECKLIST_COMPLETED_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_AI_PAYLOAD_CONSENT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_ACTIVITY_STORAGE_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, 'tacos.checkpointNote', workspaceRoot, false)
@@ -5972,6 +5989,159 @@ async function maybePromptCheckpointOnBlur(
   void vscode.window.showInformationMessage('TaCoS: checkpoint note saved for this workspace.');
 }
 
+function setupChecklistCompletedKey(workspaceRoot: string): string {
+  return `${KEY_SETUP_CHECKLIST_COMPLETED_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function isSetupChecklistCompleted(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): boolean {
+  return context.workspaceState.get<boolean>(setupChecklistCompletedKey(workspaceRoot), false);
+}
+
+async function setSetupChecklistCompleted(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  completed: boolean,
+): Promise<void> {
+  await context.workspaceState.update(
+    setupChecklistCompletedKey(workspaceRoot),
+    completed ? true : undefined,
+  );
+}
+
+async function resetSetupChecklist(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  await setSetupChecklistCompleted(context, workspaceRoot, false);
+  void vscode.window.showInformationMessage('TaCoS: setup checklist reset for this workspace.');
+}
+
+async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  if (isSetupChecklistCompleted(context, workspaceRoot)) {
+    const action = await vscode.window.showInformationMessage(
+      'TaCoS: setup checklist is already complete for this workspace.',
+      'Rerun checklist',
+      'Reset completion',
+    );
+    if (action === 'Reset completion') {
+      await setSetupChecklistCompleted(context, workspaceRoot, false);
+      void vscode.window.showInformationMessage(
+        'TaCoS: setup checklist completion reset for this workspace.',
+      );
+      return;
+    }
+    if (action !== 'Rerun checklist') {
+      return;
+    }
+  }
+
+  const start = await vscode.window.showInformationMessage(
+    'TaCoS setup checklist: local-only defaults, provider choice, and trust expectations in ~3 minutes.',
+    'Start setup',
+  );
+  if (start !== 'Start setup') {
+    return;
+  }
+
+  type PresetPick = vscode.QuickPickItem & {
+    id: 'minimal' | 'balanced' | 'max-context' | 'skip';
+  };
+  const presetPick = await vscode.window.showQuickPick<PresetPick>(
+    [
+      {
+        id: 'minimal',
+        label: 'Minimal (Recommended)',
+        detail: 'No diff, no terminal/debug history, local summary only.',
+      },
+      {
+        id: 'balanced',
+        label: 'Balanced',
+        detail: 'Terminal/debug history enabled, no diff, local summary only.',
+      },
+      {
+        id: 'max-context',
+        label: 'Max Context',
+        detail: 'Terminal/debug + diff enabled, local summary only.',
+      },
+      {
+        id: 'skip',
+        label: 'Skip this step',
+        detail: 'Keep current privacy preset.',
+      },
+    ],
+    {
+      title: 'TaCoS Setup Checklist (1/3): Choose privacy preset',
+      placeHolder: 'Select the default context collection profile',
+      ignoreFocusOut: true,
+    },
+  );
+  if (!presetPick) {
+    return;
+  }
+  if (presetPick.id !== 'skip') {
+    await applyPrivacyPreset(presetPick.id, context);
+  }
+
+  type ProviderPick = vscode.QuickPickItem & { id: 'local' | 'configure' | 'skip' };
+  const providerPick = await vscode.window.showQuickPick<ProviderPick>(
+    [
+      {
+        id: 'local',
+        label: 'Keep Local-Only Provider (Recommended)',
+        detail: 'Fastest and private by default. No AI payload send.',
+      },
+      {
+        id: 'configure',
+        label: 'Configure AI Provider',
+        detail: 'Optional. Choose VS Code LM or OpenAI with explicit payload consent.',
+      },
+      {
+        id: 'skip',
+        label: 'Skip this step',
+        detail: 'Keep current provider setting.',
+      },
+    ],
+    {
+      title: 'TaCoS Setup Checklist (2/3): Choose summary provider mode',
+      placeHolder: 'Local-only is safest and works instantly',
+      ignoreFocusOut: true,
+    },
+  );
+  if (!providerPick) {
+    return;
+  }
+  if (providerPick.id === 'local') {
+    await setSummaryProvider('local');
+  } else if (providerPick.id === 'configure') {
+    await vscode.commands.executeCommand('tacos.configureAiProvider');
+  }
+
+  const trustAction = await vscode.window.showInformationMessage(
+    'TaCoS trust expectations: Restricted Mode disables git/terminal collection, AI refinement, and task/debug/branch execution actions.',
+    'Open Privacy & Safety',
+    'Continue',
+  );
+  if (trustAction === 'Open Privacy & Safety') {
+    await openPrivacySafetyDoc(context);
+  }
+
+  await setSetupChecklistCompleted(context, workspaceRoot, true);
+  await context.globalState.update(KEY_ONBOARDING_NOTICE_SHOWN, true);
+  void vscode.window.showInformationMessage('TaCoS: setup checklist complete for this workspace.');
+}
+
 async function maybeShowOnboardingNotice(context: vscode.ExtensionContext): Promise<void> {
   const shown = context.globalState.get<boolean>(KEY_ONBOARDING_NOTICE_SHOWN, false);
   if (shown) {
@@ -5981,9 +6151,15 @@ async function maybeShowOnboardingNotice(context: vscode.ExtensionContext): Prom
   await context.globalState.update(KEY_ONBOARDING_NOTICE_SHOWN, true);
   const action = await vscode.window.showInformationMessage(
     'TaCoS collects local editor/git/terminal context. AI receives redacted context only when an AI provider is enabled.',
+    'Run Setup Checklist',
     'Open Privacy & Safety',
     'Pause Auto Summaries',
   );
+  if (action === 'Run Setup Checklist') {
+    await runSetupChecklist(context);
+    return;
+  }
+
   if (action === 'Open Privacy & Safety') {
     await openPrivacySafetyDoc(context);
     return;

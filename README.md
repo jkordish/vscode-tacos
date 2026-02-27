@@ -48,6 +48,8 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Jump to Last Edit`
 - `TaCoS: Set Privacy Preset`
 - `TaCoS: Set Retention Policy`
+- `TaCoS: Run Setup Checklist`
+- `TaCoS: Reset Setup Checklist`
 - `TaCoS: Forget This Workspace Now`
 - `TaCoS: Revoke AI Payload Consent`
 - `TaCoS: Rate Summary Helpfulness`
