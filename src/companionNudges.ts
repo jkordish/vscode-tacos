@@ -23,6 +23,10 @@ export interface CompanionNudgeDecision {
   nextEligibleAt?: number;
 }
 
+interface SuppressionTextOptions {
+  formatTimestamp?: (value: number) => string;
+}
+
 interface CompanionNudgeInput {
   summary: ResumeSummary;
   provider: SummaryProvider;
@@ -131,6 +135,62 @@ export function chooseCompanionNudges(input: CompanionNudgeInput): CompanionNudg
 
   const [primary, secondary] = scored;
   return { primary, secondary };
+}
+
+export function describeCompanionNudgeReason(nudge: CompanionNudge): string {
+  if (nudge.id === 'fix-failing-command') {
+    return 'A recent failing command was detected for this context, so TaCoS prioritizes remediation.';
+  }
+
+  if (nudge.id === 'branch-switch') {
+    return 'TaCoS detected a branch switch between your last and current context.';
+  }
+
+  if (nudge.id === 'resume-next-step') {
+    return 'TaCoS found a saved next step and surfaced it as the fastest way to resume.';
+  }
+
+  if (nudge.id === 'refresh-guidance') {
+    return 'No concrete next step was available, so TaCoS suggests regenerating guidance.';
+  }
+
+  return 'TaCoS selected this nudge from local context signals.';
+}
+
+export function describeCompanionNudgeSuppression(
+  decision: CompanionNudgeDecision | undefined,
+  options: SuppressionTextOptions = {},
+): string {
+  if (!decision?.suppressedReason) {
+    return '';
+  }
+
+  if (decision.suppressedReason === 'disabled') {
+    return 'Companion nudges are disabled in settings.';
+  }
+
+  if (decision.suppressedReason === 'inactive-mode') {
+    return 'Nudges are hidden while companion mode is paused or restricted.';
+  }
+
+  if (decision.suppressedReason === 'quiet-hours') {
+    return 'Nudges are currently in your configured quiet hours window.';
+  }
+
+  if (decision.suppressedReason === 'cooldown') {
+    if (!decision.nextEligibleAt) {
+      return 'Nudges are cooling down before the next reminder.';
+    }
+
+    const formatter = options.formatTimestamp ?? ((value: number) => new Date(value).toISOString());
+    return `Nudges are cooling down until ${formatter(decision.nextEligibleAt)}.`;
+  }
+
+  if (decision.suppressedReason === 'no-candidate') {
+    return 'No high-confidence nudge is available for this context yet.';
+  }
+
+  return '';
 }
 
 export const __test__ = {
