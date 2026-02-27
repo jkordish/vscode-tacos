@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
@@ -37,14 +36,21 @@ import {
   normalizeHttpUrl,
   resolveFileTargetInWorkspace,
 } from './pathSafety';
+import {
+  buildPartitionScope,
+  inferTaskPartitionKey,
+  resolveTaskPartitionKey as resolveTaskPartitionFromInputs,
+} from './partitionScope';
 import { isInQuietHours } from './quietHours';
 import { redactList, redactText } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability } from './restoreSafety';
+import { resolveScopeBranch as resolveScopeBranchFromInputs } from './scopeBranch';
 import { buildResumeSummary } from './summary';
 import { buildStandupUpdate } from './standup';
 import { buildTimelineGroups } from './timeline';
 import { buildTrustCue } from './trustCue';
+import { chooseWorkspaceRoot } from './workspaceRoot';
 import type {
   ExtensionConfig,
   MetricRecord,
@@ -271,6 +277,85 @@ export function activate(context: vscode.ExtensionContext): void {
         tooltip: typeof state.statusBar?.tooltip === 'string' ? state.statusBar.tooltip : '',
         mode: resolveCompanionRuntimeMode(getConfig()),
       };
+    }),
+    vscode.commands.registerCommand('tacos.__test.getPartitionScopeSnapshot', async () => {
+      const workspaceRoot = pickWorkspaceRoot() ?? '';
+      if (!workspaceRoot) {
+        return undefined;
+      }
+
+      const persistedBranch = context.workspaceState.get<string>(branchStateKey(workspaceRoot), '');
+      const scopeBranch = resolveScopeBranchFromInputs({
+        workspaceRoot,
+        persistedBranch,
+      });
+      const manualTaskPartition = context.workspaceState
+        .get<string>(taskPartitionStorageKey(workspaceRoot), '')
+        .trim();
+      const resolvedTaskPartition = resolveTaskPartitionKey(context, workspaceRoot, scopeBranch);
+      return {
+        workspaceRoot,
+        scopeBranch,
+        manualTaskPartition,
+        resolvedTaskPartition,
+        scope: buildPartitionScope(workspaceRoot, scopeBranch, resolvedTaskPartition),
+      };
+    }),
+    vscode.commands.registerCommand('tacos.__test.setTaskPartition', async (value?: string) => {
+      const workspaceRoot = pickWorkspaceRoot();
+      if (!workspaceRoot) {
+        return false;
+      }
+
+      const nextValue = typeof value === 'string' ? value.trim() : '';
+      await context.workspaceState.update(
+        taskPartitionStorageKey(workspaceRoot),
+        nextValue ? nextValue : undefined,
+      );
+      return true;
+    }),
+    vscode.commands.registerCommand('tacos.__test.setPersistedBranch', async (value?: string) => {
+      const workspaceRoot = pickWorkspaceRoot();
+      if (!workspaceRoot) {
+        return false;
+      }
+
+      const nextValue = typeof value === 'string' ? value.trim() : '';
+      await context.workspaceState.update(
+        branchStateKey(workspaceRoot),
+        nextValue ? nextValue : undefined,
+      );
+      return true;
+    }),
+    vscode.commands.registerCommand(
+      'tacos.__test.pickWorkspaceRoot',
+      async (preferred?: string) => {
+        const preferredWorkspaceRoot = typeof preferred === 'string' ? preferred : undefined;
+        return pickWorkspaceRoot(preferredWorkspaceRoot);
+      },
+    ),
+    vscode.commands.registerCommand('tacos.__test.getRuntimeStateSnapshot', async () => {
+      return {
+        panelOpen: Boolean(state.panel),
+        panelWorkspaceRoot: state.panelWorkspaceRoot,
+        hasScratchSummary: Boolean(state.scratchSummary),
+        scratchContextHash: state.scratchSummary?.contextHash,
+        recentFilesCount: state.recentFiles.values().length,
+        recentTerminalCount: state.recentTerminal.values().length,
+        recentDebugCount: state.recentDebug.values().length,
+        recentUrlsCount: state.recentUrls.values().length,
+        doneItemsCount: state.doneItems.values().length,
+      };
+    }),
+    vscode.commands.registerCommand('tacos.__test.switchTaskPartition', async (value?: string) => {
+      const workspaceRoot = pickWorkspaceRoot();
+      if (!workspaceRoot) {
+        return false;
+      }
+
+      const nextValue = typeof value === 'string' ? value.trim() : '';
+      await applyTaskPartitionSwitch(context, workspaceRoot, nextValue);
+      return true;
     }),
     vscode.commands.registerCommand('tacos.slash', async () => {
       const root = pickWorkspaceRoot();
@@ -565,7 +650,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const task = event.execution.task;
       recordFirstActionLag();
       state.lastTaskName = task.name;
-      state.lastTaskWorkspaceRoot = taskWorkspaceRoot(task) ?? pickWorkspaceRoot();
+      state.lastTaskWorkspaceRoot = pickWorkspaceRoot(taskWorkspaceRoot(task));
       markMeaningfulActivity();
     }),
   );
@@ -575,7 +660,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const task = event.execution.task;
       const exitCode = typeof event.exitCode === 'number' ? event.exitCode : undefined;
       state.lastTaskName = task.name;
-      state.lastTaskWorkspaceRoot = taskWorkspaceRoot(task) ?? pickWorkspaceRoot();
+      state.lastTaskWorkspaceRoot = pickWorkspaceRoot(taskWorkspaceRoot(task));
       if (typeof exitCode === 'number') {
         state.lastTaskExitCode = exitCode;
         state.lastTaskEndedAt = Date.now();
@@ -600,8 +685,9 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const workspaceRoot =
-        vscode.workspace.getWorkspaceFolder(event.document.uri)?.uri.fsPath ?? pickWorkspaceRoot();
+      const workspaceRoot = pickWorkspaceRoot(
+        vscode.workspace.getWorkspaceFolder(event.document.uri)?.uri.fsPath,
+      );
       const relativePath = workspaceRoot
         ? toRelativePath(event.document.uri.fsPath, workspaceRoot)
         : event.document.uri.fsPath;
@@ -669,7 +755,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await updateActiveNudges(
           context,
           state.scratchSummary,
-          state.panelWorkspaceRoot ?? pickWorkspaceRoot(),
+          pickWorkspaceRoot(state.panelWorkspaceRoot),
           getConfig(),
         );
       }
@@ -955,7 +1041,7 @@ async function triggerSummary(
   reason: Exclude<TriggerReason, 'cached'>,
   preferredWorkspaceRoot?: string,
 ): Promise<void> {
-  const root = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  const root = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!root) {
     void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
     return;
@@ -1283,7 +1369,7 @@ async function presentSummary(
     };
   }
 
-  const workspaceRoot = options.workspaceRoot ?? pickWorkspaceRoot();
+  const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
   await updateActiveNudges(context, summary, workspaceRoot, config);
   updateSummaryScratchpad(summary, options.workspaceRoot);
 
@@ -1856,7 +1942,7 @@ async function showDetailsPanel(
   summary: ResumeSummary,
   options: Pick<PresentSummaryOptions, 'workspaceRoot' | 'checkpointNote'> = {},
 ): Promise<void> {
-  const workspaceRoot = options.workspaceRoot ?? pickWorkspaceRoot();
+  const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
   const checkpointNote = options.checkpointNote;
   updateSummaryScratchpad(summary, workspaceRoot);
   state.panelSummary = summary;
@@ -1936,7 +2022,7 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'sessionAddCheckpoint') {
-        const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
         if (!workspaceRoot) {
           void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
           return;
@@ -1988,7 +2074,7 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'refreshSummary') {
-        const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
         if (!workspaceRoot) {
           void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
           return;
@@ -2138,7 +2224,7 @@ async function showDetailsPanel(
         }
 
         if (evidence.kind === 'file') {
-          const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
+          const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
           if (!workspaceRoot) {
             void vscode.window.showWarningMessage(
               'TaCoS blocked file evidence because no workspace root is available for validation.',
@@ -2170,7 +2256,7 @@ async function showDetailsPanel(
 
       if (message.type === 'openTopFile') {
         const file = state.panelSummary?.topFiles[message.index];
-        const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
         if (!file || !workspaceRoot) {
           void vscode.window.showWarningMessage(
             'TaCoS blocked file link because no workspace root is available for validation.',
@@ -2202,7 +2288,7 @@ async function showDetailsPanel(
 
       if (link.kind === 'file') {
         const summary = state.panelSummary;
-        const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
         if (!summary || !workspaceRoot) {
           void vscode.window.showWarningMessage(
             'TaCoS blocked file link because no workspace root is available for validation.',
@@ -2342,7 +2428,7 @@ function renderWebview(
     currentBranch: summary.currentBranch,
     previousBranch: summary.previousBranch,
   });
-  const diagnostics = collectWorkspaceDiagnostics(state.panelWorkspaceRoot ?? pickWorkspaceRoot());
+  const diagnostics = collectWorkspaceDiagnostics(pickWorkspaceRoot(state.panelWorkspaceRoot));
   const hasFailingTask =
     Boolean(state.lastTaskName) &&
     Number.isInteger(state.lastTaskExitCode) &&
@@ -3369,9 +3455,7 @@ async function switchTaskPartition(context: vscode.ExtensionContext): Promise<vo
 
   const current =
     context.workspaceState.get<string>(taskPartitionStorageKey(workspaceRoot), '').trim() || '';
-  const inferred =
-    inferTaskPartitionKey(context.workspaceState.get<string>(branchStateKey(workspaceRoot), '')) ||
-    '';
+  const inferred = inferTaskPartitionKey(resolveScopeBranch(context, workspaceRoot)) || '';
   const input = await vscode.window.showInputBox({
     title: 'TaCoS: Switch Task Partition',
     prompt:
@@ -3385,6 +3469,19 @@ async function switchTaskPartition(context: vscode.ExtensionContext): Promise<vo
   }
 
   const nextValue = input.trim();
+  await applyTaskPartitionSwitch(context, workspaceRoot, nextValue);
+  void vscode.window.showInformationMessage(
+    nextValue
+      ? `TaCoS: switched to task partition "${nextValue}".`
+      : `TaCoS: switched to ${inferred ? `inferred partition "${inferred}"` : 'default partition'}.`,
+  );
+}
+
+async function applyTaskPartitionSwitch(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  nextValue: string,
+): Promise<void> {
   await context.workspaceState.update(
     taskPartitionStorageKey(workspaceRoot),
     nextValue ? nextValue : undefined,
@@ -3403,11 +3500,6 @@ async function switchTaskPartition(context: vscode.ExtensionContext): Promise<vo
     state.panel.dispose();
   }
   updateCompanionStatusBar();
-  void vscode.window.showInformationMessage(
-    nextValue
-      ? `TaCoS: switched to task partition "${nextValue}".`
-      : `TaCoS: switched to ${inferred ? `inferred partition "${inferred}"` : 'default partition'}.`,
-  );
 }
 
 async function restoreWorkingSetCommand(context: vscode.ExtensionContext): Promise<void> {
@@ -3617,7 +3709,7 @@ function diagnosticSeverityRank(severity: vscode.DiagnosticSeverity): number {
 }
 
 function collectWorkspaceDiagnostics(preferredWorkspaceRoot?: string): DiagnosticBlockerSnapshot {
-  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
   let errorCount = 0;
   let warningCount = 0;
   let top: DiagnosticBlockerReference | undefined;
@@ -3669,7 +3761,7 @@ async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promi
     return;
   }
 
-  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!workspaceRoot) {
     void vscode.window.showWarningMessage(
       'TaCoS blocked diagnostic navigation because no workspace root is available.',
@@ -3750,7 +3842,7 @@ async function runNextStepAction(
   }
 
   if (action.kind === 'openFile') {
-    const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+    const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
     if (!workspaceRoot) {
       void vscode.window.showWarningMessage(
         'TaCoS blocked file action because no workspace root is available for validation.',
@@ -3823,7 +3915,7 @@ async function persistRecentEditLocations(
   context: vscode.ExtensionContext,
   preferredWorkspaceRoot?: string,
 ): Promise<void> {
-  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!workspaceRoot) {
     return;
   }
@@ -3870,7 +3962,7 @@ async function openRecentEditLocation(
   location: EditLocation,
   preferredWorkspaceRoot?: string,
 ): Promise<void> {
-  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!workspaceRoot) {
     void vscode.window.showWarningMessage(
       'TaCoS blocked jump-to-edit because no workspace root is available for validation.',
@@ -3941,7 +4033,7 @@ function readPersistedTaskMetadata(
 }
 
 async function persistTaskMetadata(context: vscode.ExtensionContext): Promise<void> {
-  const workspaceRoot = state.lastTaskWorkspaceRoot ?? pickWorkspaceRoot() ?? '';
+  const workspaceRoot = pickWorkspaceRoot(state.lastTaskWorkspaceRoot) ?? '';
   if (!workspaceRoot) {
     return;
   }
@@ -4050,7 +4142,7 @@ async function checkoutPreviousBranch(
     return;
   }
 
-  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!workspaceRoot) {
     void vscode.window.showWarningMessage('TaCoS: open a workspace folder to checkout a branch.');
     return;
@@ -4219,7 +4311,7 @@ async function clearSummaryCorrections(
 
 async function captureSummaryCorrection(context: vscode.ExtensionContext): Promise<void> {
   const summary = state.panelSummary;
-  const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
+  const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
   if (!summary || !workspaceRoot) {
     void vscode.window.showInformationMessage(
       'TaCoS: no active summary context is available for correction.',
@@ -5033,16 +5125,23 @@ async function resolveOpenAiApiKey(context: vscode.ExtensionContext): Promise<st
   return '';
 }
 
-function pickWorkspaceRoot(): string | undefined {
-  const active = vscode.window.activeTextEditor?.document?.uri;
-  if (active) {
-    const workspaceFolder = vscode.workspace.getWorkspaceFolder(active);
-    if (workspaceFolder) {
-      return workspaceFolder.uri.fsPath;
-    }
-  }
+function pickWorkspaceRoot(preferredWorkspaceRoot?: string): string | undefined {
+  const workspaceRoots =
+    vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ?? [];
+  const activeUri = vscode.window.activeTextEditor?.document?.uri;
+  const activeWorkspaceRoot = activeUri
+    ? vscode.workspace.getWorkspaceFolder(activeUri)?.uri.fsPath
+    : undefined;
+  const runtimeWorkspaceHints = state
+    ? [state.panelWorkspaceRoot, state.lastTaskWorkspaceRoot, state.lastDebugWorkspaceRoot]
+    : [];
 
-  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  return chooseWorkspaceRoot({
+    workspaceRoots,
+    preferredWorkspaceRoot,
+    activeWorkspaceRoot,
+    runtimeWorkspaceHints,
+  });
 }
 
 function toRelativePath(filePath: string, workspaceRoot: string): string {
@@ -5153,93 +5252,30 @@ function taskPartitionStorageKey(root: string): string {
   return `${KEY_TASK_PARTITION_PREFIX}.${Buffer.from(root).toString('base64url')}`;
 }
 
-function inferTaskPartitionKey(branch: string): string | undefined {
-  const normalized = branch.trim();
-  if (!normalized) {
-    return undefined;
-  }
-
-  const ticketMatch = normalized.match(/([A-Z]{2,}-\d+)/);
-  if (ticketMatch?.[1]) {
-    return ticketMatch[1];
-  }
-
-  const issueMatch = normalized.match(/#(\d{2,})/);
-  if (issueMatch?.[1]) {
-    return `issue-${issueMatch[1]}`;
-  }
-
-  return undefined;
-}
-
 function resolveTaskPartitionKey(
   context: vscode.ExtensionContext,
   root: string,
   scopeBranch?: string,
 ): string {
-  const manual = context.workspaceState.get<string>(taskPartitionStorageKey(root), '').trim();
-  if (manual) {
-    return manual;
-  }
-
+  const manual = context.workspaceState.get<string>(taskPartitionStorageKey(root), '');
   const branch = scopeBranch ?? resolveScopeBranch(context, root);
-  const inferred = inferTaskPartitionKey(branch);
-  return inferred ?? 'default';
-}
-
-function readBranchFromGitHead(workspaceRoot: string): string | undefined {
-  if (!workspaceRoot) {
-    return undefined;
-  }
-
-  const gitEntry = path.join(workspaceRoot, '.git');
-  if (!existsSync(gitEntry)) {
-    return undefined;
-  }
-
-  try {
-    let gitDir = gitEntry;
-    const gitEntryStat = statSync(gitEntry);
-    if (gitEntryStat.isFile()) {
-      const pointer = readFileSync(gitEntry, 'utf8').trim();
-      const match = pointer.match(/^gitdir:\s*(.+)$/i);
-      if (!match?.[1]) {
-        return undefined;
-      }
-      gitDir = path.resolve(workspaceRoot, match[1].trim());
-    }
-
-    const headPath = path.join(gitDir, 'HEAD');
-    if (!existsSync(headPath)) {
-      return undefined;
-    }
-
-    const head = readFileSync(headPath, 'utf8').trim();
-    const branchRef = head.match(/^ref:\s*refs\/heads\/(.+)$/i);
-    if (!branchRef?.[1]) {
-      return undefined;
-    }
-
-    const branch = branchRef[1].trim();
-    return branch || undefined;
-  } catch {
-    return undefined;
-  }
+  return resolveTaskPartitionFromInputs({
+    manualTaskPartition: manual,
+    scopeBranch: branch,
+  });
 }
 
 function resolveScopeBranch(context: vscode.ExtensionContext, root: string): string {
-  const liveBranch = readBranchFromGitHead(root);
-  if (liveBranch) {
-    return liveBranch;
-  }
-
-  return context.workspaceState.get<string>(branchStateKey(root), '').trim() || 'default';
+  return resolveScopeBranchFromInputs({
+    workspaceRoot: root,
+    persistedBranch: context.workspaceState.get<string>(branchStateKey(root), ''),
+  });
 }
 
 function partitionScope(context: vscode.ExtensionContext, root: string): string {
   const branch = resolveScopeBranch(context, root);
   const taskPartition = resolveTaskPartitionKey(context, root, branch);
-  return `${root}::${branch}::${taskPartition}`;
+  return buildPartitionScope(root, branch, taskPartition);
 }
 
 function summaryCacheKey(context: vscode.ExtensionContext, root: string): string {
@@ -5259,7 +5295,7 @@ async function touchWorkspaceActivity(
   context: vscode.ExtensionContext,
   workspaceRoot?: string,
 ): Promise<void> {
-  const root = workspaceRoot ?? pickWorkspaceRoot();
+  const root = pickWorkspaceRoot(workspaceRoot);
   if (!root) {
     return;
   }
@@ -5415,7 +5451,7 @@ async function applyRetentionPolicy(
       recentEditLocationsStorageKey(workspaceRoot),
       prunedEditLocations,
     );
-    if ((state.panelWorkspaceRoot ?? pickWorkspaceRoot()) === workspaceRoot) {
+    if (pickWorkspaceRoot(state.panelWorkspaceRoot) === workspaceRoot) {
       state.recentEditLocations = prunedEditLocations;
     }
   }
@@ -5449,7 +5485,7 @@ async function applyRetentionPolicy(
   if (summaryPruneOps.length > 0) {
     await Promise.all(summaryPruneOps);
   }
-  if (clearedActiveSummary && (state.panelWorkspaceRoot ?? pickWorkspaceRoot()) === workspaceRoot) {
+  if (clearedActiveSummary && pickWorkspaceRoot(state.panelWorkspaceRoot) === workspaceRoot) {
     state.scratchSummary = undefined;
   }
 
@@ -5562,7 +5598,7 @@ async function maybePromptCheckpointOnBlur(
     return;
   }
 
-  const root = workspaceRoot ?? pickWorkspaceRoot();
+  const root = pickWorkspaceRoot(workspaceRoot);
   if (!root) {
     return;
   }
@@ -5762,7 +5798,7 @@ function isEmptyActivityState(activity: PersistedActivityState): boolean {
 function scopedActivityStorageKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
   const branch = resolveScopeBranch(context, workspaceRoot);
   const taskPartition = resolveTaskPartitionKey(context, workspaceRoot, branch);
-  const scope = `${workspaceRoot}::${branch}::${taskPartition}`;
+  const scope = buildPartitionScope(workspaceRoot, branch, taskPartition);
   const normalizedScope = scope.trim() || '__no_workspace__';
   return `${KEY_ACTIVITY_STORAGE_PREFIX}.${Buffer.from(normalizedScope).toString('base64url')}`;
 }
