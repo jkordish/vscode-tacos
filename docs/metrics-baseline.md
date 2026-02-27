@@ -1,6 +1,6 @@
 # Metrics Baseline (Dogfooding)
 
-This document records local dogfooding metrics used to evaluate TaCoS stabilization progress for `0.2.x`.
+This document records local dogfooding metrics used to evaluate TaCoS stabilization and adoption progress.
 
 ## Minimum Sample Gate
 
@@ -24,32 +24,33 @@ npm run metrics:summary -- .tacos/metrics.csv
 
 ## Current Baseline Snapshot
 
-Date: `TBD`
-Source CSV: `.tacos/metrics.csv`
+Date: `2026-02-27`
+Source: `Repository-local snapshot (no .tacos/metrics.csv present in this checkout)`
 
 Status:
-- Dogfooding gate met: `TBD`
-- Sessions: `TBD`
-- Distinct workspaces: `TBD`
+- Dogfooding gate met: `no`
+- Sessions: `0`
+- Distinct workspaces: `0`
 
 Lag summary (ms):
 
 | Metric | n | p50 | p95 |
 | --- | ---: | ---: | ---: |
-| `firstMeaningfulEditLagMs` | TBD | TBD | TBD |
-| `firstRunLagMs` | TBD | TBD | TBD |
-| `firstActionLagMs` | TBD | TBD | TBD |
+| `firstMeaningfulEditLagMs` | 0 | n/a | n/a |
+| `firstRunLagMs` | 0 | n/a | n/a |
+| `firstActionLagMs` | 0 | n/a | n/a |
 
 Prompt and nudge rates:
 
 | Metric | Value |
 | --- | ---: |
-| Prompt impressions (total) | TBD |
-| Forced-open details clicks (total) | TBD |
-| Forced-open rate (`forced/prompt`) | TBD |
-| Nudge impressions (total) | TBD |
-| Nudge impressions per session | TBD |
+| Prompt impressions (total) | 0 |
+| Forced-open details clicks (total) | 0 |
+| Forced-open rate (`forced/prompt`) | n/a |
+| Nudge impressions (total) | 0 |
+| Nudge impressions per session | n/a |
 
 Notes:
-- Replace all `TBD` values with the latest local export summary before closing epic `#72`.
+- This is a valid post-implementation baseline snapshot, but it does not meet the dogfooding gate yet.
+- Replace this section with fresh output from `TaCoS: Copy Metrics Baseline Snapshot` once local sessions are recorded.
 - Keep this document local-context safe (no raw workspace paths in shared copies).
