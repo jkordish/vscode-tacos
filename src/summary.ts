@@ -5,6 +5,7 @@ import type {
   ResumeSignals,
   ResumeSummary,
   SummaryEvidenceItem,
+  SummaryEvidenceKind,
   SummaryLink,
 } from './types';
 
@@ -368,7 +369,62 @@ function buildStepEvidenceIds(
     return nextSteps.map(() => []);
   }
 
-  return nextSteps.map((_, index) => [evidenceIds[Math.min(index, evidenceIds.length - 1)]]);
+  const usedIds = new Set<string>();
+  const defaultEvidenceId = evidenceCatalog[0].id;
+
+  return nextSteps.map((stepText, index) => {
+    const kindPreference = inferEvidenceKindPreference(stepText);
+
+    for (const kind of kindPreference) {
+      const unusedMatch = evidenceCatalog.find(
+        (item) => item.kind === kind && !usedIds.has(item.id),
+      );
+      if (unusedMatch) {
+        usedIds.add(unusedMatch.id);
+        return [unusedMatch.id];
+      }
+    }
+
+    for (const kind of kindPreference) {
+      const fallbackMatch = evidenceCatalog.find((item) => item.kind === kind);
+      if (fallbackMatch) {
+        return [fallbackMatch.id];
+      }
+    }
+
+    const positional = evidenceIds[Math.min(index, evidenceIds.length - 1)] ?? defaultEvidenceId;
+    return positional ? [positional] : [];
+  });
+}
+
+function inferEvidenceKindPreference(stepText: string): SummaryEvidenceKind[] {
+  const normalized = stepText.trim().toLowerCase();
+
+  if (!normalized) {
+    return ['file', 'url', 'terminal', 'task', 'debug', 'git', 'branch', 'commit'];
+  }
+
+  if (/\b(debug|breakpoint|launch|attach|inspect)\b/.test(normalized)) {
+    return ['debug', 'terminal', 'task', 'file', 'url', 'git', 'branch', 'commit'];
+  }
+
+  if (
+    /\b(re-?run|rerun|retry|failing|failed|blocker|test|build|command|validate|validation|verify)\b/.test(
+      normalized,
+    )
+  ) {
+    return ['terminal', 'task', 'debug', 'file', 'url', 'git', 'branch', 'commit'];
+  }
+
+  if (/\b(link|url|http|https|pr\b|pull request|issue|ticket|docs?)\b/.test(normalized)) {
+    return ['url', 'file', 'terminal', 'task', 'debug', 'git', 'branch', 'commit'];
+  }
+
+  if (/\b(file|edit|code|module|open)\b/.test(normalized)) {
+    return ['file', 'url', 'terminal', 'task', 'debug', 'git', 'branch', 'commit'];
+  }
+
+  return ['file', 'url', 'terminal', 'task', 'debug', 'git', 'branch', 'commit'];
 }
 
 function buildCandidateIntents(signals: ResumeSignals, topFiles: string[]): string[] {

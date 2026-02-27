@@ -23,7 +23,12 @@ import {
 import { isSummaryLinkEvidenceGrounded } from './evidenceSafety';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
-import { buildMetricsCsv, hasAnyRecordedMetric } from './metrics';
+import {
+  buildMetricsCsv,
+  hasAnyRecordedMetric,
+  pruneMetricsForWorkspace,
+  removeMetricsForWorkspace,
+} from './metrics';
 import { shouldAutoTriggerSummary, shouldPromptCheckpointOnBlur } from './noiseControl';
 import { buildNextStepActions } from './nextStepActions';
 import {
@@ -4863,6 +4868,11 @@ async function forgetWorkspaceNow(context: vscode.ExtensionContext): Promise<voi
   }
 
   await clearWorkspaceScopedState(context, workspaceRoot);
+  const metricHistory = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
+  const retainedMetrics = removeMetricsForWorkspace(metricHistory, workspaceRoot);
+  if (retainedMetrics.length !== metricHistory.length) {
+    await context.workspaceState.update(KEY_METRIC_HISTORY, retainedMetrics);
+  }
   resetRuntimeWorkspaceState();
   rerenderPanel();
   updateCompanionStatusBar();
@@ -5252,10 +5262,6 @@ function collectWorkspaceScopedKeys(
       return true;
     }
 
-    if (key === KEY_METRIC_HISTORY) {
-      return true;
-    }
-
     return (
       matchesEncodedWorkspaceKey(key, 'tacos.summary', workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, 'tacos.branch', workspaceRoot, false) ||
@@ -5365,7 +5371,7 @@ async function applyRetentionPolicy(
   }
 
   const metricHistory = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
-  const prunedMetrics = metricHistory.filter((metric) => metric.startedAt >= cutoffAt);
+  const prunedMetrics = pruneMetricsForWorkspace(metricHistory, workspaceRoot, cutoffAt);
   if (prunedMetrics.length !== metricHistory.length) {
     await context.workspaceState.update(KEY_METRIC_HISTORY, prunedMetrics);
   }

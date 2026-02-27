@@ -53,6 +53,18 @@ describe('buildResumeSummary', () => {
     );
   });
 
+  it('maps rerun-style steps to terminal/task evidence before positional file evidence', () => {
+    const summary = buildResumeSummary(sampleSignals());
+    const firstStepEvidenceIds = summary.nextStepEvidenceIds?.[0] ?? [];
+    const evidenceById = new Map((summary.evidenceCatalog ?? []).map((item) => [item.id, item]));
+    const firstEvidence = firstStepEvidenceIds[0]
+      ? evidenceById.get(firstStepEvidenceIds[0])
+      : undefined;
+
+    expect(summary.nextSteps[0].toLowerCase()).toContain('re-run');
+    expect(firstEvidence?.kind).toBe('terminal');
+  });
+
   it('marks mode as coding when no debug/failing signals exist', () => {
     const signals = sampleSignals();
     signals.failingCommand = undefined;

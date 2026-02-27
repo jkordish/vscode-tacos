@@ -105,3 +105,20 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
 
   return `${lines.join('\n')}\n`;
 }
+
+export function removeMetricsForWorkspace(
+  metrics: MetricRecord[],
+  workspaceRoot: string,
+): MetricRecord[] {
+  return metrics.filter((metric) => metric.workspaceRoot !== workspaceRoot);
+}
+
+export function pruneMetricsForWorkspace(
+  metrics: MetricRecord[],
+  workspaceRoot: string,
+  cutoffAt: number,
+): MetricRecord[] {
+  return metrics.filter(
+    (metric) => metric.workspaceRoot !== workspaceRoot || metric.startedAt >= cutoffAt,
+  );
+}

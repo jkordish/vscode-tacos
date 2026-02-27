@@ -21,8 +21,128 @@ export interface BuildNextStepActionsInput {
   canCopyFailingCommand: boolean;
 }
 
+const DEFAULT_ACTION_PREFERENCE: NextStepActionKind[] = [
+  'openFile',
+  'openUrl',
+  'copyFailingCommand',
+  'rerunDebug',
+  'rerunTask',
+];
+
 function hasTarget(item: SummaryEvidenceItem): boolean {
   return typeof item.target === 'string' && item.target.trim().length > 0;
+}
+
+interface StepActionPreference {
+  kinds: NextStepActionKind[];
+  strong: boolean;
+}
+
+function inferActionPreference(stepText: string): StepActionPreference {
+  const normalized = stepText.trim().toLowerCase();
+
+  if (!normalized) {
+    return { kinds: DEFAULT_ACTION_PREFERENCE, strong: false };
+  }
+
+  if (/\b(debug|breakpoint|launch|attach|inspect)\b/.test(normalized)) {
+    return {
+      kinds: ['rerunDebug', 'rerunTask', 'copyFailingCommand', 'openFile', 'openUrl'],
+      strong: true,
+    };
+  }
+
+  if (
+    /\b(re-?run|rerun|retry|failing|failed|blocker|test|build|command|validate|validation|verify)\b/.test(
+      normalized,
+    )
+  ) {
+    return {
+      kinds: ['copyFailingCommand', 'rerunTask', 'rerunDebug', 'openFile', 'openUrl'],
+      strong: true,
+    };
+  }
+
+  if (/\b(link|url|http|https|pr\b|pull request|issue|ticket|docs?)\b/.test(normalized)) {
+    return {
+      kinds: ['openUrl', 'openFile', 'copyFailingCommand', 'rerunTask', 'rerunDebug'],
+      strong: true,
+    };
+  }
+
+  if (/\b(file|edit|code|module|open)\b/.test(normalized)) {
+    return {
+      kinds: ['openFile', 'openUrl', 'copyFailingCommand', 'rerunTask', 'rerunDebug'],
+      strong: true,
+    };
+  }
+
+  return { kinds: DEFAULT_ACTION_PREFERENCE, strong: false };
+}
+
+function toAction(
+  evidence: SummaryEvidenceItem,
+  evidenceId: string,
+  stepIndex: number,
+  input: BuildNextStepActionsInput,
+): NextStepAction | undefined {
+  if (evidence.kind === 'file' && hasTarget(evidence)) {
+    return {
+      stepIndex,
+      kind: 'openFile',
+      label: 'Open file',
+      evidenceId,
+    };
+  }
+
+  if (evidence.kind === 'url' && hasTarget(evidence)) {
+    return {
+      stepIndex,
+      kind: 'openUrl',
+      label: 'Open link',
+      evidenceId,
+    };
+  }
+
+  if (evidence.kind === 'terminal') {
+    if (input.canCopyFailingCommand) {
+      return {
+        stepIndex,
+        kind: 'copyFailingCommand',
+        label: 'Copy failing command',
+        evidenceId,
+      };
+    }
+    if (input.canRerunTask) {
+      return {
+        stepIndex,
+        kind: 'rerunTask',
+        label: 'Rerun last task',
+        evidenceId,
+      };
+    }
+    return undefined;
+  }
+
+  if (evidence.kind === 'task' && input.canRerunTask) {
+    return {
+      stepIndex,
+      kind: 'rerunTask',
+      label: 'Rerun last task',
+      evidenceId,
+    };
+  }
+
+  if (evidence.kind === 'debug' && input.canRerunDebug) {
+    return {
+      stepIndex,
+      kind: 'rerunDebug',
+      label: 'Start debug',
+      evidenceId,
+    };
+  }
+
+  return undefined;
 }
 
 export function buildNextStepActions(
@@ -35,76 +155,72 @@ export function buildNextStepActions(
   const evidenceById = new Map(
     (input.summary.evidenceCatalog ?? []).map((item) => [item.id, item] as const),
   );
+  const catalogEvidence = input.summary.evidenceCatalog ?? [];
 
-  return input.summary.nextSteps.map((_, index) => {
-    const evidenceIds = input.summary.nextStepEvidenceIds?.[index] ?? [];
-    if (!Array.isArray(evidenceIds) || evidenceIds.length === 0) {
+  return input.summary.nextSteps.map((step, index) => {
+    const mappedEvidenceIds = input.summary.nextStepEvidenceIds?.[index] ?? [];
+    const preference = inferActionPreference(step);
+
+    if (!Array.isArray(mappedEvidenceIds) || mappedEvidenceIds.length === 0) {
       return undefined;
     }
 
-    for (const evidenceId of evidenceIds) {
+    const mappedActionCandidates: NextStepAction[] = [];
+    for (const evidenceId of mappedEvidenceIds) {
       const evidence = evidenceById.get(evidenceId);
       if (!evidence) {
         continue;
       }
-
-      if (evidence.kind === 'file' && hasTarget(evidence)) {
-        return {
-          stepIndex: index,
-          kind: 'openFile',
-          label: 'Open file',
-          evidenceId,
-        };
-      }
-
-      if (evidence.kind === 'url' && hasTarget(evidence)) {
-        return {
-          stepIndex: index,
-          kind: 'openUrl',
-          label: 'Open link',
-          evidenceId,
-        };
-      }
-
-      if (evidence.kind === 'terminal') {
-        if (input.canCopyFailingCommand) {
-          return {
-            stepIndex: index,
-            kind: 'copyFailingCommand',
-            label: 'Copy failing command',
-            evidenceId,
-          };
-        }
-        if (input.canRerunTask) {
-          return {
-            stepIndex: index,
-            kind: 'rerunTask',
-            label: 'Rerun last task',
-            evidenceId,
-          };
-        }
-        continue;
-      }
-
-      if (evidence.kind === 'task' && input.canRerunTask) {
-        return {
-          stepIndex: index,
-          kind: 'rerunTask',
-          label: 'Rerun last task',
-          evidenceId,
-        };
-      }
-
-      if (evidence.kind === 'debug' && input.canRerunDebug) {
-        return {
-          stepIndex: index,
-          kind: 'rerunDebug',
-          label: 'Start debug',
-          evidenceId,
-        };
+      const action = toAction(evidence, evidenceId, index, input);
+      if (action) {
+        mappedActionCandidates.push(action);
       }
     }
 
-    return undefined;
+    if (mappedActionCandidates.length === 0) {
+      return undefined;
+    }
+
+    if (!preference.strong) {
+      return mappedActionCandidates[0];
+    }
+
+    const orderedCandidateIds: string[] = [];
+
+    for (const evidenceId of mappedEvidenceIds) {
+      if (!orderedCandidateIds.includes(evidenceId)) {
+        orderedCandidateIds.push(evidenceId);
+      }
+    }
+    for (const evidence of catalogEvidence) {
+      if (!orderedCandidateIds.includes(evidence.id)) {
+        orderedCandidateIds.push(evidence.id);
+      }
+    }
+
+    const actionCandidates: NextStepAction[] = [];
+    for (const evidenceId of orderedCandidateIds) {
+      const evidence = evidenceById.get(evidenceId);
+      if (!evidence) {
+        continue;
+      }
+      const action = toAction(evidence, evidenceId, index, input);
+      if (action) {
+        actionCandidates.push(action);
+      }
+    }
+
+    if (actionCandidates.length === 0) {
+      return undefined;
+    }
+
+    for (const preferredKind of preference.kinds) {
+      const match = actionCandidates.find((candidate) => candidate.kind === preferredKind);
+      if (match) {
+        return match;
+      }
+    }
+
+    return mappedActionCandidates[0];
   });
 }

@@ -151,4 +151,39 @@ describe('buildNextStepActions', () => {
 
     expect(actions).toEqual([undefined, undefined]);
   });
+
+  it('prefers semantically matching actions even when mapped evidence IDs are positional', () => {
+    const evidence: SummaryEvidenceItem[] = [
+      {
+        id: 'file:src/extension.ts',
+        kind: 'file',
+        label: 'src/extension.ts',
+        target: '/workspace/src/extension.ts',
+      },
+      {
+        id: 'terminal:fail',
+        kind: 'terminal',
+        label: 'npm test',
+      },
+    ];
+    const summary = baseSummary({
+      nextSteps: ['Re-run and fix: npm test'],
+      nextStepEvidenceIds: [['file:src/extension.ts']],
+      evidenceCatalog: evidence,
+    });
+
+    const actions = buildNextStepActions({
+      summary,
+      canRerunTask: true,
+      canRerunDebug: false,
+      canCopyFailingCommand: true,
+    });
+
+    expect(actions[0]).toEqual({
+      stepIndex: 0,
+      kind: 'copyFailingCommand',
+      label: 'Copy failing command',
+      evidenceId: 'terminal:fail',
+    });
+  });
 });
