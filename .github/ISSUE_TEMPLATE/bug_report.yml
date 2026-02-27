@@ -46,6 +46,14 @@ body:
     validations:
       required: true
   - type: input
+    id: scope_context
+    attributes:
+      label: Scope context (workspace / branch / partition)
+      description: Include the workspace root label, active branch, and task partition when relevant.
+      placeholder: e.g. repo-a / feature/parser-fix / ABC-123
+    validations:
+      required: false
+  - type: input
     id: vscode_version
     attributes:
       label: VS Code version

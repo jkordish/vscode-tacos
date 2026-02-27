@@ -6668,7 +6668,10 @@ async function updateCheckpointNoteById(
     if (!updated) {
       notes.splice(index, 1);
     } else {
-      notes[index] = updated;
+      notes[index] = {
+        ...updated,
+        updatedAt: Date.now(),
+      };
     }
     await writeCheckpointNotesForScope(context, scope, notes);
     return true;

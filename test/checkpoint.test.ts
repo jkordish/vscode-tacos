@@ -53,12 +53,14 @@ describe('checkpoint helpers', () => {
       {
         id: 'b',
         createdAt: 2,
+        updatedAt: 2,
         text: 'Newest',
         status: 'open',
       },
       {
         id: 'a',
         createdAt: 1,
+        updatedAt: 1,
         text: 'Older',
         status: 'done',
       },
@@ -78,12 +80,14 @@ describe('checkpoint helpers', () => {
       {
         id: 'n1',
         createdAt: 10,
+        updatedAt: 10,
         text: 'recent open',
         status: 'open',
       },
       {
         id: 'n2',
         createdAt: 5,
+        updatedAt: 5,
         text: 'pinned old',
         status: 'open',
         pinned: true,
@@ -100,6 +104,7 @@ describe('checkpoint helpers', () => {
     expect(migrated?.pinned).toBe(true);
     expect(migrated?.status).toBe('open');
     expect(migrated?.scope).toBe('workspace');
+    expect(typeof migrated?.updatedAt).toBe('number');
   });
 
   it('prunes closed notes older than cutoff while keeping open notes', () => {
@@ -108,18 +113,21 @@ describe('checkpoint helpers', () => {
         {
           id: 'open-old',
           createdAt: 1,
+          updatedAt: 1,
           text: 'still relevant',
           status: 'open',
         },
         {
           id: 'done-old',
           createdAt: 2,
+          updatedAt: 2,
           text: 'already done',
           status: 'done',
         },
         {
           id: 'dismissed-new',
           createdAt: 200,
+          updatedAt: 200,
           text: 'dismissed but recent',
           status: 'dismissed',
         },

@@ -7,6 +7,7 @@ export type CheckpointNoteScope = 'partition' | 'workspace';
 export interface CheckpointNote {
   id: string;
   createdAt: number;
+  updatedAt: number;
   text: string;
   branch?: string;
   partition?: string;
@@ -61,6 +62,10 @@ function normalizeNote(raw: unknown): CheckpointNote | undefined {
     typeof value.createdAt === 'number' && Number.isFinite(value.createdAt)
       ? value.createdAt
       : Date.now();
+  const updatedAt =
+    typeof value.updatedAt === 'number' && Number.isFinite(value.updatedAt)
+      ? value.updatedAt
+      : createdAt;
   const id = typeof value.id === 'string' && value.id.trim() ? value.id.trim() : randomUUID();
   const branch = typeof value.branch === 'string' ? value.branch.trim() : '';
   const partition = typeof value.partition === 'string' ? value.partition.trim() : '';
@@ -73,6 +78,7 @@ function normalizeNote(raw: unknown): CheckpointNote | undefined {
   return {
     id,
     createdAt,
+    updatedAt,
     text,
     branch: branch || undefined,
     partition: partition || undefined,
@@ -116,17 +122,23 @@ export function sanitizeCheckpointNote(
 
 export function createCheckpointNote(
   text: string,
-  options: Omit<CheckpointNote, 'id' | 'createdAt' | 'text' | 'status'> & {
+  options: Omit<CheckpointNote, 'id' | 'createdAt' | 'updatedAt' | 'text' | 'status'> & {
     status?: CheckpointNoteStatus;
     createdAt?: number;
+    updatedAt?: number;
   } = {},
 ): CheckpointNote {
+  const createdAt =
+    typeof options.createdAt === 'number' && Number.isFinite(options.createdAt)
+      ? options.createdAt
+      : Date.now();
   return {
     id: randomUUID(),
-    createdAt:
-      typeof options.createdAt === 'number' && Number.isFinite(options.createdAt)
-        ? options.createdAt
-        : Date.now(),
+    createdAt,
+    updatedAt:
+      typeof options.updatedAt === 'number' && Number.isFinite(options.updatedAt)
+        ? options.updatedAt
+        : createdAt,
     text,
     branch: options.branch,
     partition: options.partition,
@@ -177,7 +189,7 @@ export function pruneCheckpointNotesForCutoff(
     return normalized;
   }
 
-  return normalized.filter((note) => note.status === 'open' || note.createdAt >= cutoffAt);
+  return normalized.filter((note) => note.status === 'open' || note.updatedAt >= cutoffAt);
 }
 
 export function createLegacyMigrationNote(
@@ -194,6 +206,7 @@ export function createLegacyMigrationNote(
   return {
     id: `legacy-${id}`,
     createdAt: Date.now(),
+    updatedAt: Date.now(),
     text: sanitized,
     status: 'open',
     pinned: true,
