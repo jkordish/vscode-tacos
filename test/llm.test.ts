@@ -1,5 +1,9 @@
 import * as path from 'node:path';
-import { buildSummaryContextPrompt, validateOpenAiSummaryPayload } from '../src/llm';
+import {
+  buildSummaryContextPrompt,
+  shouldRetryWithJsonObjectFallback,
+  validateOpenAiSummaryPayload,
+} from '../src/llm';
 import type { SummaryEvidenceItem } from '../src/types';
 
 describe('validateOpenAiSummaryPayload', () => {
@@ -280,5 +284,31 @@ describe('buildSummaryContextPrompt', () => {
     expect(prompt).toContain(
       'id=url:https://example.com/docs | kind=url | label=Docs | target=https://example.com/docs',
     );
+  });
+});
+
+describe('shouldRetryWithJsonObjectFallback', () => {
+  it('returns true for response_format/json_schema compatibility errors', () => {
+    expect(
+      shouldRetryWithJsonObjectFallback(
+        new Error('OpenAI request failed (400): unsupported response_format: json_schema'),
+      ),
+    ).toBe(true);
+    expect(
+      shouldRetryWithJsonObjectFallback(
+        new Error('invalid parameter: response_format must be one of json_object or text'),
+      ),
+    ).toBe(true);
+  });
+
+  it('returns false for timeout and refusal errors', () => {
+    expect(
+      shouldRetryWithJsonObjectFallback(new Error('OpenAI request timed out after 15000ms')),
+    ).toBe(false);
+    expect(
+      shouldRetryWithJsonObjectFallback(
+        new Error('OpenAI model refused summary request: policy restriction'),
+      ),
+    ).toBe(false);
   });
 });
