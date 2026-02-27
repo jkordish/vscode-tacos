@@ -22,6 +22,12 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'openScratchpad' })).toEqual({
       type: 'openScratchpad',
     });
+    expect(parseWebviewMessage({ type: 'appendScratchpad' })).toEqual({
+      type: 'appendScratchpad',
+    });
+    expect(parseWebviewMessage({ type: 'setScratchpadScope' })).toEqual({
+      type: 'setScratchpadScope',
+    });
     expect(parseWebviewMessage({ type: 'toggleAutoSummaries' })).toEqual({
       type: 'toggleAutoSummaries',
     });

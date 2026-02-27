@@ -20,6 +20,9 @@ All notable changes to this project are documented in this file.
   - `TaCoS: List Checkpoint Notes`
   - `TaCoS: Add Checkpoint from Selection`
   - `TaCoS: Add Quick Checkpoint Note`
+- Scratchpad quick actions in Companion surfaces:
+  - `Open Scratchpad`, `Append`, and `Set Scope` buttons in the panel scratchpad card
+  - Scratchpad and checkpoint-note management entries in `TaCoS Companion` quick actions
 - Resume panel notes card with actions for `Mark done`, `Pin/Unpin`, `Dismiss`, and `Add note`.
 
 ### Changed

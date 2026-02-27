@@ -1870,6 +1870,10 @@ interface CompanionActionPick extends vscode.QuickPickItem {
     | 'standup'
     | 'restoreWorkingSet'
     | 'switchPartition'
+    | 'listCheckpointNotes'
+    | 'openScratchpad'
+    | 'appendScratchpad'
+    | 'setScratchpadScope'
     | 'jumpLastEdit'
     | 'copyPrompt'
     | 'togglePause'
@@ -1913,6 +1917,26 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'switchPartition',
       label: 'Switch task partition',
       detail: 'Set or clear manual task key for context partitioning.',
+    },
+    {
+      id: 'listCheckpointNotes',
+      label: 'List checkpoint notes',
+      detail: 'Review, edit, pin, dismiss, or mark notes done.',
+    },
+    {
+      id: 'openScratchpad',
+      label: 'Open scratchpad',
+      detail: 'Open the scoped scratchpad in a real editor tab.',
+    },
+    {
+      id: 'appendScratchpad',
+      label: 'Append to scratchpad',
+      detail: 'Append selected text (or clipboard fallback) with a timestamp divider.',
+    },
+    {
+      id: 'setScratchpadScope',
+      label: 'Set scratchpad scope',
+      detail: 'Switch between task scope and workspace-global scratchpad.',
     },
     {
       id: 'jumpLastEdit',
@@ -2015,6 +2039,18 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'switchPartition') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.switchTaskPartition');
+  } else if (picked.id === 'listCheckpointNotes') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.listCheckpointNotes');
+  } else if (picked.id === 'openScratchpad') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.openScratchpad');
+  } else if (picked.id === 'appendScratchpad') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.appendToScratchpad');
+  } else if (picked.id === 'setScratchpadScope') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.setScratchpadScope');
   } else if (picked.id === 'jumpLastEdit') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.jumpToLastEdit');
@@ -2153,7 +2189,24 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'openScratchpad') {
+        recordCompanionQuickAction();
         await openScratchpadCommand(context, state.panelWorkspaceRoot);
+        await refreshPanelScratchpadState(context, state.panelWorkspaceRoot);
+        rerenderPanel();
+        return;
+      }
+
+      if (message.type === 'appendScratchpad') {
+        recordCompanionQuickAction();
+        await appendToScratchpadCommand(context);
+        await refreshPanelScratchpadState(context, state.panelWorkspaceRoot);
+        rerenderPanel();
+        return;
+      }
+
+      if (message.type === 'setScratchpadScope') {
+        recordCompanionQuickAction();
+        await setScratchpadScopeCommand(context);
         await refreshPanelScratchpadState(context, state.panelWorkspaceRoot);
         rerenderPanel();
         return;
@@ -2621,6 +2674,8 @@ function renderWebview(
       ${scratchpadPreviewHtml}
       <div class="status-actions">
         <button type="button" class="secondary" data-action="openScratchpad">Open Scratchpad</button>
+        <button type="button" class="secondary" data-action="appendScratchpad">Append</button>
+        <button type="button" class="secondary" data-action="setScratchpadScope">Set Scope</button>
       </div>
     </div>`;
   const candidateIntentItems = (summary.candidateIntents ?? [])
@@ -3465,6 +3520,8 @@ function renderWebview(
         'checkpointDismiss',
         'checkpointOpenList',
         'openScratchpad',
+        'appendScratchpad',
+        'setScratchpadScope',
         'sessionAddCheckpoint',
         'copyNextSteps',
         'copySummary',

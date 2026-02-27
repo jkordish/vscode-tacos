@@ -5,6 +5,8 @@ const SIMPLE_MESSAGE_TYPES = [
   'checkpointDismiss',
   'checkpointOpenList',
   'openScratchpad',
+  'appendScratchpad',
+  'setScratchpadScope',
   'copyNextSteps',
   'copySummary',
   'copyPromptAndOpenCodex',
