@@ -3,6 +3,7 @@ import {
   checkpointStorageKey,
   createLegacyMigrationNote,
   parseCheckpointNotes,
+  pruneCheckpointNotesForCutoff,
   sanitizeCheckpointNote,
   sortCheckpointNotes,
 } from '../src/checkpoint';
@@ -90,5 +91,33 @@ describe('checkpoint helpers', () => {
     expect(migrated?.pinned).toBe(true);
     expect(migrated?.status).toBe('open');
     expect(migrated?.scope).toBe('workspace');
+  });
+
+  it('prunes closed notes older than cutoff while keeping open notes', () => {
+    const pruned = pruneCheckpointNotesForCutoff(
+      [
+        {
+          id: 'open-old',
+          createdAt: 1,
+          text: 'still relevant',
+          status: 'open',
+        },
+        {
+          id: 'done-old',
+          createdAt: 2,
+          text: 'already done',
+          status: 'done',
+        },
+        {
+          id: 'dismissed-new',
+          createdAt: 200,
+          text: 'dismissed but recent',
+          status: 'dismissed',
+        },
+      ],
+      100,
+    );
+
+    expect(pruned.map((note) => note.id)).toEqual(['dismissed-new', 'open-old']);
   });
 });

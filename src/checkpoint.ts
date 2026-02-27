@@ -168,6 +168,18 @@ export function sortCheckpointNotes(notes: CheckpointNote[]): CheckpointNote[] {
   });
 }
 
+export function pruneCheckpointNotesForCutoff(
+  notes: CheckpointNote[],
+  cutoffAt: number,
+): CheckpointNote[] {
+  const normalized = sortCheckpointNotes(parseCheckpointNotes(notes));
+  if (!Number.isFinite(cutoffAt)) {
+    return normalized;
+  }
+
+  return normalized.filter((note) => note.status === 'open' || note.createdAt >= cutoffAt);
+}
+
 export function createLegacyMigrationNote(
   rawLegacyNote: string,
   workspaceRoot: string,

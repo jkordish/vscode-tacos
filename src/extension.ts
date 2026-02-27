@@ -22,7 +22,9 @@ import {
   checkpointStorageKey,
   createCheckpointNote,
   createLegacyMigrationNote,
+  decodeCheckpointScopeFromStorageKey,
   parseCheckpointNotes,
+  pruneCheckpointNotesForCutoff,
   sanitizeCheckpointNote,
   sortCheckpointNotes,
   type CheckpointNote,
@@ -6221,6 +6223,43 @@ function resetRuntimeWorkspaceState(): void {
   }
 }
 
+function isCheckpointScopeForWorkspace(scope: string, workspaceRoot: string): boolean {
+  return scope === workspaceGlobalCheckpointScope(workspaceRoot) || scope.startsWith(`${workspaceRoot}::`);
+}
+
+async function pruneCheckpointNotesForWorkspace(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  cutoffAt: number,
+): Promise<void> {
+  const checkpointKeys = context.workspaceState
+    .keys()
+    .filter((key) => key.startsWith('tacos.checkpointNotes.'));
+  if (checkpointKeys.length === 0) {
+    return;
+  }
+
+  const pruneOps: Thenable<void>[] = [];
+  for (const key of checkpointKeys) {
+    const scope = decodeCheckpointScopeFromStorageKey(key);
+    if (!scope || !isCheckpointScopeForWorkspace(scope, workspaceRoot)) {
+      continue;
+    }
+
+    const notes = parseCheckpointNotes(context.workspaceState.get<unknown>(key, []));
+    const pruned = pruneCheckpointNotesForCutoff(notes, cutoffAt);
+    if (pruned.length === notes.length) {
+      continue;
+    }
+
+    pruneOps.push(context.workspaceState.update(key, pruned.length > 0 ? pruned : undefined));
+  }
+
+  if (pruneOps.length > 0) {
+    await Promise.all(pruneOps);
+  }
+}
+
 async function applyRetentionPolicy(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
@@ -6291,6 +6330,8 @@ async function applyRetentionPolicy(
   if (clearedActiveSummary && pickWorkspaceRoot(state.panelWorkspaceRoot) === workspaceRoot) {
     state.scratchSummary = undefined;
   }
+
+  await pruneCheckpointNotesForWorkspace(context, workspaceRoot, cutoffAt);
 
   const prunedMetrics = pruneMetricsForWorkspace(metricHistory, workspaceRoot, cutoffAt);
   if (prunedMetrics.length !== metricHistory.length) {
