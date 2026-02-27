@@ -41,7 +41,9 @@ describe('buildAiPayloadPreviewMarkdown', () => {
     expect(markdown).toContain('"provider": "openai"');
     expect(markdown).toContain('"intent": "Fix tests"');
     expect(markdown).toContain('Includes your checkpoint notes: no');
-    expect(markdown).toContain('Scratchpad content: excluded by default');
+    expect(markdown).toContain('Includes scratchpad content: no');
+    expect(markdown).toContain('## Redaction report');
+    expect(markdown).toContain('High-risk detected: no');
   });
 
   it('marks large payload previews as truncated', () => {
@@ -65,5 +67,47 @@ describe('buildAiPayloadPreviewMarkdown', () => {
 
     expect(markdown).toContain('Preview JSON is truncated');
     expect(markdown).toContain('...truncated...');
+  });
+
+  it('renders redaction report categories and high-risk flag', () => {
+    const markdown = buildAiPayloadPreviewMarkdown({
+      provider: 'openai',
+      workspaceName: 'workspace',
+      generatedAt: 123,
+      signals: sampleSignals(),
+      summary: {
+        intent: 'Review redactions',
+        nextSteps: ['Inspect payload'],
+        topFiles: ['src/extension.ts'],
+        links: [],
+        evidenceCatalog: [],
+      },
+      includeCheckpointNotes: true,
+      includeScratchpad: false,
+      checkpointNotes: ['secret removed'],
+      redactionReport: {
+        categoryCounts: {
+          bearer_header: 2,
+          private_key_block: 1,
+        },
+        totalReplacements: 3,
+        totalCharsReplaced: 120,
+        highRiskDetected: true,
+        customPatternValidation: {
+          provided: 2,
+          accepted: 1,
+          invalid: 1,
+          tooLong: 0,
+          overLimit: 0,
+        },
+      },
+    });
+
+    expect(markdown).toContain('Includes your checkpoint notes: yes');
+    expect(markdown).toContain('Includes scratchpad content: no');
+    expect(markdown).toContain('Total replacements: 3');
+    expect(markdown).toContain('High-risk detected: yes');
+    expect(markdown).toContain('bearer_header: 2');
+    expect(markdown).toContain('private_key_block: 1');
   });
 });

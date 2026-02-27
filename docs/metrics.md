@@ -52,6 +52,10 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `resumeWithNote` | integer | `1` if an open checkpoint note was present in the resume context, else `0`. |
 | `scratchpadOpened` | integer | Count of `TaCoS: Open Scratchpad` actions during session. |
 | `scratchpadAppended` | integer | Count of `TaCoS: Append to Scratchpad` actions during session. |
+| `redactionEventsTotal` | integer | Aggregate count of sanitizer replacements performed locally during the session. |
+| `redactionHighRiskDetectedTotal` | integer | Count of high-risk sanitizer detections during the session. |
+| `aiSendBlockedBySanitizerTotal` | integer | Count of AI-boundary sends blocked by strict sanitizer checks. |
+| `aiSendAllowedAfterReviewTotal` | integer | Count of AI sends explicitly approved after payload review. |
 | `companionActionFollowThroughRate` | ratio | Derived as `companionQuickActionsTaken / companionPromptImpressions`. |
 | `companionForcedOpenRate` | ratio | Derived as `companionForcedOpenDetailsClicks / companionPromptImpressions`. |
 
@@ -71,6 +75,10 @@ Track these explicitly for stabilization/adoption gating:
 - `resumeWithNote`
 - `scratchpadOpened`
 - `scratchpadAppended`
+- `redactionEventsTotal`
+- `redactionHighRiskDetectedTotal`
+- `aiSendBlockedBySanitizerTotal`
+- `aiSendAllowedAfterReviewTotal`
 
 ## Notes
 

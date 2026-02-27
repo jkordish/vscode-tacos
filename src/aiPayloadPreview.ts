@@ -1,4 +1,5 @@
 import type { ResumeSignals, ResumeSummary, SummaryProvider } from './types';
+import type { RedactionReport } from './redaction';
 
 export interface AiPayloadPreviewInput {
   provider: SummaryProvider;
@@ -7,6 +8,10 @@ export interface AiPayloadPreviewInput {
   signals: ResumeSignals;
   summary: Pick<ResumeSummary, 'intent' | 'nextSteps' | 'topFiles' | 'links' | 'evidenceCatalog'>;
   checkpointNotes?: string[];
+  includeCheckpointNotes?: boolean;
+  includeScratchpad?: boolean;
+  scratchpadExcerpt?: string;
+  redactionReport?: RedactionReport;
   maxJsonChars?: number;
 }
 
@@ -22,6 +27,9 @@ function truncateJson(json: string, maxChars: number): { value: string; truncate
 }
 
 export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): string {
+  const includeCheckpointNotes =
+    input.includeCheckpointNotes ?? (input.checkpointNotes?.length ?? 0) > 0;
+  const includeScratchpad = input.includeScratchpad ?? false;
   const payload = {
     provider: input.provider,
     generatedAt: input.generatedAt,
@@ -34,7 +42,8 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
       links: input.summary.links,
       evidenceCatalog: input.summary.evidenceCatalog ?? [],
     },
-    checkpointNotes: input.checkpointNotes ?? [],
+    checkpointNotes: includeCheckpointNotes ? (input.checkpointNotes ?? []) : [],
+    scratchpadExcerpt: includeScratchpad ? (input.scratchpadExcerpt ?? '') : undefined,
   };
   const json = JSON.stringify(payload, null, 2);
   const { value: previewJson, truncated } = truncateJson(json, input.maxJsonChars ?? 12_000);
@@ -42,6 +51,15 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
   const truncationNote = truncated
     ? '\n- Preview JSON is truncated for readability. The sent payload uses full redacted context.\n'
     : '';
+  const report = input.redactionReport;
+  const categoryEntries =
+    report && Object.keys(report.categoryCounts).length > 0
+      ? Object.entries(report.categoryCounts).sort((a, b) => b[1] - a[1])
+      : [];
+  const categoryLines =
+    categoryEntries.length > 0
+      ? categoryEntries.map(([category, count]) => `  - ${category}: ${count}`)
+      : ['  - none'];
 
   return [
     '# TaCoS AI Payload Preview',
@@ -51,8 +69,15 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
     `- Provider: \`${input.provider}\``,
     `- Workspace: \`${input.workspaceName}\``,
     `- Generated: ${new Date(input.generatedAt).toLocaleString()}`,
-    `- Includes your checkpoint notes: ${(input.checkpointNotes?.length ?? 0) > 0 ? 'yes' : 'no'}`,
-    '- Scratchpad content: excluded by default (explicit opt-in only).',
+    `- Includes your checkpoint notes: ${includeCheckpointNotes ? 'yes' : 'no'}`,
+    `- Includes scratchpad content: ${includeScratchpad ? 'yes' : 'no'}`,
+    '',
+    '## Redaction report',
+    `- Total replacements: ${report?.totalReplacements ?? 0}`,
+    `- Total chars replaced: ${report?.totalCharsReplaced ?? 0}`,
+    `- High-risk detected: ${report?.highRiskDetected ? 'yes' : 'no'}`,
+    '- Category counts:',
+    ...categoryLines,
     truncationNote,
     '```json',
     previewJson,

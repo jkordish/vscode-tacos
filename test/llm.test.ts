@@ -1,5 +1,6 @@
 import * as path from 'node:path';
 import {
+  buildStrictSanitizedSummaryContext,
   buildSummaryContextPrompt,
   shouldRetryWithJsonObjectFallback,
   validateOpenAiSummaryPayload,
@@ -284,6 +285,46 @@ describe('buildSummaryContextPrompt', () => {
     expect(prompt).toContain(
       'id=url:https://example.com/docs | kind=url | label=Docs | target=https://example.com/docs',
     );
+  });
+});
+
+describe('buildStrictSanitizedSummaryContext', () => {
+  it('sanitizes prompt text and flags high-risk content', () => {
+    const result = buildStrictSanitizedSummaryContext(
+      {
+        workspaceRoot: '/workspace/repo',
+        workspaceName: 'repo',
+        branch: 'main',
+        gitStatus: '',
+        gitDiffStat: '',
+        gitDiff: '',
+        gitLog: '',
+        changedFiles: [],
+        openFiles: [],
+        recentFiles: [],
+        recentTerminal: [],
+        recentDebug: [],
+        recentUrls: [],
+        doneItems: [],
+      },
+      {
+        intent: 'intent',
+        nextSteps: ['step 1', 'step 2'],
+        topFiles: [],
+        links: [],
+        detailsMarkdown: 'token=super-secret-token-value',
+        codexPrompt: 'prompt',
+        contextHash: 'hash',
+        generatedAt: 1,
+        source: 'local',
+      },
+      [],
+    );
+
+    expect(result.report.highRiskDetected).toBe(true);
+    expect(result.report.totalReplacements).toBeGreaterThan(0);
+    expect(result.sanitizedPrompt).toContain('<redacted>');
+    expect(result.sanitizedPrompt).not.toContain('super-secret-token-value');
   });
 });
 

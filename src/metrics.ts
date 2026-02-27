@@ -26,6 +26,10 @@ const CSV_HEADERS = [
   'resumeWithNote',
   'scratchpadOpened',
   'scratchpadAppended',
+  'redactionEventsTotal',
+  'redactionHighRiskDetectedTotal',
+  'aiSendBlockedBySanitizerTotal',
+  'aiSendAllowedAfterReviewTotal',
   'companionActionFollowThroughRate',
   'companionForcedOpenRate',
 ] as const;
@@ -137,6 +141,10 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const notesPinned = summarizeTotal(metrics, 'notePinned');
   const scratchpadOpened = summarizeTotal(metrics, 'scratchpadOpened');
   const scratchpadAppended = summarizeTotal(metrics, 'scratchpadAppended');
+  const redactionEventsTotal = summarizeTotal(metrics, 'redactionEventsTotal');
+  const redactionHighRiskDetectedTotal = summarizeTotal(metrics, 'redactionHighRiskDetectedTotal');
+  const aiSendBlockedBySanitizerTotal = summarizeTotal(metrics, 'aiSendBlockedBySanitizerTotal');
+  const aiSendAllowedAfterReviewTotal = summarizeTotal(metrics, 'aiSendAllowedAfterReviewTotal');
   const sessionsWithNote = metrics.filter((metric) => metric.resumeWithNote === 1).length;
   const lagActionWithNote = summarizeLag(
     metrics.filter((metric) => metric.resumeWithNote === 1),
@@ -184,6 +192,10 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| notePinned (total) | ${notesPinned} |`,
     `| scratchpadOpened (total) | ${scratchpadOpened} |`,
     `| scratchpadAppended (total) | ${scratchpadAppended} |`,
+    `| redactionEventsTotal (total) | ${redactionEventsTotal} |`,
+    `| redactionHighRiskDetectedTotal (total) | ${redactionHighRiskDetectedTotal} |`,
+    `| aiSendBlockedBySanitizerTotal (total) | ${aiSendBlockedBySanitizerTotal} |`,
+    `| aiSendAllowedAfterReviewTotal (total) | ${aiSendAllowedAfterReviewTotal} |`,
     '',
     'Resumption lag by note usage (`firstActionLagMs`):',
     '',
@@ -227,7 +239,11 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.notePinned ?? 0) > 0 ||
     metric.resumeWithNote === 1 ||
     (metric.scratchpadOpened ?? 0) > 0 ||
-    (metric.scratchpadAppended ?? 0) > 0
+    (metric.scratchpadAppended ?? 0) > 0 ||
+    (metric.redactionEventsTotal ?? 0) > 0 ||
+    (metric.redactionHighRiskDetectedTotal ?? 0) > 0 ||
+    (metric.aiSendBlockedBySanitizerTotal ?? 0) > 0 ||
+    (metric.aiSendAllowedAfterReviewTotal ?? 0) > 0
   );
 }
 
@@ -265,6 +281,10 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.resumeWithNote),
       toOptionalNumber(metric.scratchpadOpened),
       toOptionalNumber(metric.scratchpadAppended),
+      toOptionalNumber(metric.redactionEventsTotal),
+      toOptionalNumber(metric.redactionHighRiskDetectedTotal),
+      toOptionalNumber(metric.aiSendBlockedBySanitizerTotal),
+      toOptionalNumber(metric.aiSendAllowedAfterReviewTotal),
       toRatio(quickActions, prompts),
       toRatio(forcedOpens, prompts),
     ];

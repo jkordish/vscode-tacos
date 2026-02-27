@@ -24,7 +24,9 @@
       "restrictedConfigurations": [
         "tacos.summaryProvider",
         "tacos.openaiBaseUrl",
-        "tacos.openaiModel"
+        "tacos.openaiModel",
+        "tacos.aiIncludeCheckpointNotes",
+        "tacos.aiIncludeScratchpad"
       ]
     }
   },
@@ -68,6 +70,7 @@
     "onCommand:tacos.exportMetrics",
     "onCommand:tacos.copyMetricsBaselineSnapshot",
     "onCommand:tacos.copyDiagnostics",
+    "onCommand:tacos.testSanitizer",
     "onCommand:tacos.addVisitedUrl",
     "onCommand:tacos.addCheckpointNote",
     "onCommand:tacos.addCheckpointNoteFromClipboard",
@@ -182,6 +185,10 @@
       {
         "command": "tacos.copyDiagnostics",
         "title": "TaCoS: Copy Diagnostics"
+      },
+      {
+        "command": "tacos.testSanitizer",
+        "title": "TaCoS: Test Sanitizer"
       },
       {
         "command": "tacos.addVisitedUrl",
@@ -415,6 +422,16 @@
           "default": 15000,
           "minimum": 1000,
           "description": "Timeout for direct OpenAI summary requests."
+        },
+        "tacos.aiIncludeCheckpointNotes": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include open checkpoint note text in AI payload context. Disabled by default for safety."
+        },
+        "tacos.aiIncludeScratchpad": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include scratchpad excerpt in AI payload context. Disabled by default for safety."
         },
         "tacos.codexOpenCommand": {
           "type": "string",

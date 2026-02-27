@@ -33,6 +33,8 @@ export interface ExtensionConfig {
   openaiModel: string;
   openaiBaseUrl: string;
   openaiTimeoutMs: number;
+  aiIncludeCheckpointNotes: boolean;
+  aiIncludeScratchpad: boolean;
   codexOpenCommand: string;
 }
 
@@ -145,6 +147,10 @@ export interface MetricRecord {
   resumeWithNote?: 0 | 1;
   scratchpadOpened?: number;
   scratchpadAppended?: number;
+  redactionEventsTotal?: number;
+  redactionHighRiskDetectedTotal?: number;
+  aiSendBlockedBySanitizerTotal?: number;
+  aiSendAllowedAfterReviewTotal?: number;
 }
 
 export interface VscodeLmModelSelector {

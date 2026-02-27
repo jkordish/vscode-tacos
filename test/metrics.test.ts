@@ -50,6 +50,17 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
+
+  it('treats sanitizer counters as recorded metric activity', () => {
+    const metric: MetricRecord = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      aiSendBlockedBySanitizerTotal: 1,
+    };
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -84,10 +95,14 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('resumeWithNote');
     expect(lines[0]).toContain('scratchpadOpened');
     expect(lines[0]).toContain('scratchpadAppended');
+    expect(lines[0]).toContain('redactionEventsTotal');
+    expect(lines[0]).toContain('redactionHighRiskDetectedTotal');
+    expect(lines[0]).toContain('aiSendBlockedBySanitizerTotal');
+    expect(lines[0]).toContain('aiSendAllowedAfterReviewTotal');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('"/workspace/repo,feature"');
     expect(lines[1]).toContain(',statusbar,0,');
-    expect(lines[1]).toContain(',2,1,0.7500,');
+    expect(lines[1]).toContain(',2,1,,,,,0.7500,');
     expect(lines[1]).toContain(',0.7500,');
     expect(lines[1]).toContain(',0.2500');
   });

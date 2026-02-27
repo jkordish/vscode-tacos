@@ -25,7 +25,7 @@ import {
   decodeCheckpointScopeFromStorageKey,
   parseCheckpointNotes,
   pruneCheckpointNotesForCutoff,
-  sanitizeCheckpointNote,
+  sanitizeCheckpointNoteWithReport,
   sortCheckpointNotes,
   type CheckpointNote,
   type CheckpointNoteScope,
@@ -40,7 +40,7 @@ import {
 } from './editActivity';
 import { isSummaryLinkEvidenceGrounded } from './evidenceSafety';
 import { collectGit, parsePorcelainPaths } from './git';
-import { tryGenerateOpenAiSummary } from './llm';
+import { buildStrictSanitizedSummaryContext, tryGenerateOpenAiSummary } from './llm';
 import {
   buildMetricsBaselineSnapshotMarkdown,
   buildMetricsCsv,
@@ -61,7 +61,12 @@ import {
   resolveTaskPartitionKey as resolveTaskPartitionFromInputs,
 } from './partitionScope';
 import { isInQuietHours } from './quietHours';
-import { redactList, redactText } from './redaction';
+import {
+  redactList,
+  redactText,
+  redactTextWithReport,
+  validateCustomRedactionPatterns,
+} from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability, type RestoreAvailability } from './restoreSafety';
 import {
@@ -127,6 +132,8 @@ const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const CHECKPOINT_WORKSPACE_GLOBAL_SCOPE = 'workspace-global';
 const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
 const SCRATCHPAD_PREVIEW_MAX_BYTES = 256 * 1024;
+const AI_SCRATCHPAD_MAX_LINES = 80;
+const AI_SCRATCHPAD_MAX_CHARS = 4_000;
 const execFileAsync = promisify(execFile);
 const markdownRenderer = new MarkdownIt({
   html: false,
@@ -213,9 +220,45 @@ interface RuntimeState {
   vscodeLmSelector?: VscodeLmModelSelector;
   vscodeLmUnavailableNotified: boolean;
   applyingPrivacyPreset: boolean;
+  lastRedactionPatternWarningSignature?: string;
 }
 
 let state: RuntimeState;
+
+function maybeWarnRedactionPatternGuardrails(patterns: string[]): void {
+  const validation = validateCustomRedactionPatterns(patterns);
+  if (validation.invalid === 0 && validation.tooLong === 0 && validation.overLimit === 0) {
+    return;
+  }
+
+  const signature = [
+    validation.provided,
+    validation.accepted,
+    validation.invalid,
+    validation.tooLong,
+    validation.overLimit,
+  ].join(':');
+  if (state.lastRedactionPatternWarningSignature === signature) {
+    return;
+  }
+  state.lastRedactionPatternWarningSignature = signature;
+
+  const parts: string[] = [];
+  if (validation.invalid > 0) {
+    parts.push(`${validation.invalid} invalid`);
+  }
+  if (validation.tooLong > 0) {
+    parts.push(`${validation.tooLong} too long`);
+  }
+  if (validation.overLimit > 0) {
+    parts.push(`${validation.overLimit} beyond max`);
+  }
+  const detail = parts.join(', ');
+  void vscode.window.showWarningMessage(`TaCoS: some redaction patterns were ignored (${detail}).`);
+  state.output.appendLine(
+    `TaCoS: redaction pattern guardrails applied (provided=${validation.provided}, accepted=${validation.accepted}, invalid=${validation.invalid}, tooLong=${validation.tooLong}, overLimit=${validation.overLimit}).`,
+  );
+}
 
 interface PresentSummaryOptions {
   autoOpenDetails?: boolean;
@@ -294,6 +337,7 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscodeLmUnavailableNotified: false,
     applyingPrivacyPreset: false,
+    lastRedactionPatternWarningSignature: undefined,
   };
 
   state.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 80);
@@ -305,6 +349,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(state.output);
   void migrateLegacyPersistedActivityIfNeeded(context, persistedActivity);
   void applyRetentionPolicy(context, initialWorkspaceRoot);
+  maybeWarnRedactionPatternGuardrails(getConfig().redactionPatterns);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('tacos.showNow', async () => {
@@ -718,6 +763,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.copyDiagnostics', async () => {
       await copyDiagnosticsBundle(context);
     }),
+    vscode.commands.registerCommand('tacos.testSanitizer', async () => {
+      await testSanitizerCommand();
+    }),
   );
 
   context.subscriptions.push(
@@ -862,6 +910,7 @@ export function activate(context: vscode.ExtensionContext): void {
         event.affectsConfiguration('tacos.companionNudgeAggressiveness') ||
         event.affectsConfiguration('tacos.companionNudgeQuietHours') ||
         event.affectsConfiguration('tacos.companionNudgeCooldownMinutes');
+      const affectsRedactionPatterns = event.affectsConfiguration('tacos.redactionPatterns');
       const affectsPrivacyPreset = event.affectsConfiguration('tacos.privacyPreset');
       const affectsRetention = event.affectsConfiguration('tacos.retentionPolicy');
       const affectsStatus =
@@ -878,6 +927,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
       if (affectsRetention) {
         await applyRetentionPolicy(context, pickWorkspaceRoot() ?? '');
+      }
+
+      if (affectsRedactionPatterns) {
+        maybeWarnRedactionPatternGuardrails(getConfig().redactionPatterns);
       }
 
       if (affectsNudges && state.scratchSummary) {
@@ -1210,6 +1263,9 @@ interface PreparedTriggerSummary {
   triggerReason: TriggerReason;
   summary: ResumeSummary;
   localSummary: ResumeSummary;
+  aiPayloadSummary: ResumeSummary;
+  aiPayloadCheckpointNotes: string[];
+  aiPayloadScratchpadExcerpt?: string;
   checkpointNotes: CheckpointNote[];
   checkpointPrimaryNote?: CheckpointNote;
   checkpointScope: string;
@@ -1252,9 +1308,29 @@ async function prepareTriggerSummary(
     true,
   );
   const localSummary = applyCheckpointNoteToSummary(baseSummary, checkpointContext.primaryNote);
+  const aiPayloadCheckpointNotes =
+    config.aiIncludeCheckpointNotes && checkpointContext.primaryNote?.status === 'open'
+      ? [checkpointContext.primaryNote.text]
+      : [];
+  const aiPayloadScratchpadExcerpt = config.aiIncludeScratchpad
+    ? await loadScratchpadExcerptForAi(context, root, baseSummary.currentBranch)
+    : undefined;
+  let aiPayloadSummary =
+    aiPayloadCheckpointNotes.length > 0
+      ? localSummary
+      : { ...baseSummary, links: [...baseSummary.links] };
+  if (aiPayloadScratchpadExcerpt) {
+    aiPayloadSummary = applyScratchpadExcerptToSummary(
+      aiPayloadSummary,
+      aiPayloadScratchpadExcerpt,
+    );
+  }
   const corrections = getSummaryCorrectionsForContext(context, root, baseSummary.contextHash);
+  const correctionsFingerprint = summarizeCorrectionsFingerprint(corrections);
   localSummary.userCorrections = corrections;
-  localSummary.correctionsFingerprint = summarizeCorrectionsFingerprint(corrections);
+  localSummary.correctionsFingerprint = correctionsFingerprint;
+  aiPayloadSummary.userCorrections = corrections;
+  aiPayloadSummary.correctionsFingerprint = correctionsFingerprint;
   const cacheKey = summaryCacheKey(context, root);
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
   const correctionsUnchanged =
@@ -1285,6 +1361,9 @@ async function prepareTriggerSummary(
     triggerReason: contextUnchanged && cached ? 'cached' : reason,
     summary,
     localSummary,
+    aiPayloadSummary,
+    aiPayloadCheckpointNotes,
+    aiPayloadScratchpadExcerpt,
     checkpointNotes: checkpointContext.notes,
     checkpointPrimaryNote: checkpointContext.primaryNote,
     checkpointScope: checkpointContext.scope,
@@ -1482,7 +1561,7 @@ async function generateAiSummary(
   if (prepared.providerPlan.activeProvider === 'openai') {
     return tryGenerateOpenAiSummary(
       prepared.signals,
-      prepared.localSummary,
+      prepared.aiPayloadSummary,
       prepared.config,
       prepared.providerPlan.openAiApiKey ?? '',
       log,
@@ -1492,8 +1571,9 @@ async function generateAiSummary(
   if (prepared.providerPlan.activeProvider === 'vscode-lm' && prepared.providerPlan.vscodeLmModel) {
     return tryGenerateVscodeLmSummary(
       prepared.signals,
-      prepared.localSummary,
+      prepared.aiPayloadSummary,
       prepared.providerPlan.vscodeLmModel,
+      prepared.config.redactionPatterns,
       log,
     );
   }
@@ -1743,13 +1823,27 @@ function recordMetricCounter(
     | 'noteMarkedDone'
     | 'notePinned'
     | 'scratchpadOpened'
-    | 'scratchpadAppended',
+    | 'scratchpadAppended'
+    | 'redactionEventsTotal'
+    | 'redactionHighRiskDetectedTotal'
+    | 'aiSendBlockedBySanitizerTotal'
+    | 'aiSendAllowedAfterReviewTotal',
+  amount = 1,
 ): void {
   if (!state.metricSession) {
     return;
   }
 
-  state.metricSession[field] = (state.metricSession[field] ?? 0) + 1;
+  state.metricSession[field] = (state.metricSession[field] ?? 0) + amount;
+}
+
+function recordRedactionMetrics(totalReplacements: number, highRiskDetected: boolean): void {
+  if (totalReplacements > 0) {
+    recordMetricCounter('redactionEventsTotal', totalReplacements);
+  }
+  if (highRiskDetected) {
+    recordMetricCounter('redactionHighRiskDetectedTotal');
+  }
 }
 
 async function promptSummaryHelpfulnessRating(): Promise<void> {
@@ -3753,19 +3847,42 @@ function formatPlainSummary(summary: ResumeSummary): string {
 }
 
 async function copyPromptAndOpenCodex(summary: ResumeSummary): Promise<void> {
-  await vscode.env.clipboard.writeText(summary.codexPrompt);
+  const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot) ?? '';
+  const strictPrompt = redactTextWithReport(
+    summary.codexPrompt,
+    workspaceRoot,
+    getConfig().redactionPatterns,
+    { mode: 'ai-send' },
+  );
+  recordRedactionMetrics(
+    strictPrompt.report.totalReplacements,
+    strictPrompt.report.highRiskDetected,
+  );
+  if (strictPrompt.report.highRiskDetected) {
+    recordMetricCounter('aiSendBlockedBySanitizerTotal');
+    void vscode.window.showWarningMessage(
+      'TaCoS: Copy Prompt blocked by strict sanitizer due to high-risk content.',
+    );
+    return;
+  }
+
+  await vscode.env.clipboard.writeText(strictPrompt.text);
   const openedCommand = await tryOpenCodexPanel(getConfig());
+  const redactionDetail =
+    strictPrompt.report.totalReplacements > 0
+      ? ` (${strictPrompt.report.totalReplacements} item${strictPrompt.report.totalReplacements === 1 ? '' : 's'} redacted)`
+      : '';
 
   if (openedCommand) {
     void vscode.window.showInformationMessage(
-      `TaCoS: prompt copied and opened Codex via \`${openedCommand}\`.`,
+      `TaCoS: prompt copied${redactionDetail} and opened Codex via \`${openedCommand}\`.`,
     );
     return;
   }
 
   await vscode.commands.executeCommand('workbench.action.quickOpen', '>Codex');
   void vscode.window.showWarningMessage(
-    'TaCoS: prompt copied. Set `tacos.codexOpenCommand` to your Codex panel command id for one-click opening.',
+    `TaCoS: prompt copied${redactionDetail}. Set \`tacos.codexOpenCommand\` to your Codex panel command id for one-click opening.`,
   );
 }
 
@@ -3775,6 +3892,75 @@ async function openSummaryEditor(content: string): Promise<void> {
     content,
   });
 
+  await vscode.window.showTextDocument(doc, {
+    preview: false,
+    viewColumn: vscode.ViewColumn.Beside,
+    preserveFocus: false,
+  });
+}
+
+async function testSanitizerCommand(): Promise<void> {
+  const selected =
+    vscode.window.activeTextEditor?.document
+      .getText(vscode.window.activeTextEditor.selection)
+      .trim() ?? '';
+  const source =
+    selected ||
+    (
+      await vscode.window.showInputBox({
+        title: 'TaCoS: Test Sanitizer',
+        prompt: 'Paste text to sanitize locally (nothing is sent to AI)',
+        ignoreFocusOut: true,
+      })
+    )?.trim() ||
+    '';
+  if (!source) {
+    void vscode.window.showInformationMessage('TaCoS: no text provided for sanitizer test.');
+    return;
+  }
+
+  const workspaceRoot = pickWorkspaceRoot() ?? '';
+  const sanitizedResult = redactTextWithReport(
+    source,
+    workspaceRoot,
+    getConfig().redactionPatterns,
+    {
+      mode: 'storage',
+    },
+  );
+  recordRedactionMetrics(
+    sanitizedResult.report.totalReplacements,
+    sanitizedResult.report.highRiskDetected,
+  );
+  const categoryEntries = Object.entries(sanitizedResult.report.categoryCounts).sort(
+    (a, b) => b[1] - a[1],
+  );
+  const categoryLines =
+    categoryEntries.length > 0
+      ? categoryEntries.map(([category, count]) => `- ${category}: ${count}`)
+      : ['- none'];
+  const reportMarkdown = [
+    '# TaCoS Sanitizer Test',
+    '',
+    '- Local only: no AI send',
+    '- Mode: `storage`',
+    `- Workspace root tokenization: ${workspaceRoot ? 'enabled' : 'disabled'}`,
+    `- Total replacements: ${sanitizedResult.report.totalReplacements}`,
+    `- Total chars replaced: ${sanitizedResult.report.totalCharsReplaced}`,
+    `- High-risk detected: ${sanitizedResult.report.highRiskDetected ? 'yes' : 'no'}`,
+    '',
+    '## Category counts',
+    ...categoryLines,
+    '',
+    '## Sanitized output',
+    '```text',
+    sanitizedResult.text,
+    '```',
+  ].join('\n');
+  const doc = await vscode.workspace.openTextDocument({
+    language: 'markdown',
+    content: reportMarkdown,
+  });
   await vscode.window.showTextDocument(doc, {
     preview: false,
     viewColumn: vscode.ViewColumn.Beside,
@@ -5803,18 +5989,37 @@ function aiPayloadConsentKey(workspaceRoot: string): string {
   return `${KEY_AI_PAYLOAD_CONSENT_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
 }
 
-function hasAiPayloadConsent(context: vscode.ExtensionContext, workspaceRoot: string): boolean {
-  return context.workspaceState.get<boolean>(aiPayloadConsentKey(workspaceRoot), false);
+function aiPayloadConsentSignature(prepared: PreparedTriggerSummary): string {
+  const includeCheckpointNotes = prepared.aiPayloadCheckpointNotes.length > 0;
+  const includeScratchpad = Boolean(prepared.aiPayloadScratchpadExcerpt);
+  return [
+    prepared.providerPlan.activeProvider,
+    `checkpoint:${includeCheckpointNotes ? '1' : '0'}`,
+    `scratchpad:${includeScratchpad ? '1' : '0'}`,
+  ].join('|');
+}
+
+function hasAiPayloadConsent(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  expectedSignature: string,
+): boolean {
+  const storedSignature = context.workspaceState.get<string>(
+    aiPayloadConsentKey(workspaceRoot),
+    '',
+  );
+  return storedSignature.trim() === expectedSignature;
 }
 
 async function setAiPayloadConsent(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
   allowed: boolean,
+  signature: string,
 ): Promise<void> {
   await context.workspaceState.update(
     aiPayloadConsentKey(workspaceRoot),
-    allowed ? true : undefined,
+    allowed ? signature : undefined,
   );
 }
 
@@ -5825,7 +6030,7 @@ async function revokeAiPayloadConsent(context: vscode.ExtensionContext): Promise
     return;
   }
 
-  await setAiPayloadConsent(context, workspaceRoot, false);
+  await setAiPayloadConsent(context, workspaceRoot, false, '');
   void vscode.window.showInformationMessage(
     'TaCoS: AI payload consent revoked for this workspace.',
   );
@@ -5835,9 +6040,19 @@ async function ensureAiPayloadConsent(
   context: vscode.ExtensionContext,
   prepared: PreparedTriggerSummary,
 ): Promise<boolean> {
-  if (hasAiPayloadConsent(context, prepared.root)) {
-    return true;
-  }
+  const includeCheckpointNotes = prepared.aiPayloadCheckpointNotes.length > 0;
+  const includeScratchpad = Boolean(prepared.aiPayloadScratchpadExcerpt);
+  const consentSignature = aiPayloadConsentSignature(prepared);
+  const strictContext = buildStrictSanitizedSummaryContext(
+    prepared.signals,
+    prepared.aiPayloadSummary,
+    prepared.config.redactionPatterns,
+  );
+  recordRedactionMetrics(
+    strictContext.report.totalReplacements,
+    strictContext.report.highRiskDetected,
+  );
+  const hasStoredConsent = hasAiPayloadConsent(context, prepared.root, consentSignature);
 
   const previewMarkdown = buildAiPayloadPreviewMarkdown({
     provider: prepared.providerPlan.activeProvider,
@@ -5845,17 +6060,40 @@ async function ensureAiPayloadConsent(
     generatedAt: Date.now(),
     signals: prepared.signals,
     summary: {
-      intent: prepared.localSummary.intent,
-      nextSteps: prepared.localSummary.nextSteps,
-      topFiles: prepared.localSummary.topFiles,
-      links: prepared.localSummary.links,
-      evidenceCatalog: prepared.localSummary.evidenceCatalog,
+      intent: prepared.aiPayloadSummary.intent,
+      nextSteps: prepared.aiPayloadSummary.nextSteps,
+      topFiles: prepared.aiPayloadSummary.topFiles,
+      links: prepared.aiPayloadSummary.links,
+      evidenceCatalog: prepared.aiPayloadSummary.evidenceCatalog,
     },
-    checkpointNotes:
-      prepared.checkpointPrimaryNote?.status === 'open'
-        ? [prepared.checkpointPrimaryNote.text]
-        : [],
+    checkpointNotes: prepared.aiPayloadCheckpointNotes,
+    includeCheckpointNotes,
+    includeScratchpad,
+    scratchpadExcerpt: prepared.aiPayloadScratchpadExcerpt,
+    redactionReport: strictContext.report,
   });
+
+  if (strictContext.report.highRiskDetected) {
+    if (!hasStoredConsent) {
+      const doc = await vscode.workspace.openTextDocument({
+        language: 'markdown',
+        content: previewMarkdown,
+      });
+      await vscode.window.showTextDocument(doc, {
+        preview: false,
+        viewColumn: vscode.ViewColumn.Beside,
+        preserveFocus: false,
+      });
+    }
+    recordMetricCounter('aiSendBlockedBySanitizerTotal');
+    void vscode.window.showWarningMessage(
+      'TaCoS: AI payload send blocked by strict sanitizer due to high-risk content.',
+    );
+    return false;
+  }
+  if (hasStoredConsent) {
+    return true;
+  }
 
   const doc = await vscode.workspace.openTextDocument({
     language: 'markdown',
@@ -5895,8 +6133,10 @@ async function ensureAiPayloadConsent(
     return false;
   }
 
+  recordMetricCounter('aiSendAllowedAfterReviewTotal');
+
   if (picked.id === 'always') {
-    await setAiPayloadConsent(context, prepared.root, true);
+    await setAiPayloadConsent(context, prepared.root, true, consentSignature);
   }
 
   return true;
@@ -5939,6 +6179,8 @@ function getConfig(): ExtensionConfig {
     openaiModel: config.get<string>('openaiModel', 'gpt-4.1-mini'),
     openaiBaseUrl: config.get<string>('openaiBaseUrl', 'https://api.openai.com/v1'),
     openaiTimeoutMs: config.get<number>('openaiTimeoutMs', 15000),
+    aiIncludeCheckpointNotes: config.get<boolean>('aiIncludeCheckpointNotes', false),
+    aiIncludeScratchpad: config.get<boolean>('aiIncludeScratchpad', false),
     codexOpenCommand: config.get<string>('codexOpenCommand', ''),
   };
 }
@@ -6761,7 +7003,16 @@ async function promptAndSaveCheckpointNote(
     return false;
   }
 
-  const sanitized = sanitizeCheckpointNote(note, workspaceRoot, getConfig().redactionPatterns);
+  const sanitizedResult = sanitizeCheckpointNoteWithReport(
+    note,
+    workspaceRoot,
+    getConfig().redactionPatterns,
+  );
+  recordRedactionMetrics(
+    sanitizedResult.report.totalReplacements,
+    sanitizedResult.report.highRiskDetected,
+  );
+  const sanitized = sanitizedResult.text;
   if (!sanitized) {
     void vscode.window.showWarningMessage(
       'TaCoS: note was empty after sanitization and was not saved.',
@@ -6778,8 +7029,12 @@ async function promptAndSaveCheckpointNote(
     return false;
   }
 
+  const redactionDetail =
+    sanitizedResult.report.totalReplacements > 0
+      ? ` Removed sensitive content (${sanitizedResult.report.totalReplacements} item${sanitizedResult.report.totalReplacements === 1 ? '' : 's'} redacted).`
+      : '';
   void vscode.window.showInformationMessage(
-    options.successMessage ?? 'TaCoS: checkpoint note saved for this task scope.',
+    `${options.successMessage ?? 'TaCoS: checkpoint note saved for this task scope.'}${redactionDetail}`,
   );
   return true;
 }
@@ -6799,11 +7054,16 @@ async function saveCheckpointNoteFromClipboard(
     return false;
   }
 
-  const sanitized = sanitizeCheckpointNote(
+  const sanitizedResult = sanitizeCheckpointNoteWithReport(
     clipboardValue,
     workspaceRoot,
     getConfig().redactionPatterns,
   );
+  recordRedactionMetrics(
+    sanitizedResult.report.totalReplacements,
+    sanitizedResult.report.highRiskDetected,
+  );
+  const sanitized = sanitizedResult.text;
   if (!sanitized) {
     void vscode.window.showWarningMessage(
       'TaCoS: clipboard note was empty after sanitization and was not saved.',
@@ -6820,8 +7080,12 @@ async function saveCheckpointNoteFromClipboard(
     return false;
   }
 
+  const redactionDetail =
+    sanitizedResult.report.totalReplacements > 0
+      ? ` Removed sensitive content (${sanitizedResult.report.totalReplacements} item${sanitizedResult.report.totalReplacements === 1 ? '' : 's'} redacted).`
+      : '';
   void vscode.window.showInformationMessage(
-    options.successMessage ?? 'TaCoS: checkpoint note saved for this task scope.',
+    `${options.successMessage ?? 'TaCoS: checkpoint note saved for this task scope.'}${redactionDetail}`,
   );
   return true;
 }
@@ -6847,7 +7111,16 @@ async function addCheckpointFromSelectionCommand(context: vscode.ExtensionContex
 
   const relativeFile = toRelativePath(editor.document.uri.fsPath, workspaceRoot);
   const line = editor.selection.start.line + 1;
-  const sanitized = sanitizeCheckpointNote(selected, workspaceRoot, getConfig().redactionPatterns);
+  const sanitizedResult = sanitizeCheckpointNoteWithReport(
+    selected,
+    workspaceRoot,
+    getConfig().redactionPatterns,
+  );
+  recordRedactionMetrics(
+    sanitizedResult.report.totalReplacements,
+    sanitizedResult.report.highRiskDetected,
+  );
+  const sanitized = sanitizedResult.text;
   if (!sanitized) {
     void vscode.window.showWarningMessage(
       'TaCoS: selection was empty after sanitization and was not saved.',
@@ -6865,7 +7138,13 @@ async function addCheckpointFromSelectionCommand(context: vscode.ExtensionContex
 
   await refreshPanelCheckpointState(context, workspaceRoot);
   rerenderPanel();
-  void vscode.window.showInformationMessage('TaCoS: checkpoint note saved from selection.');
+  const redactionDetail =
+    sanitizedResult.report.totalReplacements > 0
+      ? ` Removed sensitive content (${sanitizedResult.report.totalReplacements} item${sanitizedResult.report.totalReplacements === 1 ? '' : 's'} redacted).`
+      : '';
+  void vscode.window.showInformationMessage(
+    `TaCoS: checkpoint note saved from selection.${redactionDetail}`,
+  );
 }
 
 async function listCheckpointNotesCommand(
@@ -7002,7 +7281,16 @@ async function listCheckpointNotesCommand(
       return;
     }
 
-    const sanitized = sanitizeCheckpointNote(edited, workspaceRoot, getConfig().redactionPatterns);
+    const sanitizedResult = sanitizeCheckpointNoteWithReport(
+      edited,
+      workspaceRoot,
+      getConfig().redactionPatterns,
+    );
+    recordRedactionMetrics(
+      sanitizedResult.report.totalReplacements,
+      sanitizedResult.report.highRiskDetected,
+    );
+    const sanitized = sanitizedResult.text;
     if (!sanitized) {
       void vscode.window.showWarningMessage(
         'TaCoS: note was empty after sanitization and was not saved.',
@@ -7014,6 +7302,11 @@ async function listCheckpointNotesCommand(
       ...current,
       text: sanitized,
     }));
+    if (sanitizedResult.report.totalReplacements > 0) {
+      void vscode.window.showInformationMessage(
+        `TaCoS: removed sensitive content (${sanitizedResult.report.totalReplacements} item${sanitizedResult.report.totalReplacements === 1 ? '' : 's'} redacted).`,
+      );
+    }
   } else if (action.id === 'done') {
     await updateCheckpointNoteById(context, workspaceRoot, target.id, (current) => ({
       ...current,
@@ -7233,6 +7526,61 @@ function extractScratchpadPreviewLines(
     .slice(0, maxLines);
 }
 
+function buildAiScratchpadExcerpt(rawContent: string): string | undefined {
+  if (!rawContent.trim()) {
+    return undefined;
+  }
+
+  const lines = rawContent
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !/^---\s/.test(line))
+    .slice(0, AI_SCRATCHPAD_MAX_LINES);
+  if (lines.length === 0) {
+    return undefined;
+  }
+
+  const joined = lines.join('\n');
+  if (joined.length <= AI_SCRATCHPAD_MAX_CHARS) {
+    return joined;
+  }
+
+  return `${joined.slice(0, AI_SCRATCHPAD_MAX_CHARS)}\n...truncated...`;
+}
+
+function applyScratchpadExcerptToSummary(summary: ResumeSummary, excerpt: string): ResumeSummary {
+  const section = ['## Scratchpad excerpt (opt-in)', '```text', excerpt, '```'].join('\n');
+
+  return {
+    ...summary,
+    detailsMarkdown: `${summary.detailsMarkdown}\n\n${section}`,
+  };
+}
+
+async function loadScratchpadExcerptForAi(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  branchHint?: string,
+): Promise<string | undefined> {
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  const { uri, scopeState } = resolveScratchpadFileUri(context, workspaceRoot, branchHint);
+  await migrateLegacyScratchpadFileIfNeeded(context, workspaceRoot, scopeState.scope, uri);
+  try {
+    const stat = await vscode.workspace.fs.stat(uri);
+    if (stat.size <= 0) {
+      return undefined;
+    }
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    const content = Buffer.from(bytes).toString('utf8');
+    return buildAiScratchpadExcerpt(content);
+  } catch {
+    return undefined;
+  }
+}
+
 async function refreshPanelScratchpadState(
   context: vscode.ExtensionContext,
   workspaceRoot?: string,
@@ -7334,6 +7682,22 @@ async function appendToScratchpadCommand(
     );
     return;
   }
+  const sanitizedResult = redactTextWithReport(
+    sourceText,
+    workspaceRoot,
+    getConfig().redactionPatterns,
+  );
+  recordRedactionMetrics(
+    sanitizedResult.report.totalReplacements,
+    sanitizedResult.report.highRiskDetected,
+  );
+  const sanitizedSourceText = sanitizedResult.text.trim();
+  if (!sanitizedSourceText) {
+    void vscode.window.showWarningMessage(
+      'TaCoS: scratchpad append text was empty after sanitization.',
+    );
+    return;
+  }
 
   const { document } = await ensureScratchpadDocument(
     context,
@@ -7342,7 +7706,7 @@ async function appendToScratchpadCommand(
   );
   const existingText = document.getText();
   const prefix = existingText.trim().length > 0 ? '\n' : '';
-  const chunk = `${prefix}${buildScratchpadAppendChunk(sourceText)}`;
+  const chunk = `${prefix}${buildScratchpadAppendChunk(sanitizedSourceText)}`;
   const edit = new vscode.WorkspaceEdit();
   edit.insert(document.uri, document.positionAt(existingText.length), chunk);
   const applied = await vscode.workspace.applyEdit(edit);
@@ -7355,7 +7719,11 @@ async function appendToScratchpadCommand(
   recordMetricCounter('scratchpadAppended');
   await refreshPanelScratchpadState(context, workspaceRoot);
   rerenderPanel();
-  void vscode.window.showInformationMessage('TaCoS: appended to scratchpad.');
+  const redactionDetail =
+    sanitizedResult.report.totalReplacements > 0
+      ? ` Removed sensitive content (${sanitizedResult.report.totalReplacements} item${sanitizedResult.report.totalReplacements === 1 ? '' : 's'} redacted).`
+      : '';
+  void vscode.window.showInformationMessage(`TaCoS: appended to scratchpad.${redactionDetail}`);
 }
 
 async function setScratchpadScopeCommand(
@@ -7468,7 +7836,12 @@ async function maybePromptCheckpointOnBlur(
     return;
   }
 
-  const sanitized = sanitizeCheckpointNote(note, root, config.redactionPatterns);
+  const sanitizedResult = sanitizeCheckpointNoteWithReport(note, root, config.redactionPatterns);
+  recordRedactionMetrics(
+    sanitizedResult.report.totalReplacements,
+    sanitizedResult.report.highRiskDetected,
+  );
+  const sanitized = sanitizedResult.text;
   if (!sanitized) {
     void vscode.window.showWarningMessage(
       'TaCoS: note was empty after sanitization and was not saved.',
@@ -7483,7 +7856,13 @@ async function maybePromptCheckpointOnBlur(
   await refreshPanelCheckpointState(context, root);
   rerenderPanel();
   state.meaningfulActivitySinceCheckpointPrompt = false;
-  void vscode.window.showInformationMessage('TaCoS: checkpoint note saved for this task scope.');
+  const redactionDetail =
+    sanitizedResult.report.totalReplacements > 0
+      ? ` Removed sensitive content (${sanitizedResult.report.totalReplacements} item${sanitizedResult.report.totalReplacements === 1 ? '' : 's'} redacted).`
+      : '';
+  void vscode.window.showInformationMessage(
+    `TaCoS: checkpoint note saved for this task scope.${redactionDetail}`,
+  );
 }
 
 function setupChecklistCompletedKey(workspaceRoot: string): string {

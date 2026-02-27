@@ -28,9 +28,15 @@ Use this only if you want refinement beyond local-only summaries.
 - `Always allow in this workspace`
 - `Do not send`
 
+Default safety posture:
+- `tacos.aiIncludeCheckpointNotes = false`
+- `tacos.aiIncludeScratchpad = false`
+- AI payload preview shows inclusion flags and redaction summary before send.
+
 Control later:
 - Run `TaCoS: Revoke AI Payload Consent` to require payload review again.
 - Run `TaCoS: Configure AI Provider` and switch back to `local` at any time.
+- Run `TaCoS: Test Sanitizer` to validate local redaction behavior without AI send.
 
 ## Privacy Presets (Plain Language)
 
