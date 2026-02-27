@@ -8,6 +8,32 @@ All notable changes to this project are documented in this file.
 
 - No notable changes yet.
 
+## [0.2.1] - 2026-02-27
+
+### Added
+
+- Action safety matrix documentation (`docs/action-safety-matrix.md`) and deterministic integration coverage for missing-prerequisite no-op paths.
+- Execution-action guard coverage for trusted/restricted behavior across rerun task/debug and checkout flows.
+- Expanded companion nudge suppression tests (mode gating, quiet-hours parsing/windows, cooldown boundary behavior, deterministic ranking).
+- 5-minute quickstart documentation with local-only setup, optional AI consent flow, and privacy preset guidance.
+- Metrics documentation bundle:
+  - `docs/metrics.md` data dictionary and export workflow
+  - `docs/metrics-baseline.md` dogfooding baseline template
+  - `scripts/metrics-summary.mjs` local markdown summary helper
+- Privacy-safe diagnostics workflow:
+  - `TaCoS: Copy Diagnostics` command
+  - Bug/UX/metrics issue templates under `.github/ISSUE_TEMPLATE/`
+- `v0.3.0` roadmap rubric and candidate issue set (`docs/roadmap-0.3.0.md`, issues `#90`-`#93`).
+- `v0.2.1` stabilization ship checklist (`docs/release-0.2.1-checklist.md`).
+
+### Changed
+
+- Companion panel readability pass:
+  - action surfaces regrouped by intent (copy/feedback/restore categories)
+  - duplicate low-signal cards removed
+  - evidence/timeline expansion state persists across rerenders to reduce UI jump
+- README now includes prominent Start Here guidance and links to quickstart/privacy/metrics docs.
+
 ## [0.2.0] - 2026-02-27
 
 ### Added

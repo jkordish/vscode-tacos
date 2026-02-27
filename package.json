@@ -3,7 +3,7 @@
   "displayName": "TaCoS Resume Brief",
   "description": "Auto task-context summaries when you resume work in VS Code.",
   "license": "MIT",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "jkordish",
   "repository": {
     "type": "git",
