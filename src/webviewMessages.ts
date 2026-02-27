@@ -18,6 +18,7 @@ const RESTORE_MESSAGE_TYPES = [
   'restoreRerunDebug',
   'restoreCheckoutPreviousBranch',
   'restoreCopyFailingCommand',
+  'restoreJumpToLastEdit',
 ] as const;
 
 type SimpleWebviewMessageType = (typeof SIMPLE_MESSAGE_TYPES)[number];

@@ -13,7 +13,12 @@ import {
 } from './activityPersistence';
 import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
 import { resolveCodexOpenCommandCandidates } from './codexInterop';
-import { decideEditActivity } from './editActivity';
+import {
+  captureEditLocation,
+  decideEditActivity,
+  pushRecentEditLocation,
+  type EditLocation,
+} from './editActivity';
 import { isSummaryLinkEvidenceGrounded } from './evidenceSafety';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
@@ -54,6 +59,7 @@ const KEY_RECENT_DEBUG = 'tacos.recentDebug';
 const KEY_RECENT_URLS = 'tacos.recentUrls';
 const KEY_DONE_ITEMS = 'tacos.doneItems';
 const KEY_LAST_FAILING_COMMAND = 'tacos.lastFailingCommand';
+const KEY_RECENT_EDIT_LOCATIONS_PREFIX = 'tacos.recentEditLocations';
 const KEY_ACTIVITY_STORAGE_PREFIX = 'tacos.activityScoped';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
 const KEY_SUMMARY_CORRECTIONS_PREFIX = 'tacos.summaryCorrections';
@@ -107,6 +113,7 @@ class RingBuffer {
 interface RuntimeState {
   output: vscode.OutputChannel;
   recentFiles: RingBuffer;
+  recentEditLocations: EditLocation[];
   recentTerminal: RingBuffer;
   recentDebug: RingBuffer;
   recentUrls: RingBuffer;
@@ -154,10 +161,12 @@ type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt' | '
 type CompanionRuntimeMode = 'active' | 'paused' | 'restricted' | 'disabled';
 
 export function activate(context: vscode.ExtensionContext): void {
+  const initialWorkspaceRoot = pickWorkspaceRoot() ?? '';
   const persistedActivity = loadPersistedActivitySnapshot(context);
   state = {
     output: vscode.window.createOutputChannel('TaCoS'),
     recentFiles: new RingBuffer(15, persistedActivity.sanitized.recentFiles),
+    recentEditLocations: readRecentEditLocations(context, initialWorkspaceRoot),
     recentTerminal: new RingBuffer(15, persistedActivity.sanitized.recentTerminal),
     recentDebug: new RingBuffer(10, persistedActivity.sanitized.recentDebug),
     recentUrls: new RingBuffer(5, persistedActivity.sanitized.recentUrls),
@@ -256,6 +265,9 @@ export function activate(context: vscode.ExtensionContext): void {
         workspaceRoot: root,
         checkpointNote: getCheckpointNote(context, root),
       });
+    }),
+    vscode.commands.registerCommand('tacos.jumpToLastEdit', async () => {
+      await jumpToRecentEdit(context);
     }),
     vscode.commands.registerCommand('tacos.pauseSummaries', async () => {
       state.pauseUntilRestart = false;
@@ -466,14 +478,41 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(async (event) => {
+      const hasMeaningfulChange = isMeaningfulChange(event.contentChanges);
       const decision = decideEditActivity({
         documentScheme: event.document.uri.scheme,
-        hasMeaningfulChange: isMeaningfulChange(event.contentChanges),
+        hasMeaningfulChange,
         hasMetricSession: Boolean(state.metricSession),
         hasCapturedFirstMeaningfulEdit: state.metricSession?.firstMeaningfulEditLagMs !== undefined,
       });
       if (!decision.shouldMarkMeaningfulActivity) {
         return;
+      }
+
+      const workspaceRoot =
+        vscode.workspace.getWorkspaceFolder(event.document.uri)?.uri.fsPath ?? pickWorkspaceRoot();
+      const relativePath = workspaceRoot
+        ? toRelativePath(event.document.uri.fsPath, workspaceRoot)
+        : event.document.uri.fsPath;
+      const lastChange = event.contentChanges[event.contentChanges.length - 1];
+      const activeSelection =
+        vscode.window.activeTextEditor &&
+        vscode.window.activeTextEditor.document.uri.toString() === event.document.uri.toString()
+          ? vscode.window.activeTextEditor.selection.active
+          : undefined;
+      const location = captureEditLocation({
+        documentScheme: event.document.uri.scheme,
+        hasMeaningfulChange,
+        relativePath,
+        now: Date.now(),
+        fallbackLine: lastChange?.range.start.line ?? 0,
+        fallbackCharacter: lastChange?.range.start.character ?? 0,
+        selectionLine: activeSelection?.line,
+        selectionCharacter: activeSelection?.character,
+      });
+      if (location) {
+        state.recentEditLocations = pushRecentEditLocation(state.recentEditLocations, location, 15);
+        await persistRecentEditLocations(context, workspaceRoot);
       }
 
       markMeaningfulActivity();
@@ -1376,6 +1415,7 @@ interface CompanionActionPick extends vscode.QuickPickItem {
   id:
     | 'showNow'
     | 'showLast'
+    | 'jumpLastEdit'
     | 'copyPrompt'
     | 'togglePause'
     | 'enable'
@@ -1396,6 +1436,11 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'showLast',
       label: 'Show last summary',
       detail: 'Open the latest cached TaCoS summary.',
+    },
+    {
+      id: 'jumpLastEdit',
+      label: 'Jump to last edit',
+      detail: 'Open your most recent edited location.',
     },
     {
       id: 'copyPrompt',
@@ -1449,6 +1494,9 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'showLast') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.showLastSummary');
+  } else if (picked.id === 'jumpLastEdit') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.jumpToLastEdit');
   } else if (picked.id === 'copyPrompt') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.copyPromptAndOpenCodex');
@@ -1662,6 +1710,12 @@ async function showDetailsPanel(
         void vscode.window.showWarningMessage(
           'TaCoS blocked a link that was not part of the validated summary link list.',
         );
+        return;
+      }
+
+      if (message.type === 'restoreJumpToLastEdit') {
+        recordCompanionQuickAction();
+        await jumpToRecentEdit(context, state.panelWorkspaceRoot);
         return;
       }
 
@@ -1936,6 +1990,7 @@ function renderWebview(
     hasLastTask: Boolean(state.lastTaskName),
     hasLastDebug: Boolean(state.lastDebugConfigName),
     hasFailingCommand: Boolean(getCopyableFailingCommand()),
+    hasRecentEditLocation: state.recentEditLocations.length > 0,
     currentBranch: summary.currentBranch,
     previousBranch: summary.previousBranch,
   });
@@ -1999,6 +2054,7 @@ function renderWebview(
       : '';
 
   const companionRestoreButtons = [
+    `<button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled aria-disabled="true"'}>Jump to last edit</button>`,
     '<button type="button" data-action="restoreReopenFiles">Reopen files</button>',
     '<button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>',
     `<button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled aria-disabled="true"'}>Rerun task</button>`,
@@ -2508,6 +2564,7 @@ function renderWebview(
     <div class="card">
       <h3>Restore Pack</h3>
       <div class="restore-grid">
+        <button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled'}>Jump to last edit</button>
         <button type="button" data-action="restoreReopenFiles">Reopen files</button>
         <button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>
         <button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled'}>Rerun last task</button>
@@ -2557,6 +2614,7 @@ function renderWebview(
         'refreshSummary',
         'toggleAutoSummaries',
         'openPrivacySafety',
+        'restoreJumpToLastEdit',
         'restoreReopenFiles',
         'restoreOpenChangedFiles',
         'restoreRerunTask',
@@ -2838,6 +2896,120 @@ async function openWorkspaceFiles(
   }
 
   return opened;
+}
+
+function recentEditLocationsStorageKey(workspaceRoot: string): string {
+  return `${KEY_RECENT_EDIT_LOCATIONS_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function readRecentEditLocations(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): EditLocation[] {
+  if (!workspaceRoot) {
+    return [];
+  }
+
+  const raw = context.workspaceState.get<unknown>(recentEditLocationsStorageKey(workspaceRoot), []);
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
+    .map((entry) => ({
+      path: typeof entry.path === 'string' ? entry.path.trim() : '',
+      line: typeof entry.line === 'number' ? entry.line : -1,
+      character: typeof entry.character === 'number' ? entry.character : -1,
+      timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : 0,
+    }))
+    .filter(
+      (entry) =>
+        Boolean(entry.path) &&
+        Number.isInteger(entry.line) &&
+        entry.line >= 0 &&
+        Number.isInteger(entry.character) &&
+        entry.character >= 0 &&
+        Number.isFinite(entry.timestamp) &&
+        entry.timestamp > 0,
+    )
+    .slice(0, 15);
+}
+
+async function persistRecentEditLocations(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    return;
+  }
+
+  await context.workspaceState.update(
+    recentEditLocationsStorageKey(workspaceRoot),
+    state.recentEditLocations.slice(0, 15),
+  );
+}
+
+async function jumpToRecentEdit(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const locations = state.recentEditLocations.slice(0, 8);
+  if (locations.length === 0) {
+    void vscode.window.showInformationMessage('TaCoS: no recent edit locations are available.');
+    return;
+  }
+
+  type EditQuickPick = vscode.QuickPickItem & { location: EditLocation };
+  const picks: EditQuickPick[] = locations.map((location) => ({
+    label: `${location.path}:${location.line + 1}:${location.character + 1}`,
+    description: new Date(location.timestamp).toLocaleString(),
+    detail: 'Jump to this recent edit location',
+    location,
+  }));
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Jump to Recent Edit',
+    placeHolder: 'Select a recent edit location',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  await openRecentEditLocation(context, picked.location, preferredWorkspaceRoot);
+}
+
+async function openRecentEditLocation(
+  context: vscode.ExtensionContext,
+  location: EditLocation,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showWarningMessage(
+      'TaCoS blocked jump-to-edit because no workspace root is available for validation.',
+    );
+    return;
+  }
+
+  const safeTarget = resolveFileTargetInWorkspace(location.path, workspaceRoot);
+  if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
+    void vscode.window.showWarningMessage('TaCoS blocked an unsafe recent edit target.');
+    return;
+  }
+
+  const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(safeTarget));
+  const editor = await vscode.window.showTextDocument(doc, {
+    preview: false,
+    preserveFocus: false,
+  });
+  const position = new vscode.Position(location.line, location.character);
+  const range = new vscode.Range(position, position);
+  editor.selection = new vscode.Selection(position, position);
+  editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+  await persistRecentEditLocations(context, workspaceRoot);
 }
 
 function taskWorkspaceRoot(task: vscode.Task): string | undefined {

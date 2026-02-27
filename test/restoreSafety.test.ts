@@ -7,6 +7,7 @@ describe('computeRestoreAvailability', () => {
       hasLastTask: true,
       hasLastDebug: true,
       hasFailingCommand: true,
+      hasRecentEditLocation: true,
       currentBranch: 'feature/a',
       previousBranch: 'main',
     });
@@ -16,6 +17,7 @@ describe('computeRestoreAvailability', () => {
       canRerunDebug: false,
       canCheckoutPreviousBranch: false,
       canCopyFailingCommand: true,
+      canJumpToLastEdit: true,
     });
   });
 
@@ -25,6 +27,7 @@ describe('computeRestoreAvailability', () => {
       hasLastTask: true,
       hasLastDebug: false,
       hasFailingCommand: false,
+      hasRecentEditLocation: true,
       currentBranch: 'feature/a',
       previousBranch: 'main',
     });
@@ -34,6 +37,7 @@ describe('computeRestoreAvailability', () => {
       canRerunDebug: false,
       canCheckoutPreviousBranch: true,
       canCopyFailingCommand: false,
+      canJumpToLastEdit: true,
     });
   });
 
@@ -43,10 +47,12 @@ describe('computeRestoreAvailability', () => {
       hasLastTask: false,
       hasLastDebug: false,
       hasFailingCommand: false,
+      hasRecentEditLocation: false,
       currentBranch: 'main',
       previousBranch: 'main',
     });
 
     expect(result.canCheckoutPreviousBranch).toBe(false);
+    expect(result.canJumpToLastEdit).toBe(false);
   });
 });

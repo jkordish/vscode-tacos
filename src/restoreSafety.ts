@@ -3,6 +3,7 @@ export interface RestoreAvailabilityInput {
   hasLastTask: boolean;
   hasLastDebug: boolean;
   hasFailingCommand: boolean;
+  hasRecentEditLocation: boolean;
   currentBranch?: string;
   previousBranch?: string;
 }
@@ -12,6 +13,7 @@ export interface RestoreAvailability {
   canRerunDebug: boolean;
   canCheckoutPreviousBranch: boolean;
   canCopyFailingCommand: boolean;
+  canJumpToLastEdit: boolean;
 }
 
 export function computeRestoreAvailability(input: RestoreAvailabilityInput): RestoreAvailability {
@@ -21,6 +23,7 @@ export function computeRestoreAvailability(input: RestoreAvailabilityInput): Res
       canRerunDebug: false,
       canCheckoutPreviousBranch: false,
       canCopyFailingCommand: input.hasFailingCommand,
+      canJumpToLastEdit: input.hasRecentEditLocation,
     };
   }
 
@@ -34,5 +37,6 @@ export function computeRestoreAvailability(input: RestoreAvailabilityInput): Res
     canRerunDebug: input.hasLastDebug,
     canCheckoutPreviousBranch: hasBranchSwitchTarget,
     canCopyFailingCommand: input.hasFailingCommand,
+    canJumpToLastEdit: input.hasRecentEditLocation,
   };
 }

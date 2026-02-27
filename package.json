@@ -48,6 +48,7 @@
     "onCommand:tacos.showNow",
     "onCommand:tacos.copyPromptAndOpenCodex",
     "onCommand:tacos.showLastSummary",
+    "onCommand:tacos.jumpToLastEdit",
     "onCommand:tacos.pauseSummaries",
     "onCommand:tacos.resumeSummaries",
     "onCommand:tacos.toggleEnabled",
@@ -81,6 +82,10 @@
       {
         "command": "tacos.showLastSummary",
         "title": "TaCoS: Show Last Summary"
+      },
+      {
+        "command": "tacos.jumpToLastEdit",
+        "title": "TaCoS: Jump to Last Edit"
       },
       {
         "command": "tacos.pauseSummaries",
