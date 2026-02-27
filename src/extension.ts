@@ -357,6 +357,9 @@ export function activate(context: vscode.ExtensionContext): void {
       await applyTaskPartitionSwitch(context, workspaceRoot, nextValue);
       return true;
     }),
+    vscode.commands.registerCommand('tacos.__test.runActionSafetyNoopChecks', async () => {
+      return runActionSafetyNoopChecks(context);
+    }),
     vscode.commands.registerCommand('tacos.slash', async () => {
       const root = pickWorkspaceRoot();
       if (!root) {
@@ -4186,6 +4189,96 @@ async function copyFailingCommand(): Promise<void> {
 function getCopyableFailingCommand(): string | undefined {
   const raw = state.lastFailingCommandRaw?.trim();
   return raw || undefined;
+}
+
+async function runActionSafetyNoopChecks(
+  context: vscode.ExtensionContext,
+): Promise<Record<string, boolean>> {
+  const root = pickWorkspaceRoot();
+  const original = {
+    panelSummary: state.panelSummary,
+    scratchSummary: state.scratchSummary,
+    lastTaskName: state.lastTaskName,
+    lastTaskWorkspaceRoot: state.lastTaskWorkspaceRoot,
+    lastDebugConfigName: state.lastDebugConfigName,
+    lastDebugWorkspaceRoot: state.lastDebugWorkspaceRoot,
+  };
+  const results: Record<string, boolean> = {
+    restoreWithoutSummaryNoThrow: false,
+    rerunTaskWithoutTaskNoThrow: false,
+    rerunDebugWithoutSessionNoThrow: false,
+    checkoutWithoutPreviousBranchNoThrow: false,
+    invalidNextStepActionNoThrow: false,
+  };
+
+  const noOpSummary: ResumeSummary = {
+    intent: 'test',
+    nextSteps: ['noop'],
+    topFiles: [],
+    links: [],
+    detailsMarkdown: '',
+    codexPrompt: '',
+    contextHash: '__test_noop__',
+    generatedAt: Date.now(),
+    source: 'local',
+  };
+
+  try {
+    state.panelSummary = undefined;
+    state.scratchSummary = undefined;
+    if (root) {
+      await context.workspaceState.update(summaryCacheKey(context, root), undefined);
+    }
+
+    state.lastTaskName = undefined;
+    state.lastTaskWorkspaceRoot = undefined;
+    state.lastDebugConfigName = undefined;
+    state.lastDebugWorkspaceRoot = undefined;
+
+    try {
+      await restoreWorkingSetCommand(context);
+      results.restoreWithoutSummaryNoThrow = true;
+    } catch {
+      results.restoreWithoutSummaryNoThrow = false;
+    }
+
+    try {
+      await rerunLastTask();
+      results.rerunTaskWithoutTaskNoThrow = true;
+    } catch {
+      results.rerunTaskWithoutTaskNoThrow = false;
+    }
+
+    try {
+      await rerunLastDebugSession();
+      results.rerunDebugWithoutSessionNoThrow = true;
+    } catch {
+      results.rerunDebugWithoutSessionNoThrow = false;
+    }
+
+    try {
+      await checkoutPreviousBranch(undefined, root);
+      results.checkoutWithoutPreviousBranchNoThrow = true;
+    } catch {
+      results.checkoutWithoutPreviousBranchNoThrow = false;
+    }
+
+    try {
+      await runNextStepAction(noOpSummary, -1, root);
+      results.invalidNextStepActionNoThrow = true;
+    } catch {
+      results.invalidNextStepActionNoThrow = false;
+    }
+  } finally {
+    state.panelSummary = original.panelSummary;
+    state.scratchSummary = original.scratchSummary;
+    state.lastTaskName = original.lastTaskName;
+    state.lastTaskWorkspaceRoot = original.lastTaskWorkspaceRoot;
+    state.lastDebugConfigName = original.lastDebugConfigName;
+    state.lastDebugWorkspaceRoot = original.lastDebugWorkspaceRoot;
+  }
+
+  return results;
 }
 
 async function tryOpenCodexPanel(config: ExtensionConfig): Promise<string | undefined> {

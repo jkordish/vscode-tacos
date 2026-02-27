@@ -86,6 +86,13 @@ async function main() {
     );
 
     await runSuite(
+      'action-safety-noop',
+      path.resolve(__dirname, 'suite', 'actionSafetyNoop.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'partition-scope',
       path.resolve(__dirname, 'suite', 'partitionScope.js'),
       [fixtureWorkspace, '--disable-extensions'],
