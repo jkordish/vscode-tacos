@@ -59,6 +59,7 @@ function prepareRestrictedUserDataDir() {
 
 async function main() {
   const fixtureWorkspace = path.resolve(__dirname, '..', 'fixtures', 'workspace');
+  const multiRootWorkspace = path.resolve(__dirname, '..', 'fixtures', 'multi-root.code-workspace');
   const vscodeExecutablePath = resolveLocalVscodeExecutable();
   const restrictedUserDataDir = prepareRestrictedUserDataDir();
 
@@ -88,6 +89,13 @@ async function main() {
       'partition-scope',
       path.resolve(__dirname, 'suite', 'partitionScope.js'),
       [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
+      'multi-root-scope',
+      path.resolve(__dirname, 'suite', 'multiRootScope.js'),
+      [multiRootWorkspace, '--disable-extensions'],
       vscodeExecutablePath,
     );
   } finally {

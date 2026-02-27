@@ -326,6 +326,10 @@ export function activate(context: vscode.ExtensionContext): void {
       await context.workspaceState.update(branchStateKey(workspaceRoot), nextValue ? nextValue : undefined);
       return true;
     }),
+    vscode.commands.registerCommand('tacos.__test.pickWorkspaceRoot', async (preferred?: string) => {
+      const preferredWorkspaceRoot = typeof preferred === 'string' ? preferred : undefined;
+      return pickWorkspaceRoot(preferredWorkspaceRoot);
+    }),
     vscode.commands.registerCommand('tacos.slash', async () => {
       const root = pickWorkspaceRoot();
       if (!root) {
