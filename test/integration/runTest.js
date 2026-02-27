@@ -83,6 +83,13 @@ async function main() {
       [fixtureWorkspace, '--disable-extensions'],
       vscodeExecutablePath,
     );
+
+    await runSuite(
+      'partition-scope',
+      path.resolve(__dirname, 'suite', 'partitionScope.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
   } finally {
     fs.rmSync(restrictedUserDataDir, { recursive: true, force: true });
   }

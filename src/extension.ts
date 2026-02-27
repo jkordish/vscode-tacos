@@ -279,6 +279,52 @@ export function activate(context: vscode.ExtensionContext): void {
         mode: resolveCompanionRuntimeMode(getConfig()),
       };
     }),
+    vscode.commands.registerCommand('tacos.__test.getPartitionScopeSnapshot', async () => {
+      const workspaceRoot = pickWorkspaceRoot() ?? '';
+      if (!workspaceRoot) {
+        return undefined;
+      }
+
+      const persistedBranch = context.workspaceState.get<string>(branchStateKey(workspaceRoot), '');
+      const scopeBranch = resolveScopeBranchFromInputs({
+        workspaceRoot,
+        persistedBranch,
+      });
+      const manualTaskPartition = context.workspaceState
+        .get<string>(taskPartitionStorageKey(workspaceRoot), '')
+        .trim();
+      const resolvedTaskPartition = resolveTaskPartitionKey(context, workspaceRoot, scopeBranch);
+      return {
+        workspaceRoot,
+        scopeBranch,
+        manualTaskPartition,
+        resolvedTaskPartition,
+        scope: buildPartitionScope(workspaceRoot, scopeBranch, resolvedTaskPartition),
+      };
+    }),
+    vscode.commands.registerCommand('tacos.__test.setTaskPartition', async (value?: string) => {
+      const workspaceRoot = pickWorkspaceRoot();
+      if (!workspaceRoot) {
+        return false;
+      }
+
+      const nextValue = typeof value === 'string' ? value.trim() : '';
+      await context.workspaceState.update(
+        taskPartitionStorageKey(workspaceRoot),
+        nextValue ? nextValue : undefined,
+      );
+      return true;
+    }),
+    vscode.commands.registerCommand('tacos.__test.setPersistedBranch', async (value?: string) => {
+      const workspaceRoot = pickWorkspaceRoot();
+      if (!workspaceRoot) {
+        return false;
+      }
+
+      const nextValue = typeof value === 'string' ? value.trim() : '';
+      await context.workspaceState.update(branchStateKey(workspaceRoot), nextValue ? nextValue : undefined);
+      return true;
+    }),
     vscode.commands.registerCommand('tacos.slash', async () => {
       const root = pickWorkspaceRoot();
       if (!root) {
