@@ -30,5 +30,6 @@ Use this checklist to validate workspace/branch/task-partition scoping behavior 
 
 - Capture any stale summary/activity evidence with exact branch + task key values.
 - Record whether behavior is reproducible across restarts.
+- Run integration suite `partition-switch-reset` to verify panel/scratch reset behavior after partition changes.
 - Run integration suite `multi-root-scope` to verify active/preferred root selection behavior.
 - Link resulting findings and fixes back to issue `#74`.

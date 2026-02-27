@@ -330,6 +330,29 @@ export function activate(context: vscode.ExtensionContext): void {
       const preferredWorkspaceRoot = typeof preferred === 'string' ? preferred : undefined;
       return pickWorkspaceRoot(preferredWorkspaceRoot);
     }),
+    vscode.commands.registerCommand('tacos.__test.getRuntimeStateSnapshot', async () => {
+      return {
+        panelOpen: Boolean(state.panel),
+        panelWorkspaceRoot: state.panelWorkspaceRoot,
+        hasScratchSummary: Boolean(state.scratchSummary),
+        scratchContextHash: state.scratchSummary?.contextHash,
+        recentFilesCount: state.recentFiles.values().length,
+        recentTerminalCount: state.recentTerminal.values().length,
+        recentDebugCount: state.recentDebug.values().length,
+        recentUrlsCount: state.recentUrls.values().length,
+        doneItemsCount: state.doneItems.values().length,
+      };
+    }),
+    vscode.commands.registerCommand('tacos.__test.switchTaskPartition', async (value?: string) => {
+      const workspaceRoot = pickWorkspaceRoot();
+      if (!workspaceRoot) {
+        return false;
+      }
+
+      const nextValue = typeof value === 'string' ? value.trim() : '';
+      await applyTaskPartitionSwitch(context, workspaceRoot, nextValue);
+      return true;
+    }),
     vscode.commands.registerCommand('tacos.slash', async () => {
       const root = pickWorkspaceRoot();
       if (!root) {
@@ -3442,6 +3465,19 @@ async function switchTaskPartition(context: vscode.ExtensionContext): Promise<vo
   }
 
   const nextValue = input.trim();
+  await applyTaskPartitionSwitch(context, workspaceRoot, nextValue);
+  void vscode.window.showInformationMessage(
+    nextValue
+      ? `TaCoS: switched to task partition "${nextValue}".`
+      : `TaCoS: switched to ${inferred ? `inferred partition "${inferred}"` : 'default partition'}.`,
+  );
+}
+
+async function applyTaskPartitionSwitch(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  nextValue: string,
+): Promise<void> {
   await context.workspaceState.update(
     taskPartitionStorageKey(workspaceRoot),
     nextValue ? nextValue : undefined,
@@ -3460,11 +3496,6 @@ async function switchTaskPartition(context: vscode.ExtensionContext): Promise<vo
     state.panel.dispose();
   }
   updateCompanionStatusBar();
-  void vscode.window.showInformationMessage(
-    nextValue
-      ? `TaCoS: switched to task partition "${nextValue}".`
-      : `TaCoS: switched to ${inferred ? `inferred partition "${inferred}"` : 'default partition'}.`,
-  );
 }
 
 async function restoreWorkingSetCommand(context: vscode.ExtensionContext): Promise<void> {

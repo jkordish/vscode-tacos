@@ -93,6 +93,13 @@ async function main() {
     );
 
     await runSuite(
+      'partition-switch-reset',
+      path.resolve(__dirname, 'suite', 'partitionSwitchReset.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'multi-root-scope',
       path.resolve(__dirname, 'suite', 'multiRootScope.js'),
       [multiRootWorkspace, '--disable-extensions'],
