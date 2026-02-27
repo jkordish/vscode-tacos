@@ -12,6 +12,7 @@ import {
   type PersistedActivityState,
 } from './activityPersistence';
 import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
+import { resolveCodexOpenCommandCandidates } from './codexInterop';
 import { decideEditActivity } from './editActivity';
 import { isSummaryLinkEvidenceGrounded } from './evidenceSafety';
 import { collectGit, parsePorcelainPaths } from './git';
@@ -2931,35 +2932,7 @@ function getCopyableFailingCommand(): string | undefined {
 
 async function tryOpenCodexPanel(config: ExtensionConfig): Promise<string | undefined> {
   const knownCommands = await vscode.commands.getCommands(true);
-  const knownSet = new Set(knownCommands);
-
-  const configured = config.codexOpenCommand.trim();
-  const builtInCandidates = [
-    // Official OpenAI Codex extension commands.
-    'chatgpt.openSidebar',
-    'chatgpt.newCodexPanel',
-    'chatgpt.newChat',
-
-    'openai.codex.open',
-    'openai.codex.openPanel',
-    'openai.codex.focus',
-    'openai.codex.showPanel',
-    'codex.open',
-    'codex.focus',
-    'codex.show',
-    'codex.openPanel',
-  ];
-
-  const inferredCandidates = knownCommands
-    .filter((id) => /codex/i.test(id))
-    .filter((id) => /(open|show|focus|panel|view)/i.test(id))
-    .slice(0, 12);
-
-  const candidates = uniqueStrings([
-    configured,
-    ...builtInCandidates,
-    ...inferredCandidates,
-  ]).filter((id) => knownSet.has(id));
+  const candidates = resolveCodexOpenCommandCandidates(config.codexOpenCommand, knownCommands);
 
   for (const commandId of candidates) {
     try {
