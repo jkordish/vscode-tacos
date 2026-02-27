@@ -7,6 +7,7 @@ const SIMPLE_MESSAGE_TYPES = [
   'copyPromptAndOpenCodex',
   'refreshSummary',
   'toggleAutoSummaries',
+  'openPrivacySafety',
   'blockedLink',
 ] as const;
 const RESTORE_MESSAGE_TYPES = [

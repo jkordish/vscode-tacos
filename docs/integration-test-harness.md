@@ -29,6 +29,7 @@ The harness launches Extension Development Host runs against `test/fixtures/work
 3. Focus refresh presentation suite:
    - verifies `autoRefreshInBackground=true` resolves focus-refresh behavior to background mode
    - verifies `autoRefreshInBackground=false` resolves focus-refresh behavior to prompt mode
+   - verifies companion status bar mode transitions for active/paused states
 
 ## Files
 

@@ -10,6 +10,9 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'toggleAutoSummaries' })).toEqual({
       type: 'toggleAutoSummaries',
     });
+    expect(parseWebviewMessage({ type: 'openPrivacySafety' })).toEqual({
+      type: 'openPrivacySafety',
+    });
     expect(parseWebviewMessage({ type: 'restoreReopenFiles' })).toEqual({
       type: 'restoreReopenFiles',
     });

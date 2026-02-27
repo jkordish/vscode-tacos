@@ -109,6 +109,7 @@ interface RuntimeState {
   lastFailingCommand?: string;
   lastFailingCommandRaw?: string;
   scratchSummary?: ResumeSummary;
+  statusBar?: vscode.StatusBarItem;
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
   panelWorkspaceRoot?: string;
@@ -141,6 +142,7 @@ interface PresentSummaryOptions {
 }
 
 type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt';
+type CompanionRuntimeMode = 'active' | 'paused' | 'restricted' | 'disabled';
 
 export function activate(context: vscode.ExtensionContext): void {
   const persistedActivity = loadPersistedActivitySnapshot(context);
@@ -168,6 +170,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscodeLmUnavailableNotified: false,
   };
 
+  state.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 80);
+  state.statusBar.name = 'TaCoS Companion';
+  state.statusBar.command = 'tacos.openCompanionActions';
+  state.statusBar.show();
+  context.subscriptions.push(state.statusBar);
+
   context.subscriptions.push(state.output);
   void migrateLegacyPersistedActivityIfNeeded(context, persistedActivity);
 
@@ -175,11 +183,21 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.showNow', async () => {
       await triggerSummary(context, 'manual');
     }),
+    vscode.commands.registerCommand('tacos.openCompanionActions', async () => {
+      await showCompanionActions(context);
+    }),
     vscode.commands.registerCommand('tacos.__test.getFocusPresentationMode', async () => {
       const mode = resolveSummaryPresentationMode(getConfig(), {
         autoOpenDetails: false,
       });
       return mode;
+    }),
+    vscode.commands.registerCommand('tacos.__test.getStatusBarSnapshot', async () => {
+      return {
+        text: state.statusBar?.text ?? '',
+        tooltip: typeof state.statusBar?.tooltip === 'string' ? state.statusBar.tooltip : '',
+        mode: resolveCompanionRuntimeMode(getConfig()),
+      };
     }),
     vscode.commands.registerCommand('tacos.slash', async () => {
       const root = pickWorkspaceRoot();
@@ -230,11 +248,15 @@ export function activate(context: vscode.ExtensionContext): void {
       });
     }),
     vscode.commands.registerCommand('tacos.pauseSummaries', async () => {
+      state.pauseUntilRestart = false;
       await setPaused(true);
+      updateCompanionStatusBar();
       void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
     }),
     vscode.commands.registerCommand('tacos.resumeSummaries', async () => {
+      state.pauseUntilRestart = false;
       await setPaused(false);
+      updateCompanionStatusBar();
       void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
     }),
     vscode.commands.registerCommand('tacos.toggleEnabled', async () => {
@@ -248,6 +270,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.pauseUntilRestart', async () => {
       state.pauseUntilRestart = true;
+      updateCompanionStatusBar();
+      rerenderPanel();
       void vscode.window.showInformationMessage('TaCoS: summaries paused until VS Code restarts.');
     }),
     vscode.commands.registerCommand('tacos.addVisitedUrl', async () => {
@@ -470,15 +494,25 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((event) => {
-      if (
-        !event.affectsConfiguration('tacos.enabled') &&
-        !event.affectsConfiguration('tacos.pauseSummaries') &&
-        !event.affectsConfiguration('tacos.showTimeline')
-      ) {
-        return;
+      const affectsPanel =
+        event.affectsConfiguration('tacos.enabled') ||
+        event.affectsConfiguration('tacos.pauseSummaries') ||
+        event.affectsConfiguration('tacos.showTimeline');
+      const affectsStatus =
+        affectsPanel ||
+        event.affectsConfiguration('tacos.summaryProvider') ||
+        event.affectsConfiguration('tacos.autoRefreshInBackground');
+
+      if (affectsPanel) {
+        rerenderPanel();
+      }
+      if (affectsStatus) {
+        updateCompanionStatusBar();
       }
 
-      rerenderPanel();
+      if (!affectsPanel && !affectsStatus) {
+        return;
+      }
     }),
   );
 
@@ -581,6 +615,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   void maybeShowOnboardingNotice(context);
+  updateCompanionStatusBar();
   state.output.appendLine('TaCoS activated.');
 }
 
@@ -689,10 +724,12 @@ async function applyWorkspaceTrust(
   initial: boolean,
 ): Promise<void> {
   state.workspaceTrusted = isTrusted;
+  updateCompanionStatusBar();
 
   clearTerminalHooks();
   if (isTrusted) {
     state.terminalHooks = registerTerminalHooks(context);
+    updateCompanionStatusBar();
     if (!initial) {
       void vscode.window.showInformationMessage(
         'TaCoS: workspace is trusted. Full context collection is enabled.',
@@ -712,6 +749,7 @@ async function applyWorkspaceTrust(
       'TaCoS: Restricted Mode is active. Git and terminal command collection are currently disabled.',
     );
   }
+  updateCompanionStatusBar();
 }
 
 async function triggerSummary(
@@ -1102,6 +1140,188 @@ function resolveSummaryPresentationMode(
   return 'prompt';
 }
 
+function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeMode {
+  if (!config.enabled) {
+    return 'disabled';
+  }
+
+  if (!state.workspaceTrusted || !vscode.workspace.isTrusted) {
+    return 'restricted';
+  }
+
+  if (config.pauseSummaries || state.pauseUntilRestart) {
+    return 'paused';
+  }
+
+  return 'active';
+}
+
+function summarizeForStatusBar(raw: string, maxChars = 44): string {
+  const compact = raw.replace(/\s+/g, ' ').trim();
+  if (!compact) {
+    return 'ready';
+  }
+
+  if (compact.length <= maxChars) {
+    return compact;
+  }
+
+  return `${compact.slice(0, maxChars - 1)}…`;
+}
+
+function updateCompanionStatusBar(): void {
+  if (!state.statusBar) {
+    return;
+  }
+
+  const config = getConfig();
+  const mode = resolveCompanionRuntimeMode(config);
+  const summary = state.scratchSummary;
+  const modeIcon =
+    mode === 'restricted'
+      ? '$(shield)'
+      : mode === 'paused'
+        ? '$(circle-slash)'
+        : mode === 'disabled'
+          ? '$(close)'
+          : '$(pulse)';
+  const modeLabel =
+    mode === 'restricted'
+      ? 'restricted'
+      : mode === 'paused'
+        ? 'paused'
+        : mode === 'disabled'
+          ? 'disabled'
+          : 'active';
+  const statusHeadline =
+    mode === 'active'
+      ? summarizeForStatusBar(summary?.intent ?? '')
+      : mode === 'restricted'
+        ? 'restricted mode'
+        : mode === 'paused'
+          ? 'paused'
+          : 'disabled';
+  const blockerCount = summary?.lastFailingCommand ? 1 : 0;
+  const blockerSuffix = blockerCount > 0 ? ` · ${blockerCount} blocker` : '';
+  state.statusBar.text = `${modeIcon} TaCoS: ${statusHeadline}${blockerSuffix}`;
+  state.statusBar.backgroundColor =
+    mode === 'restricted'
+      ? new vscode.ThemeColor('statusBarItem.warningBackground')
+      : mode === 'paused' || mode === 'disabled'
+        ? new vscode.ThemeColor('statusBarItem.prominentBackground')
+        : undefined;
+  state.statusBar.tooltip = [
+    'TaCoS Companion',
+    `Mode: ${modeLabel}`,
+    `Provider: ${describeProvider(config.summaryProvider)}`,
+    summary
+      ? `Last summary: ${summary.source} at ${formatTimestamp(summary.generatedAt)}`
+      : 'No summary yet.',
+    'Click for quick actions.',
+  ].join('\n');
+  state.statusBar.show();
+}
+
+interface CompanionActionPick extends vscode.QuickPickItem {
+  id:
+    | 'showNow'
+    | 'showLast'
+    | 'copyPrompt'
+    | 'togglePause'
+    | 'enable'
+    | 'openPrivacy'
+    | 'configureProvider';
+}
+
+async function showCompanionActions(context: vscode.ExtensionContext): Promise<void> {
+  const config = getConfig();
+  const mode = resolveCompanionRuntimeMode(config);
+  const picks: CompanionActionPick[] = [
+    {
+      id: 'showNow',
+      label: 'Show resume brief now',
+      detail: 'Generate a fresh summary immediately.',
+    },
+    {
+      id: 'showLast',
+      label: 'Show last summary',
+      detail: 'Open the latest cached TaCoS summary.',
+    },
+    {
+      id: 'copyPrompt',
+      label: 'Copy prompt and open Codex',
+      detail: 'Create a Codex-ready prompt from current context.',
+    },
+    {
+      id: 'configureProvider',
+      label: 'Configure AI provider',
+      detail: 'Switch between local, VS Code LM, and OpenAI providers.',
+    },
+    {
+      id: 'openPrivacy',
+      label: 'Open Privacy & Safety',
+      detail: 'Review what TaCoS stores and sends.',
+    },
+  ];
+
+  if (mode === 'disabled') {
+    picks.unshift({
+      id: 'enable',
+      label: 'Enable auto summaries',
+      detail: 'Turn tacos.enabled back on.',
+    });
+  } else if (mode === 'paused') {
+    picks.unshift({
+      id: 'togglePause',
+      label: 'Resume auto summaries',
+      detail: 'Resume auto summaries and clear pause-until-restart state.',
+    });
+  } else {
+    picks.unshift({
+      id: 'togglePause',
+      label: 'Pause auto summaries',
+      detail: 'Pause automatic focus-triggered summaries.',
+    });
+  }
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS Companion',
+    placeHolder: `Current mode: ${mode}`,
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  if (picked.id === 'showNow') {
+    await vscode.commands.executeCommand('tacos.showNow');
+  } else if (picked.id === 'showLast') {
+    await vscode.commands.executeCommand('tacos.showLastSummary');
+  } else if (picked.id === 'copyPrompt') {
+    await vscode.commands.executeCommand('tacos.copyPromptAndOpenCodex');
+  } else if (picked.id === 'configureProvider') {
+    await vscode.commands.executeCommand('tacos.configureAiProvider');
+  } else if (picked.id === 'openPrivacy') {
+    await openPrivacySafetyDoc(context);
+  } else if (picked.id === 'enable') {
+    await setEnabled(true);
+    void vscode.window.showInformationMessage('TaCoS: automatic summaries enabled.');
+  } else if (picked.id === 'togglePause') {
+    if (mode === 'paused') {
+      state.pauseUntilRestart = false;
+      await setPaused(false);
+      void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
+    } else {
+      state.pauseUntilRestart = false;
+      await setPaused(true);
+      void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
+    }
+    rerenderPanel();
+  }
+
+  updateCompanionStatusBar();
+}
+
 async function showDetailsPanel(
   context: vscode.ExtensionContext,
   summary: ResumeSummary,
@@ -1248,6 +1468,12 @@ async function showDetailsPanel(
         }
 
         rerenderPanel();
+        updateCompanionStatusBar();
+        return;
+      }
+
+      if (message.type === 'openPrivacySafety') {
+        await openPrivacySafetyDoc(context);
         return;
       }
 
@@ -1402,6 +1628,7 @@ async function showDetailsPanel(
 
 function updateSummaryScratchpad(summary: ResumeSummary, workspaceRoot?: string): void {
   state.scratchSummary = summary;
+  updateCompanionStatusBar();
 
   if (!state.panel) {
     return;
@@ -1569,6 +1796,23 @@ function renderWebview(
   const autoSummariesDisabled = !config.enabled;
   const autoSummariesPaused =
     !autoSummariesDisabled && (config.pauseSummaries || state.pauseUntilRestart);
+  const companionRuntimeMode = resolveCompanionRuntimeMode(config);
+  const trustTrackingLabel =
+    companionRuntimeMode === 'restricted'
+      ? 'restricted'
+      : companionRuntimeMode === 'paused'
+        ? 'paused'
+        : companionRuntimeMode === 'disabled'
+          ? 'disabled'
+          : 'on';
+  const sentToAiLabel =
+    config.summaryProvider === 'local'
+      ? 'Nothing (local-only mode).'
+      : companionRuntimeMode === 'restricted'
+        ? 'Nothing while Restricted Mode is active.'
+        : 'Redacted summary context and evidence when AI refinement runs.';
+  const storedLocallyLabel =
+    'Redacted activity snapshots, summary cache, checkpoint notes, and local metrics.';
   const autoSummaryStatusLabel = autoSummariesDisabled
     ? 'Auto summaries disabled'
     : autoSummariesPaused
@@ -1839,6 +2083,12 @@ function renderWebview(
       .companion-restore-grid button {
         text-align: left;
       }
+      .trust-row {
+        margin-bottom: 8px;
+      }
+      .trust-key {
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>
@@ -1851,6 +2101,17 @@ function renderWebview(
       <div class="status-actions">
         <button type="button" data-action="refreshSummary">Refresh summary now</button>
         <button type="button" class="secondary" data-action="toggleAutoSummaries" ${autoSummaryToggleDisabledAttr}>${escapeHtml(autoSummaryToggleLabel)}</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Trust Center</h3>
+      <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(trustTrackingLabel)}</div>
+      <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(storedLocallyLabel)}</div>
+      <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(sentToAiLabel)}</div>
+      <div class="status-actions">
+        <button type="button" class="secondary" data-action="toggleAutoSummaries" ${autoSummaryToggleDisabledAttr}>${escapeHtml(autoSummaryToggleLabel)}</button>
+        <button type="button" class="secondary" data-action="openPrivacySafety">Open Privacy & Safety</button>
       </div>
     </div>
 
@@ -1963,6 +2224,7 @@ function renderWebview(
         'copyPromptAndOpenCodex',
         'refreshSummary',
         'toggleAutoSummaries',
+        'openPrivacySafety',
         'restoreReopenFiles',
         'restoreOpenChangedFiles',
         'restoreRerunTask',
@@ -2589,6 +2851,7 @@ async function setPaused(value: boolean): Promise<void> {
     : vscode.ConfigurationTarget.Global;
 
   await vscode.workspace.getConfiguration('tacos').update('pauseSummaries', value, scope);
+  updateCompanionStatusBar();
 }
 
 async function setEnabled(value: boolean): Promise<void> {
@@ -2597,6 +2860,7 @@ async function setEnabled(value: boolean): Promise<void> {
     : vscode.ConfigurationTarget.Global;
 
   await vscode.workspace.getConfiguration('tacos').update('enabled', value, scope);
+  updateCompanionStatusBar();
 }
 
 async function setSummaryProvider(value: SummaryProvider): Promise<void> {
