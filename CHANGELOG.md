@@ -4,6 +4,24 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Companion nudge engine with deterministic ranking, cooldown suppression, and quiet-hours controls.
+- Session Recap card (`Done since last resume`, `Pending / blocked`, `Recommended first action`).
+- One-click checkpoint capture from recap.
+- Companion metrics CSV export at `.tacos/metrics.csv` alongside JSON export.
+- Companion panel visual polish pass (stronger hierarchy, theme-aware tokens, and reduced-motion-safe refresh animation).
+
+### Changed
+
+- Focus refresh defaults to silent background scratch-pad updates with panel-in-place refresh.
+- Companion actions now capture follow-through and first-action latency metrics in local workspace state.
+- Manual smoke runbook and privacy docs now include companion friction metrics guidance.
+
+### Removed
+
+- Deprecated compatibility settings paths (`tacos.idleMinutes`, `tacos.cooldownSeconds`, `tacos.openaiApiKey` setting fallback).
+
 ## [0.1.0] - 2026-02-26
 
 ### Added
