@@ -2557,16 +2557,98 @@ function renderWebview(
       ? `<button type="button" class="secondary" data-action="${escapeHtml(blockerAction)}" ${blockerActionDisabled ? 'disabled aria-disabled="true"' : ''}>${escapeHtml(blockerActionLabel)}</button>`
       : '';
 
-  const companionRestoreButtons = [
-    '<button type="button" data-action="restoreWorkingSet">Restore working set</button>',
-    `<button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled aria-disabled="true"'}>Jump to last edit</button>`,
-    '<button type="button" data-action="restoreReopenFiles">Reopen files</button>',
-    '<button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>',
-    `<button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled aria-disabled="true"'}>Rerun task</button>`,
-    `<button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled aria-disabled="true"'}>Rerun debug</button>`,
-    `<button type="button" data-action="restoreOpenProblems" ${canOpenProblems ? '' : 'disabled aria-disabled="true"'}>Open Problems</button>`,
-    `<button type="button" data-action="restoreOpenDiagnosticFile" ${canOpenDiagnosticFile ? '' : 'disabled aria-disabled="true"'}>Open diagnostic file</button>`,
-  ].join('');
+  const restoreActionButtons = {
+    workingSet:
+      '<button type="button" data-action="restoreWorkingSet">Restore working set</button>',
+    jumpToLastEdit: `<button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled aria-disabled="true"'}>Jump to last edit</button>`,
+    reopenFiles: '<button type="button" data-action="restoreReopenFiles">Reopen files</button>',
+    openChangedFiles:
+      '<button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>',
+    rerunTask: `<button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled aria-disabled="true"'}>Rerun task</button>`,
+    rerunDebug: `<button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled aria-disabled="true"'}>Rerun debug</button>`,
+    openProblems: `<button type="button" data-action="restoreOpenProblems" ${canOpenProblems ? '' : 'disabled aria-disabled="true"'}>Open Problems</button>`,
+    openDiagnosticFile: `<button type="button" data-action="restoreOpenDiagnosticFile" ${canOpenDiagnosticFile ? '' : 'disabled aria-disabled="true"'}>Open diagnostic file</button>`,
+    checkoutPreviousBranch: `<button type="button" data-action="restoreCheckoutPreviousBranch" ${availability.canCheckoutPreviousBranch ? '' : 'disabled aria-disabled="true"'}>Checkout previous branch</button>`,
+    copyFailingCommand: `<button type="button" data-action="restoreCopyFailingCommand" ${availability.canCopyFailingCommand ? '' : 'disabled aria-disabled="true"'}>Copy failing command</button>`,
+  };
+
+  const companionRestoreSections = [
+    {
+      label: 'Open',
+      buttons: [
+        restoreActionButtons.workingSet,
+        restoreActionButtons.jumpToLastEdit,
+        restoreActionButtons.reopenFiles,
+        restoreActionButtons.openChangedFiles,
+      ],
+    },
+    {
+      label: 'Run',
+      buttons: [restoreActionButtons.rerunTask, restoreActionButtons.rerunDebug],
+    },
+    {
+      label: 'Diagnose',
+      buttons: [restoreActionButtons.openProblems, restoreActionButtons.openDiagnosticFile],
+    },
+  ]
+    .map(
+      (group) =>
+        `<section class="action-group compact-action-group"><h5>${escapeHtml(group.label)}</h5><div class="companion-restore-grid">${group.buttons.join('')}</div></section>`,
+    )
+    .join('');
+
+  const quickActionGroups = [
+    {
+      label: 'Copy',
+      buttons: [
+        '<button type="button" data-action="copyNextSteps">Copy next steps</button>',
+        '<button type="button" data-action="copySummary">Copy summary</button>',
+        '<button type="button" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>',
+      ],
+    },
+    {
+      label: 'Feedback',
+      buttons: [
+        '<button type="button" data-action="rateHelpfulness">Rate helpfulness</button>',
+        '<button type="button" class="secondary" data-action="fixSummary">Fix summary</button>',
+      ],
+    },
+  ]
+    .map(
+      (group) =>
+        `<section class="action-group"><h4>${escapeHtml(group.label)}</h4><div class="quick-actions">${group.buttons.join('')}</div></section>`,
+    )
+    .join('');
+
+  const restorePackGroups = [
+    {
+      label: 'Open',
+      buttons: [
+        restoreActionButtons.workingSet,
+        restoreActionButtons.jumpToLastEdit,
+        restoreActionButtons.reopenFiles,
+        restoreActionButtons.openChangedFiles,
+        restoreActionButtons.checkoutPreviousBranch,
+      ],
+    },
+    {
+      label: 'Run',
+      buttons: [restoreActionButtons.rerunTask, restoreActionButtons.rerunDebug],
+    },
+    {
+      label: 'Diagnose',
+      buttons: [restoreActionButtons.openProblems, restoreActionButtons.openDiagnosticFile],
+    },
+    {
+      label: 'Copy',
+      buttons: [restoreActionButtons.copyFailingCommand],
+    },
+  ]
+    .map(
+      (group) =>
+        `<section class="action-group"><h4>${escapeHtml(group.label)}</h4><div class="restore-grid">${group.buttons.join('')}</div></section>`,
+    )
+    .join('');
 
   const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
   const sourceLabel =
@@ -2728,22 +2810,6 @@ function renderWebview(
         font-size: var(--vscode-font-size);
         line-height: 1.5;
         padding: 16px;
-        animation: panel-refresh 180ms ease-out;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        body {
-          animation: none;
-        }
-      }
-      @keyframes panel-refresh {
-        from {
-          opacity: 0.92;
-          transform: translateY(2px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
       }
       .card {
         border: 1px solid var(--surface-border);
@@ -2943,7 +3009,18 @@ function renderWebview(
         gap: 8px;
       }
       .quick-actions button {
-        min-width: 180px;
+        min-width: 160px;
+      }
+      .action-group + .action-group {
+        margin-top: 10px;
+      }
+      .action-group h4,
+      .action-group h5 {
+        margin: 0 0 8px 0;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--surface-muted);
       }
       .companion-grid {
         display: grid;
@@ -2955,7 +3032,9 @@ function renderWebview(
         border-radius: 10px;
         padding: 12px;
         background: var(--vscode-editor-background);
-        box-shadow: inset 0 1px 0 var(--vscode-widget-border);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
       .companion-block h4 {
         margin-top: 0;
@@ -2970,13 +3049,24 @@ function renderWebview(
         font-weight: 700;
         line-height: 1.4;
       }
+      .companion-kicker {
+        margin: 0;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--surface-muted);
+      }
+      .companion-meta {
+        margin: 0;
+        color: var(--surface-muted);
+      }
       .compact-list {
         margin: 0 0 10px 0;
         padding-left: 18px;
       }
       .companion-restore-grid {
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
         gap: 6px;
       }
       .companion-restore-grid button {
@@ -3036,13 +3126,17 @@ function renderWebview(
       <div class="companion-grid">
         <section class="companion-block">
           <h4>Now</h4>
+          <p class="companion-kicker">Current focus</p>
           <p class="companion-primary">${escapeHtml(summary.intent)}</p>
-          <p class="muted">Mode: ${escapeHtml(mode)}</p>
+          <p class="companion-meta">Mode: ${escapeHtml(mode)}</p>
         </section>
         <section class="companion-block">
           <h4>Next</h4>
           <ul class="compact-list">${companionNextSteps || '<li>No next steps captured yet.</li>'}</ul>
-          <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
+          <div class="status-actions">
+            <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
+            <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
+          </div>
         </section>
         <section class="companion-block">
           <h4>Blocked</h4>
@@ -3052,15 +3146,9 @@ function renderWebview(
         </section>
         <section class="companion-block">
           <h4>Restore</h4>
-          <div class="companion-restore-grid">${companionRestoreButtons}</div>
+          ${companionRestoreSections}
         </section>
       </div>
-    </div>
-
-    <div class="card">
-      <h3>Intent</h3>
-      <p>${escapeHtml(summary.intent)}</p>
-      <p class="mode">Mode: ${escapeHtml(mode)}</p>
     </div>
 
     ${confidenceCard}
@@ -3084,38 +3172,17 @@ function renderWebview(
 
     <div class="card">
       <h3>Quick Actions</h3>
-      <div class="quick-actions">
-        <button type="button" data-action="copyNextSteps">Copy next steps</button>
-        <button type="button" data-action="copySummary">Copy summary</button>
-        <button type="button" data-action="rateHelpfulness">Rate helpfulness</button>
-        <button type="button" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
-      </div>
+      ${quickActionGroups}
     </div>
 
     <div class="card">
       <h3>Restore Pack</h3>
-      <div class="restore-grid">
-        <button type="button" data-action="restoreWorkingSet">Restore working set</button>
-        <button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled'}>Jump to last edit</button>
-        <button type="button" data-action="restoreReopenFiles">Reopen files</button>
-        <button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>
-        <button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled'}>Rerun last task</button>
-        <button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled'}>Rerun debug config</button>
-        <button type="button" data-action="restoreOpenProblems" ${canOpenProblems ? '' : 'disabled'}>Open Problems</button>
-        <button type="button" data-action="restoreOpenDiagnosticFile" ${canOpenDiagnosticFile ? '' : 'disabled'}>Open diagnostic file</button>
-        <button type="button" data-action="restoreCheckoutPreviousBranch" ${availability.canCheckoutPreviousBranch ? '' : 'disabled'}>Checkout previous branch</button>
-        <button type="button" data-action="restoreCopyFailingCommand" ${availability.canCopyFailingCommand ? '' : 'disabled'}>Copy failing command</button>
-      </div>
+      ${restorePackGroups}
       ${
         trusted
           ? ''
           : '<div class="restore-note">Restricted Mode: task/debug/branch execution actions are disabled.</div>'
       }
-    </div>
-
-    <div class="card">
-      <h3>Summary Feedback</h3>
-      <button type="button" data-action="fixSummary">Fix summary</button>
     </div>
 
     <div class="card">
@@ -3161,6 +3228,54 @@ function renderWebview(
         'restoreCheckoutPreviousBranch',
         'restoreCopyFailingCommand'
       ]);
+      const viewState = Object.assign(
+        { evidenceExpanded: false, timelineExpanded: false },
+        vscode.getState() || {},
+      );
+
+      function persistViewState() {
+        vscode.setState(viewState);
+      }
+
+      function setEvidenceExpanded(expanded) {
+        const list = document.getElementById('evidence-list');
+        const toggle = document.querySelector('[data-action="toggleEvidenceMore"]');
+        if (!(list instanceof HTMLElement) || !(toggle instanceof HTMLElement)) {
+          viewState.evidenceExpanded = false;
+          persistViewState();
+          return;
+        }
+
+        list.classList.toggle('show-more', expanded);
+        toggle.textContent = expanded ? 'Show less' : 'Show more';
+        viewState.evidenceExpanded = expanded;
+        persistViewState();
+      }
+
+      function setTimelineExpanded(expanded) {
+        const timeline = document.getElementById('timeline-content');
+        const toggle = document.querySelector('[data-action="toggleTimeline"]');
+        if (!(timeline instanceof HTMLElement) || !(toggle instanceof HTMLElement)) {
+          viewState.timelineExpanded = false;
+          persistViewState();
+          return;
+        }
+
+        if (expanded) {
+          timeline.removeAttribute('hidden');
+          toggle.textContent = 'Hide timeline';
+          toggle.setAttribute('aria-expanded', 'true');
+        } else {
+          timeline.setAttribute('hidden', 'true');
+          toggle.textContent = 'Show timeline';
+          toggle.setAttribute('aria-expanded', 'false');
+        }
+        viewState.timelineExpanded = expanded;
+        persistViewState();
+      }
+
+      setEvidenceExpanded(Boolean(viewState.evidenceExpanded));
+      setTimelineExpanded(Boolean(viewState.timelineExpanded));
 
       function parseDatasetInteger(rawValue) {
         if (typeof rawValue !== 'string') {
@@ -3189,28 +3304,12 @@ function renderWebview(
           }
 
           if (action === 'toggleEvidenceMore') {
-            const list = document.getElementById('evidence-list');
-            if (list) {
-              const expanded = list.classList.toggle('show-more');
-              actionElement.textContent = expanded ? 'Show less' : 'Show more';
-            }
+            setEvidenceExpanded(!Boolean(viewState.evidenceExpanded));
             return;
           }
 
           if (action === 'toggleTimeline') {
-            const timeline = document.getElementById('timeline-content');
-            if (timeline) {
-              const isHidden = timeline.hasAttribute('hidden');
-              if (isHidden) {
-                timeline.removeAttribute('hidden');
-                actionElement.textContent = 'Hide timeline';
-                actionElement.setAttribute('aria-expanded', 'true');
-              } else {
-                timeline.setAttribute('hidden', 'true');
-                actionElement.textContent = 'Show timeline';
-                actionElement.setAttribute('aria-expanded', 'false');
-              }
-            }
+            setTimelineExpanded(!Boolean(viewState.timelineExpanded));
             return;
           }
 
