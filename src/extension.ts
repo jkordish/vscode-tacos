@@ -5109,7 +5109,17 @@ async function maybePromptCheckpointOnBlur(
   const action = await vscode.window.showInformationMessage(
     'One-line next step for Future You (optional).',
     'Add note',
+    'Disable prompts',
   );
+  if (action === 'Disable prompts') {
+    await vscode.workspace
+      .getConfiguration('tacos')
+      .update('promptCheckpointOnBlur', false, vscode.ConfigurationTarget.Global);
+    void vscode.window.showInformationMessage('TaCoS: future-you blur prompts disabled.');
+    state.meaningfulActivitySinceCheckpointPrompt = false;
+    return;
+  }
+
   if (action !== 'Add note') {
     state.meaningfulActivitySinceCheckpointPrompt = false;
     return;
