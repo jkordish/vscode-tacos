@@ -13,6 +13,7 @@ export interface ExtensionConfig {
   promptCheckpointOnBlur: boolean;
   minIdleMinutes: number;
   cooldownMinutes: number;
+  summaryQuietHours: string;
   includeDiff: boolean;
   maxDiffChars: number;
   includeTerminalHistory: boolean;

@@ -55,6 +55,7 @@
     "onCommand:tacos.revokeAiPayloadConsent",
     "onCommand:tacos.rateSummaryHelpfulness",
     "onCommand:tacos.pauseSummaries",
+    "onCommand:tacos.snoozeAutoSummaries",
     "onCommand:tacos.resumeSummaries",
     "onCommand:tacos.toggleEnabled",
     "onCommand:tacos.pauseUntilRestart",
@@ -115,6 +116,10 @@
       {
         "command": "tacos.pauseSummaries",
         "title": "TaCoS: Pause Auto Summaries"
+      },
+      {
+        "command": "tacos.snoozeAutoSummaries",
+        "title": "TaCoS: Snooze Auto Summaries"
       },
       {
         "command": "tacos.resumeSummaries",
@@ -208,6 +213,11 @@
           "default": 5,
           "minimum": 1,
           "description": "Cooldown in minutes between automatic summaries."
+        },
+        "tacos.summaryQuietHours": {
+          "type": "string",
+          "default": "",
+          "description": "Optional quiet window for auto summaries in `HH:MM-HH:MM` format, for example `22:00-07:00`."
         },
         "tacos.includeDiff": {
           "type": "boolean",

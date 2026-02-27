@@ -31,6 +31,7 @@ import {
   normalizeHttpUrl,
   resolveFileTargetInWorkspace,
 } from './pathSafety';
+import { isInQuietHours } from './quietHours';
 import { redactList, redactText } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability } from './restoreSafety';
@@ -55,6 +56,7 @@ const KEY_LAST_BLUR_AT = 'tacos.lastBlurAt';
 const KEY_LAST_SUMMARY_AT = 'tacos.lastSummaryAt';
 const KEY_LAST_WORKSPACE_ON_BLUR = 'tacos.lastWorkspaceOnBlur';
 const KEY_LAST_AUTO_TRIGGER_FINGERPRINT = 'tacos.lastAutoTriggerFingerprint';
+const KEY_SUMMARY_SNOOZE_UNTIL = 'tacos.summarySnoozeUntil';
 
 const KEY_RECENT_FILES = 'tacos.recentFiles';
 const KEY_RECENT_TERMINAL = 'tacos.recentTerminal';
@@ -152,6 +154,7 @@ interface RuntimeState {
   lastAutoFocusTriggerAt: number;
   meaningfulActivitySinceCheckpointPrompt: boolean;
   pauseUntilRestart: boolean;
+  snoozeUntil: number;
   vscodeLmModel?: VscodeLmModelLike;
   vscodeLmSelector?: VscodeLmModelSelector;
   vscodeLmUnavailableNotified: boolean;
@@ -219,6 +222,7 @@ export function activate(context: vscode.ExtensionContext): void {
     lastAutoFocusTriggerAt: 0,
     meaningfulActivitySinceCheckpointPrompt: false,
     pauseUntilRestart: false,
+    snoozeUntil: context.workspaceState.get<number>(KEY_SUMMARY_SNOOZE_UNTIL, 0),
     vscodeLmSelector: context.globalState.get<VscodeLmModelSelector | undefined>(
       KEY_VSCODE_LM_SELECTOR,
     ),
@@ -324,13 +328,20 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.pauseSummaries', async () => {
       state.pauseUntilRestart = false;
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
       await setPaused(true);
       recordMetricCounter('pauseActions');
       updateCompanionStatusBar();
       void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
     }),
+    vscode.commands.registerCommand('tacos.snoozeAutoSummaries', async () => {
+      await promptAndSetAutoSummarySnooze(context);
+    }),
     vscode.commands.registerCommand('tacos.resumeSummaries', async () => {
       state.pauseUntilRestart = false;
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
       await setPaused(false);
       updateCompanionStatusBar();
       void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
@@ -349,6 +360,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.pauseUntilRestart', async () => {
       state.pauseUntilRestart = true;
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
       recordMetricCounter('snoozeActions');
       updateCompanionStatusBar();
       rerenderPanel();
@@ -616,6 +629,7 @@ export function activate(context: vscode.ExtensionContext): void {
         affectsPanel ||
         event.affectsConfiguration('tacos.summaryProvider') ||
         event.affectsConfiguration('tacos.uiSurface') ||
+        event.affectsConfiguration('tacos.summaryQuietHours') ||
         event.affectsConfiguration('tacos.autoRefreshInBackground') ||
         affectsNudges;
 
@@ -701,6 +715,15 @@ export function activate(context: vscode.ExtensionContext): void {
         !config.showOnFocus ||
         config.pauseSummaries
       ) {
+        return;
+      }
+
+      await clearExpiredSnoozeIfNeeded(context, now);
+      if (state.snoozeUntil > now) {
+        return;
+      }
+
+      if (isInQuietHours(now, config.summaryQuietHours)) {
         return;
       }
 
@@ -1289,6 +1312,8 @@ async function presentSummary(
 
   if (choice === actionPauseLabel) {
     recordCompanionQuickAction();
+    state.snoozeUntil = 0;
+    await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
     await setPaused(!config.pauseSummaries);
     if (!config.pauseSummaries) {
       recordMetricCounter('pauseActions');
@@ -1364,6 +1389,10 @@ function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeM
 
   if (!state.workspaceTrusted || !vscode.workspace.isTrusted) {
     return 'restricted';
+  }
+
+  if (state.snoozeUntil > Date.now()) {
+    return 'paused';
   }
 
   if (config.pauseSummaries || state.pauseUntilRestart) {
@@ -1568,6 +1597,10 @@ function updateCompanionStatusBar(): void {
     `Provider: ${describeProvider(config.summaryProvider)}`,
     `Privacy preset: ${PRIVACY_PRESET_LABELS[config.privacyPreset]}`,
     `Retention: ${RETENTION_POLICY_LABELS[config.retentionPolicy]}`,
+    `Summary quiet hours: ${config.summaryQuietHours || 'off'}`,
+    state.snoozeUntil > Date.now()
+      ? `Snoozed until: ${formatTimestamp(state.snoozeUntil)}`
+      : 'Snooze: off',
     trustCue.headline,
     summary ? `Intent: ${summarizeForStatusBar(summary.intent, 120)}` : 'Intent: (none yet)',
     topStep ? `Next: ${summarizeForStatusBar(topStep, 120)}` : 'Next: (none yet)',
@@ -1586,6 +1619,7 @@ interface CompanionActionPick extends vscode.QuickPickItem {
     | 'jumpLastEdit'
     | 'copyPrompt'
     | 'togglePause'
+    | 'snoozeAuto'
     | 'enable'
     | 'openPrivacy'
     | 'configureProvider'
@@ -1619,6 +1653,11 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'copyPrompt',
       label: 'Copy prompt and open Codex',
       detail: 'Create a Codex-ready prompt from current context.',
+    },
+    {
+      id: 'snoozeAuto',
+      label: 'Snooze auto summaries',
+      detail: 'Temporarily suppress focus-triggered summaries.',
     },
     {
       id: 'configureProvider',
@@ -1698,6 +1737,9 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'copyPrompt') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.copyPromptAndOpenCodex');
+  } else if (picked.id === 'snoozeAuto') {
+    recordCompanionQuickAction();
+    await promptAndSetAutoSummarySnooze(context);
   } else if (picked.id === 'configureProvider') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.configureAiProvider');
@@ -1727,10 +1769,14 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
     recordCompanionQuickAction();
     if (mode === 'paused') {
       state.pauseUntilRestart = false;
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
       await setPaused(false);
       void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
     } else {
       state.pauseUntilRestart = false;
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
       await setPaused(true);
       recordMetricCounter('pauseActions');
       void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
@@ -1902,9 +1948,13 @@ async function showDetailsPanel(
         const wasPaused = config.pauseSummaries || state.pauseUntilRestart;
         if (wasPaused) {
           state.pauseUntilRestart = false;
+          state.snoozeUntil = 0;
+          await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
           await setPaused(false);
           void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
         } else {
+          state.snoozeUntil = 0;
+          await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
           await setPaused(true);
           recordMetricCounter('pauseActions');
           void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
@@ -4351,6 +4401,75 @@ async function promptAndSetRetentionPolicy(context: vscode.ExtensionContext): Pr
   );
 }
 
+function nextTomorrowMorning(now: number): number {
+  const date = new Date(now);
+  date.setDate(date.getDate() + 1);
+  date.setHours(9, 0, 0, 0);
+  return date.getTime();
+}
+
+async function promptAndSetAutoSummarySnooze(context: vscode.ExtensionContext): Promise<void> {
+  type SnoozePick = vscode.QuickPickItem & { id: '30m' | 'tomorrow' | 'clear' };
+  const picks: SnoozePick[] = [
+    {
+      id: '30m',
+      label: 'Snooze 30 minutes',
+      detail: 'Suppress focus-triggered summaries for 30 minutes.',
+    },
+    {
+      id: 'tomorrow',
+      label: 'Snooze until tomorrow morning',
+      detail: 'Suppress focus-triggered summaries until 9:00 AM local time tomorrow.',
+    },
+    {
+      id: 'clear',
+      label: 'Clear snooze',
+      detail: 'Resume normal focus-triggered summaries.',
+    },
+  ];
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Snooze Auto Summaries',
+    placeHolder: 'Choose a snooze duration',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  if (picked.id === 'clear') {
+    state.snoozeUntil = 0;
+    await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+    updateCompanionStatusBar();
+    rerenderPanel();
+    void vscode.window.showInformationMessage('TaCoS: auto summary snooze cleared.');
+    return;
+  }
+
+  const now = Date.now();
+  state.snoozeUntil = picked.id === '30m' ? now + 30 * 60_000 : nextTomorrowMorning(now);
+  await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, state.snoozeUntil);
+  recordMetricCounter('snoozeActions');
+  updateCompanionStatusBar();
+  rerenderPanel();
+  void vscode.window.showInformationMessage(
+    `TaCoS: auto summaries snoozed until ${formatTimestamp(state.snoozeUntil)}.`,
+  );
+}
+
+async function clearExpiredSnoozeIfNeeded(
+  context: vscode.ExtensionContext,
+  now: number,
+): Promise<void> {
+  if (state.snoozeUntil <= 0 || now < state.snoozeUntil) {
+    return;
+  }
+
+  state.snoozeUntil = 0;
+  await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+  updateCompanionStatusBar();
+  rerenderPanel();
+}
+
 async function applyPrivacyPreset(
   preset: ExtensionConfig['privacyPreset'],
   context?: vscode.ExtensionContext,
@@ -4524,6 +4643,7 @@ function getConfig(): ExtensionConfig {
     promptCheckpointOnBlur: config.get<boolean>('promptCheckpointOnBlur', false),
     minIdleMinutes: Math.max(1, config.get<number>('minIdleMinutes', 10)),
     cooldownMinutes: Math.max(1, config.get<number>('cooldownMinutes', 5)),
+    summaryQuietHours: config.get<string>('summaryQuietHours', ''),
     includeDiff: config.get<boolean>('includeDiff', false),
     maxDiffChars: config.get<number>('maxDiffChars', 6000),
     includeTerminalHistory: config.get<boolean>('includeTerminalHistory', false),
@@ -4747,6 +4867,10 @@ function collectWorkspaceScopedKeys(
       return true;
     }
 
+    if (key === KEY_SUMMARY_SNOOZE_UNTIL) {
+      return true;
+    }
+
     if (key === KEY_METRIC_HISTORY) {
       return true;
     }
@@ -4795,6 +4919,7 @@ function resetRuntimeWorkspaceState(): void {
   state.lastTaskEndedAt = undefined;
   state.lastDebugConfigName = undefined;
   state.lastDebugWorkspaceRoot = undefined;
+  state.snoozeUntil = 0;
   state.displayedCheckpointNote = undefined;
   state.activeNudges = undefined;
   state.scratchSummary = undefined;

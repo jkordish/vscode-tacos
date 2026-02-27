@@ -50,6 +50,7 @@ In Restricted Mode:
 ## Quick Controls
 
 - Pause auto summaries: `TaCoS: Pause Auto Summaries`
+- Snooze auto summaries: `TaCoS: Snooze Auto Summaries`
 - Resume auto summaries: `TaCoS: Resume Auto Summaries`
 - Toggle enablement: `TaCoS: Toggle Summaries Enabled`
 - Configure provider: `TaCoS: Configure AI Provider`

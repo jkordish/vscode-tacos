@@ -42,6 +42,7 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Revoke AI Payload Consent`
 - `TaCoS: Rate Summary Helpfulness`
 - `TaCoS: Pause Auto Summaries`
+- `TaCoS: Snooze Auto Summaries`
 - `TaCoS: Resume Auto Summaries`
 - `TaCoS: Toggle Summaries Enabled`
 - `TaCoS: Pause Summaries Until Restart`
@@ -75,6 +76,7 @@ Then it falls back to `tacos.codexOpenCommand`, then legacy/inferred Codex comma
 - `promptCheckpointOnBlur` (default `false`)
 - `minIdleMinutes` (default `10`)
 - `cooldownMinutes` (default `5`)
+- `summaryQuietHours` (default `""`, optional `HH:MM-HH:MM` quiet window for auto summaries)
 - `includeDiff` (default `false`)
 - `maxDiffChars` (default `6000`)
 - `includeTerminalHistory` (default `false`)
