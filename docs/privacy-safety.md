@@ -37,6 +37,7 @@ In Restricted Mode:
 - Raw terminal commands are not persisted; terminal-derived fields are anonymized/fingerprinted.
 - Retention pruning is configurable (`1d`/`7d`/`30d`/`forever`) via `tacos.retentionPolicy`.
 - `TaCoS: Forget This Workspace Now` clears workspace-scoped TaCoS state immediately.
+- `TaCoS: Forget This Workspace Now` also clears scoped scratchpad files for that workspace.
 - API keys are stored in VS Code Secret Storage.
 - Metric export writes only local `.tacos/metrics.json` and `.tacos/metrics.csv` files inside the workspace.
 - Scratchpad files are stored under extension storage, not inside the workspace repo by default.

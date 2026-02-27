@@ -33,6 +33,15 @@ describe('checkpoint helpers', () => {
     expect(sanitized).not.toContain('super-secret-token-value');
   });
 
+  it('normalizes checkpoint notes to a single line', () => {
+    const sanitized = sanitizeCheckpointNote(
+      'Fix parser edge case\nand rerun tests\tbefore merge',
+      '/workspace/repo',
+    );
+
+    expect(sanitized).toBe('Fix parser edge case and rerun tests before merge');
+  });
+
   it('builds scoped storage keys for checkpoint note arrays', () => {
     const key = checkpointNotesStorageKey('/workspace/repo::feature/x::ABC-123');
     expect(key.startsWith('tacos.checkpointNotes.')).toBe(true);
