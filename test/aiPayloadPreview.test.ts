@@ -40,6 +40,7 @@ describe('buildAiPayloadPreviewMarkdown', () => {
     expect(markdown).toContain('```json');
     expect(markdown).toContain('"provider": "openai"');
     expect(markdown).toContain('"intent": "Fix tests"');
+    expect(markdown).toContain('Includes your checkpoint notes: no');
   });
 
   it('marks large payload previews as truncated', () => {

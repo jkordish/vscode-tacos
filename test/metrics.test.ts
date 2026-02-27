@@ -28,6 +28,17 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(false);
   });
+
+  it('treats note events as recorded metric activity', () => {
+    const metric: MetricRecord = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      noteCreated: 1,
+    };
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -56,6 +67,8 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('firstActionLagMs');
     expect(lines[0]).toContain('helpfulnessRating');
     expect(lines[0]).toContain('companionActionFollowThroughRate');
+    expect(lines[0]).toContain('noteCreated');
+    expect(lines[0]).toContain('resumeWithNote');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('"/workspace/repo,feature"');
     expect(lines[1]).toContain(',statusbar,0,');

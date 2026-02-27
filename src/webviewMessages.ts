@@ -1,7 +1,10 @@
 const SIMPLE_MESSAGE_TYPES = [
   'fixSummary',
-  'checkpointKeep',
-  'checkpointClear',
+  'checkpointPinToggle',
+  'checkpointMarkDone',
+  'checkpointDismiss',
+  'checkpointOpenList',
+  'openScratchpad',
   'copyNextSteps',
   'copySummary',
   'copyPromptAndOpenCodex',

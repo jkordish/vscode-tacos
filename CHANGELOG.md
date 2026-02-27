@@ -8,6 +8,29 @@ All notable changes to this project are documented in this file.
 
 - No notable changes yet.
 
+## [0.4.0] - 2026-02-27
+
+### Added
+
+- Checkpoint Notes v2:
+  - Multi-note storage with lifecycle (`open`, `done`, `dismissed`)
+  - Partition-aware default scope (`workspace + branch + task partition`)
+  - Legacy single-note migration into pinned open note format
+- New checkpoint commands:
+  - `TaCoS: List Checkpoint Notes`
+  - `TaCoS: Add Checkpoint from Selection`
+  - `TaCoS: Add Quick Checkpoint Note`
+- Resume panel notes card with actions for `Mark done`, `Pin/Unpin`, `Dismiss`, and `Add note`.
+
+### Changed
+
+- Pinned/newest open checkpoint note now overrides `recommendedFirstAction` on resume.
+- Low-confidence card is suppressed when an open checkpoint note exists.
+- Standup `Next` section now includes the active checkpoint note when available.
+- AI payload preview now explicitly labels whether checkpoint notes are included.
+- Local metrics now track checkpoint events (`noteCreated`, `noteMarkedDone`, `notePinned`) and
+  resume lag cohorts (`resumeWithNote` vs without).
+
 ## [0.3.0] - 2026-02-27
 
 ### Added

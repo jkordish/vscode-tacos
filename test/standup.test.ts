@@ -46,4 +46,12 @@ describe('buildStandupUpdate', () => {
     expect(text).toContain('Refresh summary to regenerate next steps.');
     expect(text).toContain('No active blockers captured.');
   });
+
+  it('injects checkpoint note into Next when provided', () => {
+    const text = buildStandupUpdate(sampleSummary(), 'repo', 1, {
+      checkpointNext: 'Resume by fixing parser edge-case test',
+    });
+
+    expect(text).toContain('- Resume by fixing parser edge-case test');
+  });
 });

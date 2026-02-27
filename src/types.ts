@@ -139,6 +139,10 @@ export interface MetricRecord {
   pauseActions?: number;
   snoozeActions?: number;
   disableActions?: number;
+  noteCreated?: number;
+  noteMarkedDone?: number;
+  notePinned?: number;
+  resumeWithNote?: 0 | 1;
 }
 
 export interface VscodeLmModelSelector {
