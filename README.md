@@ -52,8 +52,6 @@ TaCoS is built around five non-negotiable principles:
 - `promptCheckpointOnBlur` (default `false`)
 - `minIdleMinutes` (default `10`)
 - `cooldownMinutes` (default `5`)
-- `idleMinutes` (legacy compatibility)
-- `cooldownSeconds` (legacy compatibility)
 - `includeDiff` (default `false`)
 - `maxDiffChars` (default `6000`)
 - `includeTerminalHistory` (default `true`)
@@ -61,8 +59,8 @@ TaCoS is built around five non-negotiable principles:
 - `cacheIfContextUnchanged` (default `true`)
 - `redactionPatterns` (default `[]`)
 - `metricsEnabled` (default `true`)
+- `autoRefreshInBackground` (default `true`, skip `Open details` prompt and refresh scratch summary silently)
 - `summaryProvider` (`local` | `vscode-lm` | `openai`, default `local`)
-- `openaiApiKey` (deprecated fallback only)
 - `openaiModel` (default `gpt-4.1-mini`)
 - `openaiBaseUrl` (default `https://api.openai.com/v1`)
 - `openaiTimeoutMs` (default `15000`)
@@ -84,7 +82,6 @@ OpenAI API key resolution order:
 
 1. VS Code Secret Storage (`TaCoS: Set OpenAI API Key`) (recommended)
 2. `OPENAI_API_KEY` environment variable
-3. `tacos.openaiApiKey` setting (deprecated fallback)
 
 ## Privacy & Safety
 

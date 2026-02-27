@@ -9,8 +9,6 @@ export interface ExtensionConfig {
   promptCheckpointOnBlur: boolean;
   minIdleMinutes: number;
   cooldownMinutes: number;
-  idleMinutes: number;
-  cooldownSeconds: number;
   includeDiff: boolean;
   maxDiffChars: number;
   includeTerminalHistory: boolean;
@@ -18,8 +16,8 @@ export interface ExtensionConfig {
   cacheIfContextUnchanged: boolean;
   redactionPatterns: string[];
   metricsEnabled: boolean;
+  autoRefreshInBackground: boolean;
   summaryProvider: SummaryProvider;
-  openaiApiKeySetting: string;
   openaiModel: string;
   openaiBaseUrl: string;
   openaiTimeoutMs: number;

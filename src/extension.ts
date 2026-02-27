@@ -108,6 +108,7 @@ interface RuntimeState {
   doneItems: RingBuffer;
   lastFailingCommand?: string;
   lastFailingCommandRaw?: string;
+  scratchSummary?: ResumeSummary;
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
   panelWorkspaceRoot?: string;
@@ -150,6 +151,7 @@ export function activate(context: vscode.ExtensionContext): void {
     doneItems: new RingBuffer(10, persistedActivity.sanitized.doneItems),
     lastFailingCommand: persistedActivity.sanitized.lastFailingCommand,
     lastFailingCommandRaw: undefined,
+    scratchSummary: undefined,
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
     refinementSequence: 0,
@@ -850,9 +852,8 @@ async function refineSummaryInBackground(
 
   await context.workspaceState.update(prepared.cacheKey, refined);
 
-  if (state.panelSummary?.contextHash === prepared.localSummary.contextHash) {
-    state.panelSummary = refined;
-    rerenderPanel();
+  if (state.scratchSummary?.contextHash === prepared.localSummary.contextHash) {
+    updateSummaryScratchpad(refined, prepared.root);
     return;
   }
 
@@ -914,7 +915,7 @@ async function resolveProviderPlan(
   }
 
   if (requestedProvider === 'openai') {
-    const openAiApiKey = await resolveOpenAiApiKey(context, config);
+    const openAiApiKey = await resolveOpenAiApiKey(context);
     if (openAiApiKey) {
       return {
         requestedProvider,
@@ -1013,8 +1014,18 @@ async function presentSummary(
     };
   }
 
+  updateSummaryScratchpad(summary, options.workspaceRoot);
+
   if (options.autoOpenDetails) {
     await showDetailsPanel(context, summary, options);
+    return;
+  }
+
+  if (config.autoRefreshInBackground) {
+    const statusMessage = state.panel
+      ? `TaCoS (${summary.source}): summary refreshed in details panel.`
+      : `TaCoS (${summary.source}): summary refreshed in background scratch pad.`;
+    void vscode.window.setStatusBarMessage(statusMessage, 3500);
     return;
   }
 
@@ -1074,6 +1085,7 @@ async function showDetailsPanel(
 ): Promise<void> {
   const workspaceRoot = options.workspaceRoot ?? pickWorkspaceRoot();
   const checkpointNote = options.checkpointNote;
+  updateSummaryScratchpad(summary, workspaceRoot);
   state.panelSummary = summary;
   state.panelWorkspaceRoot = workspaceRoot;
 
@@ -1362,6 +1374,20 @@ async function showDetailsPanel(
 
   rerenderPanel();
   state.panel.reveal(vscode.ViewColumn.Beside, true);
+}
+
+function updateSummaryScratchpad(summary: ResumeSummary, workspaceRoot?: string): void {
+  state.scratchSummary = summary;
+
+  if (!state.panel) {
+    return;
+  }
+
+  state.panelSummary = summary;
+  if (workspaceRoot) {
+    state.panelWorkspaceRoot = workspaceRoot;
+  }
+  rerenderPanel();
 }
 
 function titleForSummary(summary: ResumeSummary): string {
@@ -2681,7 +2707,7 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
     }
 
     await setSummaryProvider('openai');
-    const key = await resolveOpenAiApiKey(context, getConfig());
+    const key = await resolveOpenAiApiKey(context);
     if (!key) {
       const action = await vscode.window.showInformationMessage(
         'TaCoS: OpenAI selected. Set an API key in Secret Storage to enable refinement.',
@@ -2722,49 +2748,8 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
   );
 }
 
-function hasExplicitConfigurationValue(
-  config: vscode.WorkspaceConfiguration,
-  key: string,
-): boolean {
-  const inspected = config.inspect<unknown>(key);
-  if (!inspected) {
-    return false;
-  }
-
-  const languageAwareInspected = inspected as typeof inspected & {
-    globalLanguageValue?: unknown;
-    workspaceLanguageValue?: unknown;
-    workspaceFolderLanguageValue?: unknown;
-  };
-
-  return (
-    inspected.globalValue !== undefined ||
-    inspected.workspaceValue !== undefined ||
-    inspected.workspaceFolderValue !== undefined ||
-    languageAwareInspected.globalLanguageValue !== undefined ||
-    languageAwareInspected.workspaceLanguageValue !== undefined ||
-    languageAwareInspected.workspaceFolderLanguageValue !== undefined
-  );
-}
-
 function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('tacos');
-  const idleMinutesLegacy = config.get<number>('idleMinutes', 10);
-  const cooldownSecondsLegacy = config.get<number>('cooldownSeconds', 30);
-  const hasIdleMinutesOverride = hasExplicitConfigurationValue(config, 'idleMinutes');
-  const hasCooldownSecondsOverride = hasExplicitConfigurationValue(config, 'cooldownSeconds');
-  const hasMinIdleMinutesOverride = hasExplicitConfigurationValue(config, 'minIdleMinutes');
-  const hasCooldownMinutesOverride = hasExplicitConfigurationValue(config, 'cooldownMinutes');
-  const minIdleMinutes = hasMinIdleMinutesOverride
-    ? config.get<number>('minIdleMinutes', 10)
-    : hasIdleMinutesOverride
-      ? idleMinutesLegacy
-      : 10;
-  const cooldownMinutes = hasCooldownMinutesOverride
-    ? config.get<number>('cooldownMinutes', 5)
-    : hasCooldownSecondsOverride
-      ? Math.max(1, Math.round(cooldownSecondsLegacy / 60))
-      : 5;
 
   return {
     enabled: config.get<boolean>('enabled', true),
@@ -2772,10 +2757,8 @@ function getConfig(): ExtensionConfig {
     pauseSummaries: config.get<boolean>('pauseSummaries', false),
     showTimeline: config.get<boolean>('showTimeline', true),
     promptCheckpointOnBlur: config.get<boolean>('promptCheckpointOnBlur', false),
-    minIdleMinutes: Math.max(1, minIdleMinutes),
-    cooldownMinutes: Math.max(1, cooldownMinutes),
-    idleMinutes: idleMinutesLegacy,
-    cooldownSeconds: cooldownSecondsLegacy,
+    minIdleMinutes: Math.max(1, config.get<number>('minIdleMinutes', 10)),
+    cooldownMinutes: Math.max(1, config.get<number>('cooldownMinutes', 5)),
     includeDiff: config.get<boolean>('includeDiff', false),
     maxDiffChars: config.get<number>('maxDiffChars', 6000),
     includeTerminalHistory: config.get<boolean>('includeTerminalHistory', true),
@@ -2783,8 +2766,8 @@ function getConfig(): ExtensionConfig {
     cacheIfContextUnchanged: config.get<boolean>('cacheIfContextUnchanged', true),
     redactionPatterns: config.get<string[]>('redactionPatterns', []),
     metricsEnabled: config.get<boolean>('metricsEnabled', true),
+    autoRefreshInBackground: config.get<boolean>('autoRefreshInBackground', true),
     summaryProvider: config.get<SummaryProvider>('summaryProvider', 'local'),
-    openaiApiKeySetting: config.get<string>('openaiApiKey', ''),
     openaiModel: config.get<string>('openaiModel', 'gpt-4.1-mini'),
     openaiBaseUrl: config.get<string>('openaiBaseUrl', 'https://api.openai.com/v1'),
     openaiTimeoutMs: config.get<number>('openaiTimeoutMs', 15000),
@@ -2792,10 +2775,7 @@ function getConfig(): ExtensionConfig {
   };
 }
 
-async function resolveOpenAiApiKey(
-  context: vscode.ExtensionContext,
-  config: ExtensionConfig,
-): Promise<string> {
+async function resolveOpenAiApiKey(context: vscode.ExtensionContext): Promise<string> {
   const secret = (await context.secrets.get(SECRET_OPENAI_API_KEY))?.trim() ?? '';
   if (secret) {
     return secret;
@@ -2805,8 +2785,7 @@ async function resolveOpenAiApiKey(
   if (env) {
     return env;
   }
-
-  return config.openaiApiKeySetting.trim();
+  return '';
 }
 
 function pickWorkspaceRoot(): string | undefined {
