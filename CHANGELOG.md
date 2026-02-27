@@ -6,17 +6,37 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- No notable changes yet.
+
+## [0.2.0] - 2026-02-27
+
+### Added
+
 - Companion nudge engine with deterministic ranking, cooldown suppression, and quiet-hours controls.
 - Session Recap card (`Done since last resume`, `Pending / blocked`, `Recommended first action`).
 - One-click checkpoint capture from recap.
 - Companion metrics CSV export at `.tacos/metrics.csv` alongside JSON export.
 - Companion panel visual polish pass (stronger hierarchy, theme-aware tokens, and reduced-motion-safe refresh animation).
+- Status bar Resume pill default surface with trust cues and quick-open behavior.
+- Jump-to-last-edit location capture and restore actions (file + line + timestamp).
+- Clickable next-step actions for open file/range, rerun task/test, open link, and debug actions.
+- Blocker-first section with failing task/diagnostic recovery actions.
+- Privacy presets (`Minimal`, `Balanced`, `Max context`) with retention controls and `Forget workspace now`.
+- AI payload preview/consent gate before network send.
+- Low-confidence ambiguity mode with candidate intents and safe fallback next steps.
+- Standup mode command (`Done / Next / Blockers`) with copy/open flows.
+- Task partition switching by workspace + branch + optional task key.
+- Working set restore pack with preview and selective restore actions.
 
 ### Changed
 
 - Focus refresh defaults to silent background scratch-pad updates with panel-in-place refresh.
 - Companion actions now capture follow-through and first-action latency metrics in local workspace state.
 - Manual smoke runbook and privacy docs now include companion friction metrics guidance.
+- OpenAI extension interop now prioritizes `chatgpt.openSidebar`, `chatgpt.newCodexPanel`, and `chatgpt.newChat`.
+- Details webview renders actionable HTML lists and routes link/file actions via postMessage handlers.
+- LLM refinement path now handles structured output compatibility/refusal/parsing failures with robust local fallback.
+- Metrics capture expanded for resumption/action lag and optional quick helpfulness scoring.
 
 ### Removed
 

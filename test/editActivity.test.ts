@@ -1,4 +1,8 @@
-import { captureEditLocation, decideEditActivity, pushRecentEditLocation } from '../src/editActivity';
+import {
+  captureEditLocation,
+  decideEditActivity,
+  pushRecentEditLocation,
+} from '../src/editActivity';
 
 describe('decideEditActivity', () => {
   it('marks meaningful activity for file edits even without a metric session', () => {
