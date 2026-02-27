@@ -143,6 +143,8 @@ export interface MetricRecord {
   noteMarkedDone?: number;
   notePinned?: number;
   resumeWithNote?: 0 | 1;
+  scratchpadOpened?: number;
+  scratchpadAppended?: number;
 }
 
 export interface VscodeLmModelSelector {

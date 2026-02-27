@@ -46,6 +46,12 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `pauseActions` | integer | Count of pause actions taken during session. |
 | `snoozeActions` | integer | Count of snooze actions taken during session. |
 | `disableActions` | integer | Count of disable/toggle-off actions taken during session. |
+| `noteCreated` | integer | Count of checkpoint notes created during session. |
+| `noteMarkedDone` | integer | Count of checkpoint notes marked done during session. |
+| `notePinned` | integer | Count of checkpoint notes pinned during session. |
+| `resumeWithNote` | integer | `1` if an open checkpoint note was present in the resume context, else `0`. |
+| `scratchpadOpened` | integer | Count of `TaCoS: Open Scratchpad` actions during session. |
+| `scratchpadAppended` | integer | Count of `TaCoS: Append to Scratchpad` actions during session. |
 | `companionActionFollowThroughRate` | ratio | Derived as `companionQuickActionsTaken / companionPromptImpressions`. |
 | `companionForcedOpenRate` | ratio | Derived as `companionForcedOpenDetailsClicks / companionPromptImpressions`. |
 
@@ -59,6 +65,12 @@ Track these explicitly for stabilization/adoption gating:
 - `companionPromptImpressions`
 - `companionForcedOpenDetailsClicks`
 - `companionNudgeImpressions`
+- `noteCreated`
+- `noteMarkedDone`
+- `notePinned`
+- `resumeWithNote`
+- `scratchpadOpened`
+- `scratchpadAppended`
 
 ## Notes
 

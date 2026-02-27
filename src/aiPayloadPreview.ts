@@ -52,6 +52,7 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
     `- Workspace: \`${input.workspaceName}\``,
     `- Generated: ${new Date(input.generatedAt).toLocaleString()}`,
     `- Includes your checkpoint notes: ${(input.checkpointNotes?.length ?? 0) > 0 ? 'yes' : 'no'}`,
+    '- Scratchpad content: excluded by default (explicit opt-in only).',
     truncationNote,
     '```json',
     previewJson,

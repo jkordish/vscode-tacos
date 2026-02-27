@@ -24,6 +24,8 @@ const CSV_HEADERS = [
   'noteMarkedDone',
   'notePinned',
   'resumeWithNote',
+  'scratchpadOpened',
+  'scratchpadAppended',
   'companionActionFollowThroughRate',
   'companionForcedOpenRate',
 ] as const;
@@ -133,6 +135,8 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const notesCreated = summarizeTotal(metrics, 'noteCreated');
   const notesMarkedDone = summarizeTotal(metrics, 'noteMarkedDone');
   const notesPinned = summarizeTotal(metrics, 'notePinned');
+  const scratchpadOpened = summarizeTotal(metrics, 'scratchpadOpened');
+  const scratchpadAppended = summarizeTotal(metrics, 'scratchpadAppended');
   const sessionsWithNote = metrics.filter((metric) => metric.resumeWithNote === 1).length;
   const lagActionWithNote = summarizeLag(
     metrics.filter((metric) => metric.resumeWithNote === 1),
@@ -178,6 +182,8 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| noteCreated (total) | ${notesCreated} |`,
     `| noteMarkedDone (total) | ${notesMarkedDone} |`,
     `| notePinned (total) | ${notesPinned} |`,
+    `| scratchpadOpened (total) | ${scratchpadOpened} |`,
+    `| scratchpadAppended (total) | ${scratchpadAppended} |`,
     '',
     'Resumption lag by note usage (`firstActionLagMs`):',
     '',
@@ -219,7 +225,9 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.noteCreated ?? 0) > 0 ||
     (metric.noteMarkedDone ?? 0) > 0 ||
     (metric.notePinned ?? 0) > 0 ||
-    metric.resumeWithNote === 1
+    metric.resumeWithNote === 1 ||
+    (metric.scratchpadOpened ?? 0) > 0 ||
+    (metric.scratchpadAppended ?? 0) > 0
   );
 }
 
@@ -255,6 +263,8 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.noteMarkedDone),
       toOptionalNumber(metric.notePinned),
       toOptionalNumber(metric.resumeWithNote),
+      toOptionalNumber(metric.scratchpadOpened),
+      toOptionalNumber(metric.scratchpadAppended),
       toRatio(quickActions, prompts),
       toRatio(forcedOpens, prompts),
     ];

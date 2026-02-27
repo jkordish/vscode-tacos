@@ -32,6 +32,7 @@ TaCoS is built around five non-negotiable principles:
 - Shows confidence-gated companion nudges with cooldown and quiet-hours suppression.
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.
 - Lets you capture sticky checkpoint notes (multi-note, scoped, pinned, done/dismissed) and reuse them on resume.
+- Adds a scoped persistent scratchpad in a real editor tab so running thoughts survive reloads/restarts.
 - Adds restore presets with a dry-run plan before executing working-set restore actions.
 - Supports local-only summaries and optional AI refinement (`vscode-lm` / `openai`).
 - Marks low-confidence context explicitly and suggests safe clarification steps.
@@ -66,6 +67,9 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Add Quick Checkpoint Note`
 - `TaCoS: List Checkpoint Notes`
 - `TaCoS: Clear Checkpoint Notes in Current Task Scope`
+- `TaCoS: Open Scratchpad`
+- `TaCoS: Append to Scratchpad`
+- `TaCoS: Set Scratchpad Scope`
 - `TaCoS: Configure AI Provider`
 - `TaCoS: Privacy & Safety`
 - `TaCoS: Clear Summary Corrections`
@@ -142,6 +146,9 @@ Key companion fields:
 - `pauseActions` / `snoozeActions` / `disableActions`: local opt-out interaction counters.
 - `companionActionFollowThroughRate` (CSV): quick actions ÷ prompt impressions.
 - `companionForcedOpenRate` (CSV): forced opens ÷ prompt impressions.
+- `noteCreated` / `noteMarkedDone` / `notePinned`: checkpoint note lifecycle counters.
+- `resumeWithNote`: session indicator for note-guided resume (`1` or `0`).
+- `scratchpadOpened` / `scratchpadAppended`: scratchpad usage counters.
 
 ## Provider Modes
 
@@ -192,6 +199,8 @@ Only if AI provider is enabled:
 - Redacted summary context and evidence catalog.
 - Structured summarization instructions.
 - Optional correction hints.
+- Optional checkpoint notes if included via consent flow.
+- Scratchpad content is excluded by default.
 - Payload preview + explicit consent (`Send once` / `Always allow in workspace`) are required before send.
 
 ### Privacy Doc

@@ -1727,7 +1727,9 @@ function recordMetricCounter(
     | 'disableActions'
     | 'noteCreated'
     | 'noteMarkedDone'
-    | 'notePinned',
+    | 'notePinned'
+    | 'scratchpadOpened'
+    | 'scratchpadAppended',
 ): void {
   if (!state.metricSession) {
     return;
@@ -7051,6 +7053,7 @@ async function openScratchpadCommand(
     preserveFocus: false,
     viewColumn: vscode.ViewColumn.Beside,
   });
+  recordMetricCounter('scratchpadOpened');
 }
 
 function buildScratchpadAppendChunk(rawText: string): string {
@@ -7093,6 +7096,7 @@ async function appendToScratchpadCommand(context: vscode.ExtensionContext): Prom
   }
 
   await document.save();
+  recordMetricCounter('scratchpadAppended');
   await refreshPanelScratchpadState(context, workspaceRoot);
   rerenderPanel();
   void vscode.window.showInformationMessage('TaCoS: appended to scratchpad.');
