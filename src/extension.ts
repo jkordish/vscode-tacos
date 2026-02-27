@@ -6881,7 +6881,7 @@ async function listCheckpointNotesCommand(
   const resolved = await resolveCheckpointContext(
     context,
     workspaceRoot,
-    state.panelSummary?.currentBranch,
+    resolveScopeBranch(context, workspaceRoot),
     true,
   );
 
