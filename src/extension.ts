@@ -2558,7 +2558,8 @@ function renderWebview(
       : '';
 
   const restoreActionButtons = {
-    workingSet: '<button type="button" data-action="restoreWorkingSet">Restore working set</button>',
+    workingSet:
+      '<button type="button" data-action="restoreWorkingSet">Restore working set</button>',
     jumpToLastEdit: `<button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled aria-disabled="true"'}>Jump to last edit</button>`,
     reopenFiles: '<button type="button" data-action="restoreReopenFiles">Reopen files</button>',
     openChangedFiles:
