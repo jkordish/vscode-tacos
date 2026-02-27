@@ -32,6 +32,7 @@ TaCoS is built around five non-negotiable principles:
 - Shows confidence-gated companion nudges with cooldown and quiet-hours suppression.
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.
 - Lets you add checkpoint notes (“Future You” hints) and reuse them on resume.
+- Adds restore presets with a dry-run plan before executing working-set restore actions.
 - Supports local-only summaries and optional AI refinement (`vscode-lm` / `openai`).
 - Marks low-confidence context explicitly and suggests safe clarification steps.
 

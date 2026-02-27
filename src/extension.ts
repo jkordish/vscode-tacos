@@ -45,7 +45,7 @@ import {
 import { isInQuietHours } from './quietHours';
 import { redactList, redactText } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
-import { computeRestoreAvailability } from './restoreSafety';
+import { computeRestoreAvailability, type RestoreAvailability } from './restoreSafety';
 import { resolveScopeBranch as resolveScopeBranchFromInputs } from './scopeBranch';
 import { buildResumeSummary } from './summary';
 import { buildStandupUpdate } from './standup';
@@ -82,6 +82,7 @@ const KEY_RECENT_EDIT_LOCATIONS_PREFIX = 'tacos.recentEditLocations';
 const KEY_LAST_TASK_META_PREFIX = 'tacos.lastTaskMeta';
 const KEY_LAST_TERMINAL_CWD_PREFIX = 'tacos.lastTerminalCwd';
 const KEY_RESTORE_SEARCH_QUERY_PREFIX = 'tacos.restoreSearchQuery';
+const KEY_RESTORE_PRESET_PREFIX = 'tacos.restorePreset';
 const KEY_TASK_PARTITION_PREFIX = 'tacos.taskPartition';
 const KEY_ACTIVITY_STORAGE_PREFIX = 'tacos.activityScoped';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
@@ -3542,6 +3543,139 @@ function readPersistedRestoreSearchQuery(
   return value || undefined;
 }
 
+type RestorePreset = 'files-only' | 'files-terminal' | 'full-restore';
+
+interface RestorePlanOptions {
+  preset: RestorePreset;
+  workspaceName: string;
+  filesToOpen: string[];
+  diffTarget?: string;
+  terminalCwd?: string;
+  searchQuery?: string;
+  availability: RestoreAvailability;
+  trusted: boolean;
+}
+
+const DEFAULT_RESTORE_PRESET: RestorePreset = 'full-restore';
+
+const RESTORE_PRESET_LABELS: Record<RestorePreset, string> = {
+  'files-only': 'Files only',
+  'files-terminal': 'Files + terminal',
+  'full-restore': 'Full restore',
+};
+
+const RESTORE_PRESET_DETAILS: Record<RestorePreset, string> = {
+  'files-only': 'Reopen files and diff target only.',
+  'files-terminal': 'Reopen files plus terminal cwd.',
+  'full-restore': 'Reopen files, terminal cwd, and search query.',
+};
+
+function parseRestorePreset(value: string): RestorePreset | undefined {
+  if (value === 'files-only' || value === 'files-terminal' || value === 'full-restore') {
+    return value;
+  }
+
+  return undefined;
+}
+
+function restorePresetKey(workspaceRoot: string): string {
+  return `${KEY_RESTORE_PRESET_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function readPersistedRestorePreset(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): RestorePreset {
+  if (!workspaceRoot) {
+    return DEFAULT_RESTORE_PRESET;
+  }
+
+  const raw = context.workspaceState.get<string>(restorePresetKey(workspaceRoot), '').trim();
+  return parseRestorePreset(raw) ?? DEFAULT_RESTORE_PRESET;
+}
+
+async function persistRestorePreset(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  preset: RestorePreset,
+): Promise<void> {
+  await context.workspaceState.update(restorePresetKey(workspaceRoot), preset);
+}
+
+async function promptForRestorePreset(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<RestorePreset | undefined> {
+  type RestorePresetPick = vscode.QuickPickItem & { preset: RestorePreset };
+  const current = readPersistedRestorePreset(context, workspaceRoot);
+  const allPresets: RestorePreset[] = ['files-only', 'files-terminal', 'full-restore'];
+  const ordered = [current, ...allPresets.filter((preset) => preset !== current)];
+  const picks: RestorePresetPick[] = ordered.map((preset) => ({
+    preset,
+    label: RESTORE_PRESET_LABELS[preset],
+    detail: RESTORE_PRESET_DETAILS[preset],
+    description: preset === current ? 'Current' : undefined,
+  }));
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Restore Preset',
+    placeHolder: 'Choose which restore actions to execute',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return undefined;
+  }
+
+  await persistRestorePreset(context, workspaceRoot, picked.preset);
+  return picked.preset;
+}
+
+function isPresetEnabled(options: RestorePlanOptions, action: 'terminal' | 'search'): boolean {
+  if (action === 'terminal') {
+    return options.preset === 'files-terminal' || options.preset === 'full-restore';
+  }
+
+  return options.preset === 'full-restore';
+}
+
+function buildRestoreDryRunMarkdown(options: RestorePlanOptions): string {
+  const terminalEnabled = isPresetEnabled(options, 'terminal');
+  const searchEnabled = isPresetEnabled(options, 'search');
+  const lines = [
+    '# TaCoS Restore Dry-Run Plan',
+    '',
+    `- Workspace: ${options.workspaceName}`,
+    `- Preset: ${RESTORE_PRESET_LABELS[options.preset]}`,
+    `- Mode: ${options.trusted ? 'trusted' : 'restricted'}`,
+    '',
+    '## Actions That Will Execute',
+    '',
+    `- Reopen files: ${options.filesToOpen.length} target(s)`,
+    options.diffTarget ? `- Open diff target: ${options.diffTarget}` : '- Open diff target: none',
+    terminalEnabled
+      ? `- Restore terminal cwd: ${options.terminalCwd ?? 'none available'}`
+      : '- Restore terminal cwd: skipped by preset',
+    searchEnabled
+      ? `- Restore search query: ${options.searchQuery ? 'yes' : 'none available'}`
+      : '- Restore search query: skipped by preset',
+    '',
+    '## Pending Execution Actions (Manual)',
+    '',
+    options.availability.canRerunTask
+      ? '- Rerun last task: available in Restore Pack'
+      : '- Rerun last task: unavailable',
+    options.availability.canRerunDebug
+      ? '- Rerun debug config: available in Restore Pack'
+      : '- Rerun debug config: unavailable',
+    '',
+    'Notes:',
+    '- TaCoS keeps workspace path validation and trust-mode safety checks before execution.',
+    '- Restricted Mode keeps execution actions disabled.',
+  ];
+
+  return `${lines.join('\n')}\n`;
+}
+
 async function captureRestoreSearchQuery(context: vscode.ExtensionContext): Promise<void> {
   const workspaceRoot = pickWorkspaceRoot();
   if (!workspaceRoot) {
@@ -3652,15 +3786,43 @@ async function restoreWorkingSetCommand(context: vscode.ExtensionContext): Promi
   const diffTarget = summary.topFiles[0];
   const terminalCwd = state.lastTerminalCwd?.trim() || undefined;
   const searchQuery = readPersistedRestoreSearchQuery(context, workspaceRoot);
-  const preview = [
-    `files: ${filesToOpen.length}`,
-    `diff target: ${diffTarget ? 'yes' : 'none'}`,
-    `terminal cwd: ${terminalCwd ? terminalCwd : 'none'}`,
-    `search query: ${searchQuery ? 'yes' : 'none'}`,
-  ].join(' • ');
+  const preset = await promptForRestorePreset(context, workspaceRoot);
+  if (!preset) {
+    return;
+  }
+
+  const availability = computeRestoreAvailability({
+    trusted: vscode.workspace.isTrusted,
+    hasLastTask: Boolean(state.lastTaskName),
+    hasLastDebug: Boolean(state.lastDebugConfigName),
+    hasFailingCommand: Boolean(getCopyableFailingCommand()),
+    hasRecentEditLocation: state.recentEditLocations.length > 0,
+    currentBranch: summary.currentBranch,
+    previousBranch: summary.previousBranch,
+  });
+
+  const dryRunMarkdown = buildRestoreDryRunMarkdown({
+    preset,
+    workspaceName: path.basename(workspaceRoot),
+    filesToOpen,
+    diffTarget,
+    terminalCwd,
+    searchQuery,
+    availability,
+    trusted: vscode.workspace.isTrusted,
+  });
+  const dryRunDoc = await vscode.workspace.openTextDocument({
+    language: 'markdown',
+    content: dryRunMarkdown,
+  });
+  await vscode.window.showTextDocument(dryRunDoc, {
+    preview: false,
+    viewColumn: vscode.ViewColumn.Beside,
+    preserveFocus: true,
+  });
 
   const choice = await vscode.window.showInformationMessage(
-    `TaCoS restore preview (${preview})`,
+    `TaCoS dry-run ready (${RESTORE_PRESET_LABELS[preset]}). Apply restore actions now?`,
     { modal: true },
     'Restore',
   );
@@ -3687,8 +3849,9 @@ async function restoreWorkingSetCommand(context: vscode.ExtensionContext): Promi
     }
   }
 
+  const includeTerminal = preset === 'files-terminal' || preset === 'full-restore';
   let openedTerminal = false;
-  if (terminalCwd) {
+  if (includeTerminal && terminalCwd) {
     const safeCwd = resolveFileTargetInWorkspace(terminalCwd, workspaceRoot);
     if (safeCwd && isPathWithinWorkspaceRoot(workspaceRoot, safeCwd)) {
       try {
@@ -3707,8 +3870,9 @@ async function restoreWorkingSetCommand(context: vscode.ExtensionContext): Promi
     }
   }
 
+  const includeSearch = preset === 'full-restore';
   let restoredSearch = false;
-  if (searchQuery) {
+  if (includeSearch && searchQuery) {
     await vscode.commands.executeCommand('workbench.action.findInFiles', {
       query: searchQuery,
       triggerSearch: true,
@@ -3717,7 +3881,7 @@ async function restoreWorkingSetCommand(context: vscode.ExtensionContext): Promi
   }
 
   void vscode.window.showInformationMessage(
-    `TaCoS: restored ${openedFiles} files${openedDiff ? ', diff target' : ''}${openedTerminal ? ', terminal cwd' : ''}${restoredSearch ? ', and search query' : ''}. Missing resources were skipped safely.`,
+    `TaCoS: restored ${openedFiles} files${openedDiff ? ', diff target' : ''}${openedTerminal ? ', terminal cwd' : ''}${restoredSearch ? ', and search query' : ''} (${RESTORE_PRESET_LABELS[preset]}). Missing resources were skipped safely.`,
   );
 }
 
@@ -5684,6 +5848,7 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_LAST_TASK_META_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_TERMINAL_CWD_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_RESTORE_SEARCH_QUERY_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_RESTORE_PRESET_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_TASK_PARTITION_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_SUMMARY_CORRECTIONS_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX, workspaceRoot, false) ||
