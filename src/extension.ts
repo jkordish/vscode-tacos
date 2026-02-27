@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
@@ -46,6 +45,9 @@ import { isInQuietHours } from './quietHours';
 import { redactList, redactText } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability } from './restoreSafety';
+import {
+  resolveScopeBranch as resolveScopeBranchFromInputs,
+} from './scopeBranch';
 import { buildResumeSummary } from './summary';
 import { buildStandupUpdate } from './standup';
 import { buildTimelineGroups } from './timeline';
@@ -3374,9 +3376,7 @@ async function switchTaskPartition(context: vscode.ExtensionContext): Promise<vo
 
   const current =
     context.workspaceState.get<string>(taskPartitionStorageKey(workspaceRoot), '').trim() || '';
-  const inferred =
-    inferTaskPartitionKey(context.workspaceState.get<string>(branchStateKey(workspaceRoot), '')) ||
-    '';
+  const inferred = inferTaskPartitionKey(resolveScopeBranch(context, workspaceRoot)) || '';
   const input = await vscode.window.showInputBox({
     title: 'TaCoS: Switch Task Partition',
     prompt:
@@ -5171,53 +5171,11 @@ function resolveTaskPartitionKey(
   });
 }
 
-function readBranchFromGitHead(workspaceRoot: string): string | undefined {
-  if (!workspaceRoot) {
-    return undefined;
-  }
-
-  const gitEntry = path.join(workspaceRoot, '.git');
-  if (!existsSync(gitEntry)) {
-    return undefined;
-  }
-
-  try {
-    let gitDir = gitEntry;
-    const gitEntryStat = statSync(gitEntry);
-    if (gitEntryStat.isFile()) {
-      const pointer = readFileSync(gitEntry, 'utf8').trim();
-      const match = pointer.match(/^gitdir:\s*(.+)$/i);
-      if (!match?.[1]) {
-        return undefined;
-      }
-      gitDir = path.resolve(workspaceRoot, match[1].trim());
-    }
-
-    const headPath = path.join(gitDir, 'HEAD');
-    if (!existsSync(headPath)) {
-      return undefined;
-    }
-
-    const head = readFileSync(headPath, 'utf8').trim();
-    const branchRef = head.match(/^ref:\s*refs\/heads\/(.+)$/i);
-    if (!branchRef?.[1]) {
-      return undefined;
-    }
-
-    const branch = branchRef[1].trim();
-    return branch || undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function resolveScopeBranch(context: vscode.ExtensionContext, root: string): string {
-  const liveBranch = readBranchFromGitHead(root);
-  if (liveBranch) {
-    return liveBranch;
-  }
-
-  return context.workspaceState.get<string>(branchStateKey(root), '').trim() || 'default';
+  return resolveScopeBranchFromInputs({
+    workspaceRoot: root,
+    persistedBranch: context.workspaceState.get<string>(branchStateKey(root), ''),
+  });
 }
 
 function partitionScope(context: vscode.ExtensionContext, root: string): string {

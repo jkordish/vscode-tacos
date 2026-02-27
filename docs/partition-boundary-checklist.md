@@ -11,6 +11,7 @@ Use this checklist to validate workspace/branch/task-partition scoping behavior 
 | Branch switch (`feature/A` -> `feature/B`) | Summary/activity scope changes; no stale state bleed from prior branch. |
 | Manual partition set (`ABC-123`) | Scope uses manual task partition regardless of branch naming. |
 | Manual partition cleared | Scope falls back to inferred ticket (when present) or `default`. |
+| Branch inference source | Prefers live git `HEAD` branch; falls back to persisted branch state safely. |
 | Detached HEAD / no git info | Scope falls back to persisted branch or `default` safely. |
 | Multi-root workspace | Active workspace root scoping remains isolated per root. |
 | Remote workspace | Scope key generation remains stable and does not leak across roots. |
