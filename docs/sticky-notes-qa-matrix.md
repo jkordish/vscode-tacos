@@ -4,6 +4,8 @@ Issue coverage: `#115` (QA + tests), `#107`-`#112` (behavioral surfaces)
 
 Use this checklist to validate sticky checkpoint notes and scoped scratchpad behavior before closing v0.4.0 work.
 
+When done, copy results into: `docs/sticky-notes-qa-signoff-template.md`.
+
 ## Manual Matrix
 
 | Scenario | Steps | Expected |

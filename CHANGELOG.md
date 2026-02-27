@@ -14,6 +14,7 @@ All notable changes to this project are documented in this file.
 
 - Checkpoint Notes v2:
   - Multi-note storage with lifecycle (`open`, `done`, `dismissed`)
+  - `updatedAt` lifecycle timestamp tracking for note updates
   - Partition-aware default scope (`workspace + branch + task partition`)
   - Legacy single-note migration into pinned open note format
 - New checkpoint commands:
@@ -26,6 +27,7 @@ All notable changes to this project are documented in this file.
 - Resume panel notes card with actions for `Mark done`, `Pin/Unpin`, `Dismiss`, and `Add note`.
 - Sticky notes/scratchpad QA matrix doc for v0.4.0 edge-case validation:
   - `docs/sticky-notes-qa-matrix.md`
+  - `docs/sticky-notes-qa-signoff-template.md`
 
 ### Changed
 

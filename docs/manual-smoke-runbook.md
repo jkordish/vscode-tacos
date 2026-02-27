@@ -1,6 +1,7 @@
 # Manual Smoke Runbook (Trusted + Restricted)
 
 For sticky notes/scratchpad specific edge cases, also run: `docs/sticky-notes-qa-matrix.md`.
+Record final outcomes in: `docs/sticky-notes-qa-signoff-template.md`.
 
 Date: `__________`
 Tester: `__________`
