@@ -23,7 +23,6 @@
       "description": "TaCoS runs in safe mode in Restricted Mode: git execution, terminal command collection, and restore actions that execute tooling are disabled until trust is granted.",
       "restrictedConfigurations": [
         "tacos.summaryProvider",
-        "tacos.openaiApiKey",
         "tacos.openaiBaseUrl",
         "tacos.openaiModel"
       ]
@@ -180,18 +179,6 @@
           "minimum": 1,
           "description": "Cooldown in minutes between automatic summaries."
         },
-        "tacos.idleMinutes": {
-          "type": "number",
-          "default": 10,
-          "minimum": 1,
-          "description": "Minimum idle minutes before auto summary triggers on focus."
-        },
-        "tacos.cooldownSeconds": {
-          "type": "number",
-          "default": 30,
-          "minimum": 5,
-          "description": "Minimum seconds between summaries to avoid spam."
-        },
         "tacos.includeDiff": {
           "type": "boolean",
           "default": false,
@@ -231,6 +218,37 @@
           "default": true,
           "description": "Track local resumption/edit lag metrics in workspace state."
         },
+        "tacos.autoRefreshInBackground": {
+          "type": "boolean",
+          "default": true,
+          "description": "When enabled, focus-triggered summaries refresh a background scratch summary (and update an open details panel) without prompting to Open details."
+        },
+        "tacos.companionNudgesEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable companion nudges in the details panel based on recent context and blockers."
+        },
+        "tacos.companionNudgeAggressiveness": {
+          "type": "string",
+          "enum": [
+            "low",
+            "balanced",
+            "high"
+          ],
+          "default": "balanced",
+          "description": "Companion nudge sensitivity. `low` surfaces only high-confidence nudges; `high` surfaces broader guidance."
+        },
+        "tacos.companionNudgeQuietHours": {
+          "type": "string",
+          "default": "",
+          "description": "Optional local quiet window for nudges in `HH:MM-HH:MM` format, for example `22:00-07:00`."
+        },
+        "tacos.companionNudgeCooldownMinutes": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "description": "Minimum minutes between companion nudges in the same workspace."
+        },
         "tacos.summaryProvider": {
           "type": "string",
           "enum": [
@@ -240,11 +258,6 @@
           ],
           "default": "local",
           "description": "Summary generation mode. `vscode-lm` uses a model selected via the Configure AI Provider command; `openai` uses a direct API call with strict JSON schema."
-        },
-        "tacos.openaiApiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Deprecated fallback API key location. Prefer `TaCoS: Set OpenAI API Key` (Secret Storage) or OPENAI_API_KEY environment variable."
         },
         "tacos.openaiModel": {
           "type": "string",

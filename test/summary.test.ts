@@ -37,6 +37,8 @@ describe('buildResumeSummary', () => {
     expect(summary.links.length).toBeLessThanOrEqual(3);
     expect(summary.evidenceCatalog?.length ?? 0).toBeGreaterThan(0);
     expect(summary.nextStepEvidenceIds?.length).toBe(summary.nextSteps.length);
+    expect(summary.recommendedFirstAction).toBe(summary.nextSteps[0]);
+    expect(summary.pendingBlocked?.length ?? 0).toBeGreaterThan(0);
     expect(summary.mode).toBe('debugging');
     expect(summary.intent.length).toBeGreaterThan(0);
   });
@@ -77,5 +79,14 @@ describe('buildResumeSummary', () => {
     expect(summary.detailsMarkdown).not.toContain('/workspace/repo/src/extension.ts');
     expect(summary.detailsMarkdown).toContain('url:https://github.com/org/repo/pull/1');
     expect(summary.detailsMarkdown).toContain('-> https://github.com/org/repo/pull/1');
+  });
+
+  it('includes session recap fields for done and pending work', () => {
+    const summary = buildResumeSummary(sampleSignals());
+
+    expect(summary.doneSinceLastResume).toEqual(['npm run build']);
+    expect(summary.pendingBlocked?.[0]).toContain('Failing command still unresolved');
+    expect(summary.detailsMarkdown).toContain('## Session recap');
+    expect(summary.detailsMarkdown).toContain('Recommended first action');
   });
 });

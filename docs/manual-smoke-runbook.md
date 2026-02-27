@@ -102,6 +102,56 @@ Expected:
 Result: `PASS / FAIL`
 Notes: `__________`
 
+### A7. UX friction checks (notification and click budget)
+
+Steps:
+1. Set `tacos.autoRefreshInBackground=true`.
+2. Cause at least 3 focus-triggered refresh opportunities (blur/focus cycles with meaningful activity).
+3. Count how many times you must click `Open details` to see updated state.
+4. Repeat with `tacos.autoRefreshInBackground=false`.
+
+Expected:
+- With background mode enabled, updated state should require `0` forced `Open details` clicks.
+- With background mode disabled, prompt flow should still be available.
+- No repeated notification spam while idle (cooldown/debounce still honored).
+- Companion nudges should not repeatedly fire within the configured nudge cooldown window.
+
+Record:
+- Background mode forced-click count: `__________`
+- Prompt mode forced-click count: `__________`
+- Interruption score (1 low friction - 5 high friction): `__________`
+- Notes: `__________`
+
+### A8. Session recap and checkpoint shortcut
+
+Steps:
+1. Trigger `TaCoS: Show Resume Brief Now`.
+2. Confirm `Session Recap` renders `Done since last resume`, `Pending / blocked`, and `Recommended first action`.
+3. Click `Save checkpoint` from the recap card.
+
+Expected:
+- Recap fields update after additional edits/tasks and a new summary cycle.
+- Checkpoint input opens from recap and saves a workspace-scoped note.
+- Saved checkpoint appears in subsequent resume panel runs.
+
+Result: `PASS / FAIL`
+Notes: `__________`
+
+### A9. Metrics export output
+
+Steps:
+1. Perform one quick action from panel or status bar.
+2. Run `TaCoS: Export Local Metrics`.
+3. Inspect `.tacos/metrics.json` and `.tacos/metrics.csv`.
+
+Expected:
+- Both files are written locally.
+- CSV includes companion columns (`companionPromptImpressions`, `companionQuickActionsTaken`, follow-through rates).
+- No network dependency is required for metrics export.
+
+Result: `PASS / FAIL`
+Notes: `__________`
+
 ## Part B - Restricted Mode
 
 ### B1. Enter restricted mode

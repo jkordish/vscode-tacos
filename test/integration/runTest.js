@@ -76,6 +76,13 @@ async function main() {
       [fixtureWorkspace, '--disable-extensions', '--user-data-dir', restrictedUserDataDir],
       vscodeExecutablePath,
     );
+
+    await runSuite(
+      'focus-refresh-presentation',
+      path.resolve(__dirname, 'suite', 'focusRefreshPresentation.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
   } finally {
     fs.rmSync(restrictedUserDataDir, { recursive: true, force: true });
   }

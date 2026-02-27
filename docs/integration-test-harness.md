@@ -26,11 +26,15 @@ The harness launches Extension Development Host runs against `test/fixtures/work
    - executes against a fresh profile configured for trust prompts disabled
    - `tacos.slash` still works
    - summary source remains local-only (`- Source: local`)
+3. Focus refresh presentation suite:
+   - verifies `autoRefreshInBackground=true` resolves focus-refresh behavior to background mode
+   - verifies `autoRefreshInBackground=false` resolves focus-refresh behavior to prompt mode
+   - verifies companion status bar mode transitions for active/paused states
 
 ## Files
 
 - Runner: `test/integration/runTest.js`
-- Suites: `test/integration/suite/trusted.js`, `test/integration/suite/isolatedProfileLocal.js`
+- Suites: `test/integration/suite/trusted.js`, `test/integration/suite/isolatedProfileLocal.js`, `test/integration/suite/focusRefreshPresentation.js`
 - Fixture workspace: `test/fixtures/workspace/`
 
 ## Notes

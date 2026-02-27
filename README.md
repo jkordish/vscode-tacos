@@ -17,7 +17,12 @@ TaCoS is built around five non-negotiable principles:
 - Detects resume moments (focus return, workspace switch, meaningful change).
 - Builds an evidence catalog from trusted extension-collected context.
 - Shows intent, next steps, top files/links, and restore actions.
+- Adds a companion home card (`Now`, `Next`, `Blocked`, `Restore`) for quick resume orientation.
+- Shows a status bar companion entry with quick actions.
 - Adds panel status controls to refresh immediately and pause/resume auto summaries.
+- Includes a Trust Center card that summarizes tracking mode and privacy posture.
+- Adds a session recap card (`Done`, `Pending/blocked`, `Recommended first action`) with one-click checkpoint capture.
+- Shows confidence-gated companion nudges with cooldown and quiet-hours suppression.
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.
 - Lets you add checkpoint notes (“Future You” hints) and reuse them on resume.
 - Supports local-only summaries and optional AI refinement (`vscode-lm` / `openai`).
@@ -52,8 +57,6 @@ TaCoS is built around five non-negotiable principles:
 - `promptCheckpointOnBlur` (default `false`)
 - `minIdleMinutes` (default `10`)
 - `cooldownMinutes` (default `5`)
-- `idleMinutes` (legacy compatibility)
-- `cooldownSeconds` (legacy compatibility)
 - `includeDiff` (default `false`)
 - `maxDiffChars` (default `6000`)
 - `includeTerminalHistory` (default `true`)
@@ -61,12 +64,32 @@ TaCoS is built around five non-negotiable principles:
 - `cacheIfContextUnchanged` (default `true`)
 - `redactionPatterns` (default `[]`)
 - `metricsEnabled` (default `true`)
+- `autoRefreshInBackground` (default `true`, skip `Open details` prompt and refresh scratch summary silently)
+- `companionNudgesEnabled` (default `true`)
+- `companionNudgeAggressiveness` (`low` | `balanced` | `high`, default `balanced`)
+- `companionNudgeQuietHours` (default `""`, optional `HH:MM-HH:MM`)
+- `companionNudgeCooldownMinutes` (default `20`)
 - `summaryProvider` (`local` | `vscode-lm` | `openai`, default `local`)
-- `openaiApiKey` (deprecated fallback only)
 - `openaiModel` (default `gpt-4.1-mini`)
 - `openaiBaseUrl` (default `https://api.openai.com/v1`)
 - `openaiTimeoutMs` (default `15000`)
 - `codexOpenCommand` (optional command id)
+
+## Companion Metrics (Local Only)
+
+Run `TaCoS: Export Local Metrics` to write:
+
+- `.tacos/metrics.json` (raw session records)
+- `.tacos/metrics.csv` (dashboard-friendly fields + derived rates)
+
+Key companion fields:
+
+- `companionPromptImpressions`: prompt fallback impressions per session.
+- `companionForcedOpenDetailsClicks`: forced-click count when prompt mode is used.
+- `companionQuickActionsTaken`: panel/status-bar follow-through actions.
+- `companionFirstActionLagMs`: ms from summary display to first companion action.
+- `companionActionFollowThroughRate` (CSV): quick actions ÷ prompt impressions.
+- `companionForcedOpenRate` (CSV): forced opens ÷ prompt impressions.
 
 ## Provider Modes
 
@@ -84,7 +107,6 @@ OpenAI API key resolution order:
 
 1. VS Code Secret Storage (`TaCoS: Set OpenAI API Key`) (recommended)
 2. `OPENAI_API_KEY` environment variable
-3. `tacos.openaiApiKey` setting (deprecated fallback)
 
 ## Privacy & Safety
 
@@ -182,6 +204,7 @@ Integration test harness status:
 - Runbook: `docs/integration-test-harness.md`
 - Command: `npm run test:integration`
 - Full phase-to-file acceptance mapping: `docs/acceptance-report.md`
+- Companion v1 design and rollout spec: `docs/companion-v1-spec.md`
 
 ## Manual Smoke Checklist
 

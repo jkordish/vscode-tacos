@@ -111,6 +111,34 @@ function buildNextSteps(signals: ResumeSignals, topFiles: string[]): string[] {
   return dedupe(next, 3).slice(0, 3);
 }
 
+function buildDoneSinceLastResume(signals: ResumeSignals): string[] {
+  return dedupe(signals.doneItems, 3).slice(0, 3);
+}
+
+function buildPendingBlocked(signals: ResumeSignals, topFiles: string[]): string[] {
+  const pending: string[] = [];
+
+  if (signals.failingCommand) {
+    pending.push(`Failing command still unresolved: ${signals.failingCommand}`);
+  }
+
+  if (signals.changedFiles.length > 0) {
+    pending.push(
+      `${signals.changedFiles.length} changed file${signals.changedFiles.length === 1 ? '' : 's'} pending review or commit.`,
+    );
+  }
+
+  if (signals.recentDebug.length > 0 && !signals.failingCommand) {
+    pending.push(`Recent debug context: ${signals.recentDebug[0]}.`);
+  }
+
+  if (pending.length === 0 && topFiles[0]) {
+    pending.push(`Continue pending edits in ${topFiles[0]}.`);
+  }
+
+  return dedupe(pending, 3).slice(0, 3);
+}
+
 function normalizeTerminalEntryForMode(rawEntry: string): string {
   const entry = rawEntry.trim();
   if (!entry) {
@@ -315,6 +343,9 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
   );
   const recentFilesSnapshot = dedupe([...signals.openFiles, ...signals.recentFiles], 10);
   const nextSteps = buildNextSteps(signals, topFiles).slice(0, 3);
+  const doneSinceLastResume = buildDoneSinceLastResume(signals);
+  const pendingBlocked = buildPendingBlocked(signals, topFiles);
+  const recommendedFirstAction = nextSteps[0] ?? pendingBlocked[0];
   const mode = detectResumeMode(signals);
   const evidenceCatalog = buildEvidenceCatalog(signals, topFiles);
   const links = buildLinksFromEvidence(evidenceCatalog);
@@ -335,6 +366,17 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     '',
     '## Next steps',
     ...nextSteps.map((step) => `- ${step}`),
+    '',
+    '## Session recap',
+    '- Done since last resume:',
+    ...(doneSinceLastResume.length > 0
+      ? doneSinceLastResume.map((item) => `  - ${item}`)
+      : ['  - None captured']),
+    '- Pending / blocked:',
+    ...(pendingBlocked.length > 0
+      ? pendingBlocked.map((item) => `  - ${item}`)
+      : ['  - None captured']),
+    `- Recommended first action: ${recommendedFirstAction ?? 'Refresh summary for guidance.'}`,
     '',
     '## Top files',
     ...(topFiles.length > 0 ? topFiles.map((file) => `- ${file}`) : ['- None captured']),
@@ -387,6 +429,9 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     intent,
     nextSteps,
     nextStepEvidenceIds,
+    doneSinceLastResume,
+    pendingBlocked,
+    recommendedFirstAction,
     mode,
     currentBranch: signals.branch || undefined,
     lastFailingCommand: signals.failingCommand,
