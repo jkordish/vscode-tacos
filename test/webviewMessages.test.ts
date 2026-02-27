@@ -31,6 +31,16 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'openLink', index: '1' })).toBeUndefined();
   });
 
+  it('validates openTopFile payload shape', () => {
+    expect(parseWebviewMessage({ type: 'openTopFile', index: 3 })).toEqual({
+      type: 'openTopFile',
+      index: 3,
+    });
+    expect(parseWebviewMessage({ type: 'openTopFile', index: -1 })).toBeUndefined();
+    expect(parseWebviewMessage({ type: 'openTopFile', index: 2.5 })).toBeUndefined();
+    expect(parseWebviewMessage({ type: 'openTopFile', index: '3' })).toBeUndefined();
+  });
+
   it('validates openEvidence payload shape', () => {
     expect(parseWebviewMessage({ type: 'openEvidence', evidenceId: 'file:src/index.ts' })).toEqual({
       type: 'openEvidence',

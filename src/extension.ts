@@ -1741,6 +1741,29 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'openTopFile') {
+        const file = state.panelSummary?.topFiles[message.index];
+        const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
+        if (!file || !workspaceRoot) {
+          void vscode.window.showWarningMessage(
+            'TaCoS blocked file link because no workspace root is available for validation.',
+          );
+          return;
+        }
+
+        const safeTarget = resolveFileTargetInWorkspace(file, workspaceRoot);
+        if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
+          void vscode.window.showWarningMessage(
+            'TaCoS blocked an unsafe file link from the summary.',
+          );
+          return;
+        }
+
+        recordCompanionQuickAction();
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(safeTarget));
+        return;
+      }
+
       if (message.type !== 'openLink') {
         return;
       }
@@ -1880,7 +1903,12 @@ function renderWebview(
       return `<li>${escapeHtml(step)}${badgeRow}</li>`;
     })
     .join('');
-  const topFiles = summary.topFiles.map((file) => `<li>${escapeHtml(file)}</li>`).join('');
+  const topFiles = summary.topFiles
+    .map(
+      (file, index) =>
+        `<li><a href="#" data-action="openTopFile" data-top-file-index="${index}">${escapeHtml(file)}</a></li>`,
+    )
+    .join('');
   const evidenceItems = (summary.evidenceCatalog ?? [])
     .map((item, index) => {
       const target = item.target
@@ -2596,6 +2624,16 @@ function renderWebview(
               return;
             }
             vscode.postMessage({ type: 'openLink', index });
+            return;
+          }
+
+          if (action === 'openTopFile') {
+            const index = parseDatasetInteger(actionElement.dataset.topFileIndex);
+            if (index === undefined) {
+              vscode.postMessage({ type: 'blockedLink' });
+              return;
+            }
+            vscode.postMessage({ type: 'openTopFile', index });
             return;
           }
 

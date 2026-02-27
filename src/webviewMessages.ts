@@ -27,6 +27,7 @@ export type WebviewMessage =
   | { type: SimpleWebviewMessageType }
   | { type: RestoreWebviewMessageType }
   | { type: 'openEvidence'; evidenceId: string }
+  | { type: 'openTopFile'; index: number }
   | { type: 'openLink'; index: number };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -69,6 +70,18 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
     }
 
     return { type: 'openLink', index: raw.index };
+  }
+
+  if (raw.type === 'openTopFile') {
+    if (typeof raw.index !== 'number' || !Number.isInteger(raw.index)) {
+      return undefined;
+    }
+
+    if (raw.index < 0 || raw.index > 200) {
+      return undefined;
+    }
+
+    return { type: 'openTopFile', index: raw.index };
   }
 
   return undefined;
