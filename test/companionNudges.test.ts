@@ -1,4 +1,9 @@
-import { __test__, chooseCompanionNudges } from '../src/companionNudges';
+import {
+  __test__,
+  chooseCompanionNudges,
+  describeCompanionNudgeReason,
+  describeCompanionNudgeSuppression,
+} from '../src/companionNudges';
 import type { ResumeSummary } from '../src/types';
 
 function buildSummary(overrides: Partial<ResumeSummary> = {}): ResumeSummary {
@@ -170,5 +175,66 @@ describe('quiet hour parser', () => {
 
     expect(__test__.isInQuietHours(januaryMorningLocal, '09:00-12:00')).toBe(true);
     expect(__test__.isInQuietHours(januaryLateLocal, '09:00-12:00')).toBe(false);
+  });
+});
+
+describe('nudge explainability helpers', () => {
+  it.each([
+    [
+      'fix-failing-command',
+      'A recent failing command was detected for this context, so TaCoS prioritizes remediation.',
+    ],
+    ['branch-switch', 'TaCoS detected a branch switch between your last and current context.'],
+    [
+      'resume-next-step',
+      'TaCoS found a saved next step and surfaced it as the fastest way to resume.',
+    ],
+    [
+      'refresh-guidance',
+      'No concrete next step was available, so TaCoS suggests regenerating guidance.',
+    ],
+  ] as const)('maps nudge reason text for %s', (id, expected) => {
+    const decision = chooseCompanionNudges(
+      buildInput({
+        aggressiveness: id === 'refresh-guidance' ? 'high' : 'balanced',
+        summary: buildSummary({
+          lastFailingCommand: id === 'fix-failing-command' ? 'npm test' : undefined,
+          currentBranch: id === 'branch-switch' ? 'feature/a' : undefined,
+          previousBranch: id === 'branch-switch' ? 'main' : undefined,
+          nextSteps: id === 'refresh-guidance' ? [] : ['Do thing'],
+        }),
+      }),
+    );
+
+    const nudge =
+      decision.primary?.id === id
+        ? decision.primary
+        : decision.secondary?.id === id
+          ? decision.secondary
+          : undefined;
+    expect(nudge).toBeDefined();
+    expect(describeCompanionNudgeReason(nudge!)).toBe(expected);
+  });
+
+  it('renders suppression reasons including no-candidate and cooldown timestamp', () => {
+    const disabled = describeCompanionNudgeSuppression({ suppressedReason: 'disabled' });
+    const inactive = describeCompanionNudgeSuppression({ suppressedReason: 'inactive-mode' });
+    const quiet = describeCompanionNudgeSuppression({ suppressedReason: 'quiet-hours' });
+    const noCandidate = describeCompanionNudgeSuppression({ suppressedReason: 'no-candidate' });
+    const cooldown = describeCompanionNudgeSuppression(
+      {
+        suppressedReason: 'cooldown',
+        nextEligibleAt: 1_700_000_000_000,
+      },
+      {
+        formatTimestamp: () => 'soon',
+      },
+    );
+
+    expect(disabled).toBe('Companion nudges are disabled in settings.');
+    expect(inactive).toBe('Nudges are hidden while companion mode is paused or restricted.');
+    expect(quiet).toBe('Nudges are currently in your configured quiet hours window.');
+    expect(noCandidate).toBe('No high-confidence nudge is available for this context yet.');
+    expect(cooldown).toBe('Nudges are cooling down until soon.');
   });
 });

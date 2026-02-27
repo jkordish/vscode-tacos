@@ -6,7 +6,12 @@ import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
 import { buildAiPayloadPreviewMarkdown } from './aiPayloadPreview';
-import { type CompanionNudgeDecision, chooseCompanionNudges } from './companionNudges';
+import {
+  chooseCompanionNudges,
+  describeCompanionNudgeReason,
+  describeCompanionNudgeSuppression,
+  type CompanionNudgeDecision,
+} from './companionNudges';
 import {
   persistTerminalCommandForStorage,
   sanitizeActivityForPersistence,
@@ -1657,28 +1662,6 @@ function nudgeActionLabel(action: string): string {
   return 'Take action';
 }
 
-function describeNudgeSuppression(decision: CompanionNudgeDecision | undefined): string {
-  if (!decision?.suppressedReason || decision.suppressedReason === 'no-candidate') {
-    return '';
-  }
-
-  if (decision.suppressedReason === 'disabled') {
-    return 'Companion nudges are disabled in settings.';
-  }
-  if (decision.suppressedReason === 'inactive-mode') {
-    return 'Nudges are hidden while companion mode is paused or restricted.';
-  }
-  if (decision.suppressedReason === 'quiet-hours') {
-    return 'Nudges are currently in your configured quiet hours window.';
-  }
-  if (decision.suppressedReason === 'cooldown') {
-    return decision.nextEligibleAt
-      ? `Nudges are cooling down until ${formatTimestamp(decision.nextEligibleAt)}.`
-      : 'Nudges are cooling down before the next reminder.';
-  }
-  return '';
-}
-
 function summarizeForStatusBar(raw: string, maxChars = 44): string {
   const compact = raw.replace(/\s+/g, ' ').trim();
   if (!compact) {
@@ -2519,7 +2502,29 @@ function renderWebview(
       : undefined;
   const primaryNudge = activeNudgeDecision?.primary;
   const secondaryNudge = activeNudgeDecision?.secondary;
-  const nudgeSuppressionLabel = describeNudgeSuppression(activeNudgeDecision);
+  const nudgeSuppressionLabel = describeCompanionNudgeSuppression(activeNudgeDecision, {
+    formatTimestamp,
+  });
+  const primaryNudgeReason = primaryNudge ? describeCompanionNudgeReason(primaryNudge) : '';
+  const secondaryNudgeReason = secondaryNudge ? describeCompanionNudgeReason(secondaryNudge) : '';
+  const nudgeExplainability =
+    primaryNudge || nudgeSuppressionLabel
+      ? `<details>
+        <summary><strong>${primaryNudge ? 'Why this nudge?' : 'Why no nudge right now?'}</strong></summary>
+        ${
+          primaryNudge
+            ? `<ul class="compact-list">
+            <li>${escapeHtml(primaryNudgeReason)}</li>
+            ${
+              secondaryNudge
+                ? `<li>Secondary action rationale: ${escapeHtml(secondaryNudgeReason)}</li>`
+                : ''
+            }
+          </ul>`
+            : `<p class="muted">${escapeHtml(nudgeSuppressionLabel)}</p>`
+        }
+      </details>`
+      : '';
   const switchedBranches =
     Boolean(summary.currentBranch) &&
     Boolean(summary.previousBranch) &&
@@ -2812,6 +2817,7 @@ function renderWebview(
           ? `<p class="muted">${escapeHtml(nudgeSuppressionLabel)}</p>`
           : ''
       }
+      ${nudgeExplainability}
     </div>`
       : '';
 
