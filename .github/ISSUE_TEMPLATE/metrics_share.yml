@@ -1,0 +1,32 @@
+name: Metrics share (optional)
+description: Share local TaCoS metrics summary for stabilization/adoption review.
+title: "metrics: "
+labels:
+  - metrics
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share aggregated local metrics only. Please avoid posting raw private file paths.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Metrics summary markdown
+      description: Paste output from `npm run metrics:summary -- .tacos/metrics.csv`.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Add context (workflow type, whether this was dogfooding, etc.).
+    validations:
+      required: false
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I removed any private workspace paths or secrets.
+          required: true

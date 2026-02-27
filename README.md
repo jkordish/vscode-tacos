@@ -66,6 +66,7 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Set OpenAI API Key`
 - `TaCoS: Clear OpenAI API Key`
 - `TaCoS: Export Local Metrics`
+- `TaCoS: Copy Diagnostics`
 
 ### Codex / ChatGPT Interop
 

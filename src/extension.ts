@@ -14,6 +14,7 @@ import {
 } from './activityPersistence';
 import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
 import { resolveCodexOpenCommandCandidates } from './codexInterop';
+import { buildDiagnosticsText } from './diagnostics';
 import {
   captureEditLocation,
   decideEditActivity,
@@ -619,6 +620,9 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage(
         `TaCoS: exported metrics to ${jsonPath} and ${csvPath}.`,
       );
+    }),
+    vscode.commands.registerCommand('tacos.copyDiagnostics', async () => {
+      await copyDiagnosticsBundle(context);
     }),
   );
 
@@ -6199,6 +6203,30 @@ async function persistActivity(context: vscode.ExtensionContext): Promise<void> 
   const storageKey = scopedActivityStorageKey(context, workspaceRoot);
   await context.workspaceState.update(storageKey, persisted);
   await touchWorkspaceActivity(context, workspaceRoot);
+}
+
+function extensionVersion(): string {
+  const extension = vscode.extensions.getExtension('jkordish.vscode-tacos');
+  const version = extension?.packageJSON?.version;
+  return typeof version === 'string' && version.trim() ? version.trim() : 'unknown';
+}
+
+async function copyDiagnosticsBundle(context: vscode.ExtensionContext): Promise<void> {
+  const config = getConfig();
+  const metrics = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
+  const diagnostics = buildDiagnosticsText({
+    generatedAt: Date.now(),
+    extensionVersion: extensionVersion(),
+    vscodeVersion: vscode.version,
+    workspaceTrusted: vscode.workspace.isTrusted,
+    summaryProvider: config.summaryProvider,
+    uiSurface: config.uiSurface,
+    companionRuntimeMode: resolveCompanionRuntimeMode(config),
+    metricsEnabled: config.metricsEnabled,
+    recentMetrics: metrics,
+  });
+  await vscode.env.clipboard.writeText(diagnostics);
+  void vscode.window.showInformationMessage('TaCoS: diagnostics copied to clipboard.');
 }
 
 async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<void> {

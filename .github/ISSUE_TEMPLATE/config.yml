@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: TaCoS Privacy & Safety
+    url: https://github.com/jkordish/vscode-tacos/blob/main/docs/privacy-safety.md
+    about: Review privacy and safety behavior before reporting.
