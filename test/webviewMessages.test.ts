@@ -19,6 +19,9 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'restoreReopenFiles' })).toEqual({
       type: 'restoreReopenFiles',
     });
+    expect(parseWebviewMessage({ type: 'restoreOpenProblems' })).toEqual({
+      type: 'restoreOpenProblems',
+    });
   });
 
   it('validates openLink payload shape', () => {

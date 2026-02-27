@@ -18,6 +18,8 @@ const RESTORE_MESSAGE_TYPES = [
   'restoreRerunDebug',
   'restoreCheckoutPreviousBranch',
   'restoreCopyFailingCommand',
+  'restoreOpenProblems',
+  'restoreOpenDiagnosticFile',
   'restoreJumpToLastEdit',
 ] as const;
 

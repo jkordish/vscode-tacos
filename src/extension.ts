@@ -61,6 +61,7 @@ const KEY_RECENT_URLS = 'tacos.recentUrls';
 const KEY_DONE_ITEMS = 'tacos.doneItems';
 const KEY_LAST_FAILING_COMMAND = 'tacos.lastFailingCommand';
 const KEY_RECENT_EDIT_LOCATIONS_PREFIX = 'tacos.recentEditLocations';
+const KEY_LAST_TASK_META_PREFIX = 'tacos.lastTaskMeta';
 const KEY_ACTIVITY_STORAGE_PREFIX = 'tacos.activityScoped';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
 const KEY_SUMMARY_CORRECTIONS_PREFIX = 'tacos.summaryCorrections';
@@ -133,6 +134,8 @@ interface RuntimeState {
   displayedCheckpointNote?: { workspaceRoot: string; value: string; persisted: boolean };
   lastTaskName?: string;
   lastTaskWorkspaceRoot?: string;
+  lastTaskExitCode?: number;
+  lastTaskEndedAt?: number;
   lastDebugConfigName?: string;
   lastDebugWorkspaceRoot?: string;
   metricSession?: MetricRecord;
@@ -161,9 +164,32 @@ interface PresentSummaryOptions {
 type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt' | 'silent';
 type CompanionRuntimeMode = 'active' | 'paused' | 'restricted' | 'disabled';
 
+interface PersistedTaskMetadata {
+  taskName: string;
+  workspaceRoot?: string;
+  exitCode: number;
+  timestamp: number;
+}
+
+interface DiagnosticBlockerReference {
+  path: string;
+  absolutePath: string;
+  line: number;
+  character: number;
+  message: string;
+  severity: vscode.DiagnosticSeverity;
+}
+
+interface DiagnosticBlockerSnapshot {
+  errorCount: number;
+  warningCount: number;
+  top?: DiagnosticBlockerReference;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const initialWorkspaceRoot = pickWorkspaceRoot() ?? '';
   const persistedActivity = loadPersistedActivitySnapshot(context);
+  const persistedTaskMetadata = readPersistedTaskMetadata(context, initialWorkspaceRoot);
   state = {
     output: vscode.window.createOutputChannel('TaCoS'),
     recentFiles: new RingBuffer(15, persistedActivity.sanitized.recentFiles),
@@ -176,6 +202,10 @@ export function activate(context: vscode.ExtensionContext): void {
     lastFailingCommandRaw: undefined,
     scratchSummary: undefined,
     activeNudges: undefined,
+    lastTaskName: persistedTaskMetadata?.taskName,
+    lastTaskWorkspaceRoot: persistedTaskMetadata?.workspaceRoot,
+    lastTaskExitCode: persistedTaskMetadata?.exitCode,
+    lastTaskEndedAt: persistedTaskMetadata?.timestamp,
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
     refinementSequence: 0,
@@ -469,11 +499,25 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.tasks.onDidStartTaskProcess((event) => {
       const task = event.execution.task;
       state.lastTaskName = task.name;
-      state.lastTaskWorkspaceRoot =
-        task.scope && typeof task.scope === 'object' && 'uri' in task.scope
-          ? task.scope.uri.fsPath
-          : pickWorkspaceRoot();
+      state.lastTaskWorkspaceRoot = taskWorkspaceRoot(task) ?? pickWorkspaceRoot();
       markMeaningfulActivity();
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.tasks.onDidEndTaskProcess(async (event) => {
+      const task = event.execution.task;
+      const exitCode = typeof event.exitCode === 'number' ? event.exitCode : undefined;
+      state.lastTaskName = task.name;
+      state.lastTaskWorkspaceRoot = taskWorkspaceRoot(task) ?? pickWorkspaceRoot();
+      if (typeof exitCode === 'number') {
+        state.lastTaskExitCode = exitCode;
+        state.lastTaskEndedAt = Date.now();
+      }
+
+      markMeaningfulActivity();
+      await persistTaskMetadata(context);
+      rerenderPanel();
     }),
   );
 
@@ -1734,6 +1778,18 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'restoreOpenProblems') {
+        recordCompanionQuickAction();
+        await openProblemsView();
+        return;
+      }
+
+      if (message.type === 'restoreOpenDiagnosticFile') {
+        recordCompanionQuickAction();
+        await openPrimaryDiagnosticFile(state.panelWorkspaceRoot);
+        return;
+      }
+
       if (message.type === 'restoreReopenFiles') {
         recordCompanionQuickAction();
         const opened = await reopenSummaryFiles(state.panelSummary, 6, state.panelWorkspaceRoot);
@@ -1983,6 +2039,13 @@ function renderWebview(
     currentBranch: summary.currentBranch,
     previousBranch: summary.previousBranch,
   });
+  const diagnostics = collectWorkspaceDiagnostics(state.panelWorkspaceRoot ?? pickWorkspaceRoot());
+  const hasFailingTask =
+    Boolean(state.lastTaskName) &&
+    Number.isInteger(state.lastTaskExitCode) &&
+    (state.lastTaskExitCode ?? 0) !== 0;
+  const canOpenProblems = diagnostics.errorCount > 0 || diagnostics.warningCount > 0;
+  const canOpenDiagnosticFile = Boolean(diagnostics.top);
   const nextStepActions = buildNextStepActions({
     summary,
     canRerunTask: availability.canRerunTask,
@@ -2051,16 +2114,30 @@ function renderWebview(
     blockerTitle = 'Workspace is in Restricted Mode';
     blockerDetail =
       'Task/debug reruns and branch checkout are disabled until workspace trust is granted.';
+  } else if (hasFailingTask) {
+    blockerTitle = 'Last task failed';
+    blockerDetail = `${state.lastTaskName} exited with code ${state.lastTaskExitCode}.`;
+    blockerActionLabel = 'Rerun last task';
+    blockerAction = 'restoreRerunTask';
+    blockerActionDisabled = !availability.canRerunTask;
   } else if (summary.lastFailingCommand) {
     blockerTitle = 'Last command failed';
     blockerDetail = summary.lastFailingCommand;
-    if (availability.canCopyFailingCommand) {
-      blockerActionLabel = 'Copy failing command';
-      blockerAction = 'restoreCopyFailingCommand';
-    } else if (availability.canRerunTask) {
+    if (availability.canRerunTask) {
       blockerActionLabel = 'Rerun last task';
       blockerAction = 'restoreRerunTask';
+    } else if (availability.canCopyFailingCommand) {
+      blockerActionLabel = 'Copy failing command';
+      blockerAction = 'restoreCopyFailingCommand';
     }
+  } else if (diagnostics.errorCount > 0) {
+    blockerTitle = 'Diagnostics need attention';
+    blockerDetail = diagnostics.top
+      ? `${diagnostics.errorCount} error(s). First at ${diagnostics.top.path}:${diagnostics.top.line + 1}.`
+      : `${diagnostics.errorCount} error(s) in Problems view.`;
+    blockerActionLabel = diagnostics.top ? 'Open diagnostic file' : 'Open Problems';
+    blockerAction = diagnostics.top ? 'restoreOpenDiagnosticFile' : 'restoreOpenProblems';
+    blockerActionDisabled = diagnostics.top ? !canOpenDiagnosticFile : !canOpenProblems;
   } else if (switchedBranches) {
     blockerTitle = 'Branch context changed';
     blockerDetail = `You moved from ${summary.previousBranch} to ${summary.currentBranch}.`;
@@ -2085,6 +2162,8 @@ function renderWebview(
     '<button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>',
     `<button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled aria-disabled="true"'}>Rerun task</button>`,
     `<button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled aria-disabled="true"'}>Rerun debug</button>`,
+    `<button type="button" data-action="restoreOpenProblems" ${canOpenProblems ? '' : 'disabled aria-disabled="true"'}>Open Problems</button>`,
+    `<button type="button" data-action="restoreOpenDiagnosticFile" ${canOpenDiagnosticFile ? '' : 'disabled aria-disabled="true"'}>Open diagnostic file</button>`,
   ].join('');
 
   const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
@@ -2602,6 +2681,8 @@ function renderWebview(
         <button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>
         <button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled'}>Rerun last task</button>
         <button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled'}>Rerun debug config</button>
+        <button type="button" data-action="restoreOpenProblems" ${canOpenProblems ? '' : 'disabled'}>Open Problems</button>
+        <button type="button" data-action="restoreOpenDiagnosticFile" ${canOpenDiagnosticFile ? '' : 'disabled'}>Open diagnostic file</button>
         <button type="button" data-action="restoreCheckoutPreviousBranch" ${availability.canCheckoutPreviousBranch ? '' : 'disabled'}>Checkout previous branch</button>
         <button type="button" data-action="restoreCopyFailingCommand" ${availability.canCopyFailingCommand ? '' : 'disabled'}>Copy failing command</button>
       </div>
@@ -2653,6 +2734,8 @@ function renderWebview(
         'restoreOpenChangedFiles',
         'restoreRerunTask',
         'restoreRerunDebug',
+        'restoreOpenProblems',
+        'restoreOpenDiagnosticFile',
         'restoreCheckoutPreviousBranch',
         'restoreCopyFailingCommand'
       ]);
@@ -2942,6 +3025,93 @@ async function openWorkspaceFiles(
   return opened;
 }
 
+function diagnosticSeverityRank(severity: vscode.DiagnosticSeverity): number {
+  if (severity === vscode.DiagnosticSeverity.Error) {
+    return 0;
+  }
+  if (severity === vscode.DiagnosticSeverity.Warning) {
+    return 1;
+  }
+  if (severity === vscode.DiagnosticSeverity.Information) {
+    return 2;
+  }
+  return 3;
+}
+
+function collectWorkspaceDiagnostics(preferredWorkspaceRoot?: string): DiagnosticBlockerSnapshot {
+  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  let errorCount = 0;
+  let warningCount = 0;
+  let top: DiagnosticBlockerReference | undefined;
+
+  for (const [uri, diagnostics] of vscode.languages.getDiagnostics()) {
+    if (uri.scheme !== 'file') {
+      continue;
+    }
+
+    if (workspaceRoot && !isPathWithinWorkspaceRoot(workspaceRoot, uri.fsPath)) {
+      continue;
+    }
+
+    for (const diagnostic of diagnostics) {
+      if (diagnostic.severity === vscode.DiagnosticSeverity.Error) {
+        errorCount += 1;
+      } else if (diagnostic.severity === vscode.DiagnosticSeverity.Warning) {
+        warningCount += 1;
+      }
+
+      const candidate: DiagnosticBlockerReference = {
+        path: workspaceRoot ? toRelativePath(uri.fsPath, workspaceRoot) : uri.fsPath,
+        absolutePath: uri.fsPath,
+        line: diagnostic.range.start.line,
+        character: diagnostic.range.start.character,
+        message: diagnostic.message.trim().split(/\r?\n/)[0]?.slice(0, 160) ?? '',
+        severity: diagnostic.severity,
+      };
+      if (!top || diagnosticSeverityRank(candidate.severity) < diagnosticSeverityRank(top.severity)) {
+        top = candidate;
+      }
+    }
+  }
+
+  return { errorCount, warningCount, top };
+}
+
+async function openProblemsView(): Promise<void> {
+  await vscode.commands.executeCommand('workbench.actions.view.problems');
+}
+
+async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promise<void> {
+  const diagnostics = collectWorkspaceDiagnostics(preferredWorkspaceRoot);
+  if (!diagnostics.top) {
+    void vscode.window.showInformationMessage('TaCoS: no active diagnostics are available.');
+    return;
+  }
+
+  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showWarningMessage(
+      'TaCoS blocked diagnostic navigation because no workspace root is available.',
+    );
+    return;
+  }
+
+  if (!isPathWithinWorkspaceRoot(workspaceRoot, diagnostics.top.absolutePath)) {
+    void vscode.window.showWarningMessage('TaCoS blocked an unsafe diagnostic file target.');
+    return;
+  }
+
+  const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(diagnostics.top.absolutePath));
+  const editor = await vscode.window.showTextDocument(doc, {
+    preview: false,
+    preserveFocus: false,
+  });
+  const position = new vscode.Position(diagnostics.top.line, diagnostics.top.character);
+  const range = new vscode.Range(position, position);
+  editor.selection = new vscode.Selection(position, position);
+  editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+}
+
 async function runNextStepAction(
   summary: ResumeSummary,
   stepIndex: number,
@@ -3147,6 +3317,62 @@ function taskWorkspaceRoot(task: vscode.Task): string | undefined {
   }
 
   return undefined;
+}
+
+function taskMetadataStorageKey(workspaceRoot: string): string {
+  return `${KEY_LAST_TASK_META_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function readPersistedTaskMetadata(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): PersistedTaskMetadata | undefined {
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  const raw = context.workspaceState.get<unknown>(taskMetadataStorageKey(workspaceRoot));
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  const record = raw as Record<string, unknown>;
+  const taskName = typeof record.taskName === 'string' ? record.taskName.trim() : '';
+  const exitCode = typeof record.exitCode === 'number' ? record.exitCode : NaN;
+  const timestamp = typeof record.timestamp === 'number' ? record.timestamp : NaN;
+  const storedWorkspaceRoot =
+    typeof record.workspaceRoot === 'string' ? record.workspaceRoot.trim() : undefined;
+  if (!taskName || !Number.isInteger(exitCode) || !Number.isFinite(timestamp) || timestamp <= 0) {
+    return undefined;
+  }
+
+  return {
+    taskName,
+    workspaceRoot: storedWorkspaceRoot || undefined,
+    exitCode,
+    timestamp,
+  };
+}
+
+async function persistTaskMetadata(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot() ?? '';
+  if (!workspaceRoot) {
+    return;
+  }
+
+  const taskName = state.lastTaskName?.trim();
+  if (!taskName || !Number.isInteger(state.lastTaskExitCode) || !Number.isFinite(state.lastTaskEndedAt)) {
+    await context.workspaceState.update(taskMetadataStorageKey(workspaceRoot), undefined);
+    return;
+  }
+
+  const payload: PersistedTaskMetadata = {
+    taskName,
+    workspaceRoot: state.lastTaskWorkspaceRoot,
+    exitCode: state.lastTaskExitCode ?? 0,
+    timestamp: state.lastTaskEndedAt ?? Date.now(),
+  };
+  await context.workspaceState.update(taskMetadataStorageKey(workspaceRoot), payload);
 }
 
 async function rerunLastTask(): Promise<void> {
