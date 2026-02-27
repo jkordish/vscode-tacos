@@ -16,6 +16,7 @@ TaCoS is designed around local-first context resumption with explicit security b
 - Debug/task activity.
 - User-added URLs.
 - Optional checkpoint notes.
+- Optional local companion metrics (prompt/quick-action friction counters).
 
 ## Restricted Mode (Workspace Trust)
 
@@ -32,6 +33,7 @@ In Restricted Mode:
 - Activity data is redacted before persistence.
 - Raw terminal commands are not persisted; terminal-derived fields are anonymized/fingerprinted.
 - API keys are stored in VS Code Secret Storage.
+- Metric export writes only local `.tacos/metrics.json` and `.tacos/metrics.csv` files inside the workspace.
 
 ## AI Safety Model
 

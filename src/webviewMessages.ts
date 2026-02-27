@@ -8,6 +8,7 @@ const SIMPLE_MESSAGE_TYPES = [
   'refreshSummary',
   'toggleAutoSummaries',
   'openPrivacySafety',
+  'sessionAddCheckpoint',
   'blockedLink',
 ] as const;
 const RESTORE_MESSAGE_TYPES = [

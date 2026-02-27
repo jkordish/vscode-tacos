@@ -223,6 +223,32 @@
           "default": true,
           "description": "When enabled, focus-triggered summaries refresh a background scratch summary (and update an open details panel) without prompting to Open details."
         },
+        "tacos.companionNudgesEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable companion nudges in the details panel based on recent context and blockers."
+        },
+        "tacos.companionNudgeAggressiveness": {
+          "type": "string",
+          "enum": [
+            "low",
+            "balanced",
+            "high"
+          ],
+          "default": "balanced",
+          "description": "Companion nudge sensitivity. `low` surfaces only high-confidence nudges; `high` surfaces broader guidance."
+        },
+        "tacos.companionNudgeQuietHours": {
+          "type": "string",
+          "default": "",
+          "description": "Optional local quiet window for nudges in `HH:MM-HH:MM` format, for example `22:00-07:00`."
+        },
+        "tacos.companionNudgeCooldownMinutes": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "description": "Minimum minutes between companion nudges in the same workspace."
+        },
         "tacos.summaryProvider": {
           "type": "string",
           "enum": [

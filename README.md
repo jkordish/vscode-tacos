@@ -21,6 +21,8 @@ TaCoS is built around five non-negotiable principles:
 - Shows a status bar companion entry with quick actions.
 - Adds panel status controls to refresh immediately and pause/resume auto summaries.
 - Includes a Trust Center card that summarizes tracking mode and privacy posture.
+- Adds a session recap card (`Done`, `Pending/blocked`, `Recommended first action`) with one-click checkpoint capture.
+- Shows confidence-gated companion nudges with cooldown and quiet-hours suppression.
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.
 - Lets you add checkpoint notes (“Future You” hints) and reuse them on resume.
 - Supports local-only summaries and optional AI refinement (`vscode-lm` / `openai`).
@@ -63,11 +65,31 @@ TaCoS is built around five non-negotiable principles:
 - `redactionPatterns` (default `[]`)
 - `metricsEnabled` (default `true`)
 - `autoRefreshInBackground` (default `true`, skip `Open details` prompt and refresh scratch summary silently)
+- `companionNudgesEnabled` (default `true`)
+- `companionNudgeAggressiveness` (`low` | `balanced` | `high`, default `balanced`)
+- `companionNudgeQuietHours` (default `""`, optional `HH:MM-HH:MM`)
+- `companionNudgeCooldownMinutes` (default `20`)
 - `summaryProvider` (`local` | `vscode-lm` | `openai`, default `local`)
 - `openaiModel` (default `gpt-4.1-mini`)
 - `openaiBaseUrl` (default `https://api.openai.com/v1`)
 - `openaiTimeoutMs` (default `15000`)
 - `codexOpenCommand` (optional command id)
+
+## Companion Metrics (Local Only)
+
+Run `TaCoS: Export Local Metrics` to write:
+
+- `.tacos/metrics.json` (raw session records)
+- `.tacos/metrics.csv` (dashboard-friendly fields + derived rates)
+
+Key companion fields:
+
+- `companionPromptImpressions`: prompt fallback impressions per session.
+- `companionForcedOpenDetailsClicks`: forced-click count when prompt mode is used.
+- `companionQuickActionsTaken`: panel/status-bar follow-through actions.
+- `companionFirstActionLagMs`: ms from summary display to first companion action.
+- `companionActionFollowThroughRate` (CSV): quick actions ÷ prompt impressions.
+- `companionForcedOpenRate` (CSV): forced opens ÷ prompt impressions.
 
 ## Provider Modes
 

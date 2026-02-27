@@ -1,5 +1,6 @@
 export type TriggerReason = 'focus' | 'manual' | 'cached';
 export type SummaryProvider = 'local' | 'vscode-lm' | 'openai';
+export type CompanionNudgeAggressiveness = 'low' | 'balanced' | 'high';
 
 export interface ExtensionConfig {
   enabled: boolean;
@@ -17,6 +18,10 @@ export interface ExtensionConfig {
   redactionPatterns: string[];
   metricsEnabled: boolean;
   autoRefreshInBackground: boolean;
+  companionNudgesEnabled: boolean;
+  companionNudgeAggressiveness: CompanionNudgeAggressiveness;
+  companionNudgeQuietHours: string;
+  companionNudgeCooldownMinutes: number;
   summaryProvider: SummaryProvider;
   openaiModel: string;
   openaiBaseUrl: string;
@@ -85,6 +90,9 @@ export interface ResumeSummary {
   intent: string;
   nextSteps: string[];
   nextStepEvidenceIds?: string[][];
+  doneSinceLastResume?: string[];
+  pendingBlocked?: string[];
+  recommendedFirstAction?: string;
   mode?: ResumeMode;
   currentBranch?: string;
   previousBranch?: string;
@@ -109,6 +117,11 @@ export interface MetricRecord {
   trigger: TriggerReason;
   firstMeaningfulEditLagMs?: number;
   firstRunLagMs?: number;
+  companionFirstActionLagMs?: number;
+  companionPromptImpressions?: number;
+  companionForcedOpenDetailsClicks?: number;
+  companionQuickActionsTaken?: number;
+  companionNudgeImpressions?: number;
 }
 
 export interface VscodeLmModelSelector {

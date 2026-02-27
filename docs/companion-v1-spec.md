@@ -168,9 +168,11 @@ Existing and planned settings:
 
 1. `tacos.autoRefreshInBackground` (default `true`)
 2. `tacos.pauseSummaries`
-3. Companion nudge settings (planned in #41):
-   1. aggressiveness level
-   2. quiet hours window
+3. Companion nudge settings:
+   1. `tacos.companionNudgesEnabled`
+   2. aggressiveness level
+   3. quiet hours window
+   4. cooldown minutes
 
 ## 16. Implementation Plan (Phased)
 
