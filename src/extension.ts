@@ -45,9 +45,7 @@ import { isInQuietHours } from './quietHours';
 import { redactList, redactText } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability } from './restoreSafety';
-import {
-  resolveScopeBranch as resolveScopeBranchFromInputs,
-} from './scopeBranch';
+import { resolveScopeBranch as resolveScopeBranchFromInputs } from './scopeBranch';
 import { buildResumeSummary } from './summary';
 import { buildStandupUpdate } from './standup';
 import { buildTimelineGroups } from './timeline';
@@ -323,13 +321,19 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const nextValue = typeof value === 'string' ? value.trim() : '';
-      await context.workspaceState.update(branchStateKey(workspaceRoot), nextValue ? nextValue : undefined);
+      await context.workspaceState.update(
+        branchStateKey(workspaceRoot),
+        nextValue ? nextValue : undefined,
+      );
       return true;
     }),
-    vscode.commands.registerCommand('tacos.__test.pickWorkspaceRoot', async (preferred?: string) => {
-      const preferredWorkspaceRoot = typeof preferred === 'string' ? preferred : undefined;
-      return pickWorkspaceRoot(preferredWorkspaceRoot);
-    }),
+    vscode.commands.registerCommand(
+      'tacos.__test.pickWorkspaceRoot',
+      async (preferred?: string) => {
+        const preferredWorkspaceRoot = typeof preferred === 'string' ? preferred : undefined;
+        return pickWorkspaceRoot(preferredWorkspaceRoot);
+      },
+    ),
     vscode.commands.registerCommand('tacos.__test.getRuntimeStateSnapshot', async () => {
       return {
         panelOpen: Boolean(state.panel),
@@ -5122,7 +5126,8 @@ async function resolveOpenAiApiKey(context: vscode.ExtensionContext): Promise<st
 }
 
 function pickWorkspaceRoot(preferredWorkspaceRoot?: string): string | undefined {
-  const workspaceRoots = vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ?? [];
+  const workspaceRoots =
+    vscode.workspace.workspaceFolders?.map((folder) => folder.uri.fsPath) ?? [];
   const activeUri = vscode.window.activeTextEditor?.document?.uri;
   const activeWorkspaceRoot = activeUri
     ? vscode.workspace.getWorkspaceFolder(activeUri)?.uri.fsPath
