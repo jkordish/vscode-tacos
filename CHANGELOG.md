@@ -24,6 +24,8 @@ All notable changes to this project are documented in this file.
   - `Open Scratchpad`, `Append`, and `Set Scope` buttons in the panel scratchpad card
   - Scratchpad and checkpoint-note management entries in `TaCoS Companion` quick actions
 - Resume panel notes card with actions for `Mark done`, `Pin/Unpin`, `Dismiss`, and `Add note`.
+- Sticky notes/scratchpad QA matrix doc for v0.4.0 edge-case validation:
+  - `docs/sticky-notes-qa-matrix.md`
 
 ### Changed
 

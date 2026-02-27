@@ -1,5 +1,7 @@
 # Manual Smoke Runbook (Trusted + Restricted)
 
+For sticky notes/scratchpad specific edge cases, also run: `docs/sticky-notes-qa-matrix.md`.
+
 Date: `__________`
 Tester: `__________`
 VS Code version: `__________`
