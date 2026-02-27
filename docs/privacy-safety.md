@@ -17,6 +17,7 @@ TaCoS is designed around local-first context resumption with explicit security b
 - Debug/task activity.
 - User-added URLs.
 - Optional checkpoint notes.
+- Optional scratchpad content stored locally in extension storage.
 - Optional local companion metrics (prompt/quick-action friction counters).
 
 ## Restricted Mode (Workspace Trust)
@@ -36,13 +37,16 @@ In Restricted Mode:
 - Raw terminal commands are not persisted; terminal-derived fields are anonymized/fingerprinted.
 - Retention pruning is configurable (`1d`/`7d`/`30d`/`forever`) via `tacos.retentionPolicy`.
 - `TaCoS: Forget This Workspace Now` clears workspace-scoped TaCoS state immediately.
+- `TaCoS: Forget This Workspace Now` also clears scoped scratchpad files for that workspace.
 - API keys are stored in VS Code Secret Storage.
 - Metric export writes only local `.tacos/metrics.json` and `.tacos/metrics.csv` files inside the workspace.
+- Scratchpad files are stored under extension storage, not inside the workspace repo by default.
 
 ## AI Safety Model
 
 - All model output is treated as untrusted.
 - AI payload send requires redacted preview + explicit consent per workspace.
+- Scratchpad content is excluded from AI payloads by default.
 - Links are evidence-grounded and validated before rendering and again at click time.
 - File links must resolve within workspace root.
 - External URLs are limited to `http`/`https`.

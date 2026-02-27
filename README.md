@@ -31,7 +31,8 @@ TaCoS is built around five non-negotiable principles:
 - Adds a compact `Changes Since Last Time` card (diffstat, runs, blockers, key files/links).
 - Shows confidence-gated companion nudges with cooldown and quiet-hours suppression.
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.
-- Lets you add checkpoint notes (“Future You” hints) and reuse them on resume.
+- Lets you capture sticky checkpoint notes (multi-note, scoped, pinned, done/dismissed) and reuse them on resume.
+- Adds a scoped persistent scratchpad in a real editor tab so running thoughts survive reloads/restarts.
 - Adds restore presets with a dry-run plan before executing working-set restore actions.
 - Supports local-only summaries and optional AI refinement (`vscode-lm` / `openai`).
 - Marks low-confidence context explicitly and suggests safe clarification steps.
@@ -62,7 +63,13 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Add Recent URL`
 - `TaCoS: Add Checkpoint Note`
 - `TaCoS: Add Checkpoint Note from Clipboard`
-- `TaCoS: Clear Checkpoint Note`
+- `TaCoS: Add Checkpoint from Selection`
+- `TaCoS: Add Quick Checkpoint Note`
+- `TaCoS: List Checkpoint Notes`
+- `TaCoS: Clear Checkpoint Notes in Current Task Scope`
+- `TaCoS: Open Scratchpad`
+- `TaCoS: Append to Scratchpad`
+- `TaCoS: Set Scratchpad Scope`
 - `TaCoS: Configure AI Provider`
 - `TaCoS: Privacy & Safety`
 - `TaCoS: Clear Summary Corrections`
@@ -139,6 +146,9 @@ Key companion fields:
 - `pauseActions` / `snoozeActions` / `disableActions`: local opt-out interaction counters.
 - `companionActionFollowThroughRate` (CSV): quick actions ÷ prompt impressions.
 - `companionForcedOpenRate` (CSV): forced opens ÷ prompt impressions.
+- `noteCreated` / `noteMarkedDone` / `notePinned`: checkpoint note lifecycle counters.
+- `resumeWithNote`: session indicator for note-guided resume (`1` or `0`).
+- `scratchpadOpened` / `scratchpadAppended`: scratchpad usage counters.
 
 ## Provider Modes
 
@@ -172,7 +182,7 @@ OpenAI API key resolution order:
 
 - Redacted activity snapshots (workspace + branch scoped; never raw terminal command lines).
 - Workspace summary cache.
-- Workspace-scoped checkpoint note.
+- Scoped checkpoint note lists (task scope by default, optional workspace-global).
 - Workspace-scoped correction hints keyed by context hash.
 - Optional local metrics history.
 - Workspace-scoped retention metadata and task blocker metadata.
@@ -189,6 +199,8 @@ Only if AI provider is enabled:
 - Redacted summary context and evidence catalog.
 - Structured summarization instructions.
 - Optional correction hints.
+- Optional checkpoint notes if included via consent flow.
+- Scratchpad content is excluded by default.
 - Payload preview + explicit consent (`Send once` / `Always allow in workspace`) are required before send.
 
 ### Privacy Doc

@@ -17,7 +17,19 @@ import {
   sanitizeActivityForPersistence,
   type PersistedActivityState,
 } from './activityPersistence';
-import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
+import {
+  checkpointNotesStorageKey,
+  checkpointStorageKey,
+  createCheckpointNote,
+  createLegacyMigrationNote,
+  decodeCheckpointScopeFromStorageKey,
+  parseCheckpointNotes,
+  pruneCheckpointNotesForCutoff,
+  sanitizeCheckpointNote,
+  sortCheckpointNotes,
+  type CheckpointNote,
+  type CheckpointNoteScope,
+} from './checkpoint';
 import { resolveCodexOpenCommandCandidates } from './codexInterop';
 import { buildDiagnosticsText } from './diagnostics';
 import {
@@ -52,6 +64,11 @@ import { isInQuietHours } from './quietHours';
 import { redactList, redactText } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability, type RestoreAvailability } from './restoreSafety';
+import {
+  SCRATCHPAD_FILES_SEGMENT,
+  scratchpadFileNameForScope,
+  workspaceScratchpadRootSegments,
+} from './scratchpadStorage';
 import { resolveScopeBranch as resolveScopeBranchFromInputs } from './scopeBranch';
 import { buildResumeSummary } from './summary';
 import { buildStandupUpdate } from './standup';
@@ -90,6 +107,7 @@ const KEY_LAST_TERMINAL_CWD_PREFIX = 'tacos.lastTerminalCwd';
 const KEY_RESTORE_SEARCH_QUERY_PREFIX = 'tacos.restoreSearchQuery';
 const KEY_RESTORE_PRESET_PREFIX = 'tacos.restorePreset';
 const KEY_TASK_PARTITION_PREFIX = 'tacos.taskPartition';
+const KEY_SCRATCHPAD_SCOPE_MODE_PREFIX = 'tacos.scratchpadScopeMode';
 const KEY_ACTIVITY_STORAGE_PREFIX = 'tacos.activityScoped';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
 const KEY_SUMMARY_CORRECTIONS_PREFIX = 'tacos.summaryCorrections';
@@ -105,6 +123,10 @@ const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
 const CHECKPOINT_PROMPT_COOLDOWN_MINUTES = 45;
 const FOCUS_TRIGGER_DEBOUNCE_MS = 1200;
+const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
+const CHECKPOINT_WORKSPACE_GLOBAL_SCOPE = 'workspace-global';
+const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
+const SCRATCHPAD_PREVIEW_MAX_BYTES = 256 * 1024;
 const execFileAsync = promisify(execFile);
 const markdownRenderer = new MarkdownIt({
   html: false,
@@ -162,7 +184,13 @@ interface RuntimeState {
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
   panelWorkspaceRoot?: string;
-  displayedCheckpointNote?: { workspaceRoot: string; value: string; persisted: boolean };
+  panelCheckpointNotes: CheckpointNote[];
+  panelPrimaryCheckpointNote?: CheckpointNote;
+  panelCheckpointScope?: string;
+  panelScratchpadPreviewLines: string[];
+  panelScratchpadExists: boolean;
+  panelScratchpadHasContent: boolean;
+  panelScratchpadScopeLabel?: string;
   lastTaskName?: string;
   lastTaskWorkspaceRoot?: string;
   lastTaskExitCode?: number;
@@ -192,8 +220,12 @@ let state: RuntimeState;
 interface PresentSummaryOptions {
   autoOpenDetails?: boolean;
   workspaceRoot?: string;
-  checkpointNote?: string;
+  checkpointPrimaryNote?: CheckpointNote;
+  checkpointNotes?: CheckpointNote[];
+  checkpointScope?: string;
 }
+
+type ScratchpadScopeMode = 'partition' | 'workspace';
 
 type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt' | 'silent';
 type CompanionRuntimeMode = 'active' | 'paused' | 'restricted' | 'disabled';
@@ -236,6 +268,13 @@ export function activate(context: vscode.ExtensionContext): void {
     lastFailingCommandRaw: undefined,
     scratchSummary: undefined,
     activeNudges: undefined,
+    panelCheckpointNotes: [],
+    panelPrimaryCheckpointNote: undefined,
+    panelCheckpointScope: undefined,
+    panelScratchpadPreviewLines: [],
+    panelScratchpadExists: false,
+    panelScratchpadHasContent: false,
+    panelScratchpadScopeLabel: undefined,
     lastTaskName: persistedTaskMetadata?.taskName,
     lastTaskWorkspaceRoot: persistedTaskMetadata?.workspaceRoot,
     lastTaskExitCode: persistedTaskMetadata?.exitCode,
@@ -414,10 +453,23 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      await presentSummary(context, cached, 'cached', {
+      const checkpointContext = await resolveCheckpointContext(
+        context,
+        root,
+        cached.currentBranch,
+        true,
+      );
+      const summaryWithCheckpoint = applyCheckpointNoteToSummary(
+        cached,
+        checkpointContext.primaryNote,
+      );
+
+      await presentSummary(context, summaryWithCheckpoint, 'cached', {
         autoOpenDetails: true,
         workspaceRoot: root,
-        checkpointNote: getCheckpointNote(context, root),
+        checkpointPrimaryNote: checkpointContext.primaryNote,
+        checkpointNotes: checkpointContext.notes,
+        checkpointScope: checkpointContext.scope,
       });
     }),
     vscode.commands.registerCommand('tacos.generateStandupUpdate', async () => {
@@ -534,7 +586,11 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
         return;
       }
-      await promptAndSaveCheckpointNote(context, root);
+      const saved = await promptAndSaveCheckpointNote(context, root);
+      if (saved) {
+        await refreshPanelCheckpointState(context, root);
+        rerenderPanel();
+      }
     }),
     vscode.commands.registerCommand('tacos.addCheckpointNoteFromClipboard', async () => {
       const root = pickWorkspaceRoot();
@@ -542,25 +598,35 @@ export function activate(context: vscode.ExtensionContext): void {
         void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
         return;
       }
-
-      const clipboardValue = (await vscode.env.clipboard.readText()).trim();
-      if (!clipboardValue) {
-        void vscode.window.showWarningMessage(
-          'TaCoS: clipboard is empty; no checkpoint note was saved.',
-        );
+      const saved = await saveCheckpointNoteFromClipboard(context, root, {
+        successMessage: 'TaCoS: checkpoint note saved from clipboard.',
+      });
+      if (saved) {
+        await refreshPanelCheckpointState(context, root);
+        rerenderPanel();
+      }
+    }),
+    vscode.commands.registerCommand('tacos.addCheckpointFromSelection', async () => {
+      await addCheckpointFromSelectionCommand(context);
+    }),
+    vscode.commands.registerCommand('tacos.addQuickCheckpointNote', async () => {
+      const root = pickWorkspaceRoot();
+      if (!root) {
+        void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
         return;
       }
 
-      const sanitized = sanitizeCheckpointNote(clipboardValue, root, getConfig().redactionPatterns);
-      if (!sanitized) {
-        void vscode.window.showWarningMessage(
-          'TaCoS: clipboard note was empty after sanitization and was not saved.',
-        );
-        return;
+      const saved = await saveCheckpointNoteFromClipboard(context, root, {
+        successMessage: 'TaCoS: quick checkpoint saved.',
+        noPrompt: true,
+      });
+      if (saved) {
+        await refreshPanelCheckpointState(context, root);
+        rerenderPanel();
       }
-
-      await context.workspaceState.update(checkpointStorageKey(root), sanitized);
-      void vscode.window.showInformationMessage('TaCoS: checkpoint note saved from clipboard.');
+    }),
+    vscode.commands.registerCommand('tacos.listCheckpointNotes', async () => {
+      await listCheckpointNotesCommand(context);
     }),
     vscode.commands.registerCommand('tacos.clearCheckpointNote', async () => {
       const root = pickWorkspaceRoot();
@@ -569,10 +635,21 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      await clearCheckpointNote(context, root);
+      const cleared = await clearCheckpointNotesInScope(context, root);
       void vscode.window.showInformationMessage(
-        'TaCoS: checkpoint note cleared for this workspace.',
+        cleared > 0
+          ? `TaCoS: cleared ${cleared} checkpoint note${cleared === 1 ? '' : 's'} in this task scope.`
+          : 'TaCoS: no checkpoint notes found in this task scope.',
       );
+    }),
+    vscode.commands.registerCommand('tacos.openScratchpad', async () => {
+      await openScratchpadCommand(context);
+    }),
+    vscode.commands.registerCommand('tacos.appendToScratchpad', async () => {
+      await appendToScratchpadCommand(context);
+    }),
+    vscode.commands.registerCommand('tacos.setScratchpadScope', async () => {
+      await setScratchpadScopeCommand(context);
     }),
     vscode.commands.registerCommand('tacos.configureAiProvider', async () => {
       await configureAiProvider(context);
@@ -655,6 +732,31 @@ export function activate(context: vscode.ExtensionContext): void {
       state.recentFiles.push(relative);
       markMeaningfulActivity();
       await persistActivity(context);
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidSaveTextDocument(async (document) => {
+      if (!state.panel) {
+        return;
+      }
+
+      const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+      if (!workspaceRoot) {
+        return;
+      }
+
+      const { uri } = resolveScratchpadFileUri(
+        context,
+        workspaceRoot,
+        state.panelSummary?.currentBranch,
+      );
+      if (document.uri.toString() !== uri.toString()) {
+        return;
+      }
+
+      await refreshPanelScratchpadState(context, workspaceRoot);
+      rerenderPanel();
     }),
   );
 
@@ -1084,7 +1186,9 @@ async function triggerSummary(
   await presentSummary(context, prepared.summary, prepared.triggerReason, {
     autoOpenDetails: reason === 'manual',
     workspaceRoot: root,
-    checkpointNote: getCheckpointNote(context, root),
+    checkpointPrimaryNote: prepared.checkpointPrimaryNote,
+    checkpointNotes: prepared.checkpointNotes,
+    checkpointScope: prepared.checkpointScope,
   });
   state.meaningfulActivitySinceCheckpointPrompt = false;
 
@@ -1106,6 +1210,9 @@ interface PreparedTriggerSummary {
   triggerReason: TriggerReason;
   summary: ResumeSummary;
   localSummary: ResumeSummary;
+  checkpointNotes: CheckpointNote[];
+  checkpointPrimaryNote?: CheckpointNote;
+  checkpointScope: string;
   signals: ResumeSignals;
   config: ExtensionConfig;
   providerPlan: ProviderPlan;
@@ -1137,14 +1244,23 @@ async function prepareTriggerSummary(
   const config = getConfig();
   const providerPlan = await resolveProviderPlan(context, config, reason);
   const signals = await collectSignals(root, config);
-  const localSummary = await applyBranchHistory(context, root, buildResumeSummary(signals));
-  const corrections = getSummaryCorrectionsForContext(context, root, localSummary.contextHash);
+  const baseSummary = await applyBranchHistory(context, root, buildResumeSummary(signals));
+  const checkpointContext = await resolveCheckpointContext(
+    context,
+    root,
+    baseSummary.currentBranch,
+    true,
+  );
+  const localSummary = applyCheckpointNoteToSummary(baseSummary, checkpointContext.primaryNote);
+  const corrections = getSummaryCorrectionsForContext(context, root, baseSummary.contextHash);
   localSummary.userCorrections = corrections;
   localSummary.correctionsFingerprint = summarizeCorrectionsFingerprint(corrections);
   const cacheKey = summaryCacheKey(context, root);
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
   const correctionsUnchanged =
     (cached?.correctionsFingerprint ?? '') === (localSummary.correctionsFingerprint ?? '');
+  const checkpointUnchanged =
+    (cached?.recommendedFirstAction ?? '') === (localSummary.recommendedFirstAction ?? '');
   const providerCompatibleWithCache =
     !cached || providerPlan.activeProvider !== 'local' || cached.source === 'local';
   const contextUnchanged =
@@ -1152,6 +1268,7 @@ async function prepareTriggerSummary(
     Boolean(cached) &&
     cached?.contextHash === localSummary.contextHash &&
     correctionsUnchanged &&
+    checkpointUnchanged &&
     providerCompatibleWithCache;
 
   if (!contextUnchanged) {
@@ -1168,6 +1285,9 @@ async function prepareTriggerSummary(
     triggerReason: contextUnchanged && cached ? 'cached' : reason,
     summary,
     localSummary,
+    checkpointNotes: checkpointContext.notes,
+    checkpointPrimaryNote: checkpointContext.primaryNote,
+    checkpointScope: checkpointContext.scope,
     signals,
     config,
     providerPlan,
@@ -1214,6 +1334,7 @@ async function refineSummaryInBackground(
     }
     return;
   }
+  refined = applyCheckpointNoteToSummary(refined, prepared.checkpointPrimaryNote);
 
   if (state.activeRefinementSequence !== sequence) {
     return;
@@ -1260,9 +1381,14 @@ async function generateSummary(
     };
   }
 
-  await context.workspaceState.update(prepared.cacheKey, refined);
+  const refinedWithCheckpoint = applyCheckpointNoteToSummary(
+    refined,
+    prepared.checkpointPrimaryNote,
+  );
+
+  await context.workspaceState.update(prepared.cacheKey, refinedWithCheckpoint);
   return {
-    summary: refined,
+    summary: refinedWithCheckpoint,
     triggerReason: prepared.triggerReason,
   };
 }
@@ -1393,6 +1519,7 @@ async function presentSummary(
       trigger: triggerReason,
       uiSurface: config.uiSurface,
       interruptionEvent: triggerReason === 'focus' && config.uiSurface === 'notification' ? 1 : 0,
+      resumeWithNote: options.checkpointPrimaryNote ? 1 : 0,
     };
   }
 
@@ -1607,7 +1734,17 @@ function recordCompanionNudgeImpression(): void {
     (state.metricSession.companionNudgeImpressions ?? 0) + 1;
 }
 
-function recordMetricCounter(field: 'pauseActions' | 'snoozeActions' | 'disableActions'): void {
+function recordMetricCounter(
+  field:
+    | 'pauseActions'
+    | 'snoozeActions'
+    | 'disableActions'
+    | 'noteCreated'
+    | 'noteMarkedDone'
+    | 'notePinned'
+    | 'scratchpadOpened'
+    | 'scratchpadAppended',
+): void {
   if (!state.metricSession) {
     return;
   }
@@ -1747,6 +1884,10 @@ interface CompanionActionPick extends vscode.QuickPickItem {
     | 'standup'
     | 'restoreWorkingSet'
     | 'switchPartition'
+    | 'listCheckpointNotes'
+    | 'openScratchpad'
+    | 'appendScratchpad'
+    | 'setScratchpadScope'
     | 'jumpLastEdit'
     | 'copyPrompt'
     | 'togglePause'
@@ -1790,6 +1931,26 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'switchPartition',
       label: 'Switch task partition',
       detail: 'Set or clear manual task key for context partitioning.',
+    },
+    {
+      id: 'listCheckpointNotes',
+      label: 'List checkpoint notes',
+      detail: 'Review, edit, pin, dismiss, or mark notes done.',
+    },
+    {
+      id: 'openScratchpad',
+      label: 'Open scratchpad',
+      detail: 'Open the scoped scratchpad in a real editor tab.',
+    },
+    {
+      id: 'appendScratchpad',
+      label: 'Append to scratchpad',
+      detail: 'Append selected text (or clipboard fallback) with a timestamp divider.',
+    },
+    {
+      id: 'setScratchpadScope',
+      label: 'Set scratchpad scope',
+      detail: 'Switch between task scope and workspace-global scratchpad.',
     },
     {
       id: 'jumpLastEdit',
@@ -1892,6 +2053,18 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'switchPartition') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.switchTaskPartition');
+  } else if (picked.id === 'listCheckpointNotes') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.listCheckpointNotes');
+  } else if (picked.id === 'openScratchpad') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.openScratchpad');
+  } else if (picked.id === 'appendScratchpad') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.appendToScratchpad');
+  } else if (picked.id === 'setScratchpadScope') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.setScratchpadScope');
   } else if (picked.id === 'jumpLastEdit') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.jumpToLastEdit');
@@ -1954,24 +2127,18 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
 async function showDetailsPanel(
   context: vscode.ExtensionContext,
   summary: ResumeSummary,
-  options: Pick<PresentSummaryOptions, 'workspaceRoot' | 'checkpointNote'> = {},
+  options: Pick<
+    PresentSummaryOptions,
+    'workspaceRoot' | 'checkpointPrimaryNote' | 'checkpointNotes' | 'checkpointScope'
+  > = {},
 ): Promise<void> {
   const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
-  const checkpointNote = options.checkpointNote;
   updateSummaryScratchpad(summary, workspaceRoot);
   state.panelSummary = summary;
   state.panelWorkspaceRoot = workspaceRoot;
-
-  if (checkpointNote && workspaceRoot) {
-    state.displayedCheckpointNote = {
-      workspaceRoot,
-      value: checkpointNote,
-      persisted: false,
-    };
-    await context.workspaceState.update(checkpointStorageKey(workspaceRoot), undefined);
-  } else {
-    state.displayedCheckpointNote = undefined;
-  }
+  state.panelCheckpointNotes = sortCheckpointNotes(options.checkpointNotes ?? []);
+  state.panelPrimaryCheckpointNote = options.checkpointPrimaryNote;
+  state.panelCheckpointScope = options.checkpointScope;
 
   if (!state.panel) {
     state.panel = vscode.window.createWebviewPanel(
@@ -1989,7 +2156,13 @@ async function showDetailsPanel(
       state.panel = undefined;
       state.panelSummary = undefined;
       state.panelWorkspaceRoot = undefined;
-      state.displayedCheckpointNote = undefined;
+      state.panelCheckpointNotes = [];
+      state.panelPrimaryCheckpointNote = undefined;
+      state.panelCheckpointScope = undefined;
+      state.panelScratchpadPreviewLines = [];
+      state.panelScratchpadExists = false;
+      state.panelScratchpadHasContent = false;
+      state.panelScratchpadScopeLabel = undefined;
     });
 
     state.panel.webview.onDidReceiveMessage(async (rawMessage: unknown) => {
@@ -2000,38 +2173,6 @@ async function showDetailsPanel(
 
       if (message.type === 'fixSummary') {
         await captureSummaryCorrection(context);
-        return;
-      }
-
-      if (message.type === 'checkpointKeep') {
-        if (!state.displayedCheckpointNote) {
-          return;
-        }
-
-        await context.workspaceState.update(
-          checkpointStorageKey(state.displayedCheckpointNote.workspaceRoot),
-          state.displayedCheckpointNote.value,
-        );
-        state.displayedCheckpointNote.persisted = true;
-        state.meaningfulActivitySinceCheckpointPrompt = false;
-        void vscode.window.showInformationMessage(
-          'TaCoS: checkpoint note kept for the next resume.',
-        );
-        return;
-      }
-
-      if (message.type === 'checkpointClear') {
-        if (!state.displayedCheckpointNote) {
-          return;
-        }
-
-        await context.workspaceState.update(
-          checkpointStorageKey(state.displayedCheckpointNote.workspaceRoot),
-          undefined,
-        );
-        state.displayedCheckpointNote = undefined;
-        rerenderPanel();
-        void vscode.window.showInformationMessage('TaCoS: checkpoint note cleared.');
         return;
       }
 
@@ -2050,6 +2191,78 @@ async function showDetailsPanel(
           placeHolder: 'Example: Continue from parser error and rerun npm test',
           initialValue: seededValue,
         });
+        await refreshPanelCheckpointState(context, workspaceRoot);
+        rerenderPanel();
+        return;
+      }
+
+      if (message.type === 'checkpointOpenList') {
+        await listCheckpointNotesCommand(context, state.panelWorkspaceRoot);
+        await refreshPanelCheckpointState(context, state.panelWorkspaceRoot);
+        rerenderPanel();
+        return;
+      }
+
+      if (message.type === 'openScratchpad') {
+        recordCompanionQuickAction();
+        await openScratchpadCommand(context, state.panelWorkspaceRoot);
+        await refreshPanelScratchpadState(context, state.panelWorkspaceRoot);
+        rerenderPanel();
+        return;
+      }
+
+      if (message.type === 'appendScratchpad') {
+        recordCompanionQuickAction();
+        await appendToScratchpadCommand(context, state.panelWorkspaceRoot);
+        await refreshPanelScratchpadState(context, state.panelWorkspaceRoot);
+        rerenderPanel();
+        return;
+      }
+
+      if (message.type === 'setScratchpadScope') {
+        recordCompanionQuickAction();
+        await setScratchpadScopeCommand(context, state.panelWorkspaceRoot);
+        await refreshPanelScratchpadState(context, state.panelWorkspaceRoot);
+        rerenderPanel();
+        return;
+      }
+
+      if (
+        message.type === 'checkpointPinToggle' ||
+        message.type === 'checkpointMarkDone' ||
+        message.type === 'checkpointDismiss'
+      ) {
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        const note = state.panelPrimaryCheckpointNote;
+        if (!workspaceRoot || !note) {
+          return;
+        }
+
+        if (message.type === 'checkpointPinToggle') {
+          await updateCheckpointNoteById(context, workspaceRoot, note.id, (current) => ({
+            ...current,
+            pinned: current.pinned ? undefined : true,
+          }));
+          if (!note.pinned) {
+            recordMetricCounter('notePinned');
+          }
+        } else if (message.type === 'checkpointMarkDone') {
+          await updateCheckpointNoteById(context, workspaceRoot, note.id, (current) => ({
+            ...current,
+            status: 'done',
+            pinned: undefined,
+          }));
+          recordMetricCounter('noteMarkedDone');
+        } else if (message.type === 'checkpointDismiss') {
+          await updateCheckpointNoteById(context, workspaceRoot, note.id, (current) => ({
+            ...current,
+            status: 'dismissed',
+            pinned: undefined,
+          }));
+        }
+
+        await refreshPanelCheckpointState(context, workspaceRoot);
+        rerenderPanel();
         return;
       }
 
@@ -2353,6 +2566,26 @@ async function showDetailsPanel(
     });
   }
 
+  if (workspaceRoot) {
+    if (options.checkpointNotes && options.checkpointScope) {
+      state.panelCheckpointNotes = sortCheckpointNotes(options.checkpointNotes);
+      state.panelPrimaryCheckpointNote =
+        options.checkpointPrimaryNote ?? selectPrimaryCheckpointNote(state.panelCheckpointNotes);
+      state.panelCheckpointScope = options.checkpointScope;
+      if (state.panelSummary) {
+        const nextSummary = applyCheckpointNoteToSummary(
+          state.panelSummary,
+          state.panelPrimaryCheckpointNote,
+        );
+        state.panelSummary = nextSummary;
+        updateSummaryScratchpad(nextSummary, workspaceRoot);
+      }
+    } else {
+      await refreshPanelCheckpointState(context, workspaceRoot);
+    }
+    await refreshPanelScratchpadState(context, workspaceRoot);
+  }
+
   rerenderPanel();
   state.panel.reveal(vscode.ViewColumn.Beside, true);
 }
@@ -2385,14 +2618,16 @@ function rerenderPanel(): void {
   state.panel.webview.html = renderWebview(
     state.panel.webview,
     state.panelSummary,
-    state.displayedCheckpointNote?.value,
+    state.panelCheckpointNotes,
+    state.panelPrimaryCheckpointNote,
   );
 }
 
 function renderWebview(
   webview: vscode.Webview,
   summary: ResumeSummary,
-  checkpointNote?: string,
+  checkpointNotes: CheckpointNote[],
+  primaryCheckpointNote?: CheckpointNote,
 ): string {
   const nonce = createNonce();
   const cspMetaTag = buildWebviewCspMetaTag(webview.cspSource, nonce);
@@ -2403,27 +2638,79 @@ function renderWebview(
   const timelineGroups = config.showTimeline
     ? buildTimelineGroups(summary.evidenceCatalog ?? [], Date.now())
     : [];
-  const checkpointCard = checkpointNote
-    ? `<div class="card">
-      <h3>Your Note</h3>
-      <p>${escapeHtml(checkpointNote)}</p>
+  const openCheckpointNotes = sortCheckpointNotes(
+    checkpointNotes.filter((note) => note.status === 'open'),
+  );
+  const openCheckpointCount = openCheckpointNotes.length;
+  const primaryOpenCheckpoint =
+    primaryCheckpointNote?.status === 'open' ? primaryCheckpointNote : undefined;
+  const currentCheckpointNote = primaryOpenCheckpoint ?? openCheckpointNotes[0];
+  const checkpointContextLine = currentCheckpointNote
+    ? [
+        currentCheckpointNote.file
+          ? `${currentCheckpointNote.file}${typeof currentCheckpointNote.line === 'number' ? `:${currentCheckpointNote.line}` : ''}`
+          : '',
+        currentCheckpointNote.branch ? `branch ${currentCheckpointNote.branch}` : '',
+        currentCheckpointNote.partition ? `partition ${currentCheckpointNote.partition}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
+  const checkpointCard =
+    openCheckpointCount > 0 && currentCheckpointNote
+      ? `<div class="card">
+      <h3>Notes (${openCheckpointCount})</h3>
+      <p class="companion-primary">${escapeHtml(currentCheckpointNote.text)}</p>
+      ${checkpointContextLine ? `<p class="muted">${escapeHtml(checkpointContextLine)}</p>` : ''}
       <div class="note-actions">
-        <button type="button" data-action="checkpointKeep">Keep</button>
-        <button type="button" data-action="checkpointClear">Clear now</button>
+        <button type="button" data-action="checkpointMarkDone">Mark done</button>
+        <button type="button" class="secondary" data-action="checkpointPinToggle">${currentCheckpointNote.pinned ? 'Unpin' : 'Pin'}</button>
+        <button type="button" class="secondary" data-action="checkpointDismiss">Dismiss</button>
+        <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>
+        <button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>
+      </div>
+    </div>`
+      : '';
+  const scratchpadPreviewLines = state.panelScratchpadPreviewLines.slice(
+    0,
+    SCRATCHPAD_PREVIEW_MAX_LINES,
+  );
+  const scratchpadScopeLabel = state.panelScratchpadScopeLabel?.trim() ?? '';
+  const showScratchpadCard = state.panelScratchpadExists || state.panelScratchpadHasContent;
+  const scratchpadPreviewHtml =
+    scratchpadPreviewLines.length > 0
+      ? `<ul class="compact-list">${scratchpadPreviewLines
+          .map((line) => `<li>${escapeHtml(line)}</li>`)
+          .join('')}</ul>`
+      : `<p class="muted">${
+          state.panelScratchpadHasContent
+            ? 'Scratchpad has content, but no preview lines were detected.'
+            : 'No scratchpad content yet.'
+        }</p>`;
+  const scratchpadCard = showScratchpadCard
+    ? `<div class="card">
+      <h3>Scratchpad</h3>
+      ${scratchpadScopeLabel ? `<p class="muted">${escapeHtml(scratchpadScopeLabel)}</p>` : ''}
+      ${scratchpadPreviewHtml}
+      <div class="status-actions">
+        <button type="button" class="secondary" data-action="openScratchpad">Open Scratchpad</button>
+        <button type="button" class="secondary" data-action="appendScratchpad">Append</button>
+        <button type="button" class="secondary" data-action="setScratchpadScope">Set Scope</button>
       </div>
     </div>`
     : '';
   const candidateIntentItems = (summary.candidateIntents ?? [])
     .map((candidate) => `<li>${escapeHtml(candidate)}</li>`)
     .join('');
-  const confidenceCard = summary.lowConfidence
-    ? `<div class="card">
+  const confidenceCard =
+    summary.lowConfidence && !currentCheckpointNote
+      ? `<div class="card">
       <h3>Low Confidence</h3>
       <p class="muted">Unclear intent (low evidence). Add one line of context before continuing.</p>
       <ul class="compact-list">${candidateIntentItems || '<li>No strong candidates captured.</li>'}</ul>
       <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add one-line checkpoint</button>
     </div>`
-    : '';
+      : '';
   const linkItems = summary.links
     .map(
       (link, index) =>
@@ -2487,8 +2774,13 @@ function renderWebview(
     })
     .join('');
   const hasExtraEvidence = (summary.evidenceCatalog?.length ?? 0) > 5;
-  const companionNextSteps = summary.nextSteps
-    .slice(0, 3)
+  const companionNextStepList = [
+    ...(currentCheckpointNote ? [currentCheckpointNote.text] : []),
+    ...summary.nextSteps,
+  ]
+    .filter((item, index, items) => items.indexOf(item) === index)
+    .slice(0, 3);
+  const companionNextSteps = companionNextStepList
     .map((step) => `<li>${escapeHtml(step)}</li>`)
     .join('');
   const recapDoneItems = summary.doneSinceLastResume?.slice(0, 3) ?? [];
@@ -2496,6 +2788,9 @@ function renderWebview(
   const recapFirstAction = summary.recommendedFirstAction?.trim() ?? summary.nextSteps[0] ?? '';
   const recapDoneList = recapDoneItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const recapPendingList = recapPendingItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+  const nowCheckpointLine = currentCheckpointNote
+    ? `<p class="companion-meta"><strong>Checkpoint:</strong> ${escapeHtml(currentCheckpointNote.text)}</p>`
+    : '';
   const activeNudgeDecision =
     state.activeNudges?.contextHash === summary.contextHash
       ? state.activeNudges.decision
@@ -2540,7 +2835,7 @@ function renderWebview(
     blockerTitle = 'Workspace is in Restricted Mode';
     blockerDetail =
       'Task/debug reruns and branch checkout are disabled until workspace trust is granted.';
-  } else if (summary.lowConfidence) {
+  } else if (summary.lowConfidence && !currentCheckpointNote) {
     blockerTitle = 'Low-confidence resume context';
     blockerDetail = 'Evidence is sparse. Add a one-line checkpoint before taking risky actions.';
     blockerActionLabel = 'Add checkpoint';
@@ -2716,9 +3011,9 @@ function renderWebview(
       ? 'Nothing (local-only mode).'
       : companionRuntimeMode === 'restricted'
         ? 'Nothing while Restricted Mode is active.'
-        : 'Redacted summary context and evidence when AI refinement runs.';
+        : 'Redacted summary context, evidence, and your checkpoint notes when AI refinement runs.';
   const storedLocallyLabel =
-    'Redacted activity snapshots, summary cache, checkpoint notes, and local metrics.';
+    'Redacted activity snapshots, summary cache, checkpoint notes, scratchpad files, and local metrics.';
   const trustCueDetails = trustCue.details.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const autoSummaryStatusLabel = autoSummariesDisabled
     ? 'Auto summaries disabled'
@@ -2781,7 +3076,8 @@ function renderWebview(
           <p class="companion-primary">${escapeHtml(recapFirstAction || 'Refresh summary to regenerate first-action guidance.')}</p>
           <div class="status-actions">
             <button type="button" data-action="copyNextSteps">Copy next steps</button>
-            <button type="button" class="secondary" data-action="sessionAddCheckpoint">Save checkpoint</button>
+            <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>
+            <button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>
           </div>
         </section>
       </div>
@@ -3004,6 +3300,7 @@ function renderWebview(
       .note-actions {
         display: flex;
         gap: 8px;
+        flex-wrap: wrap;
       }
       .note-actions button {
         border-radius: 6px;
@@ -3149,6 +3446,7 @@ function renderWebview(
     </div>
 
     ${checkpointCard}
+    ${scratchpadCard}
     ${recapCard}
     ${changesSinceCard}
     ${nudgeCard}
@@ -3160,6 +3458,7 @@ function renderWebview(
           <p class="companion-kicker">Current focus</p>
           <p class="companion-primary">${escapeHtml(summary.intent)}</p>
           <p class="companion-meta">Mode: ${escapeHtml(mode)}</p>
+          ${nowCheckpointLine}
         </section>
         <section class="companion-block">
           <h4>Next</h4>
@@ -3237,8 +3536,13 @@ function renderWebview(
       const vscode = acquireVsCodeApi();
       const hostActions = new Set([
         'fixSummary',
-        'checkpointKeep',
-        'checkpointClear',
+        'checkpointPinToggle',
+        'checkpointMarkDone',
+        'checkpointDismiss',
+        'checkpointOpenList',
+        'openScratchpad',
+        'appendScratchpad',
+        'setScratchpadScope',
         'sessionAddCheckpoint',
         'copyNextSteps',
         'copySummary',
@@ -3487,7 +3791,19 @@ async function generateStandupUpdateCommand(context: vscode.ExtensionContext): P
 
   const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(context, root));
   const summary = cached ?? (await generateSummary(context, root, 'manual')).summary;
-  const standup = buildStandupUpdate(summary, path.basename(root), Date.now());
+  const checkpointContext = await resolveCheckpointContext(
+    context,
+    root,
+    summary.currentBranch,
+    true,
+  );
+  const summaryWithCheckpoint = applyCheckpointNoteToSummary(
+    summary,
+    checkpointContext.primaryNote,
+  );
+  const standup = buildStandupUpdate(summaryWithCheckpoint, path.basename(root), Date.now(), {
+    checkpointNext: checkpointContext.primaryNote?.text,
+  });
   const action = await vscode.window.showInformationMessage(
     'TaCoS: standup update generated.',
     'Copy',
@@ -5459,6 +5775,7 @@ async function forgetWorkspaceNow(context: vscode.ExtensionContext): Promise<voi
   }
 
   await clearWorkspaceScopedState(context, workspaceRoot);
+  await clearScratchpadStorageForWorkspace(context, workspaceRoot);
   const metricHistory = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
   const retainedMetrics = removeMetricsForWorkspace(metricHistory, workspaceRoot);
   if (retainedMetrics.length !== metricHistory.length) {
@@ -5468,6 +5785,18 @@ async function forgetWorkspaceNow(context: vscode.ExtensionContext): Promise<voi
   rerenderPanel();
   updateCompanionStatusBar();
   void vscode.window.showInformationMessage('TaCoS: forgot workspace-scoped data.');
+}
+
+async function clearScratchpadStorageForWorkspace(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<void> {
+  const workspaceScratchpadRoot = resolveScratchpadStorageRootUri(context, workspaceRoot);
+  try {
+    await vscode.workspace.fs.delete(workspaceScratchpadRoot, { recursive: true, useTrash: false });
+  } catch {
+    // Ignore missing scratchpad storage paths.
+  }
 }
 
 function aiPayloadConsentKey(workspaceRoot: string): string {
@@ -5522,6 +5851,10 @@ async function ensureAiPayloadConsent(
       links: prepared.localSummary.links,
       evidenceCatalog: prepared.localSummary.evidenceCatalog,
     },
+    checkpointNotes:
+      prepared.checkpointPrimaryNote?.status === 'open'
+        ? [prepared.checkpointPrimaryNote.text]
+        : [],
   });
 
   const doc = await vscode.workspace.openTextDocument({
@@ -5866,7 +6199,9 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_WORKSPACE_ACTIVITY_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_SETUP_CHECKLIST_COMPLETED_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_AI_PAYLOAD_CONSENT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_SCRATCHPAD_SCOPE_MODE_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_ACTIVITY_STORAGE_PREFIX, workspaceRoot, true) ||
+      matchesEncodedWorkspaceKey(key, 'tacos.checkpointNotes', workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, 'tacos.checkpointNote', workspaceRoot, false)
     );
   });
@@ -5910,11 +6245,57 @@ function resetRuntimeWorkspaceState(): void {
   state.lastDebugConfigName = undefined;
   state.lastDebugWorkspaceRoot = undefined;
   state.snoozeUntil = 0;
-  state.displayedCheckpointNote = undefined;
+  state.panelCheckpointNotes = [];
+  state.panelPrimaryCheckpointNote = undefined;
+  state.panelCheckpointScope = undefined;
+  state.panelScratchpadPreviewLines = [];
+  state.panelScratchpadExists = false;
+  state.panelScratchpadHasContent = false;
+  state.panelScratchpadScopeLabel = undefined;
   state.activeNudges = undefined;
   state.scratchSummary = undefined;
   if (state.panel) {
     state.panel.dispose();
+  }
+}
+
+function isCheckpointScopeForWorkspace(scope: string, workspaceRoot: string): boolean {
+  return (
+    scope === workspaceGlobalCheckpointScope(workspaceRoot) ||
+    scope.startsWith(`${workspaceRoot}::`)
+  );
+}
+
+async function pruneCheckpointNotesForWorkspace(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  cutoffAt: number,
+): Promise<void> {
+  const checkpointKeys = context.workspaceState
+    .keys()
+    .filter((key) => key.startsWith('tacos.checkpointNotes.'));
+  if (checkpointKeys.length === 0) {
+    return;
+  }
+
+  const pruneOps: Thenable<void>[] = [];
+  for (const key of checkpointKeys) {
+    const scope = decodeCheckpointScopeFromStorageKey(key);
+    if (!scope || !isCheckpointScopeForWorkspace(scope, workspaceRoot)) {
+      continue;
+    }
+
+    const notes = parseCheckpointNotes(context.workspaceState.get<unknown>(key, []));
+    const pruned = pruneCheckpointNotesForCutoff(notes, cutoffAt);
+    if (pruned.length === notes.length) {
+      continue;
+    }
+
+    pruneOps.push(context.workspaceState.update(key, pruned.length > 0 ? pruned : undefined));
+  }
+
+  if (pruneOps.length > 0) {
+    await Promise.all(pruneOps);
   }
 }
 
@@ -5989,6 +6370,8 @@ async function applyRetentionPolicy(
     state.scratchSummary = undefined;
   }
 
+  await pruneCheckpointNotesForWorkspace(context, workspaceRoot, cutoffAt);
+
   const prunedMetrics = pruneMetricsForWorkspace(metricHistory, workspaceRoot, cutoffAt);
   if (prunedMetrics.length !== metricHistory.length) {
     await context.workspaceState.update(KEY_METRIC_HISTORY, prunedMetrics);
@@ -6028,21 +6411,18 @@ function computeAutoTriggerFingerprint(root: string): string {
     .digest('hex');
 }
 
-function getCheckpointNote(
-  context: vscode.ExtensionContext,
-  workspaceRoot: string,
-): string | undefined {
-  return context.workspaceState.get<string>(checkpointStorageKey(workspaceRoot));
+interface CheckpointScopeState {
+  scope: string;
+  branch: string;
+  partition: string;
 }
 
-async function clearCheckpointNote(
-  context: vscode.ExtensionContext,
-  workspaceRoot: string,
-): Promise<void> {
-  await context.workspaceState.update(checkpointStorageKey(workspaceRoot), undefined);
-  if (state.displayedCheckpointNote?.workspaceRoot === workspaceRoot) {
-    state.displayedCheckpointNote = undefined;
-  }
+interface ResolvedCheckpointContext {
+  scope: string;
+  branch: string;
+  partition: string;
+  notes: CheckpointNote[];
+  primaryNote?: CheckpointNote;
 }
 
 interface CheckpointPromptOptions {
@@ -6051,6 +6431,318 @@ interface CheckpointPromptOptions {
   placeHolder?: string;
   initialValue?: string;
   successMessage?: string;
+  scope?: CheckpointNoteScope;
+  file?: string;
+  line?: number;
+}
+
+interface ClipboardCheckpointOptions {
+  successMessage?: string;
+  noPrompt?: boolean;
+  scope?: CheckpointNoteScope;
+  file?: string;
+  line?: number;
+}
+
+function workspaceGlobalCheckpointScope(workspaceRoot: string): string {
+  return `${workspaceRoot}::${CHECKPOINT_WORKSPACE_GLOBAL_SCOPE}`;
+}
+
+function resolveCheckpointScopeState(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  branchHint?: string,
+): CheckpointScopeState {
+  const branch = branchHint?.trim() || resolveScopeBranch(context, workspaceRoot);
+  const partition = resolveTaskPartitionKey(context, workspaceRoot, branch);
+  return {
+    scope: buildPartitionScope(workspaceRoot, branch, partition),
+    branch,
+    partition,
+  };
+}
+
+function readCheckpointNotesForScope(
+  context: vscode.ExtensionContext,
+  scope: string,
+): CheckpointNote[] {
+  return parseCheckpointNotes(
+    context.workspaceState.get<unknown>(checkpointNotesStorageKey(scope), []),
+  );
+}
+
+async function writeCheckpointNotesForScope(
+  context: vscode.ExtensionContext,
+  scope: string,
+  notes: CheckpointNote[],
+): Promise<void> {
+  const normalized = sortCheckpointNotes(parseCheckpointNotes(notes)).slice(
+    0,
+    MAX_CHECKPOINT_NOTES_PER_SCOPE,
+  );
+  await context.workspaceState.update(
+    checkpointNotesStorageKey(scope),
+    normalized.length > 0 ? normalized : undefined,
+  );
+}
+
+async function migrateLegacyCheckpointNoteIfNeeded(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<void> {
+  const legacy = context.workspaceState.get<string | undefined>(
+    checkpointStorageKey(workspaceRoot),
+  );
+  if (typeof legacy !== 'string' || !legacy.trim()) {
+    return;
+  }
+
+  const migrated = createLegacyMigrationNote(legacy, workspaceRoot, getConfig().redactionPatterns);
+  if (migrated) {
+    const globalScope = workspaceGlobalCheckpointScope(workspaceRoot);
+    const existing = readCheckpointNotesForScope(context, globalScope);
+    const hasExistingEquivalent = existing.some(
+      (note) => note.text === migrated.text && note.status !== 'dismissed',
+    );
+    if (!hasExistingEquivalent) {
+      existing.unshift(migrated);
+      await writeCheckpointNotesForScope(context, globalScope, existing);
+    }
+  }
+
+  await context.workspaceState.update(checkpointStorageKey(workspaceRoot), undefined);
+}
+
+function selectPrimaryCheckpointNote(notes: CheckpointNote[]): CheckpointNote | undefined {
+  const open = notes.filter((note) => note.status === 'open');
+  if (open.length === 0) {
+    return undefined;
+  }
+
+  return sortCheckpointNotes(open)[0];
+}
+
+async function resolveCheckpointContext(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  branchHint?: string,
+  includeWorkspaceGlobal = true,
+): Promise<ResolvedCheckpointContext> {
+  await migrateLegacyCheckpointNoteIfNeeded(context, workspaceRoot);
+  const scoped = resolveCheckpointScopeState(context, workspaceRoot, branchHint);
+  const scopedNotes = readCheckpointNotesForScope(context, scoped.scope).map((note) => ({
+    ...note,
+    scope: 'partition' as const,
+    branch: note.branch ?? scoped.branch,
+    partition: note.partition ?? scoped.partition,
+  }));
+  const workspaceNotes = includeWorkspaceGlobal
+    ? readCheckpointNotesForScope(context, workspaceGlobalCheckpointScope(workspaceRoot)).map(
+        (note) => ({
+          ...note,
+          scope: 'workspace' as const,
+        }),
+      )
+    : [];
+  const notes = sortCheckpointNotes([...scopedNotes, ...workspaceNotes]);
+  return {
+    scope: scoped.scope,
+    branch: scoped.branch,
+    partition: scoped.partition,
+    notes,
+    primaryNote: selectPrimaryCheckpointNote(notes),
+  };
+}
+
+function applyCheckpointNoteToSummary(
+  summary: ResumeSummary,
+  note?: CheckpointNote,
+  previousOpenNoteText?: string,
+): ResumeSummary {
+  const openText = note?.status === 'open' ? note.text.trim() : '';
+  const previousText = previousOpenNoteText?.trim() ?? '';
+  let nextSummary = summary;
+
+  if (previousText && previousText !== openText) {
+    const escapedPrevious = previousText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const previousLinePattern = new RegExp(
+      `(^|\\n)- Recommended first action: ${escapedPrevious}(?=\\n|$)`,
+      'u',
+    );
+    const detailsMarkdown = nextSummary.detailsMarkdown
+      .replace(previousLinePattern, '$1')
+      .replace(/\n{3,}/g, '\n\n')
+      .trimEnd();
+    const codexPrompt = nextSummary.codexPrompt
+      .replace(previousLinePattern, '$1')
+      .replace(/\n{3,}/g, '\n\n')
+      .trimEnd();
+    const recommendedFirstAction =
+      nextSummary.recommendedFirstAction?.trim() === previousText
+        ? nextSummary.nextSteps[0]
+        : nextSummary.recommendedFirstAction;
+    nextSummary = {
+      ...nextSummary,
+      recommendedFirstAction,
+      detailsMarkdown,
+      codexPrompt,
+    };
+  }
+
+  if (!openText) {
+    return nextSummary;
+  }
+
+  const replacement = `- Recommended first action: ${openText}`;
+  const detailsMarkdown = nextSummary.detailsMarkdown.includes('- Recommended first action:')
+    ? nextSummary.detailsMarkdown.replace(/- Recommended first action: .*/u, replacement)
+    : `${nextSummary.detailsMarkdown}\n${replacement}`;
+  const codexPrompt = nextSummary.codexPrompt.includes('- Recommended first action:')
+    ? nextSummary.codexPrompt.replace(/- Recommended first action: .*/u, replacement)
+    : `${nextSummary.codexPrompt}\n${replacement}`;
+
+  return {
+    ...nextSummary,
+    recommendedFirstAction: openText,
+    detailsMarkdown,
+    codexPrompt,
+  };
+}
+
+async function appendCheckpointNote(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  text: string,
+  options: {
+    scope?: CheckpointNoteScope;
+    file?: string;
+    line?: number;
+    pinned?: boolean;
+    status?: CheckpointNote['status'];
+  } = {},
+): Promise<CheckpointNote | undefined> {
+  if (!workspaceRoot || !text.trim()) {
+    return undefined;
+  }
+
+  await migrateLegacyCheckpointNoteIfNeeded(context, workspaceRoot);
+  const scope = options.scope ?? 'partition';
+  const scopeState = resolveCheckpointScopeState(context, workspaceRoot);
+  const targetScope =
+    scope === 'workspace' ? workspaceGlobalCheckpointScope(workspaceRoot) : scopeState.scope;
+  const existing = readCheckpointNotesForScope(context, targetScope);
+  const note = createCheckpointNote(text, {
+    branch: scope === 'partition' ? scopeState.branch : undefined,
+    partition: scope === 'partition' ? scopeState.partition : undefined,
+    file: options.file,
+    line: options.line,
+    pinned: options.pinned,
+    status: options.status,
+    scope,
+  });
+  existing.unshift(note);
+  await writeCheckpointNotesForScope(context, targetScope, existing);
+  state.meaningfulActivitySinceCheckpointPrompt = false;
+  recordMetricCounter('noteCreated');
+  return note;
+}
+
+async function updateCheckpointNoteById(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  noteId: string,
+  updater: (note: CheckpointNote) => CheckpointNote | undefined,
+): Promise<boolean> {
+  if (!workspaceRoot || !noteId.trim()) {
+    return false;
+  }
+
+  await migrateLegacyCheckpointNoteIfNeeded(context, workspaceRoot);
+  const scopeState = resolveCheckpointScopeState(context, workspaceRoot);
+  const candidateScopes = Array.from(
+    new Set(
+      [
+        state.panelCheckpointScope,
+        scopeState.scope,
+        workspaceGlobalCheckpointScope(workspaceRoot),
+      ].filter((value): value is string => Boolean(value)),
+    ),
+  );
+
+  for (const scope of candidateScopes) {
+    const notes = readCheckpointNotesForScope(context, scope);
+    const index = notes.findIndex((note) => note.id === noteId);
+    if (index < 0) {
+      continue;
+    }
+
+    const updated = updater(notes[index]);
+    if (!updated) {
+      notes.splice(index, 1);
+    } else {
+      notes[index] = {
+        ...updated,
+        updatedAt: Date.now(),
+      };
+    }
+    await writeCheckpointNotesForScope(context, scope, notes);
+    return true;
+  }
+
+  return false;
+}
+
+async function clearCheckpointNotesInScope(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<number> {
+  await migrateLegacyCheckpointNoteIfNeeded(context, workspaceRoot);
+  const scopeState = resolveCheckpointScopeState(context, workspaceRoot);
+  const existing = readCheckpointNotesForScope(context, scopeState.scope);
+  await context.workspaceState.update(checkpointNotesStorageKey(scopeState.scope), undefined);
+  return existing.length;
+}
+
+async function refreshPanelCheckpointState(
+  context: vscode.ExtensionContext,
+  workspaceRoot?: string,
+): Promise<void> {
+  const root = pickWorkspaceRoot(workspaceRoot ?? state.panelWorkspaceRoot);
+  if (!root) {
+    state.panelCheckpointNotes = [];
+    state.panelPrimaryCheckpointNote = undefined;
+    state.panelCheckpointScope = undefined;
+    state.panelScratchpadPreviewLines = [];
+    state.panelScratchpadExists = false;
+    state.panelScratchpadHasContent = false;
+    state.panelScratchpadScopeLabel = undefined;
+    return;
+  }
+
+  const resolved = await resolveCheckpointContext(
+    context,
+    root,
+    state.panelSummary?.currentBranch,
+    true,
+  );
+  const previousOpenNoteText =
+    state.panelPrimaryCheckpointNote?.status === 'open'
+      ? state.panelPrimaryCheckpointNote.text
+      : undefined;
+  state.panelCheckpointNotes = resolved.notes;
+  state.panelPrimaryCheckpointNote = resolved.primaryNote;
+  state.panelCheckpointScope = resolved.scope;
+
+  if (state.panelSummary) {
+    const nextSummary = applyCheckpointNoteToSummary(
+      state.panelSummary,
+      resolved.primaryNote,
+      previousOpenNoteText,
+    );
+    state.panelSummary = nextSummary;
+    state.scratchSummary = nextSummary;
+    updateCompanionStatusBar();
+  }
 }
 
 async function promptAndSaveCheckpointNote(
@@ -6077,11 +6769,637 @@ async function promptAndSaveCheckpointNote(
     return false;
   }
 
-  await context.workspaceState.update(checkpointStorageKey(workspaceRoot), sanitized);
+  const saved = await appendCheckpointNote(context, workspaceRoot, sanitized, {
+    scope: options.scope,
+    file: options.file,
+    line: options.line,
+  });
+  if (!saved) {
+    return false;
+  }
+
   void vscode.window.showInformationMessage(
-    options.successMessage ?? 'TaCoS: checkpoint note saved for this workspace.',
+    options.successMessage ?? 'TaCoS: checkpoint note saved for this task scope.',
   );
   return true;
+}
+
+async function saveCheckpointNoteFromClipboard(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  options: ClipboardCheckpointOptions = {},
+): Promise<boolean> {
+  const clipboardValue = (await vscode.env.clipboard.readText()).trim();
+  if (!clipboardValue) {
+    if (!options.noPrompt) {
+      void vscode.window.showWarningMessage(
+        'TaCoS: clipboard is empty; no checkpoint note was saved.',
+      );
+    }
+    return false;
+  }
+
+  const sanitized = sanitizeCheckpointNote(
+    clipboardValue,
+    workspaceRoot,
+    getConfig().redactionPatterns,
+  );
+  if (!sanitized) {
+    void vscode.window.showWarningMessage(
+      'TaCoS: clipboard note was empty after sanitization and was not saved.',
+    );
+    return false;
+  }
+
+  const saved = await appendCheckpointNote(context, workspaceRoot, sanitized, {
+    scope: options.scope,
+    file: options.file,
+    line: options.line,
+  });
+  if (!saved) {
+    return false;
+  }
+
+  void vscode.window.showInformationMessage(
+    options.successMessage ?? 'TaCoS: checkpoint note saved for this task scope.',
+  );
+  return true;
+}
+
+async function addCheckpointFromSelectionCommand(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || editor.document.uri.scheme !== 'file') {
+    void vscode.window.showInformationMessage('TaCoS: Open a file and select text first.');
+    return;
+  }
+
+  const selected = editor.document.getText(editor.selection).trim();
+  if (!selected) {
+    void vscode.window.showInformationMessage('TaCoS: Select text first.');
+    return;
+  }
+
+  const relativeFile = toRelativePath(editor.document.uri.fsPath, workspaceRoot);
+  const line = editor.selection.start.line + 1;
+  const sanitized = sanitizeCheckpointNote(selected, workspaceRoot, getConfig().redactionPatterns);
+  if (!sanitized) {
+    void vscode.window.showWarningMessage(
+      'TaCoS: selection was empty after sanitization and was not saved.',
+    );
+    return;
+  }
+
+  const saved = await appendCheckpointNote(context, workspaceRoot, sanitized, {
+    file: relativeFile,
+    line,
+  });
+  if (!saved) {
+    return;
+  }
+
+  await refreshPanelCheckpointState(context, workspaceRoot);
+  rerenderPanel();
+  void vscode.window.showInformationMessage('TaCoS: checkpoint note saved from selection.');
+}
+
+async function listCheckpointNotesCommand(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const resolved = await resolveCheckpointContext(
+    context,
+    workspaceRoot,
+    resolveScopeBranch(context, workspaceRoot),
+    true,
+  );
+
+  type NotePick = vscode.QuickPickItem & {
+    id: 'note' | 'add-partition' | 'add-workspace' | 'clear-partition' | 'noop';
+    noteId?: string;
+  };
+
+  const notePicks: NotePick[] = resolved.notes.map((note) => ({
+    id: 'note',
+    noteId: note.id,
+    label: `${note.status === 'done' ? '[✓]' : note.status === 'dismissed' ? '[-]' : '[ ]'} ${note.pinned ? '[PIN] ' : ''}${note.text}`,
+    description: `${note.scope === 'workspace' ? 'workspace-global' : `${note.branch ?? resolved.branch} / ${note.partition ?? resolved.partition}`}`,
+    detail:
+      note.file && typeof note.line === 'number'
+        ? `${note.file}:${note.line}`
+        : note.file
+          ? note.file
+          : undefined,
+  }));
+
+  const picks: NotePick[] = [
+    ...notePicks,
+    {
+      id: 'add-partition',
+      label: 'Add note (current task scope)',
+      detail: `${resolved.branch} / ${resolved.partition}`,
+    },
+    {
+      id: 'add-workspace',
+      label: 'Add note (workspace-global)',
+      detail: 'Shared across branch/partition in this workspace.',
+    },
+    {
+      id: 'clear-partition',
+      label: 'Clear notes in current task scope',
+      detail: 'Removes all notes in this partition scope.',
+    },
+  ];
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: List Checkpoint Notes',
+    placeHolder: resolved.notes.length
+      ? 'Pick a note to manage, or add a new one'
+      : 'No notes yet. Add one now.',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  if (picked.id === 'add-partition' || picked.id === 'add-workspace') {
+    const saved = await promptAndSaveCheckpointNote(context, workspaceRoot, {
+      scope: picked.id === 'add-workspace' ? 'workspace' : 'partition',
+      successMessage:
+        picked.id === 'add-workspace'
+          ? 'TaCoS: workspace-global checkpoint note saved.'
+          : 'TaCoS: checkpoint note saved for this task scope.',
+    });
+    if (saved) {
+      await refreshPanelCheckpointState(context, workspaceRoot);
+      rerenderPanel();
+    }
+    return;
+  }
+
+  if (picked.id === 'clear-partition') {
+    const cleared = await clearCheckpointNotesInScope(context, workspaceRoot);
+    await refreshPanelCheckpointState(context, workspaceRoot);
+    rerenderPanel();
+    void vscode.window.showInformationMessage(
+      cleared > 0
+        ? `TaCoS: cleared ${cleared} note${cleared === 1 ? '' : 's'} in this task scope.`
+        : 'TaCoS: no notes found in this task scope.',
+    );
+    return;
+  }
+
+  if (picked.id !== 'note' || !picked.noteId) {
+    return;
+  }
+
+  const target = resolved.notes.find((note) => note.id === picked.noteId);
+  if (!target) {
+    return;
+  }
+
+  type NoteActionPick = vscode.QuickPickItem & {
+    id: 'done' | 'reopen' | 'edit' | 'delete' | 'pin' | 'dismiss';
+  };
+  const actionPicks: NoteActionPick[] = [
+    {
+      id: target.status === 'open' ? 'done' : 'reopen',
+      label: target.status === 'open' ? 'Mark done' : 'Mark open',
+    },
+    { id: 'pin', label: target.pinned ? 'Unpin' : 'Pin' },
+    { id: 'edit', label: 'Edit' },
+    { id: 'dismiss', label: 'Dismiss' },
+    { id: 'delete', label: 'Delete' },
+  ];
+  const action = await vscode.window.showQuickPick(actionPicks, {
+    title: 'TaCoS: Note Actions',
+    placeHolder: target.text,
+    ignoreFocusOut: true,
+  });
+  if (!action) {
+    return;
+  }
+
+  if (action.id === 'edit') {
+    const edited = await vscode.window.showInputBox({
+      title: 'TaCoS: Edit Checkpoint Note',
+      value: target.text,
+      prompt: 'One-line next step for future you',
+      ignoreFocusOut: true,
+    });
+    if (!edited) {
+      return;
+    }
+
+    const sanitized = sanitizeCheckpointNote(edited, workspaceRoot, getConfig().redactionPatterns);
+    if (!sanitized) {
+      void vscode.window.showWarningMessage(
+        'TaCoS: note was empty after sanitization and was not saved.',
+      );
+      return;
+    }
+
+    await updateCheckpointNoteById(context, workspaceRoot, target.id, (current) => ({
+      ...current,
+      text: sanitized,
+    }));
+  } else if (action.id === 'done') {
+    await updateCheckpointNoteById(context, workspaceRoot, target.id, (current) => ({
+      ...current,
+      status: 'done',
+      pinned: undefined,
+    }));
+    recordMetricCounter('noteMarkedDone');
+  } else if (action.id === 'reopen') {
+    await updateCheckpointNoteById(context, workspaceRoot, target.id, (current) => ({
+      ...current,
+      status: 'open',
+    }));
+  } else if (action.id === 'pin') {
+    await updateCheckpointNoteById(context, workspaceRoot, target.id, (current) => ({
+      ...current,
+      pinned: current.pinned ? undefined : true,
+    }));
+    if (!target.pinned) {
+      recordMetricCounter('notePinned');
+    }
+  } else if (action.id === 'dismiss') {
+    await updateCheckpointNoteById(context, workspaceRoot, target.id, (current) => ({
+      ...current,
+      status: 'dismissed',
+      pinned: undefined,
+    }));
+  } else if (action.id === 'delete') {
+    await updateCheckpointNoteById(context, workspaceRoot, target.id, () => undefined);
+  }
+
+  await refreshPanelCheckpointState(context, workspaceRoot);
+  rerenderPanel();
+}
+
+interface ScratchpadScopeState {
+  mode: ScratchpadScopeMode;
+  scope: string;
+  branch: string;
+  partition: string;
+}
+
+function scratchpadScopeModeStorageKey(workspaceRoot: string): string {
+  return `${KEY_SCRATCHPAD_SCOPE_MODE_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function getScratchpadScopeMode(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): ScratchpadScopeMode {
+  const raw = context.workspaceState
+    .get<string>(scratchpadScopeModeStorageKey(workspaceRoot), '')
+    .trim();
+  return raw === 'workspace' ? 'workspace' : 'partition';
+}
+
+async function setScratchpadScopeMode(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  mode: ScratchpadScopeMode,
+): Promise<void> {
+  await context.workspaceState.update(
+    scratchpadScopeModeStorageKey(workspaceRoot),
+    mode === 'workspace' ? 'workspace' : undefined,
+  );
+}
+
+function resolveScratchpadScopeState(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  branchHint?: string,
+): ScratchpadScopeState {
+  const mode = getScratchpadScopeMode(context, workspaceRoot);
+  const branch = branchHint?.trim() || resolveScopeBranch(context, workspaceRoot);
+  const partition = resolveTaskPartitionKey(context, workspaceRoot, branch);
+  if (mode === 'workspace') {
+    return {
+      mode,
+      scope: workspaceGlobalCheckpointScope(workspaceRoot),
+      branch,
+      partition,
+    };
+  }
+
+  return {
+    mode,
+    scope: buildPartitionScope(workspaceRoot, branch, partition),
+    branch,
+    partition,
+  };
+}
+
+function scratchpadScopeLabel(scopeState: ScratchpadScopeState): string {
+  if (scopeState.mode === 'workspace') {
+    return 'Scope: workspace-global';
+  }
+
+  return `Scope: ${scopeState.branch} / ${scopeState.partition}`;
+}
+
+function resolveScratchpadStorageRootUri(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): vscode.Uri {
+  const segments = workspaceScratchpadRootSegments(workspaceRoot);
+  if (context.storageUri) {
+    return vscode.Uri.joinPath(context.storageUri, ...segments);
+  }
+
+  return vscode.Uri.joinPath(context.globalStorageUri, ...segments);
+}
+
+function resolveLegacyScratchpadFileUri(
+  context: vscode.ExtensionContext,
+  scope: string,
+): vscode.Uri | undefined {
+  if (!context.storageUri) {
+    return undefined;
+  }
+
+  // Pre-v0.4.0 layout stored scoped files directly under storageUri/scratchpads.
+  return vscode.Uri.joinPath(
+    context.storageUri,
+    SCRATCHPAD_FILES_SEGMENT,
+    scratchpadFileNameForScope(scope),
+  );
+}
+
+function resolveScratchpadFileUri(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  branchHint?: string,
+): { uri: vscode.Uri; scopeState: ScratchpadScopeState } {
+  const scopeState = resolveScratchpadScopeState(context, workspaceRoot, branchHint);
+  const rootUri = resolveScratchpadStorageRootUri(context, workspaceRoot);
+  const uri = vscode.Uri.joinPath(
+    rootUri,
+    SCRATCHPAD_FILES_SEGMENT,
+    scratchpadFileNameForScope(scopeState.scope),
+  );
+  return { uri, scopeState };
+}
+
+async function fileExists(uri: vscode.Uri): Promise<boolean> {
+  try {
+    await vscode.workspace.fs.stat(uri);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureScratchpadDocument(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  branchHint?: string,
+): Promise<{ document: vscode.TextDocument; uri: vscode.Uri; scopeState: ScratchpadScopeState }> {
+  const { uri, scopeState } = resolveScratchpadFileUri(context, workspaceRoot, branchHint);
+  await migrateLegacyScratchpadFileIfNeeded(context, workspaceRoot, scopeState.scope, uri);
+  const scratchpadsDir = vscode.Uri.joinPath(
+    resolveScratchpadStorageRootUri(context, workspaceRoot),
+    SCRATCHPAD_FILES_SEGMENT,
+  );
+  await vscode.workspace.fs.createDirectory(scratchpadsDir);
+  if (!(await fileExists(uri))) {
+    await vscode.workspace.fs.writeFile(uri, Buffer.from('', 'utf8'));
+  }
+
+  const document = await vscode.workspace.openTextDocument(uri);
+  return { document, uri, scopeState };
+}
+
+async function migrateLegacyScratchpadFileIfNeeded(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  scope: string,
+  targetUri: vscode.Uri,
+): Promise<void> {
+  const legacyUri = resolveLegacyScratchpadFileUri(context, scope);
+  if (!legacyUri) {
+    return;
+  }
+
+  if (await fileExists(targetUri)) {
+    return;
+  }
+  if (!(await fileExists(legacyUri))) {
+    return;
+  }
+
+  const scratchpadsDir = vscode.Uri.joinPath(
+    resolveScratchpadStorageRootUri(context, workspaceRoot),
+    SCRATCHPAD_FILES_SEGMENT,
+  );
+  await vscode.workspace.fs.createDirectory(scratchpadsDir);
+
+  try {
+    const bytes = await vscode.workspace.fs.readFile(legacyUri);
+    await vscode.workspace.fs.writeFile(targetUri, bytes);
+    await vscode.workspace.fs.delete(legacyUri, { recursive: false, useTrash: false });
+  } catch {
+    // Keep legacy file intact on migration errors.
+  }
+}
+
+function extractScratchpadPreviewLines(
+  rawContent: string,
+  maxLines = SCRATCHPAD_PREVIEW_MAX_LINES,
+): string[] {
+  if (!rawContent.trim()) {
+    return [];
+  }
+
+  return rawContent
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !/^---\s/.test(line))
+    .slice(0, maxLines);
+}
+
+async function refreshPanelScratchpadState(
+  context: vscode.ExtensionContext,
+  workspaceRoot?: string,
+): Promise<void> {
+  const root = pickWorkspaceRoot(workspaceRoot ?? state.panelWorkspaceRoot);
+  if (!root) {
+    state.panelScratchpadPreviewLines = [];
+    state.panelScratchpadExists = false;
+    state.panelScratchpadHasContent = false;
+    state.panelScratchpadScopeLabel = undefined;
+    return;
+  }
+
+  const { uri, scopeState } = resolveScratchpadFileUri(
+    context,
+    root,
+    state.panelSummary?.currentBranch,
+  );
+  await migrateLegacyScratchpadFileIfNeeded(context, root, scopeState.scope, uri);
+  let exists = false;
+  let sizeBytes = 0;
+  try {
+    const stat = await vscode.workspace.fs.stat(uri);
+    exists = true;
+    sizeBytes = stat.size;
+  } catch {
+    exists = false;
+  }
+
+  let content = '';
+  if (exists && sizeBytes <= SCRATCHPAD_PREVIEW_MAX_BYTES) {
+    try {
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      content = Buffer.from(bytes).toString('utf8');
+    } catch {
+      content = '';
+    }
+  }
+
+  state.panelScratchpadExists = exists;
+  state.panelScratchpadHasContent = exists ? sizeBytes > 0 : content.trim().length > 0;
+  state.panelScratchpadPreviewLines =
+    exists && sizeBytes > SCRATCHPAD_PREVIEW_MAX_BYTES
+      ? [
+          `Preview unavailable for large scratchpad (${Math.ceil(sizeBytes / 1024)} KB). Open Scratchpad to view.`,
+        ]
+      : extractScratchpadPreviewLines(content);
+  state.panelScratchpadScopeLabel = scratchpadScopeLabel(scopeState);
+}
+
+async function openScratchpadCommand(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const { document } = await ensureScratchpadDocument(
+    context,
+    workspaceRoot,
+    state.panelSummary?.currentBranch,
+  );
+  await vscode.window.showTextDocument(document, {
+    preview: false,
+    preserveFocus: false,
+    viewColumn: vscode.ViewColumn.Beside,
+  });
+  recordMetricCounter('scratchpadOpened');
+}
+
+function buildScratchpadAppendChunk(rawText: string): string {
+  const text = rawText.trim();
+  const timestamp = new Date().toLocaleString();
+  return `--- ${timestamp} ---\n${text}\n`;
+}
+
+async function appendToScratchpadCommand(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const selected =
+    vscode.window.activeTextEditor?.document
+      .getText(vscode.window.activeTextEditor.selection)
+      .trim() ?? '';
+  const fallbackClipboard = selected ? '' : (await vscode.env.clipboard.readText()).trim();
+  const sourceText = selected || fallbackClipboard;
+  if (!sourceText) {
+    void vscode.window.showWarningMessage(
+      'TaCoS: no selected text or clipboard text found to append to scratchpad.',
+    );
+    return;
+  }
+
+  const { document } = await ensureScratchpadDocument(
+    context,
+    workspaceRoot,
+    state.panelSummary?.currentBranch,
+  );
+  const existingText = document.getText();
+  const prefix = existingText.trim().length > 0 ? '\n' : '';
+  const chunk = `${prefix}${buildScratchpadAppendChunk(sourceText)}`;
+  const edit = new vscode.WorkspaceEdit();
+  edit.insert(document.uri, document.positionAt(existingText.length), chunk);
+  const applied = await vscode.workspace.applyEdit(edit);
+  if (!applied) {
+    void vscode.window.showWarningMessage('TaCoS: failed to append to scratchpad.');
+    return;
+  }
+
+  await document.save();
+  recordMetricCounter('scratchpadAppended');
+  await refreshPanelScratchpadState(context, workspaceRoot);
+  rerenderPanel();
+  void vscode.window.showInformationMessage('TaCoS: appended to scratchpad.');
+}
+
+async function setScratchpadScopeCommand(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  type ScopePick = vscode.QuickPickItem & { mode: ScratchpadScopeMode };
+  const current = getScratchpadScopeMode(context, workspaceRoot);
+  const picks: ScopePick[] = [
+    {
+      mode: 'partition',
+      label: 'Task scope (default)',
+      detail: 'workspace + branch + task partition',
+      description: current === 'partition' ? 'Current' : '',
+    },
+    {
+      mode: 'workspace',
+      label: 'Workspace-global',
+      detail: 'shared across branches and partitions',
+      description: current === 'workspace' ? 'Current' : '',
+    },
+  ];
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Set Scratchpad Scope',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  await setScratchpadScopeMode(context, workspaceRoot, picked.mode);
+  await refreshPanelScratchpadState(context, workspaceRoot);
+  rerenderPanel();
+  void vscode.window.showInformationMessage(
+    picked.mode === 'workspace'
+      ? 'TaCoS: scratchpad scope set to workspace-global.'
+      : 'TaCoS: scratchpad scope set to task scope.',
+  );
 }
 
 function checkpointPromptAtKey(workspaceRoot: string): string {
@@ -6159,9 +7477,13 @@ async function maybePromptCheckpointOnBlur(
     return;
   }
 
-  await context.workspaceState.update(checkpointStorageKey(root), sanitized);
+  await appendCheckpointNote(context, root, sanitized, {
+    scope: 'partition',
+  });
+  await refreshPanelCheckpointState(context, root);
+  rerenderPanel();
   state.meaningfulActivitySinceCheckpointPrompt = false;
-  void vscode.window.showInformationMessage('TaCoS: checkpoint note saved for this workspace.');
+  void vscode.window.showInformationMessage('TaCoS: checkpoint note saved for this task scope.');
 }
 
 function setupChecklistCompletedKey(workspaceRoot: string): string {

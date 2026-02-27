@@ -20,6 +20,12 @@ const CSV_HEADERS = [
   'pauseActions',
   'snoozeActions',
   'disableActions',
+  'noteCreated',
+  'noteMarkedDone',
+  'notePinned',
+  'resumeWithNote',
+  'scratchpadOpened',
+  'scratchpadAppended',
   'companionActionFollowThroughRate',
   'companionForcedOpenRate',
 ] as const;
@@ -126,6 +132,20 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const promptImpressions = summarizeTotal(metrics, 'companionPromptImpressions');
   const forcedOpenClicks = summarizeTotal(metrics, 'companionForcedOpenDetailsClicks');
   const nudgeImpressions = summarizeTotal(metrics, 'companionNudgeImpressions');
+  const notesCreated = summarizeTotal(metrics, 'noteCreated');
+  const notesMarkedDone = summarizeTotal(metrics, 'noteMarkedDone');
+  const notesPinned = summarizeTotal(metrics, 'notePinned');
+  const scratchpadOpened = summarizeTotal(metrics, 'scratchpadOpened');
+  const scratchpadAppended = summarizeTotal(metrics, 'scratchpadAppended');
+  const sessionsWithNote = metrics.filter((metric) => metric.resumeWithNote === 1).length;
+  const lagActionWithNote = summarizeLag(
+    metrics.filter((metric) => metric.resumeWithNote === 1),
+    'firstActionLagMs',
+  );
+  const lagActionWithoutNote = summarizeLag(
+    metrics.filter((metric) => metric.resumeWithNote !== 1),
+    'firstActionLagMs',
+  );
   const forcedOpenRate = promptImpressions > 0 ? forcedOpenClicks / promptImpressions : undefined;
   const promptPerSession = sessions > 0 ? promptImpressions / sessions : undefined;
   const nudgePerSession = sessions > 0 ? nudgeImpressions / sessions : undefined;
@@ -159,6 +179,20 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| Forced-open rate (\`forced/prompt\`) | ${formatNumber(forcedOpenRate, 4)} |`,
     `| Nudge impressions (total) | ${nudgeImpressions} |`,
     `| Nudge impressions per session | ${formatNumber(nudgePerSession)} |`,
+    `| noteCreated (total) | ${notesCreated} |`,
+    `| noteMarkedDone (total) | ${notesMarkedDone} |`,
+    `| notePinned (total) | ${notesPinned} |`,
+    `| scratchpadOpened (total) | ${scratchpadOpened} |`,
+    `| scratchpadAppended (total) | ${scratchpadAppended} |`,
+    '',
+    'Resumption lag by note usage (`firstActionLagMs`):',
+    '',
+    '| Cohort | Sessions | p50 (ms / s) | p95 (ms / s) |',
+    '| --- | ---: | ---: | ---: |',
+    `| resumeWithNote = 1 | ${lagActionWithNote.n} | ${formatMs(lagActionWithNote.p50)} | ${formatMs(lagActionWithNote.p95)} |`,
+    `| resumeWithNote = 0 | ${lagActionWithoutNote.n} | ${formatMs(lagActionWithoutNote.p50)} | ${formatMs(lagActionWithoutNote.p95)} |`,
+    '',
+    `Sessions with checkpoint note on resume: ${sessionsWithNote}/${sessions}`,
     '',
     'Notes:',
     '- Snapshot contains aggregate-only values and excludes raw workspace paths.',
@@ -187,7 +221,13 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     typeof metric.helpfulnessRating === 'number' ||
     (metric.pauseActions ?? 0) > 0 ||
     (metric.snoozeActions ?? 0) > 0 ||
-    (metric.disableActions ?? 0) > 0
+    (metric.disableActions ?? 0) > 0 ||
+    (metric.noteCreated ?? 0) > 0 ||
+    (metric.noteMarkedDone ?? 0) > 0 ||
+    (metric.notePinned ?? 0) > 0 ||
+    metric.resumeWithNote === 1 ||
+    (metric.scratchpadOpened ?? 0) > 0 ||
+    (metric.scratchpadAppended ?? 0) > 0
   );
 }
 
@@ -219,6 +259,12 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.pauseActions),
       toOptionalNumber(metric.snoozeActions),
       toOptionalNumber(metric.disableActions),
+      toOptionalNumber(metric.noteCreated),
+      toOptionalNumber(metric.noteMarkedDone),
+      toOptionalNumber(metric.notePinned),
+      toOptionalNumber(metric.resumeWithNote),
+      toOptionalNumber(metric.scratchpadOpened),
+      toOptionalNumber(metric.scratchpadAppended),
       toRatio(quickActions, prompts),
       toRatio(forcedOpens, prompts),
     ];

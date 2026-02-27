@@ -7,6 +7,27 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'refreshSummary' })).toEqual({
       type: 'refreshSummary',
     });
+    expect(parseWebviewMessage({ type: 'checkpointPinToggle' })).toEqual({
+      type: 'checkpointPinToggle',
+    });
+    expect(parseWebviewMessage({ type: 'checkpointMarkDone' })).toEqual({
+      type: 'checkpointMarkDone',
+    });
+    expect(parseWebviewMessage({ type: 'checkpointDismiss' })).toEqual({
+      type: 'checkpointDismiss',
+    });
+    expect(parseWebviewMessage({ type: 'checkpointOpenList' })).toEqual({
+      type: 'checkpointOpenList',
+    });
+    expect(parseWebviewMessage({ type: 'openScratchpad' })).toEqual({
+      type: 'openScratchpad',
+    });
+    expect(parseWebviewMessage({ type: 'appendScratchpad' })).toEqual({
+      type: 'appendScratchpad',
+    });
+    expect(parseWebviewMessage({ type: 'setScratchpadScope' })).toEqual({
+      type: 'setScratchpadScope',
+    });
     expect(parseWebviewMessage({ type: 'toggleAutoSummaries' })).toEqual({
       type: 'toggleAutoSummaries',
     });

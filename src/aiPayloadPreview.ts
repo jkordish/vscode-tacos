@@ -6,6 +6,7 @@ export interface AiPayloadPreviewInput {
   generatedAt: number;
   signals: ResumeSignals;
   summary: Pick<ResumeSummary, 'intent' | 'nextSteps' | 'topFiles' | 'links' | 'evidenceCatalog'>;
+  checkpointNotes?: string[];
   maxJsonChars?: number;
 }
 
@@ -33,6 +34,7 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
       links: input.summary.links,
       evidenceCatalog: input.summary.evidenceCatalog ?? [],
     },
+    checkpointNotes: input.checkpointNotes ?? [],
   };
   const json = JSON.stringify(payload, null, 2);
   const { value: previewJson, truncated } = truncateJson(json, input.maxJsonChars ?? 12_000);
@@ -49,6 +51,8 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
     `- Provider: \`${input.provider}\``,
     `- Workspace: \`${input.workspaceName}\``,
     `- Generated: ${new Date(input.generatedAt).toLocaleString()}`,
+    `- Includes your checkpoint notes: ${(input.checkpointNotes?.length ?? 0) > 0 ? 'yes' : 'no'}`,
+    '- Scratchpad content: excluded by default (explicit opt-in only).',
     truncationNote,
     '```json',
     previewJson,

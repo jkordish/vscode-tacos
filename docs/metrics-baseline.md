@@ -45,10 +45,23 @@ Prompt and nudge rates:
 | Metric | Value |
 | --- | ---: |
 | Prompt impressions (total) | 0 |
+| Prompt impressions per session | n/a |
 | Forced-open details clicks (total) | 0 |
 | Forced-open rate (`forced/prompt`) | n/a |
 | Nudge impressions (total) | 0 |
 | Nudge impressions per session | n/a |
+| noteCreated (total) | 0 |
+| noteMarkedDone (total) | 0 |
+| notePinned (total) | 0 |
+| scratchpadOpened (total) | 0 |
+| scratchpadAppended (total) | 0 |
+
+Resumption lag by note usage (`firstActionLagMs`):
+
+| Cohort | Sessions | p50 (ms / s) | p95 (ms / s) |
+| --- | ---: | ---: | ---: |
+| `resumeWithNote = 1` | 0 | n/a | n/a |
+| `resumeWithNote = 0` | 0 | n/a | n/a |
 
 Notes:
 - This is a valid post-implementation baseline snapshot, but it does not meet the dogfooding gate yet.

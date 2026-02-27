@@ -8,6 +8,38 @@ All notable changes to this project are documented in this file.
 
 - No notable changes yet.
 
+## [0.4.0] - 2026-02-27
+
+### Added
+
+- Checkpoint Notes v2:
+  - Multi-note storage with lifecycle (`open`, `done`, `dismissed`)
+  - `updatedAt` lifecycle timestamp tracking for note updates
+  - Partition-aware default scope (`workspace + branch + task partition`)
+  - Legacy single-note migration into pinned open note format
+- New checkpoint commands:
+  - `TaCoS: List Checkpoint Notes`
+  - `TaCoS: Add Checkpoint from Selection`
+  - `TaCoS: Add Quick Checkpoint Note`
+- Scratchpad quick actions in Companion surfaces:
+  - `Open Scratchpad`, `Append`, and `Set Scope` buttons in the panel scratchpad card
+  - Scratchpad and checkpoint-note management entries in `TaCoS Companion` quick actions
+- Resume panel notes card with actions for `Mark done`, `Pin/Unpin`, `Dismiss`, and `Add note`.
+- Sticky notes/scratchpad QA matrix doc for v0.4.0 edge-case validation:
+  - `docs/sticky-notes-qa-matrix.md`
+  - `docs/sticky-notes-qa-signoff-template.md`
+
+### Changed
+
+- Pinned/newest open checkpoint note now overrides `recommendedFirstAction` on resume.
+- Low-confidence card is suppressed when an open checkpoint note exists.
+- Standup `Next` section now includes the active checkpoint note when available.
+- AI payload preview now explicitly labels whether checkpoint notes are included.
+- Retention policy now prunes old closed checkpoint notes (`done`/`dismissed`) while keeping open notes sticky.
+- Resume panel now shows the Scratchpad card when a scoped scratchpad exists/has been created.
+- Local metrics now track checkpoint events (`noteCreated`, `noteMarkedDone`, `notePinned`) and
+  resume lag cohorts (`resumeWithNote` vs without).
+
 ## [0.3.0] - 2026-02-27
 
 ### Added

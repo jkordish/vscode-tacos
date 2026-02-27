@@ -28,6 +28,28 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(false);
   });
+
+  it('treats note events as recorded metric activity', () => {
+    const metric: MetricRecord = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      noteCreated: 1,
+    };
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
+
+  it('treats scratchpad events as recorded metric activity', () => {
+    const metric: MetricRecord = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      scratchpadOpened: 1,
+    };
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -49,6 +71,8 @@ describe('buildMetricsCsv', () => {
         pauseActions: 1,
         snoozeActions: 0,
         disableActions: 0,
+        scratchpadOpened: 2,
+        scratchpadAppended: 1,
       },
     ]);
 
@@ -56,9 +80,14 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('firstActionLagMs');
     expect(lines[0]).toContain('helpfulnessRating');
     expect(lines[0]).toContain('companionActionFollowThroughRate');
+    expect(lines[0]).toContain('noteCreated');
+    expect(lines[0]).toContain('resumeWithNote');
+    expect(lines[0]).toContain('scratchpadOpened');
+    expect(lines[0]).toContain('scratchpadAppended');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('"/workspace/repo,feature"');
     expect(lines[1]).toContain(',statusbar,0,');
+    expect(lines[1]).toContain(',2,1,0.7500,');
     expect(lines[1]).toContain(',0.7500,');
     expect(lines[1]).toContain(',0.2500');
   });
@@ -123,6 +152,7 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
           companionPromptImpressions: 2,
           companionForcedOpenDetailsClicks: 1,
           companionNudgeImpressions: 1,
+          scratchpadOpened: 1,
         },
         {
           startedAt: Date.UTC(2026, 1, 1, 10, 5, 0),
@@ -134,6 +164,7 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
           companionPromptImpressions: 3,
           companionForcedOpenDetailsClicks: 1,
           companionNudgeImpressions: 2,
+          scratchpadAppended: 2,
         },
         {
           startedAt: Date.UTC(2026, 1, 1, 10, 10, 0),
@@ -160,6 +191,8 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| Forced-open rate (`forced/prompt`) | 0.4000 |');
     expect(markdown).toContain('| Nudge impressions (total) | 3 |');
     expect(markdown).toContain('| Nudge impressions per session | 1.00 |');
+    expect(markdown).toContain('| scratchpadOpened (total) | 1 |');
+    expect(markdown).toContain('| scratchpadAppended (total) | 2 |');
   });
 
   it('stays privacy-safe and marks gate as met for qualifying dogfooding sample', () => {

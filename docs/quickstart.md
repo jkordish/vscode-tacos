@@ -52,3 +52,14 @@ After setup, confirm:
 - `TaCoS` status bar entry appears.
 - `Companion Home` shows `Now / Next / Blocked / Restore`.
 - `TaCoS: Export Local Metrics` writes `.tacos/metrics.csv` when you want local adoption metrics.
+
+## Sticky Notes + Scratchpad (30 Seconds)
+
+1. Run `TaCoS: Add Checkpoint Note` and capture one line for future-you.
+2. Run `TaCoS: Open Scratchpad` to open the scoped scratchpad in a real editor tab.
+3. Run `TaCoS: Append to Scratchpad` to append selected text (or clipboard fallback) with a timestamp divider.
+4. Trigger `TaCoS: Show Resume Brief Now` and confirm the panel shows your notes/scratchpad context.
+
+Expected:
+- Checkpoint notes influence resume guidance and standup `Next`.
+- Scratchpad content persists across reload/restart without creating a repo file by default.

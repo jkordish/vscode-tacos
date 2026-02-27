@@ -3,7 +3,7 @@
   "displayName": "TaCoS Resume Brief",
   "description": "Auto task-context summaries when you resume work in VS Code.",
   "license": "MIT",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "jkordish",
   "repository": {
     "type": "git",
@@ -71,7 +71,13 @@
     "onCommand:tacos.addVisitedUrl",
     "onCommand:tacos.addCheckpointNote",
     "onCommand:tacos.addCheckpointNoteFromClipboard",
+    "onCommand:tacos.addCheckpointFromSelection",
+    "onCommand:tacos.addQuickCheckpointNote",
+    "onCommand:tacos.listCheckpointNotes",
     "onCommand:tacos.clearCheckpointNote",
+    "onCommand:tacos.openScratchpad",
+    "onCommand:tacos.appendToScratchpad",
+    "onCommand:tacos.setScratchpadScope",
     "onCommand:tacos.configureAiProvider",
     "onCommand:tacos.openPrivacySafety",
     "onCommand:tacos.clearCorrections",
@@ -190,8 +196,32 @@
         "title": "TaCoS: Add Checkpoint Note from Clipboard"
       },
       {
+        "command": "tacos.addCheckpointFromSelection",
+        "title": "TaCoS: Add Checkpoint from Selection"
+      },
+      {
+        "command": "tacos.addQuickCheckpointNote",
+        "title": "TaCoS: Add Quick Checkpoint Note"
+      },
+      {
+        "command": "tacos.listCheckpointNotes",
+        "title": "TaCoS: List Checkpoint Notes"
+      },
+      {
         "command": "tacos.clearCheckpointNote",
-        "title": "TaCoS: Clear Checkpoint Note"
+        "title": "TaCoS: Clear Checkpoint Notes in Current Task Scope"
+      },
+      {
+        "command": "tacos.openScratchpad",
+        "title": "TaCoS: Open Scratchpad"
+      },
+      {
+        "command": "tacos.appendToScratchpad",
+        "title": "TaCoS: Append to Scratchpad"
+      },
+      {
+        "command": "tacos.setScratchpadScope",
+        "title": "TaCoS: Set Scratchpad Scope"
       },
       {
         "command": "tacos.configureAiProvider",
