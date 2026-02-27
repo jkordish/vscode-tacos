@@ -3,7 +3,7 @@
   "displayName": "TaCoS Resume Brief",
   "description": "Auto task-context summaries when you resume work in VS Code.",
   "license": "MIT",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "jkordish",
   "repository": {
     "type": "git",
@@ -48,7 +48,18 @@
     "onCommand:tacos.showNow",
     "onCommand:tacos.copyPromptAndOpenCodex",
     "onCommand:tacos.showLastSummary",
+    "onCommand:tacos.jumpToLastEdit",
+    "onCommand:tacos.setPrivacyPreset",
+    "onCommand:tacos.setRetentionPolicy",
+    "onCommand:tacos.forgetWorkspaceNow",
+    "onCommand:tacos.revokeAiPayloadConsent",
+    "onCommand:tacos.rateSummaryHelpfulness",
     "onCommand:tacos.pauseSummaries",
+    "onCommand:tacos.snoozeAutoSummaries",
+    "onCommand:tacos.generateStandupUpdate",
+    "onCommand:tacos.restoreWorkingSet",
+    "onCommand:tacos.captureRestoreSearchQuery",
+    "onCommand:tacos.switchTaskPartition",
     "onCommand:tacos.resumeSummaries",
     "onCommand:tacos.toggleEnabled",
     "onCommand:tacos.pauseUntilRestart",
@@ -83,8 +94,52 @@
         "title": "TaCoS: Show Last Summary"
       },
       {
+        "command": "tacos.jumpToLastEdit",
+        "title": "TaCoS: Jump to Last Edit"
+      },
+      {
+        "command": "tacos.setPrivacyPreset",
+        "title": "TaCoS: Set Privacy Preset"
+      },
+      {
+        "command": "tacos.setRetentionPolicy",
+        "title": "TaCoS: Set Retention Policy"
+      },
+      {
+        "command": "tacos.forgetWorkspaceNow",
+        "title": "TaCoS: Forget This Workspace Now"
+      },
+      {
+        "command": "tacos.revokeAiPayloadConsent",
+        "title": "TaCoS: Revoke AI Payload Consent"
+      },
+      {
+        "command": "tacos.rateSummaryHelpfulness",
+        "title": "TaCoS: Rate Summary Helpfulness"
+      },
+      {
         "command": "tacos.pauseSummaries",
         "title": "TaCoS: Pause Auto Summaries"
+      },
+      {
+        "command": "tacos.snoozeAutoSummaries",
+        "title": "TaCoS: Snooze Auto Summaries"
+      },
+      {
+        "command": "tacos.generateStandupUpdate",
+        "title": "TaCoS: Generate Standup Update"
+      },
+      {
+        "command": "tacos.restoreWorkingSet",
+        "title": "TaCoS: Restore Working Set"
+      },
+      {
+        "command": "tacos.captureRestoreSearchQuery",
+        "title": "TaCoS: Set Restore Search Query"
+      },
+      {
+        "command": "tacos.switchTaskPartition",
+        "title": "TaCoS: Switch Task Partition"
       },
       {
         "command": "tacos.resumeSummaries",
@@ -179,6 +234,11 @@
           "minimum": 1,
           "description": "Cooldown in minutes between automatic summaries."
         },
+        "tacos.summaryQuietHours": {
+          "type": "string",
+          "default": "",
+          "description": "Optional quiet window for auto summaries in `HH:MM-HH:MM` format, for example `22:00-07:00`."
+        },
         "tacos.includeDiff": {
           "type": "boolean",
           "default": false,
@@ -192,12 +252,12 @@
         },
         "tacos.includeTerminalHistory": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Include recent terminal commands when shell integration is available."
         },
         "tacos.includeDebugHistory": {
           "type": "boolean",
-          "default": true,
+          "default": false,
           "description": "Include recent debug sessions in context collection."
         },
         "tacos.cacheIfContextUnchanged": {
@@ -213,15 +273,46 @@
           },
           "description": "Additional regex patterns to redact from collected context."
         },
+        "tacos.privacyPreset": {
+          "type": "string",
+          "enum": [
+            "minimal",
+            "balanced",
+            "max-context"
+          ],
+          "default": "minimal",
+          "description": "Privacy behavior preset. `minimal` (default) limits context collection, `balanced` enables terminal/debug context locally, `max-context` enables richer local context."
+        },
+        "tacos.retentionPolicy": {
+          "type": "string",
+          "enum": [
+            "1d",
+            "7d",
+            "30d",
+            "forever"
+          ],
+          "default": "7d",
+          "description": "How long TaCoS keeps workspace-scoped context and metrics before pruning."
+        },
         "tacos.metricsEnabled": {
           "type": "boolean",
           "default": true,
           "description": "Track local resumption/edit lag metrics in workspace state."
         },
+        "tacos.uiSurface": {
+          "type": "string",
+          "enum": [
+            "statusbar",
+            "notification",
+            "silent"
+          ],
+          "default": "statusbar",
+          "description": "Primary UI surface for focus-triggered summaries. `statusbar` is ambient (default), `notification` shows actionable toasts, and `silent` only updates cached/status context."
+        },
         "tacos.autoRefreshInBackground": {
           "type": "boolean",
           "default": true,
-          "description": "When enabled, focus-triggered summaries refresh a background scratch summary (and update an open details panel) without prompting to Open details."
+          "description": "Legacy compatibility toggle for focus presentation mode. Prefer `tacos.uiSurface` for new setups."
         },
         "tacos.companionNudgesEnabled": {
           "type": "boolean",

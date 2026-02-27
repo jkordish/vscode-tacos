@@ -28,6 +28,15 @@ interface ValidatedOpenAiSummaryPayload {
   links: SummaryLink[];
 }
 
+type OpenAiResponseFormat =
+  | {
+      type: 'json_schema';
+      json_schema: ReturnType<typeof jsonSchema>;
+    }
+  | {
+      type: 'json_object';
+    };
+
 function trimToMax(value: string, max = 300): string {
   const text = value.trim();
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
@@ -201,6 +210,11 @@ function extractResponseText(responsePayload: unknown): string {
     const message = (choices[0] as Record<string, unknown>).message as
       | Record<string, unknown>
       | undefined;
+    const refusal = message?.refusal;
+    if (typeof refusal === 'string' && refusal.trim()) {
+      throw new Error(`OpenAI model refused summary request: ${trimToMax(refusal, 200)}`);
+    }
+
     const content = message?.content;
     if (typeof content === 'string') {
       return content;
@@ -224,6 +238,26 @@ function extractResponseText(responsePayload: unknown): string {
   }
 
   throw new Error('Could not extract message content from OpenAI response');
+}
+
+export function shouldRetryWithJsonObjectFallback(error: unknown): boolean {
+  const message = (error as Error)?.message?.toLowerCase?.() ?? '';
+  if (!message) {
+    return false;
+  }
+
+  if (message.includes('timed out') || message.includes('refused summary request')) {
+    return false;
+  }
+
+  return (
+    message.includes('json_schema') ||
+    (message.includes('response_format') &&
+      (message.includes('unsupported') ||
+        message.includes('not supported') ||
+        message.includes('invalid') ||
+        message.includes('must be')))
+  );
 }
 
 export function buildSummaryInstructionsPrompt(): string {
@@ -440,26 +474,26 @@ export async function tryGenerateOpenAiSummary(
   const baseUrl = config.openaiBaseUrl.trim().replace(/\/$/, '') || 'https://api.openai.com/v1';
   const endpoint = `${baseUrl}/chat/completions`;
 
-  const requestBody = {
-    model: config.openaiModel,
-    temperature: 0.1,
-    messages: [
-      {
-        role: 'system',
-        content: buildSummaryInstructionsPrompt(),
-      },
-      {
-        role: 'user',
-        content: buildSummaryContextPrompt(signals, base),
-      },
-    ],
-    response_format: {
-      type: 'json_schema',
-      json_schema: jsonSchema(),
-    },
-  };
+  const systemPrompt = buildSummaryInstructionsPrompt();
+  const contextPrompt = buildSummaryContextPrompt(signals, base);
 
-  try {
+  const requestSummary = async (responseFormat: OpenAiResponseFormat): Promise<ResumeSummary> => {
+    const requestBody = {
+      model: config.openaiModel,
+      temperature: 0.1,
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt,
+        },
+        {
+          role: 'user',
+          content: contextPrompt,
+        },
+      ],
+      response_format: responseFormat,
+    };
+
     const responsePayload = await postJson(
       endpoint,
       {
@@ -478,8 +512,28 @@ export async function tryGenerateOpenAiSummary(
       signals.workspaceRoot,
     );
     return buildAiSummary(base, validated, 'openai', 'OpenAI');
-  } catch (error) {
-    log(`OpenAI summary failed: ${(error as Error).message}`);
-    return undefined;
+  };
+
+  try {
+    return await requestSummary({
+      type: 'json_schema',
+      json_schema: jsonSchema(),
+    });
+  } catch (structuredError) {
+    if (!shouldRetryWithJsonObjectFallback(structuredError)) {
+      log(`OpenAI summary failed: ${(structuredError as Error).message}`);
+      return undefined;
+    }
+
+    log(
+      'OpenAI model appears incompatible with json_schema response_format. Retrying with json_object.',
+    );
+
+    try {
+      return await requestSummary({ type: 'json_object' });
+    } catch (fallbackError) {
+      log(`OpenAI summary failed after json_object fallback: ${(fallbackError as Error).message}`);
+      return undefined;
+    }
   }
 }

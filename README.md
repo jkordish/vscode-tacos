@@ -21,11 +21,14 @@ TaCoS is built around five non-negotiable principles:
 - Shows a status bar companion entry with quick actions.
 - Adds panel status controls to refresh immediately and pause/resume auto summaries.
 - Includes a Trust Center card that summarizes tracking mode and privacy posture.
+- Adds trust cues (`Based on: X files • Y runs • branch Z`) with a "Why am I seeing this?" drill-down.
 - Adds a session recap card (`Done`, `Pending/blocked`, `Recommended first action`) with one-click checkpoint capture.
+- Adds a compact `Changes Since Last Time` card (diffstat, runs, blockers, key files/links).
 - Shows confidence-gated companion nudges with cooldown and quiet-hours suppression.
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.
 - Lets you add checkpoint notes (“Future You” hints) and reuse them on resume.
 - Supports local-only summaries and optional AI refinement (`vscode-lm` / `openai`).
+- Marks low-confidence context explicitly and suggests safe clarification steps.
 
 ## Commands
 
@@ -33,7 +36,18 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Show Resume Brief Now`
 - `TaCoS: Copy Prompt and Open Codex`
 - `TaCoS: Show Last Summary`
+- `TaCoS: Generate Standup Update`
+- `TaCoS: Restore Working Set`
+- `TaCoS: Set Restore Search Query`
+- `TaCoS: Switch Task Partition`
+- `TaCoS: Jump to Last Edit`
+- `TaCoS: Set Privacy Preset`
+- `TaCoS: Set Retention Policy`
+- `TaCoS: Forget This Workspace Now`
+- `TaCoS: Revoke AI Payload Consent`
+- `TaCoS: Rate Summary Helpfulness`
 - `TaCoS: Pause Auto Summaries`
+- `TaCoS: Snooze Auto Summaries`
 - `TaCoS: Resume Auto Summaries`
 - `TaCoS: Toggle Summaries Enabled`
 - `TaCoS: Pause Summaries Until Restart`
@@ -48,6 +62,16 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Clear OpenAI API Key`
 - `TaCoS: Export Local Metrics`
 
+### Codex / ChatGPT Interop
+
+`TaCoS: Copy Prompt and Open Codex` now tries known OpenAI ChatGPT extension commands first:
+
+1. `chatgpt.newCodexPanel`
+2. `chatgpt.openSidebar`
+3. `chatgpt.newChat`
+
+Then it falls back to `tacos.codexOpenCommand`, then legacy/inferred Codex command IDs.
+
 ## Configuration (`tacos.*`)
 
 - `enabled` (default `true`)
@@ -57,14 +81,18 @@ TaCoS is built around five non-negotiable principles:
 - `promptCheckpointOnBlur` (default `false`)
 - `minIdleMinutes` (default `10`)
 - `cooldownMinutes` (default `5`)
+- `summaryQuietHours` (default `""`, optional `HH:MM-HH:MM` quiet window for auto summaries)
 - `includeDiff` (default `false`)
 - `maxDiffChars` (default `6000`)
-- `includeTerminalHistory` (default `true`)
-- `includeDebugHistory` (default `true`)
+- `includeTerminalHistory` (default `false`)
+- `includeDebugHistory` (default `false`)
 - `cacheIfContextUnchanged` (default `true`)
 - `redactionPatterns` (default `[]`)
+- `privacyPreset` (`minimal` | `balanced` | `max-context`, default `minimal`)
+- `retentionPolicy` (`1d` | `7d` | `30d` | `forever`, default `7d`)
 - `metricsEnabled` (default `true`)
-- `autoRefreshInBackground` (default `true`, skip `Open details` prompt and refresh scratch summary silently)
+- `uiSurface` (`statusbar` | `notification` | `silent`, default `statusbar`)
+- `autoRefreshInBackground` (legacy compatibility toggle; prefer `uiSurface`)
 - `companionNudgesEnabled` (default `true`)
 - `companionNudgeAggressiveness` (`low` | `balanced` | `high`, default `balanced`)
 - `companionNudgeQuietHours` (default `""`, optional `HH:MM-HH:MM`)
@@ -88,6 +116,10 @@ Key companion fields:
 - `companionForcedOpenDetailsClicks`: forced-click count when prompt mode is used.
 - `companionQuickActionsTaken`: panel/status-bar follow-through actions.
 - `companionFirstActionLagMs`: ms from summary display to first companion action.
+- `firstActionLagMs`: ms from summary display to first task/test/debug/companion action.
+- `interruptionEvent`: `1` for focus-triggered notification-mode prompts; else `0`.
+- `helpfulnessRating`: optional local user rating (`1`-`5`) via command.
+- `pauseActions` / `snoozeActions` / `disableActions`: local opt-out interaction counters.
 - `companionActionFollowThroughRate` (CSV): quick actions ÷ prompt impressions.
 - `companionForcedOpenRate` (CSV): forced opens ÷ prompt impressions.
 
@@ -121,11 +153,17 @@ OpenAI API key resolution order:
 
 ### Persisted locally
 
-- Redacted activity snapshots.
+- Redacted activity snapshots (workspace + branch scoped; never raw terminal command lines).
 - Workspace summary cache.
 - Workspace-scoped checkpoint note.
 - Workspace-scoped correction hints keyed by context hash.
 - Optional local metrics history.
+- Workspace-scoped retention metadata and task blocker metadata.
+
+Retention + forget controls:
+
+- `tacos.retentionPolicy` prunes stale workspace data (`1d`, `7d`, `30d`, `forever`).
+- `TaCoS: Forget This Workspace Now` clears workspace-scoped TaCoS state immediately.
 
 ### Sent to AI
 
@@ -134,6 +172,7 @@ Only if AI provider is enabled:
 - Redacted summary context and evidence catalog.
 - Structured summarization instructions.
 - Optional correction hints.
+- Payload preview + explicit consent (`Send once` / `Always allow in workspace`) are required before send.
 
 ### Privacy Doc
 

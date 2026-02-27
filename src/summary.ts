@@ -5,6 +5,7 @@ import type {
   ResumeSignals,
   ResumeSummary,
   SummaryEvidenceItem,
+  SummaryEvidenceKind,
   SummaryLink,
 } from './types';
 
@@ -137,6 +138,41 @@ function buildPendingBlocked(signals: ResumeSignals, topFiles: string[]): string
   }
 
   return dedupe(pending, 3).slice(0, 3);
+}
+
+function buildChangesSinceLastResume(signals: ResumeSignals, topFiles: string[]): string[] {
+  const changes: string[] = [];
+  const diffStatLine = signals.gitDiffStat
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (diffStatLine) {
+    changes.push(`Diffstat: ${diffStatLine}`);
+  }
+
+  const runs = dedupe(signals.recentTerminal, 2);
+  if (runs.length > 0) {
+    changes.push(`Runs: ${runs.join(' | ')}`);
+  }
+
+  if (signals.failingCommand) {
+    changes.push(`Blocker: ${signals.failingCommand}`);
+  }
+
+  if (topFiles.length > 0) {
+    changes.push(`Key files: ${topFiles.slice(0, 2).join(', ')}`);
+  }
+
+  const links = dedupe(signals.recentUrls, 2);
+  if (links.length > 0) {
+    changes.push(`Key links: ${links.join(', ')}`);
+  }
+
+  if (changes.length === 0) {
+    changes.push('No recent changes captured.');
+  }
+
+  return changes.slice(0, 5);
 }
 
 function normalizeTerminalEntryForMode(rawEntry: string): string {
@@ -333,7 +369,98 @@ function buildStepEvidenceIds(
     return nextSteps.map(() => []);
   }
 
-  return nextSteps.map((_, index) => [evidenceIds[Math.min(index, evidenceIds.length - 1)]]);
+  const usedIds = new Set<string>();
+  const defaultEvidenceId = evidenceCatalog[0].id;
+
+  return nextSteps.map((stepText, index) => {
+    const kindPreference = inferEvidenceKindPreference(stepText);
+
+    for (const kind of kindPreference) {
+      const unusedMatch = evidenceCatalog.find(
+        (item) => item.kind === kind && !usedIds.has(item.id),
+      );
+      if (unusedMatch) {
+        usedIds.add(unusedMatch.id);
+        return [unusedMatch.id];
+      }
+    }
+
+    for (const kind of kindPreference) {
+      const fallbackMatch = evidenceCatalog.find((item) => item.kind === kind);
+      if (fallbackMatch) {
+        return [fallbackMatch.id];
+      }
+    }
+
+    const positional = evidenceIds[Math.min(index, evidenceIds.length - 1)] ?? defaultEvidenceId;
+    return positional ? [positional] : [];
+  });
+}
+
+function inferEvidenceKindPreference(stepText: string): SummaryEvidenceKind[] {
+  const normalized = stepText.trim().toLowerCase();
+
+  if (!normalized) {
+    return ['file', 'url', 'terminal', 'task', 'debug', 'git', 'branch', 'commit'];
+  }
+
+  if (/\b(debug|breakpoint|launch|attach|inspect)\b/.test(normalized)) {
+    return ['debug', 'terminal', 'task', 'file', 'url', 'git', 'branch', 'commit'];
+  }
+
+  if (
+    /\b(re-?run|rerun|retry|failing|failed|blocker|test|build|command|validate|validation|verify)\b/.test(
+      normalized,
+    )
+  ) {
+    return ['terminal', 'task', 'debug', 'file', 'url', 'git', 'branch', 'commit'];
+  }
+
+  if (/\b(link|url|http|https|pr\b|pull request|issue|ticket|docs?)\b/.test(normalized)) {
+    return ['url', 'file', 'terminal', 'task', 'debug', 'git', 'branch', 'commit'];
+  }
+
+  if (/\b(file|edit|code|module|open)\b/.test(normalized)) {
+    return ['file', 'url', 'terminal', 'task', 'debug', 'git', 'branch', 'commit'];
+  }
+
+  return ['file', 'url', 'terminal', 'task', 'debug', 'git', 'branch', 'commit'];
+}
+
+function buildCandidateIntents(signals: ResumeSignals, topFiles: string[]): string[] {
+  const candidates = dedupe(
+    [
+      topFiles[0] ? `Continue edits around ${topFiles[0]}.` : '',
+      signals.branch ? `Continue work on branch ${signals.branch}.` : '',
+      signals.recentDebug[0] ? `Resume debugging flow from ${signals.recentDebug[0]}.` : '',
+      signals.recentTerminal[0] ? 'Resume validation by rerunning your latest command flow.' : '',
+      'Open your latest file and capture a one-line checkpoint for intent.',
+    ],
+    2,
+  );
+  return candidates.slice(0, 2);
+}
+
+function isLowConfidenceSummary(signals: ResumeSignals, topFiles: string[]): boolean {
+  const signalStrength =
+    (topFiles.length > 0 ? 1 : 0) +
+    (signals.changedFiles.length > 0 ? 1 : 0) +
+    (signals.recentTerminal.length > 0 ? 1 : 0) +
+    (signals.recentDebug.length > 0 ? 1 : 0) +
+    (signals.doneItems.length > 0 ? 1 : 0) +
+    (signals.failingCommand ? 1 : 0);
+  return signalStrength < 2;
+}
+
+function buildLowConfidenceNextSteps(topFiles: string[]): string[] {
+  const focusTarget = topFiles[0]
+    ? `Open ${topFiles[0]} and confirm the intended change path.`
+    : 'Open your latest edited file and identify the next safe change.';
+  return [
+    'Unclear intent (low evidence). Add a one-line checkpoint note before proceeding.',
+    focusTarget,
+    'Run one focused test/build step to rebuild context and confidence.',
+  ];
 }
 
 export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
@@ -342,8 +469,13 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     3,
   );
   const recentFilesSnapshot = dedupe([...signals.openFiles, ...signals.recentFiles], 10);
-  const nextSteps = buildNextSteps(signals, topFiles).slice(0, 3);
+  const lowConfidence = isLowConfidenceSummary(signals, topFiles);
+  const candidateIntents = buildCandidateIntents(signals, topFiles);
+  const nextSteps = lowConfidence
+    ? buildLowConfidenceNextSteps(topFiles)
+    : buildNextSteps(signals, topFiles).slice(0, 3);
   const doneSinceLastResume = buildDoneSinceLastResume(signals);
+  const changesSinceLastResume = buildChangesSinceLastResume(signals, topFiles);
   const pendingBlocked = buildPendingBlocked(signals, topFiles);
   const recommendedFirstAction = nextSteps[0] ?? pendingBlocked[0];
   const mode = detectResumeMode(signals);
@@ -359,10 +491,20 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
       })
     : ['- None captured'];
 
-  const intent = buildIntent(signals, topFiles);
+  const intent = lowConfidence ? 'Unclear intent (low evidence).' : buildIntent(signals, topFiles);
   const detailsSections = [
     '## Intent',
     `- ${intent}`,
+    ...(lowConfidence
+      ? [
+          '',
+          '## Confidence',
+          '- Low confidence: evidence is sparse or ambiguous.',
+          '- Candidate intents:',
+          ...candidateIntents.map((candidate) => `  - ${candidate}`),
+          '- Suggested action: add a one-line checkpoint note.',
+        ]
+      : []),
     '',
     '## Next steps',
     ...nextSteps.map((step) => `- ${step}`),
@@ -372,6 +514,8 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     ...(doneSinceLastResume.length > 0
       ? doneSinceLastResume.map((item) => `  - ${item}`)
       : ['  - None captured']),
+    '- Changes since last resume:',
+    ...changesSinceLastResume.map((item) => `  - ${item}`),
     '- Pending / blocked:',
     ...(pendingBlocked.length > 0
       ? pendingBlocked.map((item) => `  - ${item}`)
@@ -430,8 +574,11 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     nextSteps,
     nextStepEvidenceIds,
     doneSinceLastResume,
+    changesSinceLastResume,
     pendingBlocked,
     recommendedFirstAction,
+    lowConfidence,
+    candidateIntents,
     mode,
     currentBranch: signals.branch || undefined,
     lastFailingCommand: signals.failingCommand,

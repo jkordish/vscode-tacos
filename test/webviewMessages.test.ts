@@ -13,11 +13,20 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'openPrivacySafety' })).toEqual({
       type: 'openPrivacySafety',
     });
+    expect(parseWebviewMessage({ type: 'rateHelpfulness' })).toEqual({
+      type: 'rateHelpfulness',
+    });
     expect(parseWebviewMessage({ type: 'sessionAddCheckpoint' })).toEqual({
       type: 'sessionAddCheckpoint',
     });
     expect(parseWebviewMessage({ type: 'restoreReopenFiles' })).toEqual({
       type: 'restoreReopenFiles',
+    });
+    expect(parseWebviewMessage({ type: 'restoreOpenProblems' })).toEqual({
+      type: 'restoreOpenProblems',
+    });
+    expect(parseWebviewMessage({ type: 'restoreWorkingSet' })).toEqual({
+      type: 'restoreWorkingSet',
     });
   });
 
@@ -29,6 +38,26 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'openLink', index: -1 })).toBeUndefined();
     expect(parseWebviewMessage({ type: 'openLink', index: 1.2 })).toBeUndefined();
     expect(parseWebviewMessage({ type: 'openLink', index: '1' })).toBeUndefined();
+  });
+
+  it('validates openTopFile payload shape', () => {
+    expect(parseWebviewMessage({ type: 'openTopFile', index: 3 })).toEqual({
+      type: 'openTopFile',
+      index: 3,
+    });
+    expect(parseWebviewMessage({ type: 'openTopFile', index: -1 })).toBeUndefined();
+    expect(parseWebviewMessage({ type: 'openTopFile', index: 2.5 })).toBeUndefined();
+    expect(parseWebviewMessage({ type: 'openTopFile', index: '3' })).toBeUndefined();
+  });
+
+  it('validates runNextStepAction payload shape', () => {
+    expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: 1 })).toEqual({
+      type: 'runNextStepAction',
+      stepIndex: 1,
+    });
+    expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: -1 })).toBeUndefined();
+    expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: 2.1 })).toBeUndefined();
+    expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: '1' })).toBeUndefined();
   });
 
   it('validates openEvidence payload shape', () => {

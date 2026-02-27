@@ -1,10 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
+import { buildAiPayloadPreviewMarkdown } from './aiPayloadPreview';
 import { type CompanionNudgeDecision, chooseCompanionNudges } from './companionNudges';
 import {
   persistTerminalCommandForStorage,
@@ -12,22 +14,37 @@ import {
   type PersistedActivityState,
 } from './activityPersistence';
 import { checkpointStorageKey, sanitizeCheckpointNote } from './checkpoint';
-import { decideEditActivity } from './editActivity';
+import { resolveCodexOpenCommandCandidates } from './codexInterop';
+import {
+  captureEditLocation,
+  decideEditActivity,
+  pushRecentEditLocation,
+  type EditLocation,
+} from './editActivity';
 import { isSummaryLinkEvidenceGrounded } from './evidenceSafety';
 import { collectGit, parsePorcelainPaths } from './git';
 import { tryGenerateOpenAiSummary } from './llm';
-import { buildMetricsCsv, hasAnyRecordedMetric } from './metrics';
+import {
+  buildMetricsCsv,
+  hasAnyRecordedMetric,
+  pruneMetricsForWorkspace,
+  removeMetricsForWorkspace,
+} from './metrics';
 import { shouldAutoTriggerSummary, shouldPromptCheckpointOnBlur } from './noiseControl';
+import { buildNextStepActions } from './nextStepActions';
 import {
   isPathWithinWorkspaceRoot,
   normalizeHttpUrl,
   resolveFileTargetInWorkspace,
 } from './pathSafety';
+import { isInQuietHours } from './quietHours';
 import { redactList, redactText } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
 import { computeRestoreAvailability } from './restoreSafety';
 import { buildResumeSummary } from './summary';
+import { buildStandupUpdate } from './standup';
 import { buildTimelineGroups } from './timeline';
+import { buildTrustCue } from './trustCue';
 import type {
   ExtensionConfig,
   MetricRecord,
@@ -46,6 +63,7 @@ const KEY_LAST_BLUR_AT = 'tacos.lastBlurAt';
 const KEY_LAST_SUMMARY_AT = 'tacos.lastSummaryAt';
 const KEY_LAST_WORKSPACE_ON_BLUR = 'tacos.lastWorkspaceOnBlur';
 const KEY_LAST_AUTO_TRIGGER_FINGERPRINT = 'tacos.lastAutoTriggerFingerprint';
+const KEY_SUMMARY_SNOOZE_UNTIL = 'tacos.summarySnoozeUntil';
 
 const KEY_RECENT_FILES = 'tacos.recentFiles';
 const KEY_RECENT_TERMINAL = 'tacos.recentTerminal';
@@ -53,12 +71,20 @@ const KEY_RECENT_DEBUG = 'tacos.recentDebug';
 const KEY_RECENT_URLS = 'tacos.recentUrls';
 const KEY_DONE_ITEMS = 'tacos.doneItems';
 const KEY_LAST_FAILING_COMMAND = 'tacos.lastFailingCommand';
+const KEY_RECENT_EDIT_LOCATIONS_PREFIX = 'tacos.recentEditLocations';
+const KEY_LAST_TASK_META_PREFIX = 'tacos.lastTaskMeta';
+const KEY_LAST_TERMINAL_CWD_PREFIX = 'tacos.lastTerminalCwd';
+const KEY_RESTORE_SEARCH_QUERY_PREFIX = 'tacos.restoreSearchQuery';
+const KEY_TASK_PARTITION_PREFIX = 'tacos.taskPartition';
+const KEY_ACTIVITY_STORAGE_PREFIX = 'tacos.activityScoped';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
 const KEY_SUMMARY_CORRECTIONS_PREFIX = 'tacos.summaryCorrections';
 const KEY_VSCODE_LM_SELECTOR = 'tacos.vscodeLmSelector';
 const KEY_ONBOARDING_NOTICE_SHOWN = 'tacos.onboardingNoticeShown';
 const KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX = 'tacos.lastCheckpointPromptAt';
 const KEY_LAST_NUDGE_AT_PREFIX = 'tacos.lastNudgeAt';
+const KEY_WORKSPACE_ACTIVITY_AT_PREFIX = 'tacos.workspaceActivityAt';
+const KEY_AI_PAYLOAD_CONSENT_PREFIX = 'tacos.aiPayloadConsent';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
@@ -105,6 +131,7 @@ class RingBuffer {
 interface RuntimeState {
   output: vscode.OutputChannel;
   recentFiles: RingBuffer;
+  recentEditLocations: EditLocation[];
   recentTerminal: RingBuffer;
   recentDebug: RingBuffer;
   recentUrls: RingBuffer;
@@ -123,6 +150,9 @@ interface RuntimeState {
   displayedCheckpointNote?: { workspaceRoot: string; value: string; persisted: boolean };
   lastTaskName?: string;
   lastTaskWorkspaceRoot?: string;
+  lastTaskExitCode?: number;
+  lastTaskEndedAt?: number;
+  lastTerminalCwd?: string;
   lastDebugConfigName?: string;
   lastDebugWorkspaceRoot?: string;
   metricSession?: MetricRecord;
@@ -135,9 +165,11 @@ interface RuntimeState {
   lastAutoFocusTriggerAt: number;
   meaningfulActivitySinceCheckpointPrompt: boolean;
   pauseUntilRestart: boolean;
+  snoozeUntil: number;
   vscodeLmModel?: VscodeLmModelLike;
   vscodeLmSelector?: VscodeLmModelSelector;
   vscodeLmUnavailableNotified: boolean;
+  applyingPrivacyPreset: boolean;
 }
 
 let state: RuntimeState;
@@ -148,14 +180,39 @@ interface PresentSummaryOptions {
   checkpointNote?: string;
 }
 
-type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt';
+type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt' | 'silent';
 type CompanionRuntimeMode = 'active' | 'paused' | 'restricted' | 'disabled';
 
+interface PersistedTaskMetadata {
+  taskName: string;
+  workspaceRoot?: string;
+  exitCode: number;
+  timestamp: number;
+}
+
+interface DiagnosticBlockerReference {
+  path: string;
+  absolutePath: string;
+  line: number;
+  character: number;
+  message: string;
+  severity: vscode.DiagnosticSeverity;
+}
+
+interface DiagnosticBlockerSnapshot {
+  errorCount: number;
+  warningCount: number;
+  top?: DiagnosticBlockerReference;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
+  const initialWorkspaceRoot = pickWorkspaceRoot() ?? '';
   const persistedActivity = loadPersistedActivitySnapshot(context);
+  const persistedTaskMetadata = readPersistedTaskMetadata(context, initialWorkspaceRoot);
   state = {
     output: vscode.window.createOutputChannel('TaCoS'),
     recentFiles: new RingBuffer(15, persistedActivity.sanitized.recentFiles),
+    recentEditLocations: readRecentEditLocations(context, initialWorkspaceRoot),
     recentTerminal: new RingBuffer(15, persistedActivity.sanitized.recentTerminal),
     recentDebug: new RingBuffer(10, persistedActivity.sanitized.recentDebug),
     recentUrls: new RingBuffer(5, persistedActivity.sanitized.recentUrls),
@@ -164,6 +221,11 @@ export function activate(context: vscode.ExtensionContext): void {
     lastFailingCommandRaw: undefined,
     scratchSummary: undefined,
     activeNudges: undefined,
+    lastTaskName: persistedTaskMetadata?.taskName,
+    lastTaskWorkspaceRoot: persistedTaskMetadata?.workspaceRoot,
+    lastTaskExitCode: persistedTaskMetadata?.exitCode,
+    lastTaskEndedAt: persistedTaskMetadata?.timestamp,
+    lastTerminalCwd: readPersistedTerminalCwd(context, initialWorkspaceRoot),
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
     refinementSequence: 0,
@@ -172,10 +234,12 @@ export function activate(context: vscode.ExtensionContext): void {
     lastAutoFocusTriggerAt: 0,
     meaningfulActivitySinceCheckpointPrompt: false,
     pauseUntilRestart: false,
+    snoozeUntil: context.workspaceState.get<number>(KEY_SUMMARY_SNOOZE_UNTIL, 0),
     vscodeLmSelector: context.globalState.get<VscodeLmModelSelector | undefined>(
       KEY_VSCODE_LM_SELECTOR,
     ),
     vscodeLmUnavailableNotified: false,
+    applyingPrivacyPreset: false,
   };
 
   state.statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 80);
@@ -186,6 +250,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(state.output);
   void migrateLegacyPersistedActivityIfNeeded(context, persistedActivity);
+  void applyRetentionPolicy(context, initialWorkspaceRoot);
 
   context.subscriptions.push(
     vscode.commands.registerCommand('tacos.showNow', async () => {
@@ -241,7 +306,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(root));
+      const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(context, root));
       if (!cached) {
         void vscode.window.showInformationMessage(
           'TaCoS: No cached summary yet for this workspace.',
@@ -255,14 +320,52 @@ export function activate(context: vscode.ExtensionContext): void {
         checkpointNote: getCheckpointNote(context, root),
       });
     }),
+    vscode.commands.registerCommand('tacos.generateStandupUpdate', async () => {
+      await generateStandupUpdateCommand(context);
+    }),
+    vscode.commands.registerCommand('tacos.restoreWorkingSet', async () => {
+      await restoreWorkingSetCommand(context);
+    }),
+    vscode.commands.registerCommand('tacos.captureRestoreSearchQuery', async () => {
+      await captureRestoreSearchQuery(context);
+    }),
+    vscode.commands.registerCommand('tacos.switchTaskPartition', async () => {
+      await switchTaskPartition(context);
+    }),
+    vscode.commands.registerCommand('tacos.jumpToLastEdit', async () => {
+      await jumpToRecentEdit(context);
+    }),
+    vscode.commands.registerCommand('tacos.setPrivacyPreset', async () => {
+      await promptAndApplyPrivacyPreset(context);
+    }),
+    vscode.commands.registerCommand('tacos.setRetentionPolicy', async () => {
+      await promptAndSetRetentionPolicy(context);
+    }),
+    vscode.commands.registerCommand('tacos.forgetWorkspaceNow', async () => {
+      await forgetWorkspaceNow(context);
+    }),
+    vscode.commands.registerCommand('tacos.revokeAiPayloadConsent', async () => {
+      await revokeAiPayloadConsent(context);
+    }),
+    vscode.commands.registerCommand('tacos.rateSummaryHelpfulness', async () => {
+      await promptSummaryHelpfulnessRating();
+    }),
     vscode.commands.registerCommand('tacos.pauseSummaries', async () => {
       state.pauseUntilRestart = false;
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
       await setPaused(true);
+      recordMetricCounter('pauseActions');
       updateCompanionStatusBar();
       void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
     }),
+    vscode.commands.registerCommand('tacos.snoozeAutoSummaries', async () => {
+      await promptAndSetAutoSummarySnooze(context);
+    }),
     vscode.commands.registerCommand('tacos.resumeSummaries', async () => {
       state.pauseUntilRestart = false;
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
       await setPaused(false);
       updateCompanionStatusBar();
       void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
@@ -270,6 +373,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.toggleEnabled', async () => {
       const config = getConfig();
       await setEnabled(!config.enabled);
+      if (config.enabled) {
+        recordMetricCounter('disableActions');
+      }
       void vscode.window.showInformationMessage(
         !config.enabled
           ? 'TaCoS: automatic summaries enabled.'
@@ -278,6 +384,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.pauseUntilRestart', async () => {
       state.pauseUntilRestart = true;
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+      recordMetricCounter('snoozeActions');
       updateCompanionStatusBar();
       rerenderPanel();
       void vscode.window.showInformationMessage('TaCoS: summaries paused until VS Code restarts.');
@@ -441,6 +550,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.debug.onDidStartDebugSession(async (session) => {
       const label = session?.name ? `${session.type}: ${session.name}` : session.type;
       if (label) {
+        recordFirstActionLag();
         state.recentDebug.push(label);
         state.lastDebugConfigName = session.name;
         state.lastDebugWorkspaceRoot = session.workspaceFolder?.uri.fsPath;
@@ -453,25 +563,67 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.tasks.onDidStartTaskProcess((event) => {
       const task = event.execution.task;
+      recordFirstActionLag();
       state.lastTaskName = task.name;
-      state.lastTaskWorkspaceRoot =
-        task.scope && typeof task.scope === 'object' && 'uri' in task.scope
-          ? task.scope.uri.fsPath
-          : pickWorkspaceRoot();
+      state.lastTaskWorkspaceRoot = taskWorkspaceRoot(task) ?? pickWorkspaceRoot();
       markMeaningfulActivity();
     }),
   );
 
   context.subscriptions.push(
+    vscode.tasks.onDidEndTaskProcess(async (event) => {
+      const task = event.execution.task;
+      const exitCode = typeof event.exitCode === 'number' ? event.exitCode : undefined;
+      state.lastTaskName = task.name;
+      state.lastTaskWorkspaceRoot = taskWorkspaceRoot(task) ?? pickWorkspaceRoot();
+      if (typeof exitCode === 'number') {
+        state.lastTaskExitCode = exitCode;
+        state.lastTaskEndedAt = Date.now();
+      }
+
+      markMeaningfulActivity();
+      await persistTaskMetadata(context);
+      rerenderPanel();
+    }),
+  );
+
+  context.subscriptions.push(
     vscode.workspace.onDidChangeTextDocument(async (event) => {
+      const hasMeaningfulChange = isMeaningfulChange(event.contentChanges);
       const decision = decideEditActivity({
         documentScheme: event.document.uri.scheme,
-        hasMeaningfulChange: isMeaningfulChange(event.contentChanges),
+        hasMeaningfulChange,
         hasMetricSession: Boolean(state.metricSession),
         hasCapturedFirstMeaningfulEdit: state.metricSession?.firstMeaningfulEditLagMs !== undefined,
       });
       if (!decision.shouldMarkMeaningfulActivity) {
         return;
+      }
+
+      const workspaceRoot =
+        vscode.workspace.getWorkspaceFolder(event.document.uri)?.uri.fsPath ?? pickWorkspaceRoot();
+      const relativePath = workspaceRoot
+        ? toRelativePath(event.document.uri.fsPath, workspaceRoot)
+        : event.document.uri.fsPath;
+      const lastChange = event.contentChanges[event.contentChanges.length - 1];
+      const activeSelection =
+        vscode.window.activeTextEditor &&
+        vscode.window.activeTextEditor.document.uri.toString() === event.document.uri.toString()
+          ? vscode.window.activeTextEditor.selection.active
+          : undefined;
+      const location = captureEditLocation({
+        documentScheme: event.document.uri.scheme,
+        hasMeaningfulChange,
+        relativePath,
+        now: Date.now(),
+        fallbackLine: lastChange?.range.start.line ?? 0,
+        fallbackCharacter: lastChange?.range.start.character ?? 0,
+        selectionLine: activeSelection?.line,
+        selectionCharacter: activeSelection?.character,
+      });
+      if (location) {
+        state.recentEditLocations = pushRecentEditLocation(state.recentEditLocations, location, 15);
+        await persistRecentEditLocations(context, workspaceRoot);
       }
 
       markMeaningfulActivity();
@@ -495,11 +647,23 @@ export function activate(context: vscode.ExtensionContext): void {
         event.affectsConfiguration('tacos.companionNudgeAggressiveness') ||
         event.affectsConfiguration('tacos.companionNudgeQuietHours') ||
         event.affectsConfiguration('tacos.companionNudgeCooldownMinutes');
+      const affectsPrivacyPreset = event.affectsConfiguration('tacos.privacyPreset');
+      const affectsRetention = event.affectsConfiguration('tacos.retentionPolicy');
       const affectsStatus =
         affectsPanel ||
         event.affectsConfiguration('tacos.summaryProvider') ||
+        event.affectsConfiguration('tacos.uiSurface') ||
+        event.affectsConfiguration('tacos.summaryQuietHours') ||
         event.affectsConfiguration('tacos.autoRefreshInBackground') ||
         affectsNudges;
+
+      if (affectsPrivacyPreset && !state.applyingPrivacyPreset) {
+        await applyPrivacyPreset(getConfig().privacyPreset, context);
+      }
+
+      if (affectsRetention) {
+        await applyRetentionPolicy(context, pickWorkspaceRoot() ?? '');
+      }
 
       if (affectsNudges && state.scratchSummary) {
         await updateActiveNudges(
@@ -517,7 +681,7 @@ export function activate(context: vscode.ExtensionContext): void {
         updateCompanionStatusBar();
       }
 
-      if (!affectsPanel && !affectsStatus) {
+      if (!affectsPanel && !affectsStatus && !affectsRetention && !affectsPrivacyPreset) {
         return;
       }
     }),
@@ -578,6 +742,15 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
+      await clearExpiredSnoozeIfNeeded(context, now);
+      if (state.snoozeUntil > now) {
+        return;
+      }
+
+      if (isInQuietHours(now, config.summaryQuietHours)) {
+        return;
+      }
+
       const root = pickWorkspaceRoot();
       if (!root) {
         return;
@@ -592,7 +765,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const lastSummaryAt = context.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0);
       const fingerprint = computeAutoTriggerFingerprint(root);
       const lastFingerprint = context.workspaceState.get<string>(
-        autoTriggerFingerprintKey(root),
+        autoTriggerFingerprintKey(context, root),
         '',
       );
       const significantChange = fingerprint !== lastFingerprint;
@@ -612,7 +785,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       state.lastAutoFocusTriggerAt = now;
       state.autoSummaryInFlight = true;
-      await context.workspaceState.update(autoTriggerFingerprintKey(root), fingerprint);
+      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
       try {
         await triggerSummary(context, 'focus');
       } finally {
@@ -660,17 +833,25 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       workspaceRoot,
       config.redactionPatterns,
     );
-    state.recentTerminal.push(sanitizedCommand);
-    markMeaningfulActivity();
-    for (const url of extractUrls(command)) {
-      state.recentUrls.push(url);
+    const rawCwd = String(event?.execution?.cwd?.value ?? event?.execution?.cwd ?? '').trim();
+    if (workspaceRoot && rawCwd && isPathWithinWorkspaceRoot(workspaceRoot, rawCwd)) {
+      state.lastTerminalCwd = toRelativePath(rawCwd, workspaceRoot);
+      await persistTerminalCwd(context, workspaceRoot);
     }
+    if (config.includeTerminalHistory) {
+      state.recentTerminal.push(sanitizedCommand);
+      for (const url of extractUrls(command)) {
+        state.recentUrls.push(url);
+      }
+    }
+    markMeaningfulActivity();
 
     if (
       isTestOrBuildCommand(command) &&
       state.metricSession &&
       state.metricSession.firstRunLagMs === undefined
     ) {
+      recordFirstActionLag();
       state.metricSession.firstRunLagMs = Date.now() - state.metricSession.startedAt;
       await maybeFinalizeMetric(context);
     }
@@ -695,13 +876,23 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       config.redactionPatterns,
     );
 
-    if (typeof exitCode === 'number' && exitCode !== 0 && isTestOrBuildCommand(command)) {
+    if (
+      config.includeTerminalHistory &&
+      typeof exitCode === 'number' &&
+      exitCode !== 0 &&
+      isTestOrBuildCommand(command)
+    ) {
       state.lastFailingCommandRaw = command;
       state.lastFailingCommand = sanitizedCommand;
       await persistActivity(context);
     }
 
-    if (typeof exitCode === 'number' && exitCode === 0 && isTestOrBuildCommand(command)) {
+    if (
+      config.includeTerminalHistory &&
+      typeof exitCode === 'number' &&
+      exitCode === 0 &&
+      isTestOrBuildCommand(command)
+    ) {
       state.doneItems.push(sanitizedCommand);
 
       if (
@@ -775,6 +966,7 @@ async function triggerSummary(
   const prepared = await prepareTriggerSummary(context, root, reason);
 
   await context.workspaceState.update(KEY_LAST_SUMMARY_AT, Date.now());
+  await touchWorkspaceActivity(context, root);
 
   await presentSummary(context, prepared.summary, prepared.triggerReason, {
     autoOpenDetails: reason === 'manual',
@@ -836,7 +1028,7 @@ async function prepareTriggerSummary(
   const corrections = getSummaryCorrectionsForContext(context, root, localSummary.contextHash);
   localSummary.userCorrections = corrections;
   localSummary.correctionsFingerprint = summarizeCorrectionsFingerprint(corrections);
-  const cacheKey = summaryCacheKey(root);
+  const cacheKey = summaryCacheKey(context, root);
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
   const correctionsUnchanged =
     (cached?.correctionsFingerprint ?? '') === (localSummary.correctionsFingerprint ?? '');
@@ -880,6 +1072,19 @@ async function refineSummaryInBackground(
   state.activeRefinementContextHash = prepared.localSummary.contextHash;
   rerenderPanel();
 
+  const hasConsent = await ensureAiPayloadConsent(context, prepared);
+  if (!hasConsent) {
+    if (state.activeRefinementSequence === sequence) {
+      state.activeRefinementSequence = undefined;
+      state.activeRefinementContextHash = undefined;
+      rerenderPanel();
+    }
+    void vscode.window.showInformationMessage(
+      'TaCoS: AI refinement skipped because payload send was not approved.',
+    );
+    return;
+  }
+
   let refined: ResumeSummary | undefined;
   try {
     refined = await generateAiSummary(prepared);
@@ -920,6 +1125,14 @@ async function generateSummary(
 ): Promise<{ summary: ResumeSummary; triggerReason: TriggerReason }> {
   const prepared = await prepareTriggerSummary(context, root, reason);
   if (!prepared.shouldRefineWithAi) {
+    return {
+      summary: prepared.summary,
+      triggerReason: prepared.triggerReason,
+    };
+  }
+
+  const hasConsent = await ensureAiPayloadConsent(context, prepared);
+  if (!hasConsent) {
     return {
       summary: prepared.summary,
       triggerReason: prepared.triggerReason,
@@ -1065,6 +1278,8 @@ async function presentSummary(
       startedAt: Date.now(),
       workspaceRoot: root,
       trigger: triggerReason,
+      uiSurface: config.uiSurface,
+      interruptionEvent: triggerReason === 'focus' && config.uiSurface === 'notification' ? 1 : 0,
     };
   }
 
@@ -1078,10 +1293,10 @@ async function presentSummary(
   }
 
   if (presentationMode === 'background') {
-    const statusMessage = state.panel
-      ? `TaCoS (${summary.source}): summary refreshed in details panel.`
-      : `TaCoS (${summary.source}): summary refreshed in background scratch pad.`;
-    void vscode.window.setStatusBarMessage(statusMessage, 3500);
+    return;
+  }
+
+  if (presentationMode === 'silent') {
     return;
   }
 
@@ -1134,7 +1349,12 @@ async function presentSummary(
 
   if (choice === actionPauseLabel) {
     recordCompanionQuickAction();
+    state.snoozeUntil = 0;
+    await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
     await setPaused(!config.pauseSummaries);
+    if (!config.pauseSummaries) {
+      recordMetricCounter('pauseActions');
+    }
     void vscode.window.showInformationMessage(
       !config.pauseSummaries ? 'TaCoS: auto summaries paused.' : 'TaCoS: auto summaries resumed.',
     );
@@ -1188,11 +1408,15 @@ function resolveSummaryPresentationMode(
     return 'auto-open-details';
   }
 
-  if (config.autoRefreshInBackground) {
-    return 'background';
+  if (config.uiSurface === 'silent') {
+    return 'silent';
   }
 
-  return 'prompt';
+  if (config.uiSurface === 'notification') {
+    return 'prompt';
+  }
+
+  return 'background';
 }
 
 function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeMode {
@@ -1204,6 +1428,10 @@ function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeM
     return 'restricted';
   }
 
+  if (state.snoozeUntil > Date.now()) {
+    return 'paused';
+  }
+
   if (config.pauseSummaries || state.pauseUntilRestart) {
     return 'paused';
   }
@@ -1211,11 +1439,20 @@ function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeM
   return 'active';
 }
 
+function recordFirstActionLag(): void {
+  if (!state.metricSession || state.metricSession.firstActionLagMs !== undefined) {
+    return;
+  }
+
+  state.metricSession.firstActionLagMs = Date.now() - state.metricSession.startedAt;
+}
+
 function recordCompanionFirstActionLag(): void {
   if (!state.metricSession || state.metricSession.companionFirstActionLagMs !== undefined) {
     return;
   }
 
+  recordFirstActionLag();
   state.metricSession.companionFirstActionLagMs = Date.now() - state.metricSession.startedAt;
 }
 
@@ -1255,6 +1492,45 @@ function recordCompanionNudgeImpression(): void {
 
   state.metricSession.companionNudgeImpressions =
     (state.metricSession.companionNudgeImpressions ?? 0) + 1;
+}
+
+function recordMetricCounter(field: 'pauseActions' | 'snoozeActions' | 'disableActions'): void {
+  if (!state.metricSession) {
+    return;
+  }
+
+  state.metricSession[field] = (state.metricSession[field] ?? 0) + 1;
+}
+
+async function promptSummaryHelpfulnessRating(): Promise<void> {
+  if (!state.metricSession) {
+    void vscode.window.showInformationMessage(
+      'TaCoS: generate or refresh a summary first to record helpfulness for this session.',
+    );
+    return;
+  }
+
+  type HelpfulnessPick = vscode.QuickPickItem & { rating: 1 | 2 | 3 | 4 | 5 };
+  const picks: HelpfulnessPick[] = [
+    { rating: 5, label: '5 - Very helpful' },
+    { rating: 4, label: '4 - Helpful' },
+    { rating: 3, label: '3 - Mixed' },
+    { rating: 2, label: '2 - Not very helpful' },
+    { rating: 1, label: '1 - Not helpful' },
+  ];
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Rate Summary Helpfulness',
+    placeHolder: 'Optional local rating',
+    ignoreFocusOut: true,
+  });
+  if (!picked || !state.metricSession) {
+    return;
+  }
+
+  state.metricSession.helpfulnessRating = picked.rating;
+  void vscode.window.showInformationMessage(
+    `TaCoS: helpfulness rating saved (${picked.rating}/5).`,
+  );
 }
 
 function nudgeActionLabel(action: string): string {
@@ -1340,8 +1616,10 @@ function updateCompanionStatusBar(): void {
         : mode === 'paused'
           ? 'paused'
           : 'disabled';
+  const topStep = summary?.nextSteps[0]?.trim();
   const blockerCount = summary?.lastFailingCommand ? 1 : 0;
   const blockerSuffix = blockerCount > 0 ? ` · ${blockerCount} blocker` : '';
+  const trustCue = buildTrustCue(summary);
   state.statusBar.text = `${modeIcon} TaCoS: ${statusHeadline}${blockerSuffix}`;
   state.statusBar.backgroundColor =
     mode === 'restricted'
@@ -1352,7 +1630,17 @@ function updateCompanionStatusBar(): void {
   state.statusBar.tooltip = [
     'TaCoS Companion',
     `Mode: ${modeLabel}`,
+    `Surface: ${config.uiSurface}`,
     `Provider: ${describeProvider(config.summaryProvider)}`,
+    `Privacy preset: ${PRIVACY_PRESET_LABELS[config.privacyPreset]}`,
+    `Retention: ${RETENTION_POLICY_LABELS[config.retentionPolicy]}`,
+    `Summary quiet hours: ${config.summaryQuietHours || 'off'}`,
+    state.snoozeUntil > Date.now()
+      ? `Snoozed until: ${formatTimestamp(state.snoozeUntil)}`
+      : 'Snooze: off',
+    trustCue.headline,
+    summary ? `Intent: ${summarizeForStatusBar(summary.intent, 120)}` : 'Intent: (none yet)',
+    topStep ? `Next: ${summarizeForStatusBar(topStep, 120)}` : 'Next: (none yet)',
     summary
       ? `Last summary: ${summary.source} at ${formatTimestamp(summary.generatedAt)}`
       : 'No summary yet.',
@@ -1365,11 +1653,21 @@ interface CompanionActionPick extends vscode.QuickPickItem {
   id:
     | 'showNow'
     | 'showLast'
+    | 'standup'
+    | 'restoreWorkingSet'
+    | 'switchPartition'
+    | 'jumpLastEdit'
     | 'copyPrompt'
     | 'togglePause'
+    | 'snoozeAuto'
     | 'enable'
     | 'openPrivacy'
-    | 'configureProvider';
+    | 'configureProvider'
+    | 'setPrivacyPreset'
+    | 'setRetentionPolicy'
+    | 'forgetWorkspace'
+    | 'revokeAiConsent'
+    | 'rateHelpfulness';
 }
 
 async function showCompanionActions(context: vscode.ExtensionContext): Promise<void> {
@@ -1387,9 +1685,34 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       detail: 'Open the latest cached TaCoS summary.',
     },
     {
+      id: 'standup',
+      label: 'Generate standup update',
+      detail: 'Create concise Done/Next/Blockers output.',
+    },
+    {
+      id: 'restoreWorkingSet',
+      label: 'Restore working set',
+      detail: 'Preview and restore files, diff target, terminal cwd, and search query.',
+    },
+    {
+      id: 'switchPartition',
+      label: 'Switch task partition',
+      detail: 'Set or clear manual task key for context partitioning.',
+    },
+    {
+      id: 'jumpLastEdit',
+      label: 'Jump to last edit',
+      detail: 'Open your most recent edited location.',
+    },
+    {
       id: 'copyPrompt',
       label: 'Copy prompt and open Codex',
       detail: 'Create a Codex-ready prompt from current context.',
+    },
+    {
+      id: 'snoozeAuto',
+      label: 'Snooze auto summaries',
+      detail: 'Temporarily suppress focus-triggered summaries.',
     },
     {
       id: 'configureProvider',
@@ -1400,6 +1723,31 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'openPrivacy',
       label: 'Open Privacy & Safety',
       detail: 'Review what TaCoS stores and sends.',
+    },
+    {
+      id: 'setPrivacyPreset',
+      label: 'Set privacy preset',
+      detail: `Current: ${PRIVACY_PRESET_LABELS[config.privacyPreset]}.`,
+    },
+    {
+      id: 'setRetentionPolicy',
+      label: 'Set retention policy',
+      detail: `Current: ${RETENTION_POLICY_LABELS[config.retentionPolicy]}.`,
+    },
+    {
+      id: 'forgetWorkspace',
+      label: 'Forget this workspace now',
+      detail: 'Clear TaCoS workspace-scoped data immediately.',
+    },
+    {
+      id: 'revokeAiConsent',
+      label: 'Revoke AI payload consent',
+      detail: 'Require payload review before the next AI send.',
+    },
+    {
+      id: 'rateHelpfulness',
+      label: 'Rate summary helpfulness',
+      detail: 'Optional local rating for TaCoS quality metrics.',
     },
   ];
 
@@ -1438,15 +1786,45 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'showLast') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.showLastSummary');
+  } else if (picked.id === 'standup') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.generateStandupUpdate');
+  } else if (picked.id === 'restoreWorkingSet') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.restoreWorkingSet');
+  } else if (picked.id === 'switchPartition') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.switchTaskPartition');
+  } else if (picked.id === 'jumpLastEdit') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.jumpToLastEdit');
   } else if (picked.id === 'copyPrompt') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.copyPromptAndOpenCodex');
+  } else if (picked.id === 'snoozeAuto') {
+    recordCompanionQuickAction();
+    await promptAndSetAutoSummarySnooze(context);
   } else if (picked.id === 'configureProvider') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.configureAiProvider');
   } else if (picked.id === 'openPrivacy') {
     recordCompanionQuickAction();
     await openPrivacySafetyDoc(context);
+  } else if (picked.id === 'setPrivacyPreset') {
+    recordCompanionQuickAction();
+    await promptAndApplyPrivacyPreset(context);
+  } else if (picked.id === 'setRetentionPolicy') {
+    recordCompanionQuickAction();
+    await promptAndSetRetentionPolicy(context);
+  } else if (picked.id === 'forgetWorkspace') {
+    recordCompanionQuickAction();
+    await forgetWorkspaceNow(context);
+  } else if (picked.id === 'revokeAiConsent') {
+    recordCompanionQuickAction();
+    await revokeAiPayloadConsent(context);
+  } else if (picked.id === 'rateHelpfulness') {
+    recordCompanionQuickAction();
+    await promptSummaryHelpfulnessRating();
   } else if (picked.id === 'enable') {
     recordCompanionQuickAction();
     await setEnabled(true);
@@ -1455,11 +1833,16 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
     recordCompanionQuickAction();
     if (mode === 'paused') {
       state.pauseUntilRestart = false;
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
       await setPaused(false);
       void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
     } else {
       state.pauseUntilRestart = false;
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
       await setPaused(true);
+      recordMetricCounter('pauseActions');
       void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
     }
     rerenderPanel();
@@ -1629,10 +2012,15 @@ async function showDetailsPanel(
         const wasPaused = config.pauseSummaries || state.pauseUntilRestart;
         if (wasPaused) {
           state.pauseUntilRestart = false;
+          state.snoozeUntil = 0;
+          await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
           await setPaused(false);
           void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
         } else {
+          state.snoozeUntil = 0;
+          await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
           await setPaused(true);
+          recordMetricCounter('pauseActions');
           void vscode.window.showInformationMessage('TaCoS: auto summaries paused.');
         }
 
@@ -1647,10 +2035,50 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'rateHelpfulness') {
+        recordCompanionQuickAction();
+        await promptSummaryHelpfulnessRating();
+        return;
+      }
+
+      if (message.type === 'runNextStepAction') {
+        if (!state.panelSummary) {
+          return;
+        }
+
+        recordCompanionQuickAction();
+        await runNextStepAction(state.panelSummary, message.stepIndex, state.panelWorkspaceRoot);
+        return;
+      }
+
       if (message.type === 'blockedLink') {
         void vscode.window.showWarningMessage(
           'TaCoS blocked a link that was not part of the validated summary link list.',
         );
+        return;
+      }
+
+      if (message.type === 'restoreJumpToLastEdit') {
+        recordCompanionQuickAction();
+        await jumpToRecentEdit(context, state.panelWorkspaceRoot);
+        return;
+      }
+
+      if (message.type === 'restoreWorkingSet') {
+        recordCompanionQuickAction();
+        await restoreWorkingSetCommand(context);
+        return;
+      }
+
+      if (message.type === 'restoreOpenProblems') {
+        recordCompanionQuickAction();
+        await openProblemsView();
+        return;
+      }
+
+      if (message.type === 'restoreOpenDiagnosticFile') {
+        recordCompanionQuickAction();
+        await openPrimaryDiagnosticFile(state.panelWorkspaceRoot);
         return;
       }
 
@@ -1737,6 +2165,29 @@ async function showDetailsPanel(
 
         recordCompanionQuickAction();
         await vscode.env.openExternal(vscode.Uri.parse(safeUrl));
+        return;
+      }
+
+      if (message.type === 'openTopFile') {
+        const file = state.panelSummary?.topFiles[message.index];
+        const workspaceRoot = state.panelWorkspaceRoot ?? pickWorkspaceRoot();
+        if (!file || !workspaceRoot) {
+          void vscode.window.showWarningMessage(
+            'TaCoS blocked file link because no workspace root is available for validation.',
+          );
+          return;
+        }
+
+        const safeTarget = resolveFileTargetInWorkspace(file, workspaceRoot);
+        if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
+          void vscode.window.showWarningMessage(
+            'TaCoS blocked an unsafe file link from the summary.',
+          );
+          return;
+        }
+
+        recordCompanionQuickAction();
+        await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(safeTarget));
         return;
       }
 
@@ -1862,6 +2313,17 @@ function renderWebview(
       </div>
     </div>`
     : '';
+  const candidateIntentItems = (summary.candidateIntents ?? [])
+    .map((candidate) => `<li>${escapeHtml(candidate)}</li>`)
+    .join('');
+  const confidenceCard = summary.lowConfidence
+    ? `<div class="card">
+      <h3>Low Confidence</h3>
+      <p class="muted">Unclear intent (low evidence). Add one line of context before continuing.</p>
+      <ul class="compact-list">${candidateIntentItems || '<li>No strong candidates captured.</li>'}</ul>
+      <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add one-line checkpoint</button>
+    </div>`
+    : '';
   const linkItems = summary.links
     .map(
       (link, index) =>
@@ -1869,17 +2331,52 @@ function renderWebview(
     )
     .join('');
 
+  const mode = summary.mode ?? 'coding';
+  const trusted = vscode.workspace.isTrusted;
+  const availability = computeRestoreAvailability({
+    trusted,
+    hasLastTask: Boolean(state.lastTaskName),
+    hasLastDebug: Boolean(state.lastDebugConfigName),
+    hasFailingCommand: Boolean(getCopyableFailingCommand()),
+    hasRecentEditLocation: state.recentEditLocations.length > 0,
+    currentBranch: summary.currentBranch,
+    previousBranch: summary.previousBranch,
+  });
+  const diagnostics = collectWorkspaceDiagnostics(state.panelWorkspaceRoot ?? pickWorkspaceRoot());
+  const hasFailingTask =
+    Boolean(state.lastTaskName) &&
+    Number.isInteger(state.lastTaskExitCode) &&
+    (state.lastTaskExitCode ?? 0) !== 0;
+  const canOpenProblems = diagnostics.errorCount > 0 || diagnostics.warningCount > 0;
+  const canOpenDiagnosticFile = Boolean(diagnostics.top);
+  const trustCue = buildTrustCue(summary);
+  const nextStepActions = buildNextStepActions({
+    summary,
+    canRerunTask: availability.canRerunTask,
+    canRerunDebug: availability.canRerunDebug,
+    canCopyFailingCommand: availability.canCopyFailingCommand,
+  });
   const nextSteps = summary.nextSteps
     .map((step, index) => {
       const evidenceIds = summary.nextStepEvidenceIds?.[index] ?? [];
       const badges = evidenceIds
         .map((evidenceId) => renderStepEvidenceBadge(evidenceId, evidenceById.get(evidenceId)))
         .join('');
+      const action = nextStepActions[index];
+      const actionButton = action
+        ? `<button type="button" class="secondary step-action" data-action="runNextStepAction" data-step-index="${index}">${escapeHtml(action.label)}</button>`
+        : '';
       const badgeRow = badges ? `<div class="step-evidence">${badges}</div>` : '';
-      return `<li>${escapeHtml(step)}${badgeRow}</li>`;
+      const actionRow = actionButton ? `<div class="step-actions">${actionButton}</div>` : '';
+      return `<li>${escapeHtml(step)}${badgeRow}${actionRow}</li>`;
     })
     .join('');
-  const topFiles = summary.topFiles.map((file) => `<li>${escapeHtml(file)}</li>`).join('');
+  const topFiles = summary.topFiles
+    .map(
+      (file, index) =>
+        `<li><a href="#" data-action="openTopFile" data-top-file-index="${index}">${escapeHtml(file)}</a></li>`,
+    )
+    .join('');
   const evidenceItems = (summary.evidenceCatalog ?? [])
     .map((item, index) => {
       const target = item.target
@@ -1890,16 +2387,6 @@ function renderWebview(
     })
     .join('');
   const hasExtraEvidence = (summary.evidenceCatalog?.length ?? 0) > 5;
-  const mode = summary.mode ?? 'coding';
-  const trusted = vscode.workspace.isTrusted;
-  const availability = computeRestoreAvailability({
-    trusted,
-    hasLastTask: Boolean(state.lastTaskName),
-    hasLastDebug: Boolean(state.lastDebugConfigName),
-    hasFailingCommand: Boolean(getCopyableFailingCommand()),
-    currentBranch: summary.currentBranch,
-    previousBranch: summary.previousBranch,
-  });
   const companionNextSteps = summary.nextSteps
     .slice(0, 3)
     .map((step) => `<li>${escapeHtml(step)}</li>`)
@@ -1931,16 +2418,35 @@ function renderWebview(
     blockerTitle = 'Workspace is in Restricted Mode';
     blockerDetail =
       'Task/debug reruns and branch checkout are disabled until workspace trust is granted.';
+  } else if (summary.lowConfidence) {
+    blockerTitle = 'Low-confidence resume context';
+    blockerDetail = 'Evidence is sparse. Add a one-line checkpoint before taking risky actions.';
+    blockerActionLabel = 'Add checkpoint';
+    blockerAction = 'sessionAddCheckpoint';
+  } else if (hasFailingTask) {
+    blockerTitle = 'Last task failed';
+    blockerDetail = `${state.lastTaskName} exited with code ${state.lastTaskExitCode}.`;
+    blockerActionLabel = 'Rerun last task';
+    blockerAction = 'restoreRerunTask';
+    blockerActionDisabled = !availability.canRerunTask;
   } else if (summary.lastFailingCommand) {
     blockerTitle = 'Last command failed';
     blockerDetail = summary.lastFailingCommand;
-    if (availability.canCopyFailingCommand) {
-      blockerActionLabel = 'Copy failing command';
-      blockerAction = 'restoreCopyFailingCommand';
-    } else if (availability.canRerunTask) {
+    if (availability.canRerunTask) {
       blockerActionLabel = 'Rerun last task';
       blockerAction = 'restoreRerunTask';
+    } else if (availability.canCopyFailingCommand) {
+      blockerActionLabel = 'Copy failing command';
+      blockerAction = 'restoreCopyFailingCommand';
     }
+  } else if (diagnostics.errorCount > 0) {
+    blockerTitle = 'Diagnostics need attention';
+    blockerDetail = diagnostics.top
+      ? `${diagnostics.errorCount} error(s). First at ${diagnostics.top.path}:${diagnostics.top.line + 1}.`
+      : `${diagnostics.errorCount} error(s) in Problems view.`;
+    blockerActionLabel = diagnostics.top ? 'Open diagnostic file' : 'Open Problems';
+    blockerAction = diagnostics.top ? 'restoreOpenDiagnosticFile' : 'restoreOpenProblems';
+    blockerActionDisabled = diagnostics.top ? !canOpenDiagnosticFile : !canOpenProblems;
   } else if (switchedBranches) {
     blockerTitle = 'Branch context changed';
     blockerDetail = `You moved from ${summary.previousBranch} to ${summary.currentBranch}.`;
@@ -1960,10 +2466,14 @@ function renderWebview(
       : '';
 
   const companionRestoreButtons = [
+    '<button type="button" data-action="restoreWorkingSet">Restore working set</button>',
+    `<button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled aria-disabled="true"'}>Jump to last edit</button>`,
     '<button type="button" data-action="restoreReopenFiles">Reopen files</button>',
     '<button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>',
     `<button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled aria-disabled="true"'}>Rerun task</button>`,
     `<button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled aria-disabled="true"'}>Rerun debug</button>`,
+    `<button type="button" data-action="restoreOpenProblems" ${canOpenProblems ? '' : 'disabled aria-disabled="true"'}>Open Problems</button>`,
+    `<button type="button" data-action="restoreOpenDiagnosticFile" ${canOpenDiagnosticFile ? '' : 'disabled aria-disabled="true"'}>Open diagnostic file</button>`,
   ].join('');
 
   const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
@@ -2005,6 +2515,7 @@ function renderWebview(
         : 'Redacted summary context and evidence when AI refinement runs.';
   const storedLocallyLabel =
     'Redacted activity snapshots, summary cache, checkpoint notes, and local metrics.';
+  const trustCueDetails = trustCue.details.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const autoSummaryStatusLabel = autoSummariesDisabled
     ? 'Auto summaries disabled'
     : autoSummariesPaused
@@ -2072,6 +2583,13 @@ function renderWebview(
       </div>
     </div>`
       : '';
+  const changesSinceItems = (summary.changesSinceLastResume ?? [])
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join('');
+  const changesSinceCard = `<div class="card">
+      <h3>Changes Since Last Time</h3>
+      <ul class="compact-list">${changesSinceItems || '<li>No changes captured.</li>'}</ul>
+    </div>`;
   const nudgeCard =
     primaryNudge || secondaryNudge || nudgeSuppressionLabel
       ? `<div class="card">
@@ -2213,6 +2731,13 @@ function renderWebview(
         display: flex;
         gap: 6px;
         flex-wrap: wrap;
+      }
+      .step-actions {
+        margin-top: 8px;
+      }
+      .step-action {
+        padding: 4px 10px;
+        font-size: 12px;
       }
       .badge {
         display: inline-block;
@@ -2399,6 +2924,11 @@ function renderWebview(
       <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(trustTrackingLabel)}</div>
       <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(storedLocallyLabel)}</div>
       <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(sentToAiLabel)}</div>
+      <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(trustCue.headline.replace('Based on: ', ''))}</div>
+      <details>
+        <summary><strong>Why am I seeing this?</strong></summary>
+        <ul class="compact-list">${trustCueDetails || '<li>No evidence counts yet.</li>'}</ul>
+      </details>
       <div class="status-actions">
         <button type="button" class="secondary" data-action="toggleAutoSummaries" ${autoSummaryToggleDisabledAttr}>${escapeHtml(autoSummaryToggleLabel)}</button>
         <button type="button" class="secondary" data-action="openPrivacySafety">Open Privacy & Safety</button>
@@ -2407,6 +2937,7 @@ function renderWebview(
 
     ${checkpointCard}
     ${recapCard}
+    ${changesSinceCard}
     ${nudgeCard}
     <div class="card">
       <h3>Companion Home</h3>
@@ -2440,6 +2971,8 @@ function renderWebview(
       <p class="mode">Mode: ${escapeHtml(mode)}</p>
     </div>
 
+    ${confidenceCard}
+
     <div class="card">
       <h3>Next Steps</h3>
       <ul>${nextSteps}</ul>
@@ -2462,6 +2995,7 @@ function renderWebview(
       <div class="quick-actions">
         <button type="button" data-action="copyNextSteps">Copy next steps</button>
         <button type="button" data-action="copySummary">Copy summary</button>
+        <button type="button" data-action="rateHelpfulness">Rate helpfulness</button>
         <button type="button" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
       </div>
     </div>
@@ -2469,10 +3003,14 @@ function renderWebview(
     <div class="card">
       <h3>Restore Pack</h3>
       <div class="restore-grid">
+        <button type="button" data-action="restoreWorkingSet">Restore working set</button>
+        <button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled'}>Jump to last edit</button>
         <button type="button" data-action="restoreReopenFiles">Reopen files</button>
         <button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>
         <button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled'}>Rerun last task</button>
         <button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled'}>Rerun debug config</button>
+        <button type="button" data-action="restoreOpenProblems" ${canOpenProblems ? '' : 'disabled'}>Open Problems</button>
+        <button type="button" data-action="restoreOpenDiagnosticFile" ${canOpenDiagnosticFile ? '' : 'disabled'}>Open diagnostic file</button>
         <button type="button" data-action="restoreCheckoutPreviousBranch" ${availability.canCheckoutPreviousBranch ? '' : 'disabled'}>Checkout previous branch</button>
         <button type="button" data-action="restoreCopyFailingCommand" ${availability.canCopyFailingCommand ? '' : 'disabled'}>Copy failing command</button>
       </div>
@@ -2518,10 +3056,16 @@ function renderWebview(
         'refreshSummary',
         'toggleAutoSummaries',
         'openPrivacySafety',
+        'rateHelpfulness',
+        'runNextStepAction',
+        'restoreWorkingSet',
+        'restoreJumpToLastEdit',
         'restoreReopenFiles',
         'restoreOpenChangedFiles',
         'restoreRerunTask',
         'restoreRerunDebug',
+        'restoreOpenProblems',
+        'restoreOpenDiagnosticFile',
         'restoreCheckoutPreviousBranch',
         'restoreCopyFailingCommand'
       ]);
@@ -2595,6 +3139,26 @@ function renderWebview(
               return;
             }
             vscode.postMessage({ type: 'openLink', index });
+            return;
+          }
+
+          if (action === 'openTopFile') {
+            const index = parseDatasetInteger(actionElement.dataset.topFileIndex);
+            if (index === undefined) {
+              vscode.postMessage({ type: 'blockedLink' });
+              return;
+            }
+            vscode.postMessage({ type: 'openTopFile', index });
+            return;
+          }
+
+          if (action === 'runNextStepAction') {
+            const stepIndex = parseDatasetInteger(actionElement.dataset.stepIndex);
+            if (stepIndex === undefined) {
+              vscode.postMessage({ type: 'blockedLink' });
+              return;
+            }
+            vscode.postMessage({ type: 'runNextStepAction', stepIndex });
             return;
           }
 
@@ -2690,6 +3254,254 @@ async function openSummaryEditor(content: string): Promise<void> {
     viewColumn: vscode.ViewColumn.Beside,
     preserveFocus: false,
   });
+}
+
+async function generateStandupUpdateCommand(context: vscode.ExtensionContext): Promise<void> {
+  const root = pickWorkspaceRoot();
+  if (!root) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(context, root));
+  const summary = cached ?? (await generateSummary(context, root, 'manual')).summary;
+  const standup = buildStandupUpdate(summary, path.basename(root), Date.now());
+  const action = await vscode.window.showInformationMessage(
+    'TaCoS: standup update generated.',
+    'Copy',
+    'Open',
+    'Copy + Open',
+  );
+  if (action === 'Copy') {
+    await vscode.env.clipboard.writeText(standup);
+    void vscode.window.showInformationMessage('TaCoS: standup update copied to clipboard.');
+    return;
+  }
+
+  if (action === 'Open') {
+    await openSummaryEditor(standup);
+    return;
+  }
+
+  if (action === 'Copy + Open') {
+    await vscode.env.clipboard.writeText(standup);
+    await openSummaryEditor(standup);
+    void vscode.window.showInformationMessage(
+      'TaCoS: standup update copied and opened in an editor tab.',
+    );
+  }
+}
+
+function terminalCwdStorageKey(workspaceRoot: string): string {
+  return `${KEY_LAST_TERMINAL_CWD_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function readPersistedTerminalCwd(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): string | undefined {
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  const value = context.workspaceState.get<string>(terminalCwdStorageKey(workspaceRoot), '').trim();
+  return value || undefined;
+}
+
+async function persistTerminalCwd(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<void> {
+  await context.workspaceState.update(terminalCwdStorageKey(workspaceRoot), state.lastTerminalCwd);
+}
+
+function restoreSearchQueryKey(workspaceRoot: string): string {
+  return `${KEY_RESTORE_SEARCH_QUERY_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function readPersistedRestoreSearchQuery(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): string | undefined {
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  const value = context.workspaceState.get<string>(restoreSearchQueryKey(workspaceRoot), '').trim();
+  return value || undefined;
+}
+
+async function captureRestoreSearchQuery(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const current = readPersistedRestoreSearchQuery(context, workspaceRoot) ?? '';
+  const input = await vscode.window.showInputBox({
+    title: 'TaCoS: Set Restore Search Query',
+    prompt: 'Optional query to re-open in Search during restore working set.',
+    placeHolder: 'Example: TODO auth middleware',
+    value: current,
+    ignoreFocusOut: true,
+  });
+  if (typeof input === 'undefined') {
+    return;
+  }
+
+  const nextValue = input.trim();
+  await context.workspaceState.update(
+    restoreSearchQueryKey(workspaceRoot),
+    nextValue ? nextValue : undefined,
+  );
+  void vscode.window.showInformationMessage(
+    nextValue ? 'TaCoS: restore search query saved.' : 'TaCoS: restore search query cleared.',
+  );
+}
+
+async function switchTaskPartition(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const current =
+    context.workspaceState.get<string>(taskPartitionStorageKey(workspaceRoot), '').trim() || '';
+  const inferred =
+    inferTaskPartitionKey(context.workspaceState.get<string>(branchStateKey(workspaceRoot), '')) ||
+    '';
+  const input = await vscode.window.showInputBox({
+    title: 'TaCoS: Switch Task Partition',
+    prompt:
+      'Set an optional task key (for example ABC-123). Leave empty to use inferred/default partition.',
+    placeHolder: inferred ? `Inferred from branch: ${inferred}` : 'Example: ABC-123',
+    value: current,
+    ignoreFocusOut: true,
+  });
+  if (typeof input === 'undefined') {
+    return;
+  }
+
+  const nextValue = input.trim();
+  await context.workspaceState.update(
+    taskPartitionStorageKey(workspaceRoot),
+    nextValue ? nextValue : undefined,
+  );
+
+  const snapshot = loadPersistedActivitySnapshot(context);
+  state.recentFiles = new RingBuffer(15, snapshot.sanitized.recentFiles);
+  state.recentTerminal = new RingBuffer(15, snapshot.sanitized.recentTerminal);
+  state.recentDebug = new RingBuffer(10, snapshot.sanitized.recentDebug);
+  state.recentUrls = new RingBuffer(5, snapshot.sanitized.recentUrls);
+  state.doneItems = new RingBuffer(10, snapshot.sanitized.doneItems);
+  state.lastFailingCommand = snapshot.sanitized.lastFailingCommand;
+  state.lastFailingCommandRaw = undefined;
+  state.scratchSummary = undefined;
+  if (state.panel) {
+    state.panel.dispose();
+  }
+  updateCompanionStatusBar();
+  void vscode.window.showInformationMessage(
+    nextValue
+      ? `TaCoS: switched to task partition "${nextValue}".`
+      : `TaCoS: switched to ${inferred ? `inferred partition "${inferred}"` : 'default partition'}.`,
+  );
+}
+
+async function restoreWorkingSetCommand(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const summary =
+    state.panelSummary ??
+    state.scratchSummary ??
+    context.workspaceState.get<ResumeSummary>(summaryCacheKey(context, workspaceRoot));
+  if (!summary) {
+    void vscode.window.showInformationMessage(
+      'TaCoS: no summary context available to restore yet.',
+    );
+    return;
+  }
+
+  const filesToOpen = uniqueStrings([
+    ...(summary.recentFilesSnapshot ?? []),
+    ...summary.topFiles,
+  ]).slice(0, 6);
+  const diffTarget = summary.topFiles[0];
+  const terminalCwd = state.lastTerminalCwd?.trim() || undefined;
+  const searchQuery = readPersistedRestoreSearchQuery(context, workspaceRoot);
+  const preview = [
+    `files: ${filesToOpen.length}`,
+    `diff target: ${diffTarget ? 'yes' : 'none'}`,
+    `terminal cwd: ${terminalCwd ? terminalCwd : 'none'}`,
+    `search query: ${searchQuery ? 'yes' : 'none'}`,
+  ].join(' • ');
+
+  const choice = await vscode.window.showInformationMessage(
+    `TaCoS restore preview (${preview})`,
+    { modal: true },
+    'Restore',
+  );
+  if (choice !== 'Restore') {
+    return;
+  }
+
+  const openedFiles = await openWorkspaceFiles(filesToOpen, workspaceRoot);
+  let openedDiff = false;
+  if (diffTarget) {
+    const safePath = resolveFileTargetInWorkspace(diffTarget, workspaceRoot);
+    if (safePath && isPathWithinWorkspaceRoot(workspaceRoot, safePath)) {
+      const diffUri = vscode.Uri.file(safePath);
+      try {
+        await vscode.commands.executeCommand('git.openChange', diffUri);
+        openedDiff = true;
+      } catch {
+        await vscode.commands.executeCommand('vscode.open', diffUri, {
+          preview: false,
+          preserveFocus: true,
+        });
+        openedDiff = true;
+      }
+    }
+  }
+
+  let openedTerminal = false;
+  if (terminalCwd) {
+    const safeCwd = resolveFileTargetInWorkspace(terminalCwd, workspaceRoot);
+    if (safeCwd && isPathWithinWorkspaceRoot(workspaceRoot, safeCwd)) {
+      try {
+        await vscode.commands.executeCommand('workbench.action.terminal.newWithCwd', {
+          cwd: safeCwd,
+        });
+        openedTerminal = true;
+      } catch {
+        const terminal = vscode.window.createTerminal({
+          name: 'TaCoS Restore',
+          cwd: safeCwd,
+        });
+        terminal.show(true);
+        openedTerminal = true;
+      }
+    }
+  }
+
+  let restoredSearch = false;
+  if (searchQuery) {
+    await vscode.commands.executeCommand('workbench.action.findInFiles', {
+      query: searchQuery,
+      triggerSearch: true,
+    });
+    restoredSearch = true;
+  }
+
+  void vscode.window.showInformationMessage(
+    `TaCoS: restored ${openedFiles} files${openedDiff ? ', diff target' : ''}${openedTerminal ? ', terminal cwd' : ''}${restoredSearch ? ', and search query' : ''}. Missing resources were skipped safely.`,
+  );
 }
 
 function formatMarkdownSummary(summary: ResumeSummary): string {
@@ -2791,6 +3603,299 @@ async function openWorkspaceFiles(
   return opened;
 }
 
+function diagnosticSeverityRank(severity: vscode.DiagnosticSeverity): number {
+  if (severity === vscode.DiagnosticSeverity.Error) {
+    return 0;
+  }
+  if (severity === vscode.DiagnosticSeverity.Warning) {
+    return 1;
+  }
+  if (severity === vscode.DiagnosticSeverity.Information) {
+    return 2;
+  }
+  return 3;
+}
+
+function collectWorkspaceDiagnostics(preferredWorkspaceRoot?: string): DiagnosticBlockerSnapshot {
+  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  let errorCount = 0;
+  let warningCount = 0;
+  let top: DiagnosticBlockerReference | undefined;
+
+  for (const [uri, diagnostics] of vscode.languages.getDiagnostics()) {
+    if (uri.scheme !== 'file') {
+      continue;
+    }
+
+    if (workspaceRoot && !isPathWithinWorkspaceRoot(workspaceRoot, uri.fsPath)) {
+      continue;
+    }
+
+    for (const diagnostic of diagnostics) {
+      if (diagnostic.severity === vscode.DiagnosticSeverity.Error) {
+        errorCount += 1;
+      } else if (diagnostic.severity === vscode.DiagnosticSeverity.Warning) {
+        warningCount += 1;
+      }
+
+      const candidate: DiagnosticBlockerReference = {
+        path: workspaceRoot ? toRelativePath(uri.fsPath, workspaceRoot) : uri.fsPath,
+        absolutePath: uri.fsPath,
+        line: diagnostic.range.start.line,
+        character: diagnostic.range.start.character,
+        message: diagnostic.message.trim().split(/\r?\n/)[0]?.slice(0, 160) ?? '',
+        severity: diagnostic.severity,
+      };
+      if (
+        !top ||
+        diagnosticSeverityRank(candidate.severity) < diagnosticSeverityRank(top.severity)
+      ) {
+        top = candidate;
+      }
+    }
+  }
+
+  return { errorCount, warningCount, top };
+}
+
+async function openProblemsView(): Promise<void> {
+  await vscode.commands.executeCommand('workbench.actions.view.problems');
+}
+
+async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promise<void> {
+  const diagnostics = collectWorkspaceDiagnostics(preferredWorkspaceRoot);
+  if (!diagnostics.top) {
+    void vscode.window.showInformationMessage('TaCoS: no active diagnostics are available.');
+    return;
+  }
+
+  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showWarningMessage(
+      'TaCoS blocked diagnostic navigation because no workspace root is available.',
+    );
+    return;
+  }
+
+  if (!isPathWithinWorkspaceRoot(workspaceRoot, diagnostics.top.absolutePath)) {
+    void vscode.window.showWarningMessage('TaCoS blocked an unsafe diagnostic file target.');
+    return;
+  }
+
+  const doc = await vscode.workspace.openTextDocument(
+    vscode.Uri.file(diagnostics.top.absolutePath),
+  );
+  const editor = await vscode.window.showTextDocument(doc, {
+    preview: false,
+    preserveFocus: false,
+  });
+  const position = new vscode.Position(diagnostics.top.line, diagnostics.top.character);
+  const range = new vscode.Range(position, position);
+  editor.selection = new vscode.Selection(position, position);
+  editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+}
+
+async function runNextStepAction(
+  summary: ResumeSummary,
+  stepIndex: number,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  if (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= summary.nextSteps.length) {
+    void vscode.window.showWarningMessage('TaCoS blocked an invalid next-step action target.');
+    return;
+  }
+
+  const availability = computeRestoreAvailability({
+    trusted: vscode.workspace.isTrusted,
+    hasLastTask: Boolean(state.lastTaskName),
+    hasLastDebug: Boolean(state.lastDebugConfigName),
+    hasFailingCommand: Boolean(getCopyableFailingCommand()),
+    hasRecentEditLocation: state.recentEditLocations.length > 0,
+    currentBranch: summary.currentBranch,
+    previousBranch: summary.previousBranch,
+  });
+  const actions = buildNextStepActions({
+    summary,
+    canRerunTask: availability.canRerunTask,
+    canRerunDebug: availability.canRerunDebug,
+    canCopyFailingCommand: availability.canCopyFailingCommand,
+  });
+  const action = actions[stepIndex];
+  if (!action) {
+    void vscode.window.showInformationMessage(
+      'TaCoS: this step has no verified clickable action yet. Use evidence links to continue.',
+    );
+    return;
+  }
+
+  const evidence = (summary.evidenceCatalog ?? []).find((item) => item.id === action.evidenceId);
+  if (!evidence) {
+    void vscode.window.showWarningMessage('TaCoS blocked a stale next-step action.');
+    return;
+  }
+
+  if (action.kind === 'copyFailingCommand') {
+    await copyFailingCommand();
+    return;
+  }
+
+  if (action.kind === 'rerunTask') {
+    await rerunLastTask();
+    return;
+  }
+
+  if (action.kind === 'rerunDebug') {
+    await rerunLastDebugSession();
+    return;
+  }
+
+  if (action.kind === 'openFile') {
+    const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+    if (!workspaceRoot) {
+      void vscode.window.showWarningMessage(
+        'TaCoS blocked file action because no workspace root is available for validation.',
+      );
+      return;
+    }
+
+    const safeTarget = resolveFileTargetInWorkspace(evidence.target ?? '', workspaceRoot);
+    if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
+      void vscode.window.showWarningMessage('TaCoS blocked an unsafe next-step file target.');
+      return;
+    }
+
+    await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(safeTarget));
+    return;
+  }
+
+  if (action.kind === 'openUrl') {
+    const safeUrl = normalizeHttpUrl(evidence.target ?? '');
+    if (!safeUrl) {
+      void vscode.window.showWarningMessage('TaCoS blocked an unsafe next-step URL.');
+      return;
+    }
+
+    await vscode.env.openExternal(vscode.Uri.parse(safeUrl));
+  }
+}
+
+function recentEditLocationsStorageKey(workspaceRoot: string): string {
+  return `${KEY_RECENT_EDIT_LOCATIONS_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function readRecentEditLocations(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): EditLocation[] {
+  if (!workspaceRoot) {
+    return [];
+  }
+
+  const raw = context.workspaceState.get<unknown>(recentEditLocationsStorageKey(workspaceRoot), []);
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .filter(
+      (entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object',
+    )
+    .map((entry) => ({
+      path: typeof entry.path === 'string' ? entry.path.trim() : '',
+      line: typeof entry.line === 'number' ? entry.line : -1,
+      character: typeof entry.character === 'number' ? entry.character : -1,
+      timestamp: typeof entry.timestamp === 'number' ? entry.timestamp : 0,
+    }))
+    .filter(
+      (entry) =>
+        Boolean(entry.path) &&
+        Number.isInteger(entry.line) &&
+        entry.line >= 0 &&
+        Number.isInteger(entry.character) &&
+        entry.character >= 0 &&
+        Number.isFinite(entry.timestamp) &&
+        entry.timestamp > 0,
+    )
+    .slice(0, 15);
+}
+
+async function persistRecentEditLocations(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    return;
+  }
+
+  await context.workspaceState.update(
+    recentEditLocationsStorageKey(workspaceRoot),
+    state.recentEditLocations.slice(0, 15),
+  );
+  await touchWorkspaceActivity(context, workspaceRoot);
+}
+
+async function jumpToRecentEdit(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const locations = state.recentEditLocations.slice(0, 8);
+  if (locations.length === 0) {
+    void vscode.window.showInformationMessage('TaCoS: no recent edit locations are available.');
+    return;
+  }
+
+  type EditQuickPick = vscode.QuickPickItem & { location: EditLocation };
+  const picks: EditQuickPick[] = locations.map((location) => ({
+    label: `${location.path}:${location.line + 1}:${location.character + 1}`,
+    description: new Date(location.timestamp).toLocaleString(),
+    detail: 'Jump to this recent edit location',
+    location,
+  }));
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Jump to Recent Edit',
+    placeHolder: 'Select a recent edit location',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  await openRecentEditLocation(context, picked.location, preferredWorkspaceRoot);
+}
+
+async function openRecentEditLocation(
+  context: vscode.ExtensionContext,
+  location: EditLocation,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = preferredWorkspaceRoot ?? pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showWarningMessage(
+      'TaCoS blocked jump-to-edit because no workspace root is available for validation.',
+    );
+    return;
+  }
+
+  const safeTarget = resolveFileTargetInWorkspace(location.path, workspaceRoot);
+  if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
+    void vscode.window.showWarningMessage('TaCoS blocked an unsafe recent edit target.');
+    return;
+  }
+
+  const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(safeTarget));
+  const editor = await vscode.window.showTextDocument(doc, {
+    preview: false,
+    preserveFocus: false,
+  });
+  const position = new vscode.Position(location.line, location.character);
+  const range = new vscode.Range(position, position);
+  editor.selection = new vscode.Selection(position, position);
+  editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+  await persistRecentEditLocations(context, workspaceRoot);
+}
+
 function taskWorkspaceRoot(task: vscode.Task): string | undefined {
   const scope = task.scope;
   if (scope && typeof scope === 'object' && 'uri' in scope) {
@@ -2798,6 +3903,68 @@ function taskWorkspaceRoot(task: vscode.Task): string | undefined {
   }
 
   return undefined;
+}
+
+function taskMetadataStorageKey(workspaceRoot: string): string {
+  return `${KEY_LAST_TASK_META_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function readPersistedTaskMetadata(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): PersistedTaskMetadata | undefined {
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  const raw = context.workspaceState.get<unknown>(taskMetadataStorageKey(workspaceRoot));
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  const record = raw as Record<string, unknown>;
+  const taskName = typeof record.taskName === 'string' ? record.taskName.trim() : '';
+  const exitCode = typeof record.exitCode === 'number' ? record.exitCode : NaN;
+  const timestamp = typeof record.timestamp === 'number' ? record.timestamp : NaN;
+  const storedWorkspaceRoot =
+    typeof record.workspaceRoot === 'string' ? record.workspaceRoot.trim() : undefined;
+  if (!taskName || !Number.isInteger(exitCode) || !Number.isFinite(timestamp) || timestamp <= 0) {
+    return undefined;
+  }
+
+  return {
+    taskName,
+    workspaceRoot: storedWorkspaceRoot || undefined,
+    exitCode,
+    timestamp,
+  };
+}
+
+async function persistTaskMetadata(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = state.lastTaskWorkspaceRoot ?? pickWorkspaceRoot() ?? '';
+  if (!workspaceRoot) {
+    return;
+  }
+
+  const taskName = state.lastTaskName?.trim();
+  if (
+    !taskName ||
+    !Number.isInteger(state.lastTaskExitCode) ||
+    !Number.isFinite(state.lastTaskEndedAt)
+  ) {
+    await context.workspaceState.update(taskMetadataStorageKey(workspaceRoot), undefined);
+    await touchWorkspaceActivity(context, workspaceRoot);
+    return;
+  }
+
+  const payload: PersistedTaskMetadata = {
+    taskName,
+    workspaceRoot: state.lastTaskWorkspaceRoot,
+    exitCode: state.lastTaskExitCode ?? 0,
+    timestamp: state.lastTaskEndedAt ?? Date.now(),
+  };
+  await context.workspaceState.update(taskMetadataStorageKey(workspaceRoot), payload);
+  await touchWorkspaceActivity(context, workspaceRoot);
 }
 
 async function rerunLastTask(): Promise<void> {
@@ -2931,35 +4098,7 @@ function getCopyableFailingCommand(): string | undefined {
 
 async function tryOpenCodexPanel(config: ExtensionConfig): Promise<string | undefined> {
   const knownCommands = await vscode.commands.getCommands(true);
-  const knownSet = new Set(knownCommands);
-
-  const configured = config.codexOpenCommand.trim();
-  const builtInCandidates = [
-    // Official OpenAI Codex extension commands.
-    'chatgpt.openSidebar',
-    'chatgpt.newCodexPanel',
-    'chatgpt.newChat',
-
-    'openai.codex.open',
-    'openai.codex.openPanel',
-    'openai.codex.focus',
-    'openai.codex.showPanel',
-    'codex.open',
-    'codex.focus',
-    'codex.show',
-    'codex.openPanel',
-  ];
-
-  const inferredCandidates = knownCommands
-    .filter((id) => /codex/i.test(id))
-    .filter((id) => /(open|show|focus|panel|view)/i.test(id))
-    .slice(0, 12);
-
-  const candidates = uniqueStrings([
-    configured,
-    ...builtInCandidates,
-    ...inferredCandidates,
-  ]).filter((id) => knownSet.has(id));
+  const candidates = resolveCodexOpenCommandCandidates(config.codexOpenCommand, knownCommands);
 
   for (const commandId of candidates) {
     try {
@@ -3441,6 +4580,405 @@ async function configureAiProvider(context: vscode.ExtensionContext): Promise<vo
   );
 }
 
+function hasExplicitConfigValue<T>(
+  inspected:
+    | {
+        globalValue?: T;
+        workspaceValue?: T;
+        workspaceFolderValue?: T;
+      }
+    | undefined,
+): boolean {
+  if (!inspected) {
+    return false;
+  }
+
+  return (
+    typeof inspected.globalValue !== 'undefined' ||
+    typeof inspected.workspaceValue !== 'undefined' ||
+    typeof inspected.workspaceFolderValue !== 'undefined'
+  );
+}
+
+function resolveUiSurfaceConfig(
+  config: vscode.WorkspaceConfiguration,
+): ExtensionConfig['uiSurface'] {
+  const uiSurfaceInspect = config.inspect<ExtensionConfig['uiSurface']>('uiSurface');
+  const hasExplicitUiSurface = hasExplicitConfigValue(uiSurfaceInspect);
+  const configuredUiSurface = config.get<ExtensionConfig['uiSurface']>('uiSurface', 'statusbar');
+
+  if (hasExplicitUiSurface) {
+    return configuredUiSurface;
+  }
+
+  const autoRefreshInspect = config.inspect<boolean>('autoRefreshInBackground');
+  const hasExplicitAutoRefresh = hasExplicitConfigValue(autoRefreshInspect);
+  if (!hasExplicitAutoRefresh) {
+    return configuredUiSurface;
+  }
+
+  return config.get<boolean>('autoRefreshInBackground', true) ? 'statusbar' : 'notification';
+}
+
+const PRIVACY_PRESET_LABELS: Record<ExtensionConfig['privacyPreset'], string> = {
+  minimal: 'Minimal',
+  balanced: 'Balanced',
+  'max-context': 'Max Context',
+};
+
+const PRIVACY_PRESET_DETAILS: Record<ExtensionConfig['privacyPreset'], string> = {
+  minimal: 'No diff, no terminal/debug history, local summary only.',
+  balanced: 'Terminal/debug context enabled, no diff, local summary only.',
+  'max-context': 'Terminal/debug + diff enabled, local summary only.',
+};
+
+const RETENTION_POLICY_LABELS: Record<ExtensionConfig['retentionPolicy'], string> = {
+  '1d': '1 day',
+  '7d': '7 days',
+  '30d': '30 days',
+  forever: 'Forever',
+};
+
+const PRIVACY_PRESET_PROFILES: Record<
+  ExtensionConfig['privacyPreset'],
+  {
+    includeDiff: boolean;
+    includeTerminalHistory: boolean;
+    includeDebugHistory: boolean;
+    summaryProvider: SummaryProvider;
+  }
+> = {
+  minimal: {
+    includeDiff: false,
+    includeTerminalHistory: false,
+    includeDebugHistory: false,
+    summaryProvider: 'local',
+  },
+  balanced: {
+    includeDiff: false,
+    includeTerminalHistory: true,
+    includeDebugHistory: true,
+    summaryProvider: 'local',
+  },
+  'max-context': {
+    includeDiff: true,
+    includeTerminalHistory: true,
+    includeDebugHistory: true,
+    summaryProvider: 'local',
+  },
+};
+
+function retentionPolicyToMs(
+  retentionPolicy: ExtensionConfig['retentionPolicy'],
+): number | undefined {
+  if (retentionPolicy === '1d') {
+    return 24 * 60 * 60 * 1000;
+  }
+  if (retentionPolicy === '7d') {
+    return 7 * 24 * 60 * 60 * 1000;
+  }
+  if (retentionPolicy === '30d') {
+    return 30 * 24 * 60 * 60 * 1000;
+  }
+  return undefined;
+}
+
+async function promptAndApplyPrivacyPreset(context: vscode.ExtensionContext): Promise<void> {
+  type PresetPick = vscode.QuickPickItem & { preset: ExtensionConfig['privacyPreset'] };
+  const current = getConfig().privacyPreset;
+  const picks: PresetPick[] = (['minimal', 'balanced', 'max-context'] as const).map((preset) => ({
+    preset,
+    label: PRIVACY_PRESET_LABELS[preset],
+    detail: PRIVACY_PRESET_DETAILS[preset],
+    description: preset === current ? 'Current' : undefined,
+  }));
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Privacy Preset',
+    placeHolder: 'Choose a preset',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  await applyPrivacyPreset(picked.preset, context);
+  rerenderPanel();
+  updateCompanionStatusBar();
+  void vscode.window.showInformationMessage(
+    `TaCoS: privacy preset set to ${PRIVACY_PRESET_LABELS[picked.preset]}.`,
+  );
+}
+
+async function promptAndSetRetentionPolicy(context: vscode.ExtensionContext): Promise<void> {
+  type RetentionPick = vscode.QuickPickItem & { policy: ExtensionConfig['retentionPolicy'] };
+  const current = getConfig().retentionPolicy;
+  const picks: RetentionPick[] = (['1d', '7d', '30d', 'forever'] as const).map((policy) => ({
+    policy,
+    label: RETENTION_POLICY_LABELS[policy],
+    description: policy === current ? 'Current' : undefined,
+  }));
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Retention Policy',
+    placeHolder: 'Choose how long workspace context is kept',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  const config = vscode.workspace.getConfiguration('tacos');
+  await config.update('retentionPolicy', picked.policy, vscode.ConfigurationTarget.Global);
+  await applyRetentionPolicy(context, pickWorkspaceRoot() ?? '');
+  rerenderPanel();
+  void vscode.window.showInformationMessage(
+    `TaCoS: retention policy set to ${RETENTION_POLICY_LABELS[picked.policy]}.`,
+  );
+}
+
+function nextTomorrowMorning(now: number): number {
+  const date = new Date(now);
+  date.setDate(date.getDate() + 1);
+  date.setHours(9, 0, 0, 0);
+  return date.getTime();
+}
+
+async function promptAndSetAutoSummarySnooze(context: vscode.ExtensionContext): Promise<void> {
+  type SnoozePick = vscode.QuickPickItem & { id: '30m' | 'tomorrow' | 'clear' };
+  const picks: SnoozePick[] = [
+    {
+      id: '30m',
+      label: 'Snooze 30 minutes',
+      detail: 'Suppress focus-triggered summaries for 30 minutes.',
+    },
+    {
+      id: 'tomorrow',
+      label: 'Snooze until tomorrow morning',
+      detail: 'Suppress focus-triggered summaries until 9:00 AM local time tomorrow.',
+    },
+    {
+      id: 'clear',
+      label: 'Clear snooze',
+      detail: 'Resume normal focus-triggered summaries.',
+    },
+  ];
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Snooze Auto Summaries',
+    placeHolder: 'Choose a snooze duration',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  if (picked.id === 'clear') {
+    state.snoozeUntil = 0;
+    await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+    updateCompanionStatusBar();
+    rerenderPanel();
+    void vscode.window.showInformationMessage('TaCoS: auto summary snooze cleared.');
+    return;
+  }
+
+  const now = Date.now();
+  state.snoozeUntil = picked.id === '30m' ? now + 30 * 60_000 : nextTomorrowMorning(now);
+  await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, state.snoozeUntil);
+  recordMetricCounter('snoozeActions');
+  updateCompanionStatusBar();
+  rerenderPanel();
+  void vscode.window.showInformationMessage(
+    `TaCoS: auto summaries snoozed until ${formatTimestamp(state.snoozeUntil)}.`,
+  );
+}
+
+async function clearExpiredSnoozeIfNeeded(
+  context: vscode.ExtensionContext,
+  now: number,
+): Promise<void> {
+  if (state.snoozeUntil <= 0 || now < state.snoozeUntil) {
+    return;
+  }
+
+  state.snoozeUntil = 0;
+  await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+  updateCompanionStatusBar();
+  rerenderPanel();
+}
+
+async function applyPrivacyPreset(
+  preset: ExtensionConfig['privacyPreset'],
+  context?: vscode.ExtensionContext,
+): Promise<void> {
+  const profile = PRIVACY_PRESET_PROFILES[preset];
+  const config = vscode.workspace.getConfiguration('tacos');
+
+  state.applyingPrivacyPreset = true;
+  try {
+    await Promise.all([
+      config.update('privacyPreset', preset, vscode.ConfigurationTarget.Global),
+      config.update('includeDiff', profile.includeDiff, vscode.ConfigurationTarget.Global),
+      config.update(
+        'includeTerminalHistory',
+        profile.includeTerminalHistory,
+        vscode.ConfigurationTarget.Global,
+      ),
+      config.update(
+        'includeDebugHistory',
+        profile.includeDebugHistory,
+        vscode.ConfigurationTarget.Global,
+      ),
+      config.update('summaryProvider', profile.summaryProvider, vscode.ConfigurationTarget.Global),
+    ]);
+  } finally {
+    state.applyingPrivacyPreset = false;
+  }
+
+  if (!context) {
+    return;
+  }
+
+  if (!profile.includeTerminalHistory) {
+    state.recentTerminal = new RingBuffer(15);
+    state.doneItems = new RingBuffer(10);
+    state.lastFailingCommand = undefined;
+    state.lastFailingCommandRaw = undefined;
+    state.recentUrls = new RingBuffer(5);
+  }
+  if (!profile.includeDebugHistory) {
+    state.recentDebug = new RingBuffer(10);
+  }
+
+  await persistActivity(context);
+}
+
+async function forgetWorkspaceNow(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const choice = await vscode.window.showWarningMessage(
+    `Forget all TaCoS state for this workspace (${path.basename(workspaceRoot)})?`,
+    { modal: true },
+    'Forget',
+  );
+  if (choice !== 'Forget') {
+    return;
+  }
+
+  await clearWorkspaceScopedState(context, workspaceRoot);
+  const metricHistory = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
+  const retainedMetrics = removeMetricsForWorkspace(metricHistory, workspaceRoot);
+  if (retainedMetrics.length !== metricHistory.length) {
+    await context.workspaceState.update(KEY_METRIC_HISTORY, retainedMetrics);
+  }
+  resetRuntimeWorkspaceState();
+  rerenderPanel();
+  updateCompanionStatusBar();
+  void vscode.window.showInformationMessage('TaCoS: forgot workspace-scoped data.');
+}
+
+function aiPayloadConsentKey(workspaceRoot: string): string {
+  return `${KEY_AI_PAYLOAD_CONSENT_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function hasAiPayloadConsent(context: vscode.ExtensionContext, workspaceRoot: string): boolean {
+  return context.workspaceState.get<boolean>(aiPayloadConsentKey(workspaceRoot), false);
+}
+
+async function setAiPayloadConsent(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  allowed: boolean,
+): Promise<void> {
+  await context.workspaceState.update(
+    aiPayloadConsentKey(workspaceRoot),
+    allowed ? true : undefined,
+  );
+}
+
+async function revokeAiPayloadConsent(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  await setAiPayloadConsent(context, workspaceRoot, false);
+  void vscode.window.showInformationMessage(
+    'TaCoS: AI payload consent revoked for this workspace.',
+  );
+}
+
+async function ensureAiPayloadConsent(
+  context: vscode.ExtensionContext,
+  prepared: PreparedTriggerSummary,
+): Promise<boolean> {
+  if (hasAiPayloadConsent(context, prepared.root)) {
+    return true;
+  }
+
+  const previewMarkdown = buildAiPayloadPreviewMarkdown({
+    provider: prepared.providerPlan.activeProvider,
+    workspaceName: path.basename(prepared.root),
+    generatedAt: Date.now(),
+    signals: prepared.signals,
+    summary: {
+      intent: prepared.localSummary.intent,
+      nextSteps: prepared.localSummary.nextSteps,
+      topFiles: prepared.localSummary.topFiles,
+      links: prepared.localSummary.links,
+      evidenceCatalog: prepared.localSummary.evidenceCatalog,
+    },
+  });
+
+  const doc = await vscode.workspace.openTextDocument({
+    language: 'markdown',
+    content: previewMarkdown,
+  });
+  await vscode.window.showTextDocument(doc, {
+    preview: false,
+    viewColumn: vscode.ViewColumn.Beside,
+    preserveFocus: false,
+  });
+
+  type ConsentPick = vscode.QuickPickItem & { id: 'once' | 'always' | 'deny' };
+  const picks: ConsentPick[] = [
+    {
+      id: 'once',
+      label: 'Send once',
+      detail: 'Allow this one AI refinement send.',
+    },
+    {
+      id: 'always',
+      label: 'Always allow in this workspace',
+      detail: 'Remember consent locally for this workspace.',
+    },
+    {
+      id: 'deny',
+      label: 'Do not send',
+      detail: 'Keep local summary only for now.',
+    },
+  ];
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Review AI Payload',
+    placeHolder: 'Choose whether to send this redacted payload',
+    ignoreFocusOut: true,
+  });
+  if (!picked || picked.id === 'deny') {
+    return false;
+  }
+
+  if (picked.id === 'always') {
+    await setAiPayloadConsent(context, prepared.root, true);
+  }
+
+  return true;
+}
+
 function getConfig(): ExtensionConfig {
   const config = vscode.workspace.getConfiguration('tacos');
 
@@ -3452,13 +4990,17 @@ function getConfig(): ExtensionConfig {
     promptCheckpointOnBlur: config.get<boolean>('promptCheckpointOnBlur', false),
     minIdleMinutes: Math.max(1, config.get<number>('minIdleMinutes', 10)),
     cooldownMinutes: Math.max(1, config.get<number>('cooldownMinutes', 5)),
+    summaryQuietHours: config.get<string>('summaryQuietHours', ''),
     includeDiff: config.get<boolean>('includeDiff', false),
     maxDiffChars: config.get<number>('maxDiffChars', 6000),
-    includeTerminalHistory: config.get<boolean>('includeTerminalHistory', true),
-    includeDebugHistory: config.get<boolean>('includeDebugHistory', true),
+    includeTerminalHistory: config.get<boolean>('includeTerminalHistory', false),
+    includeDebugHistory: config.get<boolean>('includeDebugHistory', false),
     cacheIfContextUnchanged: config.get<boolean>('cacheIfContextUnchanged', true),
     redactionPatterns: config.get<string[]>('redactionPatterns', []),
+    privacyPreset: config.get<ExtensionConfig['privacyPreset']>('privacyPreset', 'minimal'),
+    retentionPolicy: config.get<ExtensionConfig['retentionPolicy']>('retentionPolicy', '7d'),
     metricsEnabled: config.get<boolean>('metricsEnabled', true),
+    uiSurface: resolveUiSurfaceConfig(config),
     autoRefreshInBackground: config.get<boolean>('autoRefreshInBackground', true),
     companionNudgesEnabled: config.get<boolean>('companionNudgesEnabled', true),
     companionNudgeAggressiveness: config.get<ExtensionConfig['companionNudgeAggressiveness']>(
@@ -3603,16 +5145,318 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
   };
 }
 
-function summaryCacheKey(root: string): string {
-  return `tacos.summary.${Buffer.from(root).toString('base64url')}`;
-}
-
 function branchStateKey(root: string): string {
   return `tacos.branch.${Buffer.from(root).toString('base64url')}`;
 }
 
-function autoTriggerFingerprintKey(root: string): string {
-  return `${KEY_LAST_AUTO_TRIGGER_FINGERPRINT}.${Buffer.from(root).toString('base64url')}`;
+function taskPartitionStorageKey(root: string): string {
+  return `${KEY_TASK_PARTITION_PREFIX}.${Buffer.from(root).toString('base64url')}`;
+}
+
+function inferTaskPartitionKey(branch: string): string | undefined {
+  const normalized = branch.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const ticketMatch = normalized.match(/([A-Z]{2,}-\d+)/);
+  if (ticketMatch?.[1]) {
+    return ticketMatch[1];
+  }
+
+  const issueMatch = normalized.match(/#(\d{2,})/);
+  if (issueMatch?.[1]) {
+    return `issue-${issueMatch[1]}`;
+  }
+
+  return undefined;
+}
+
+function resolveTaskPartitionKey(
+  context: vscode.ExtensionContext,
+  root: string,
+  scopeBranch?: string,
+): string {
+  const manual = context.workspaceState.get<string>(taskPartitionStorageKey(root), '').trim();
+  if (manual) {
+    return manual;
+  }
+
+  const branch = scopeBranch ?? resolveScopeBranch(context, root);
+  const inferred = inferTaskPartitionKey(branch);
+  return inferred ?? 'default';
+}
+
+function readBranchFromGitHead(workspaceRoot: string): string | undefined {
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  const gitEntry = path.join(workspaceRoot, '.git');
+  if (!existsSync(gitEntry)) {
+    return undefined;
+  }
+
+  try {
+    let gitDir = gitEntry;
+    const gitEntryStat = statSync(gitEntry);
+    if (gitEntryStat.isFile()) {
+      const pointer = readFileSync(gitEntry, 'utf8').trim();
+      const match = pointer.match(/^gitdir:\s*(.+)$/i);
+      if (!match?.[1]) {
+        return undefined;
+      }
+      gitDir = path.resolve(workspaceRoot, match[1].trim());
+    }
+
+    const headPath = path.join(gitDir, 'HEAD');
+    if (!existsSync(headPath)) {
+      return undefined;
+    }
+
+    const head = readFileSync(headPath, 'utf8').trim();
+    const branchRef = head.match(/^ref:\s*refs\/heads\/(.+)$/i);
+    if (!branchRef?.[1]) {
+      return undefined;
+    }
+
+    const branch = branchRef[1].trim();
+    return branch || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveScopeBranch(context: vscode.ExtensionContext, root: string): string {
+  const liveBranch = readBranchFromGitHead(root);
+  if (liveBranch) {
+    return liveBranch;
+  }
+
+  return context.workspaceState.get<string>(branchStateKey(root), '').trim() || 'default';
+}
+
+function partitionScope(context: vscode.ExtensionContext, root: string): string {
+  const branch = resolveScopeBranch(context, root);
+  const taskPartition = resolveTaskPartitionKey(context, root, branch);
+  return `${root}::${branch}::${taskPartition}`;
+}
+
+function summaryCacheKey(context: vscode.ExtensionContext, root: string): string {
+  return `tacos.summary.${Buffer.from(partitionScope(context, root)).toString('base64url')}`;
+}
+
+function autoTriggerFingerprintKey(context: vscode.ExtensionContext, root: string): string {
+  const scope = partitionScope(context, root);
+  return `${KEY_LAST_AUTO_TRIGGER_FINGERPRINT}.${Buffer.from(scope).toString('base64url')}`;
+}
+
+function workspaceActivityKey(root: string): string {
+  return `${KEY_WORKSPACE_ACTIVITY_AT_PREFIX}.${Buffer.from(root).toString('base64url')}`;
+}
+
+async function touchWorkspaceActivity(
+  context: vscode.ExtensionContext,
+  workspaceRoot?: string,
+): Promise<void> {
+  const root = workspaceRoot ?? pickWorkspaceRoot();
+  if (!root) {
+    return;
+  }
+
+  await context.workspaceState.update(workspaceActivityKey(root), Date.now());
+}
+
+function decodeBase64UrlToken(token: string): string | undefined {
+  try {
+    return Buffer.from(token, 'base64url').toString('utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+function matchesEncodedWorkspaceKey(
+  key: string,
+  prefix: string,
+  workspaceRoot: string,
+  allowScopedWorkspace: boolean,
+): boolean {
+  const keyPrefix = `${prefix}.`;
+  if (!key.startsWith(keyPrefix)) {
+    return false;
+  }
+
+  const decoded = decodeBase64UrlToken(key.slice(keyPrefix.length));
+  if (!decoded) {
+    return false;
+  }
+
+  if (decoded === workspaceRoot) {
+    return true;
+  }
+
+  return allowScopedWorkspace && decoded.startsWith(`${workspaceRoot}::`);
+}
+
+function collectWorkspaceScopedKeys(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): string[] {
+  const keys = context.workspaceState.keys();
+  return keys.filter((key) => {
+    if (
+      key === KEY_LAST_SUMMARY_AT ||
+      key === KEY_LAST_BLUR_AT ||
+      key === KEY_LAST_WORKSPACE_ON_BLUR
+    ) {
+      return true;
+    }
+
+    if (key === KEY_SUMMARY_SNOOZE_UNTIL) {
+      return true;
+    }
+
+    return (
+      matchesEncodedWorkspaceKey(key, 'tacos.summary', workspaceRoot, true) ||
+      matchesEncodedWorkspaceKey(key, 'tacos.branch', workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_AUTO_TRIGGER_FINGERPRINT, workspaceRoot, true) ||
+      matchesEncodedWorkspaceKey(key, KEY_RECENT_EDIT_LOCATIONS_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_TASK_META_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_TERMINAL_CWD_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_RESTORE_SEARCH_QUERY_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_TASK_PARTITION_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_SUMMARY_CORRECTIONS_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_WORKSPACE_ACTIVITY_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_AI_PAYLOAD_CONSENT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_ACTIVITY_STORAGE_PREFIX, workspaceRoot, true) ||
+      matchesEncodedWorkspaceKey(key, 'tacos.checkpointNote', workspaceRoot, false)
+    );
+  });
+}
+
+function collectWorkspacePartitionSummaryKeys(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): string[] {
+  return context.workspaceState
+    .keys()
+    .filter((key) => matchesEncodedWorkspaceKey(key, 'tacos.summary', workspaceRoot, true));
+}
+
+async function clearWorkspaceScopedState(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<void> {
+  const keys = collectWorkspaceScopedKeys(context, workspaceRoot);
+  if (keys.length === 0) {
+    return;
+  }
+
+  await Promise.all(keys.map((key) => context.workspaceState.update(key, undefined)));
+}
+
+function resetRuntimeWorkspaceState(): void {
+  state.recentFiles = new RingBuffer(15);
+  state.recentEditLocations = [];
+  state.recentTerminal = new RingBuffer(15);
+  state.recentDebug = new RingBuffer(10);
+  state.recentUrls = new RingBuffer(5);
+  state.doneItems = new RingBuffer(10);
+  state.lastFailingCommand = undefined;
+  state.lastFailingCommandRaw = undefined;
+  state.lastTaskName = undefined;
+  state.lastTaskWorkspaceRoot = undefined;
+  state.lastTaskExitCode = undefined;
+  state.lastTaskEndedAt = undefined;
+  state.lastTerminalCwd = undefined;
+  state.lastDebugConfigName = undefined;
+  state.lastDebugWorkspaceRoot = undefined;
+  state.snoozeUntil = 0;
+  state.displayedCheckpointNote = undefined;
+  state.activeNudges = undefined;
+  state.scratchSummary = undefined;
+  if (state.panel) {
+    state.panel.dispose();
+  }
+}
+
+async function applyRetentionPolicy(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): Promise<void> {
+  if (!workspaceRoot) {
+    return;
+  }
+
+  const cutoffWindowMs = retentionPolicyToMs(getConfig().retentionPolicy);
+  if (!cutoffWindowMs) {
+    return;
+  }
+
+  const cutoffAt = Date.now() - cutoffWindowMs;
+  const lastActivityAt = context.workspaceState.get<number>(workspaceActivityKey(workspaceRoot), 0);
+  const metricHistory = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
+  if (lastActivityAt > 0 && lastActivityAt < cutoffAt) {
+    await clearWorkspaceScopedState(context, workspaceRoot);
+    const prunedMetrics = pruneMetricsForWorkspace(metricHistory, workspaceRoot, cutoffAt);
+    if (prunedMetrics.length !== metricHistory.length) {
+      await context.workspaceState.update(KEY_METRIC_HISTORY, prunedMetrics);
+    }
+    resetRuntimeWorkspaceState();
+    return;
+  }
+
+  const recentEditLocations = readRecentEditLocations(context, workspaceRoot);
+  const prunedEditLocations = recentEditLocations.filter((entry) => entry.timestamp >= cutoffAt);
+  if (prunedEditLocations.length !== recentEditLocations.length) {
+    await context.workspaceState.update(
+      recentEditLocationsStorageKey(workspaceRoot),
+      prunedEditLocations,
+    );
+    if ((state.panelWorkspaceRoot ?? pickWorkspaceRoot()) === workspaceRoot) {
+      state.recentEditLocations = prunedEditLocations;
+    }
+  }
+
+  const taskMetadata = readPersistedTaskMetadata(context, workspaceRoot);
+  if (taskMetadata && taskMetadata.timestamp < cutoffAt) {
+    await context.workspaceState.update(taskMetadataStorageKey(workspaceRoot), undefined);
+    if ((state.lastTaskWorkspaceRoot ?? workspaceRoot) === workspaceRoot) {
+      state.lastTaskName = undefined;
+      state.lastTaskWorkspaceRoot = undefined;
+      state.lastTaskExitCode = undefined;
+      state.lastTaskEndedAt = undefined;
+    }
+  }
+
+  const activeSummaryKey = summaryCacheKey(context, workspaceRoot);
+  const summaryKeys = collectWorkspacePartitionSummaryKeys(context, workspaceRoot);
+  const summaryPruneOps: Thenable<void>[] = [];
+  let clearedActiveSummary = false;
+  for (const key of summaryKeys) {
+    const cachedSummary = context.workspaceState.get<ResumeSummary | undefined>(key);
+    if (!cachedSummary || cachedSummary.generatedAt >= cutoffAt) {
+      continue;
+    }
+
+    summaryPruneOps.push(context.workspaceState.update(key, undefined));
+    if (key === activeSummaryKey) {
+      clearedActiveSummary = true;
+    }
+  }
+  if (summaryPruneOps.length > 0) {
+    await Promise.all(summaryPruneOps);
+  }
+  if (clearedActiveSummary && (state.panelWorkspaceRoot ?? pickWorkspaceRoot()) === workspaceRoot) {
+    state.scratchSummary = undefined;
+  }
+
+  const prunedMetrics = pruneMetricsForWorkspace(metricHistory, workspaceRoot, cutoffAt);
+  if (prunedMetrics.length !== metricHistory.length) {
+    await context.workspaceState.update(KEY_METRIC_HISTORY, prunedMetrics);
+  }
 }
 
 function computeAutoTriggerFingerprint(root: string): string {
@@ -3743,7 +5587,17 @@ async function maybePromptCheckpointOnBlur(
   const action = await vscode.window.showInformationMessage(
     'One-line next step for Future You (optional).',
     'Add note',
+    'Disable prompts',
   );
+  if (action === 'Disable prompts') {
+    await vscode.workspace
+      .getConfiguration('tacos')
+      .update('promptCheckpointOnBlur', false, vscode.ConfigurationTarget.Global);
+    void vscode.window.showInformationMessage('TaCoS: future-you blur prompts disabled.');
+    state.meaningfulActivitySinceCheckpointPrompt = false;
+    return;
+  }
+
   if (action !== 'Add note') {
     state.meaningfulActivitySinceCheckpointPrompt = false;
     return;
@@ -3823,6 +5677,9 @@ async function openPrivacySafetyDoc(context: vscode.ExtensionContext): Promise<v
 }
 
 interface PersistedActivitySnapshot {
+  workspaceRoot: string;
+  storageKey: string;
+  usedLegacyGlobalState: boolean;
   raw: PersistedActivityState;
   sanitized: PersistedActivityState;
 }
@@ -3840,10 +5697,48 @@ function getPersistedStringArray(
   return stored.filter((value): value is string => typeof value === 'string');
 }
 
-function loadPersistedActivitySnapshot(
+function getWorkspacePersistedStringArray(
+  stored: Record<string, unknown>,
+  key: keyof PersistedActivityState,
+): string[] {
+  const value = stored[key];
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is string => typeof entry === 'string');
+}
+
+function readScopedActivityState(
   context: vscode.ExtensionContext,
-): PersistedActivitySnapshot {
-  const raw: PersistedActivityState = {
+  storageKey: string,
+): PersistedActivityState {
+  const raw = context.workspaceState.get<unknown>(storageKey);
+  if (!raw || typeof raw !== 'object') {
+    return {
+      recentFiles: [],
+      recentTerminal: [],
+      recentDebug: [],
+      recentUrls: [],
+      doneItems: [],
+      lastFailingCommand: undefined,
+    };
+  }
+
+  const stored = raw as Record<string, unknown>;
+  return {
+    recentFiles: getWorkspacePersistedStringArray(stored, 'recentFiles'),
+    recentTerminal: getWorkspacePersistedStringArray(stored, 'recentTerminal'),
+    recentDebug: getWorkspacePersistedStringArray(stored, 'recentDebug'),
+    recentUrls: getWorkspacePersistedStringArray(stored, 'recentUrls'),
+    doneItems: getWorkspacePersistedStringArray(stored, 'doneItems'),
+    lastFailingCommand:
+      typeof stored.lastFailingCommand === 'string' ? stored.lastFailingCommand : undefined,
+  };
+}
+
+function readLegacyGlobalActivityState(context: vscode.ExtensionContext): PersistedActivityState {
+  return {
     recentFiles: getPersistedStringArray(context, KEY_RECENT_FILES),
     recentTerminal: getPersistedStringArray(context, KEY_RECENT_TERMINAL),
     recentDebug: getPersistedStringArray(context, KEY_RECENT_DEBUG),
@@ -3851,11 +5746,46 @@ function loadPersistedActivitySnapshot(
     doneItems: getPersistedStringArray(context, KEY_DONE_ITEMS),
     lastFailingCommand: context.globalState.get<string>(KEY_LAST_FAILING_COMMAND),
   };
+}
+
+function isEmptyActivityState(activity: PersistedActivityState): boolean {
+  return (
+    activity.recentFiles.length === 0 &&
+    activity.recentTerminal.length === 0 &&
+    activity.recentDebug.length === 0 &&
+    activity.recentUrls.length === 0 &&
+    activity.doneItems.length === 0 &&
+    !activity.lastFailingCommand?.trim()
+  );
+}
+
+function scopedActivityStorageKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
+  const branch = resolveScopeBranch(context, workspaceRoot);
+  const taskPartition = resolveTaskPartitionKey(context, workspaceRoot, branch);
+  const scope = `${workspaceRoot}::${branch}::${taskPartition}`;
+  const normalizedScope = scope.trim() || '__no_workspace__';
+  return `${KEY_ACTIVITY_STORAGE_PREFIX}.${Buffer.from(normalizedScope).toString('base64url')}`;
+}
+
+function loadPersistedActivitySnapshot(
+  context: vscode.ExtensionContext,
+): PersistedActivitySnapshot {
+  const workspaceRoot = pickWorkspaceRoot() ?? '';
+  const storageKey = scopedActivityStorageKey(context, workspaceRoot);
+  const scopedRaw = readScopedActivityState(context, storageKey);
+  const legacyRaw = readLegacyGlobalActivityState(context);
+  const usedLegacyGlobalState = isEmptyActivityState(scopedRaw) && !isEmptyActivityState(legacyRaw);
+  const raw = usedLegacyGlobalState ? legacyRaw : scopedRaw;
 
   const config = getConfig();
-  const workspaceRoot = pickWorkspaceRoot() ?? '';
   const sanitized = sanitizeActivityForPersistence(raw, workspaceRoot, config.redactionPatterns);
-  return { raw, sanitized };
+  return {
+    workspaceRoot,
+    storageKey,
+    usedLegacyGlobalState,
+    raw,
+    sanitized,
+  };
 }
 
 function sameStringList(a: string[], b: string[]): boolean {
@@ -3884,26 +5814,32 @@ async function migrateLegacyPersistedActivityIfNeeded(
   context: vscode.ExtensionContext,
   snapshot: PersistedActivitySnapshot,
 ): Promise<void> {
-  if (!didPersistedActivityChange(snapshot.raw, snapshot.sanitized)) {
+  if (
+    !snapshot.usedLegacyGlobalState &&
+    !didPersistedActivityChange(snapshot.raw, snapshot.sanitized)
+  ) {
     return;
   }
 
+  await context.workspaceState.update(snapshot.storageKey, snapshot.sanitized);
+
   await Promise.all([
-    context.globalState.update(KEY_RECENT_FILES, snapshot.sanitized.recentFiles),
-    context.globalState.update(KEY_RECENT_TERMINAL, snapshot.sanitized.recentTerminal),
-    context.globalState.update(KEY_RECENT_DEBUG, snapshot.sanitized.recentDebug),
-    context.globalState.update(KEY_RECENT_URLS, snapshot.sanitized.recentUrls),
-    context.globalState.update(KEY_DONE_ITEMS, snapshot.sanitized.doneItems),
-    context.globalState.update(KEY_LAST_FAILING_COMMAND, snapshot.sanitized.lastFailingCommand),
+    context.globalState.update(KEY_RECENT_FILES, undefined),
+    context.globalState.update(KEY_RECENT_TERMINAL, undefined),
+    context.globalState.update(KEY_RECENT_DEBUG, undefined),
+    context.globalState.update(KEY_RECENT_URLS, undefined),
+    context.globalState.update(KEY_DONE_ITEMS, undefined),
+    context.globalState.update(KEY_LAST_FAILING_COMMAND, undefined),
   ]);
 
-  state.output.appendLine('TaCoS: migrated legacy persisted activity to sanitized storage.');
+  state.output.appendLine(
+    `TaCoS: migrated legacy persisted activity to workspace-scoped sanitized storage (${snapshot.storageKey}).`,
+  );
 }
 
 // SECURITY INVARIANT:
-// ONLY this function may persist activity-derived string keys:
-// KEY_RECENT_FILES, KEY_RECENT_TERMINAL, KEY_RECENT_DEBUG, KEY_RECENT_URLS, KEY_DONE_ITEMS, KEY_LAST_FAILING_COMMAND.
-// It must redact before writing to storage.
+// ONLY this function may persist activity-derived state.
+// It must redact before writing and must write only to workspaceState scoped storage.
 async function persistActivity(context: vscode.ExtensionContext): Promise<void> {
   const config = getConfig();
   const workspaceRoot = pickWorkspaceRoot() ?? '';
@@ -3920,14 +5856,9 @@ async function persistActivity(context: vscode.ExtensionContext): Promise<void> 
     config.redactionPatterns,
   );
 
-  await Promise.all([
-    context.globalState.update(KEY_RECENT_FILES, persisted.recentFiles),
-    context.globalState.update(KEY_RECENT_TERMINAL, persisted.recentTerminal),
-    context.globalState.update(KEY_RECENT_DEBUG, persisted.recentDebug),
-    context.globalState.update(KEY_RECENT_URLS, persisted.recentUrls),
-    context.globalState.update(KEY_DONE_ITEMS, persisted.doneItems),
-    context.globalState.update(KEY_LAST_FAILING_COMMAND, persisted.lastFailingCommand),
-  ]);
+  const storageKey = scopedActivityStorageKey(context, workspaceRoot);
+  await context.workspaceState.update(storageKey, persisted);
+  await touchWorkspaceActivity(context, workspaceRoot);
 }
 
 async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<void> {

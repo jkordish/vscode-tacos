@@ -53,6 +53,18 @@ describe('buildResumeSummary', () => {
     );
   });
 
+  it('maps rerun-style steps to terminal/task evidence before positional file evidence', () => {
+    const summary = buildResumeSummary(sampleSignals());
+    const firstStepEvidenceIds = summary.nextStepEvidenceIds?.[0] ?? [];
+    const evidenceById = new Map((summary.evidenceCatalog ?? []).map((item) => [item.id, item]));
+    const firstEvidence = firstStepEvidenceIds[0]
+      ? evidenceById.get(firstStepEvidenceIds[0])
+      : undefined;
+
+    expect(summary.nextSteps[0].toLowerCase()).toContain('re-run');
+    expect(firstEvidence?.kind).toBe('terminal');
+  });
+
   it('marks mode as coding when no debug/failing signals exist', () => {
     const signals = sampleSignals();
     signals.failingCommand = undefined;
@@ -85,8 +97,29 @@ describe('buildResumeSummary', () => {
     const summary = buildResumeSummary(sampleSignals());
 
     expect(summary.doneSinceLastResume).toEqual(['npm run build']);
+    expect(summary.changesSinceLastResume?.[0]).toContain('Diffstat:');
     expect(summary.pendingBlocked?.[0]).toContain('Failing command still unresolved');
     expect(summary.detailsMarkdown).toContain('## Session recap');
+    expect(summary.detailsMarkdown).toContain('Changes since last resume');
     expect(summary.detailsMarkdown).toContain('Recommended first action');
+  });
+
+  it('marks low-confidence summaries explicitly when evidence is sparse', () => {
+    const signals = sampleSignals();
+    signals.changedFiles = [];
+    signals.openFiles = [];
+    signals.recentFiles = [];
+    signals.recentTerminal = [];
+    signals.recentDebug = [];
+    signals.doneItems = [];
+    signals.failingCommand = undefined;
+    signals.recentUrls = [];
+
+    const summary = buildResumeSummary(signals);
+    expect(summary.lowConfidence).toBe(true);
+    expect(summary.intent).toBe('Unclear intent (low evidence).');
+    expect(summary.candidateIntents?.length ?? 0).toBeGreaterThan(0);
+    expect(summary.nextSteps[0]).toContain('Unclear intent');
+    expect(summary.links.length).toBe(0);
   });
 });

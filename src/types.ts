@@ -1,6 +1,9 @@
 export type TriggerReason = 'focus' | 'manual' | 'cached';
 export type SummaryProvider = 'local' | 'vscode-lm' | 'openai';
 export type CompanionNudgeAggressiveness = 'low' | 'balanced' | 'high';
+export type UiSurface = 'statusbar' | 'notification' | 'silent';
+export type PrivacyPreset = 'minimal' | 'balanced' | 'max-context';
+export type RetentionPolicy = '1d' | '7d' | '30d' | 'forever';
 
 export interface ExtensionConfig {
   enabled: boolean;
@@ -10,13 +13,17 @@ export interface ExtensionConfig {
   promptCheckpointOnBlur: boolean;
   minIdleMinutes: number;
   cooldownMinutes: number;
+  summaryQuietHours: string;
   includeDiff: boolean;
   maxDiffChars: number;
   includeTerminalHistory: boolean;
   includeDebugHistory: boolean;
   cacheIfContextUnchanged: boolean;
   redactionPatterns: string[];
+  privacyPreset: PrivacyPreset;
+  retentionPolicy: RetentionPolicy;
   metricsEnabled: boolean;
+  uiSurface: UiSurface;
   autoRefreshInBackground: boolean;
   companionNudgesEnabled: boolean;
   companionNudgeAggressiveness: CompanionNudgeAggressiveness;
@@ -91,8 +98,11 @@ export interface ResumeSummary {
   nextSteps: string[];
   nextStepEvidenceIds?: string[][];
   doneSinceLastResume?: string[];
+  changesSinceLastResume?: string[];
   pendingBlocked?: string[];
   recommendedFirstAction?: string;
+  lowConfidence?: boolean;
+  candidateIntents?: string[];
   mode?: ResumeMode;
   currentBranch?: string;
   previousBranch?: string;
@@ -115,13 +125,20 @@ export interface MetricRecord {
   startedAt: number;
   workspaceRoot: string;
   trigger: TriggerReason;
+  uiSurface?: UiSurface;
+  interruptionEvent?: number;
   firstMeaningfulEditLagMs?: number;
   firstRunLagMs?: number;
+  firstActionLagMs?: number;
   companionFirstActionLagMs?: number;
   companionPromptImpressions?: number;
   companionForcedOpenDetailsClicks?: number;
   companionQuickActionsTaken?: number;
   companionNudgeImpressions?: number;
+  helpfulnessRating?: 1 | 2 | 3 | 4 | 5;
+  pauseActions?: number;
+  snoozeActions?: number;
+  disableActions?: number;
 }
 
 export interface VscodeLmModelSelector {
