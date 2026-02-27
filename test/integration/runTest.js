@@ -93,6 +93,13 @@ async function main() {
     );
 
     await runSuite(
+      'execution-action-guards',
+      path.resolve(__dirname, 'suite', 'executionActionGuards.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'partition-scope',
       path.resolve(__dirname, 'suite', 'partitionScope.js'),
       [fixtureWorkspace, '--disable-extensions'],

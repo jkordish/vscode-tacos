@@ -33,7 +33,12 @@ This matrix captures expected safety behavior for TaCoS action surfaces across t
 ## Validation Coverage
 
 - Unit: `test/restoreSafety.test.ts`, `test/pathSafety.test.ts`
-- Integration: `action-safety-noop`, `partition-switch-reset`, `partition-scope`, `multi-root-scope`
+- Integration:
+  - `action-safety-noop`
+  - `execution-action-guards`
+  - `partition-switch-reset`
+  - `partition-scope`
+  - `multi-root-scope`
 - Manual follow-up:
   - trusted vs restricted mode
   - git vs no-git workspace

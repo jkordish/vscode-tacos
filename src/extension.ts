@@ -360,6 +360,9 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.__test.runActionSafetyNoopChecks', async () => {
       return runActionSafetyNoopChecks(context);
     }),
+    vscode.commands.registerCommand('tacos.__test.getExecutionActionGuardSnapshot', async () => {
+      return runExecutionActionGuardChecks();
+    }),
     vscode.commands.registerCommand('tacos.slash', async () => {
       const root = pickWorkspaceRoot();
       if (!root) {
@@ -4062,17 +4065,34 @@ async function persistTaskMetadata(context: vscode.ExtensionContext): Promise<vo
   await touchWorkspaceActivity(context, workspaceRoot);
 }
 
-async function rerunLastTask(): Promise<void> {
-  if (!vscode.workspace.isTrusted) {
-    void vscode.window.showWarningMessage('TaCoS: rerun task is disabled in Restricted Mode.');
-    return;
+interface ExecutionActionOptions {
+  isWorkspaceTrustedOverride?: boolean;
+  suppressMessages?: boolean;
+}
+
+function isExecutionActionAllowed(options?: ExecutionActionOptions): boolean {
+  if (typeof options?.isWorkspaceTrustedOverride === 'boolean') {
+    return options.isWorkspaceTrustedOverride;
+  }
+
+  return vscode.workspace.isTrusted;
+}
+
+async function rerunLastTask(options?: ExecutionActionOptions): Promise<boolean> {
+  if (!isExecutionActionAllowed(options)) {
+    if (!options?.suppressMessages) {
+      void vscode.window.showWarningMessage('TaCoS: rerun task is disabled in Restricted Mode.');
+    }
+    return false;
   }
 
   if (!state.lastTaskName) {
-    void vscode.window.showInformationMessage(
-      'TaCoS: no recent VS Code task is available to rerun.',
-    );
-    return;
+    if (!options?.suppressMessages) {
+      void vscode.window.showInformationMessage(
+        'TaCoS: no recent VS Code task is available to rerun.',
+      );
+    }
+    return false;
   }
 
   const tasks = await vscode.tasks.fetchTasks();
@@ -4090,25 +4110,36 @@ async function rerunLastTask(): Promise<void> {
   });
 
   if (!match) {
-    void vscode.window.showWarningMessage(
-      `TaCoS: could not find task "${state.lastTaskName}" to rerun.`,
-    );
-    return;
+    if (!options?.suppressMessages) {
+      void vscode.window.showWarningMessage(
+        `TaCoS: could not find task "${state.lastTaskName}" to rerun.`,
+      );
+    }
+    return false;
   }
 
   await vscode.tasks.executeTask(match);
-  void vscode.window.showInformationMessage(`TaCoS: reran task "${state.lastTaskName}".`);
+  if (!options?.suppressMessages) {
+    void vscode.window.showInformationMessage(`TaCoS: reran task "${state.lastTaskName}".`);
+  }
+  return true;
 }
 
-async function rerunLastDebugSession(): Promise<void> {
-  if (!vscode.workspace.isTrusted) {
-    void vscode.window.showWarningMessage('TaCoS: rerun debug is disabled in Restricted Mode.');
-    return;
+async function rerunLastDebugSession(options?: ExecutionActionOptions): Promise<boolean> {
+  if (!isExecutionActionAllowed(options)) {
+    if (!options?.suppressMessages) {
+      void vscode.window.showWarningMessage('TaCoS: rerun debug is disabled in Restricted Mode.');
+    }
+    return false;
   }
 
   if (!state.lastDebugConfigName) {
-    void vscode.window.showInformationMessage('TaCoS: no recent debug configuration is available.');
-    return;
+    if (!options?.suppressMessages) {
+      void vscode.window.showInformationMessage(
+        'TaCoS: no recent debug configuration is available.',
+      );
+    }
+    return false;
   }
 
   const folder = vscode.workspace.workspaceFolders?.find(
@@ -4116,39 +4147,53 @@ async function rerunLastDebugSession(): Promise<void> {
   );
   const started = await vscode.debug.startDebugging(folder, state.lastDebugConfigName);
   if (!started) {
-    void vscode.window.showWarningMessage(
-      `TaCoS: failed to start debug configuration "${state.lastDebugConfigName}".`,
-    );
-    return;
+    if (!options?.suppressMessages) {
+      void vscode.window.showWarningMessage(
+        `TaCoS: failed to start debug configuration "${state.lastDebugConfigName}".`,
+      );
+    }
+    return false;
   }
 
-  void vscode.window.showInformationMessage(
-    `TaCoS: started debug configuration "${state.lastDebugConfigName}".`,
-  );
+  if (!options?.suppressMessages) {
+    void vscode.window.showInformationMessage(
+      `TaCoS: started debug configuration "${state.lastDebugConfigName}".`,
+    );
+  }
+  return true;
 }
 
 async function checkoutPreviousBranch(
   summary: ResumeSummary | undefined,
   preferredWorkspaceRoot?: string,
-): Promise<void> {
-  if (!vscode.workspace.isTrusted) {
-    void vscode.window.showWarningMessage('TaCoS: checkout branch is disabled in Restricted Mode.');
-    return;
+  options?: ExecutionActionOptions,
+): Promise<boolean> {
+  if (!isExecutionActionAllowed(options)) {
+    if (!options?.suppressMessages) {
+      void vscode.window.showWarningMessage(
+        'TaCoS: checkout branch is disabled in Restricted Mode.',
+      );
+    }
+    return false;
   }
 
   const previousBranch = summary?.previousBranch?.trim() ?? '';
   const currentBranch = summary?.currentBranch?.trim() ?? '';
   if (!previousBranch || !currentBranch || previousBranch === currentBranch) {
-    void vscode.window.showInformationMessage(
-      'TaCoS: no previous branch is available to checkout.',
-    );
-    return;
+    if (!options?.suppressMessages) {
+      void vscode.window.showInformationMessage(
+        'TaCoS: no previous branch is available to checkout.',
+      );
+    }
+    return false;
   }
 
   const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!workspaceRoot) {
-    void vscode.window.showWarningMessage('TaCoS: open a workspace folder to checkout a branch.');
-    return;
+    if (!options?.suppressMessages) {
+      void vscode.window.showWarningMessage('TaCoS: open a workspace folder to checkout a branch.');
+    }
+    return false;
   }
 
   const choice = await vscode.window.showWarningMessage(
@@ -4157,7 +4202,7 @@ async function checkoutPreviousBranch(
     'Checkout',
   );
   if (choice !== 'Checkout') {
-    return;
+    return false;
   }
 
   try {
@@ -4165,11 +4210,17 @@ async function checkoutPreviousBranch(
       encoding: 'utf8',
       maxBuffer: 4 * 1024 * 1024,
     });
-    void vscode.window.showInformationMessage(`TaCoS: checked out "${previousBranch}".`);
+    if (!options?.suppressMessages) {
+      void vscode.window.showInformationMessage(`TaCoS: checked out "${previousBranch}".`);
+    }
+    return true;
   } catch (error) {
-    void vscode.window.showErrorMessage(
-      `TaCoS: failed to checkout "${previousBranch}": ${(error as Error).message}`,
-    );
+    if (!options?.suppressMessages) {
+      void vscode.window.showErrorMessage(
+        `TaCoS: failed to checkout "${previousBranch}": ${(error as Error).message}`,
+      );
+    }
+    return false;
   }
 }
 
@@ -4272,6 +4323,67 @@ async function runActionSafetyNoopChecks(
   } finally {
     state.panelSummary = original.panelSummary;
     state.scratchSummary = original.scratchSummary;
+    state.lastTaskName = original.lastTaskName;
+    state.lastTaskWorkspaceRoot = original.lastTaskWorkspaceRoot;
+    state.lastDebugConfigName = original.lastDebugConfigName;
+    state.lastDebugWorkspaceRoot = original.lastDebugWorkspaceRoot;
+  }
+
+  return results;
+}
+
+async function runExecutionActionGuardChecks(): Promise<Record<string, boolean>> {
+  const original = {
+    lastTaskName: state.lastTaskName,
+    lastTaskWorkspaceRoot: state.lastTaskWorkspaceRoot,
+    lastDebugConfigName: state.lastDebugConfigName,
+    lastDebugWorkspaceRoot: state.lastDebugWorkspaceRoot,
+  };
+  const results: Record<string, boolean> = {
+    restrictedTaskExecuted: false,
+    restrictedDebugExecuted: false,
+    restrictedCheckoutExecuted: false,
+    trustedTaskWithoutPrereqExecuted: false,
+    trustedDebugWithoutPrereqExecuted: false,
+    trustedCheckoutWithoutPrereqExecuted: false,
+  };
+
+  try {
+    state.lastTaskName = undefined;
+    state.lastTaskWorkspaceRoot = undefined;
+    state.lastDebugConfigName = undefined;
+    state.lastDebugWorkspaceRoot = undefined;
+
+    results.restrictedTaskExecuted = await rerunLastTask({
+      isWorkspaceTrustedOverride: false,
+      suppressMessages: true,
+    });
+    results.restrictedDebugExecuted = await rerunLastDebugSession({
+      isWorkspaceTrustedOverride: false,
+      suppressMessages: true,
+    });
+    results.restrictedCheckoutExecuted = await checkoutPreviousBranch(undefined, undefined, {
+      isWorkspaceTrustedOverride: false,
+      suppressMessages: true,
+    });
+
+    results.trustedTaskWithoutPrereqExecuted = await rerunLastTask({
+      isWorkspaceTrustedOverride: true,
+      suppressMessages: true,
+    });
+    results.trustedDebugWithoutPrereqExecuted = await rerunLastDebugSession({
+      isWorkspaceTrustedOverride: true,
+      suppressMessages: true,
+    });
+    results.trustedCheckoutWithoutPrereqExecuted = await checkoutPreviousBranch(
+      undefined,
+      undefined,
+      {
+        isWorkspaceTrustedOverride: true,
+        suppressMessages: true,
+      },
+    );
+  } finally {
     state.lastTaskName = original.lastTaskName;
     state.lastTaskWorkspaceRoot = original.lastTaskWorkspaceRoot;
     state.lastDebugConfigName = original.lastDebugConfigName;
