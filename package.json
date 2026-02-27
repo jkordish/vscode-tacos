@@ -59,6 +59,7 @@
     "onCommand:tacos.generateStandupUpdate",
     "onCommand:tacos.restoreWorkingSet",
     "onCommand:tacos.captureRestoreSearchQuery",
+    "onCommand:tacos.switchTaskPartition",
     "onCommand:tacos.resumeSummaries",
     "onCommand:tacos.toggleEnabled",
     "onCommand:tacos.pauseUntilRestart",
@@ -135,6 +136,10 @@
       {
         "command": "tacos.captureRestoreSearchQuery",
         "title": "TaCoS: Set Restore Search Query"
+      },
+      {
+        "command": "tacos.switchTaskPartition",
+        "title": "TaCoS: Switch Task Partition"
       },
       {
         "command": "tacos.resumeSummaries",

@@ -69,6 +69,7 @@ const KEY_RECENT_EDIT_LOCATIONS_PREFIX = 'tacos.recentEditLocations';
 const KEY_LAST_TASK_META_PREFIX = 'tacos.lastTaskMeta';
 const KEY_LAST_TERMINAL_CWD_PREFIX = 'tacos.lastTerminalCwd';
 const KEY_RESTORE_SEARCH_QUERY_PREFIX = 'tacos.restoreSearchQuery';
+const KEY_TASK_PARTITION_PREFIX = 'tacos.taskPartition';
 const KEY_ACTIVITY_STORAGE_PREFIX = 'tacos.activityScoped';
 const KEY_RESTRICTED_MODE_NOTICE_SHOWN = 'tacos.restrictedModeNoticeShown';
 const KEY_SUMMARY_CORRECTIONS_PREFIX = 'tacos.summaryCorrections';
@@ -299,7 +300,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(root));
+      const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(context, root));
       if (!cached) {
         void vscode.window.showInformationMessage(
           'TaCoS: No cached summary yet for this workspace.',
@@ -321,6 +322,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.captureRestoreSearchQuery', async () => {
       await captureRestoreSearchQuery(context);
+    }),
+    vscode.commands.registerCommand('tacos.switchTaskPartition', async () => {
+      await switchTaskPartition(context);
     }),
     vscode.commands.registerCommand('tacos.jumpToLastEdit', async () => {
       await jumpToRecentEdit(context);
@@ -755,7 +759,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const lastSummaryAt = context.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0);
       const fingerprint = computeAutoTriggerFingerprint(root);
       const lastFingerprint = context.workspaceState.get<string>(
-        autoTriggerFingerprintKey(root),
+        autoTriggerFingerprintKey(context, root),
         '',
       );
       const significantChange = fingerprint !== lastFingerprint;
@@ -775,7 +779,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
       state.lastAutoFocusTriggerAt = now;
       state.autoSummaryInFlight = true;
-      await context.workspaceState.update(autoTriggerFingerprintKey(root), fingerprint);
+      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
       try {
         await triggerSummary(context, 'focus');
       } finally {
@@ -1018,7 +1022,7 @@ async function prepareTriggerSummary(
   const corrections = getSummaryCorrectionsForContext(context, root, localSummary.contextHash);
   localSummary.userCorrections = corrections;
   localSummary.correctionsFingerprint = summarizeCorrectionsFingerprint(corrections);
-  const cacheKey = summaryCacheKey(root);
+  const cacheKey = summaryCacheKey(context, root);
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
   const correctionsUnchanged =
     (cached?.correctionsFingerprint ?? '') === (localSummary.correctionsFingerprint ?? '');
@@ -1645,6 +1649,7 @@ interface CompanionActionPick extends vscode.QuickPickItem {
     | 'showLast'
     | 'standup'
     | 'restoreWorkingSet'
+    | 'switchPartition'
     | 'jumpLastEdit'
     | 'copyPrompt'
     | 'togglePause'
@@ -1682,6 +1687,11 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'restoreWorkingSet',
       label: 'Restore working set',
       detail: 'Preview and restore files, diff target, terminal cwd, and search query.',
+    },
+    {
+      id: 'switchPartition',
+      label: 'Switch task partition',
+      detail: 'Set or clear manual task key for context partitioning.',
     },
     {
       id: 'jumpLastEdit',
@@ -1776,6 +1786,9 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'restoreWorkingSet') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.restoreWorkingSet');
+  } else if (picked.id === 'switchPartition') {
+    recordCompanionQuickAction();
+    await vscode.commands.executeCommand('tacos.switchTaskPartition');
   } else if (picked.id === 'jumpLastEdit') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.jumpToLastEdit');
@@ -3248,7 +3261,7 @@ async function generateStandupUpdateCommand(context: vscode.ExtensionContext): P
     return;
   }
 
-  const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(root));
+  const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(context, root));
   const summary = cached ?? (await generateSummary(context, root, 'manual')).summary;
   const standup = buildStandupUpdate(summary, path.basename(root), Date.now());
   const action = await vscode.window.showInformationMessage(
@@ -3347,6 +3360,56 @@ async function captureRestoreSearchQuery(context: vscode.ExtensionContext): Prom
   );
 }
 
+async function switchTaskPartition(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const current =
+    context.workspaceState.get<string>(taskPartitionStorageKey(workspaceRoot), '').trim() || '';
+  const inferred =
+    inferTaskPartitionKey(context.workspaceState.get<string>(branchStateKey(workspaceRoot), '')) ||
+    '';
+  const input = await vscode.window.showInputBox({
+    title: 'TaCoS: Switch Task Partition',
+    prompt:
+      'Set an optional task key (for example ABC-123). Leave empty to use inferred/default partition.',
+    placeHolder: inferred ? `Inferred from branch: ${inferred}` : 'Example: ABC-123',
+    value: current,
+    ignoreFocusOut: true,
+  });
+  if (typeof input === 'undefined') {
+    return;
+  }
+
+  const nextValue = input.trim();
+  await context.workspaceState.update(
+    taskPartitionStorageKey(workspaceRoot),
+    nextValue ? nextValue : undefined,
+  );
+
+  const snapshot = loadPersistedActivitySnapshot(context);
+  state.recentFiles = new RingBuffer(15, snapshot.sanitized.recentFiles);
+  state.recentTerminal = new RingBuffer(15, snapshot.sanitized.recentTerminal);
+  state.recentDebug = new RingBuffer(10, snapshot.sanitized.recentDebug);
+  state.recentUrls = new RingBuffer(5, snapshot.sanitized.recentUrls);
+  state.doneItems = new RingBuffer(10, snapshot.sanitized.doneItems);
+  state.lastFailingCommand = snapshot.sanitized.lastFailingCommand;
+  state.lastFailingCommandRaw = undefined;
+  state.scratchSummary = undefined;
+  if (state.panel) {
+    state.panel.dispose();
+  }
+  updateCompanionStatusBar();
+  void vscode.window.showInformationMessage(
+    nextValue
+      ? `TaCoS: switched to task partition "${nextValue}".`
+      : `TaCoS: switched to ${inferred ? `inferred partition "${inferred}"` : 'default partition'}.`,
+  );
+}
+
 async function restoreWorkingSetCommand(context: vscode.ExtensionContext): Promise<void> {
   const workspaceRoot = pickWorkspaceRoot();
   if (!workspaceRoot) {
@@ -3357,7 +3420,7 @@ async function restoreWorkingSetCommand(context: vscode.ExtensionContext): Promi
   const summary =
     state.panelSummary ??
     state.scratchSummary ??
-    context.workspaceState.get<ResumeSummary>(summaryCacheKey(workspaceRoot));
+    context.workspaceState.get<ResumeSummary>(summaryCacheKey(context, workspaceRoot));
   if (!summary) {
     void vscode.window.showInformationMessage('TaCoS: no summary context available to restore yet.');
     return;
@@ -5058,16 +5121,57 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
   };
 }
 
-function summaryCacheKey(root: string): string {
-  return `tacos.summary.${Buffer.from(root).toString('base64url')}`;
-}
-
 function branchStateKey(root: string): string {
   return `tacos.branch.${Buffer.from(root).toString('base64url')}`;
 }
 
-function autoTriggerFingerprintKey(root: string): string {
-  return `${KEY_LAST_AUTO_TRIGGER_FINGERPRINT}.${Buffer.from(root).toString('base64url')}`;
+function taskPartitionStorageKey(root: string): string {
+  return `${KEY_TASK_PARTITION_PREFIX}.${Buffer.from(root).toString('base64url')}`;
+}
+
+function inferTaskPartitionKey(branch: string): string | undefined {
+  const normalized = branch.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const ticketMatch = normalized.match(/([A-Z]{2,}-\d+)/);
+  if (ticketMatch?.[1]) {
+    return ticketMatch[1];
+  }
+
+  const issueMatch = normalized.match(/#(\d{2,})/);
+  if (issueMatch?.[1]) {
+    return `issue-${issueMatch[1]}`;
+  }
+
+  return undefined;
+}
+
+function resolveTaskPartitionKey(context: vscode.ExtensionContext, root: string): string {
+  const manual = context.workspaceState.get<string>(taskPartitionStorageKey(root), '').trim();
+  if (manual) {
+    return manual;
+  }
+
+  const branch = context.workspaceState.get<string>(branchStateKey(root), '').trim();
+  const inferred = inferTaskPartitionKey(branch);
+  return inferred ?? 'default';
+}
+
+function partitionScope(context: vscode.ExtensionContext, root: string): string {
+  const branch = context.workspaceState.get<string>(branchStateKey(root), '').trim() || 'default';
+  const taskPartition = resolveTaskPartitionKey(context, root);
+  return `${root}::${branch}::${taskPartition}`;
+}
+
+function summaryCacheKey(context: vscode.ExtensionContext, root: string): string {
+  return `tacos.summary.${Buffer.from(partitionScope(context, root)).toString('base64url')}`;
+}
+
+function autoTriggerFingerprintKey(context: vscode.ExtensionContext, root: string): string {
+  const scope = partitionScope(context, root);
+  return `${KEY_LAST_AUTO_TRIGGER_FINGERPRINT}.${Buffer.from(scope).toString('base64url')}`;
 }
 
 function workspaceActivityKey(root: string): string {
@@ -5136,13 +5240,14 @@ function collectWorkspaceScopedKeys(
     }
 
     return (
-      matchesEncodedWorkspaceKey(key, 'tacos.summary', workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, 'tacos.summary', workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, 'tacos.branch', workspaceRoot, false) ||
-      matchesEncodedWorkspaceKey(key, KEY_LAST_AUTO_TRIGGER_FINGERPRINT, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_AUTO_TRIGGER_FINGERPRINT, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_RECENT_EDIT_LOCATIONS_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_TASK_META_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_TERMINAL_CWD_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_RESTORE_SEARCH_QUERY_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_TASK_PARTITION_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_SUMMARY_CORRECTIONS_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, false) ||
@@ -5232,9 +5337,11 @@ async function applyRetentionPolicy(
     }
   }
 
-  const cachedSummary = context.workspaceState.get<ResumeSummary | undefined>(summaryCacheKey(workspaceRoot));
+  const cachedSummary = context.workspaceState.get<ResumeSummary | undefined>(
+    summaryCacheKey(context, workspaceRoot),
+  );
   if (cachedSummary && cachedSummary.generatedAt < cutoffAt) {
-    await context.workspaceState.update(summaryCacheKey(workspaceRoot), undefined);
+    await context.workspaceState.update(summaryCacheKey(context, workspaceRoot), undefined);
   }
 
   const metricHistory = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
@@ -5546,7 +5653,9 @@ function isEmptyActivityState(activity: PersistedActivityState): boolean {
 
 function scopedActivityStorageKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
   const branch = context.workspaceState.get<string>(branchStateKey(workspaceRoot), '').trim();
-  const scope = branch ? `${workspaceRoot}::${branch}` : workspaceRoot;
+  const taskPartition = resolveTaskPartitionKey(context, workspaceRoot);
+  const branchScope = branch || 'default';
+  const scope = `${workspaceRoot}::${branchScope}::${taskPartition}`;
   const normalizedScope = scope.trim() || '__no_workspace__';
   return `${KEY_ACTIVITY_STORAGE_PREFIX}.${Buffer.from(normalizedScope).toString('base64url')}`;
 }
