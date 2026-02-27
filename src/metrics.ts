@@ -44,6 +44,129 @@ function toRatio(numerator: number, denominator: number): string {
   return (numerator / denominator).toFixed(4);
 }
 
+function toFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function quantile(values: number[], percentile: number): number | undefined {
+  if (values.length === 0) {
+    return undefined;
+  }
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = (sorted.length - 1) * percentile;
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  if (lower === upper) {
+    return sorted[lower];
+  }
+
+  const weight = index - lower;
+  return sorted[lower] + (sorted[upper] - sorted[lower]) * weight;
+}
+
+function formatMs(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) {
+    return 'n/a';
+  }
+
+  return `${Math.round(value)} (${(value / 1000).toFixed(1)}s)`;
+}
+
+function formatNumber(value: number | undefined, digits = 2): string {
+  if (value === undefined || !Number.isFinite(value)) {
+    return 'n/a';
+  }
+
+  return value.toFixed(digits);
+}
+
+interface LagSummary {
+  n: number;
+  p50?: number;
+  p95?: number;
+}
+
+function summarizeLag(metrics: MetricRecord[], lagField: keyof MetricRecord): LagSummary {
+  const values = metrics
+    .map((metric) => toFiniteNumber(metric[lagField]))
+    .filter((value): value is number => typeof value === 'number');
+
+  return {
+    n: values.length,
+    p50: quantile(values, 0.5),
+    p95: quantile(values, 0.95),
+  };
+}
+
+function summarizeTotal(metrics: MetricRecord[], field: keyof MetricRecord): number {
+  return metrics.reduce((sum, metric) => sum + (toFiniteNumber(metric[field]) ?? 0), 0);
+}
+
+export interface MetricsBaselineSnapshotOptions {
+  generatedAt?: number;
+  sourceLabel?: string;
+}
+
+export function buildMetricsBaselineSnapshotMarkdown(
+  metrics: MetricRecord[],
+  options: MetricsBaselineSnapshotOptions = {},
+): string {
+  const generatedAtIso = new Date(options.generatedAt ?? Date.now()).toISOString();
+  const sessions = metrics.length;
+  const workspaceCount = new Set(
+    metrics.map((metric) => metric.workspaceRoot.trim()).filter((workspaceRoot) => workspaceRoot),
+  ).size;
+  const dogfoodingGateMet = sessions >= 30 && workspaceCount >= 3;
+
+  const lagEdit = summarizeLag(metrics, 'firstMeaningfulEditLagMs');
+  const lagRun = summarizeLag(metrics, 'firstRunLagMs');
+  const lagAction = summarizeLag(metrics, 'firstActionLagMs');
+
+  const promptImpressions = summarizeTotal(metrics, 'companionPromptImpressions');
+  const forcedOpenClicks = summarizeTotal(metrics, 'companionForcedOpenDetailsClicks');
+  const nudgeImpressions = summarizeTotal(metrics, 'companionNudgeImpressions');
+  const forcedOpenRate = promptImpressions > 0 ? forcedOpenClicks / promptImpressions : undefined;
+  const promptPerSession = sessions > 0 ? promptImpressions / sessions : undefined;
+  const nudgePerSession = sessions > 0 ? nudgeImpressions / sessions : undefined;
+
+  const lines = [
+    '# TaCoS Metrics Baseline Snapshot',
+    '',
+    `Date: \`${generatedAtIso}\``,
+    `Source: \`${options.sourceLabel ?? 'Local workspace-state metric history'}\``,
+    '',
+    'Status:',
+    `- Dogfooding gate (\`>=30 sessions\` and \`>=3 workspaces\`): ${dogfoodingGateMet ? 'met' : 'not yet met'}`,
+    `- Sessions: ${sessions}`,
+    `- Distinct workspaces: ${workspaceCount}`,
+    '',
+    'Lag summary:',
+    '',
+    '| Metric | n | p50 (ms / s) | p95 (ms / s) |',
+    '| --- | ---: | ---: | ---: |',
+    `| \`firstMeaningfulEditLagMs\` | ${lagEdit.n} | ${formatMs(lagEdit.p50)} | ${formatMs(lagEdit.p95)} |`,
+    `| \`firstRunLagMs\` | ${lagRun.n} | ${formatMs(lagRun.p50)} | ${formatMs(lagRun.p95)} |`,
+    `| \`firstActionLagMs\` | ${lagAction.n} | ${formatMs(lagAction.p50)} | ${formatMs(lagAction.p95)} |`,
+    '',
+    'Prompt and nudge rates:',
+    '',
+    '| Metric | Value |',
+    '| --- | ---: |',
+    `| Prompt impressions (total) | ${promptImpressions} |`,
+    `| Prompt impressions per session | ${formatNumber(promptPerSession)} |`,
+    `| Forced-open details clicks (total) | ${forcedOpenClicks} |`,
+    `| Forced-open rate (\`forced/prompt\`) | ${formatNumber(forcedOpenRate, 4)} |`,
+    `| Nudge impressions (total) | ${nudgeImpressions} |`,
+    `| Nudge impressions per session | ${formatNumber(nudgePerSession)} |`,
+    '',
+    'Notes:',
+    '- Snapshot contains aggregate-only values and excludes raw workspace paths.',
+  ];
+
+  return `${lines.join('\n')}\n`;
+}
+
 export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
   if (!Number.isFinite(metric.startedAt) || !metric.workspaceRoot.trim()) {
     return false;

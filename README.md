@@ -69,6 +69,7 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Set OpenAI API Key`
 - `TaCoS: Clear OpenAI API Key`
 - `TaCoS: Export Local Metrics`
+- `TaCoS: Copy Metrics Baseline Snapshot`
 - `TaCoS: Copy Diagnostics`
 
 ### Codex / ChatGPT Interop
@@ -118,6 +119,8 @@ Run `TaCoS: Export Local Metrics` to write:
 
 - `.tacos/metrics.json` (raw session records)
 - `.tacos/metrics.csv` (dashboard-friendly fields + derived rates)
+
+Run `TaCoS: Copy Metrics Baseline Snapshot` to copy a markdown baseline report (lag p50/p95, prompt/nudge/forced-open rates, dogfooding gate status) for issue comments or `docs/metrics-baseline.md`.
 
 Docs:
 
