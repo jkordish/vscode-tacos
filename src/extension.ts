@@ -3377,8 +3377,7 @@ async function showDetailsPanel(
           return;
         }
 
-        const isPrimaryStep =
-          message.primarySurface === 'home' || message.primarySurface === 'recap';
+        const isPrimaryStep = message.primarySurface === 'home';
         const outcome = await runNextStepActionDetailed(
           state.panelSummary,
           message.stepIndex,
