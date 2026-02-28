@@ -51,6 +51,7 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `helpfulnessRating` | integer | Optional local rating (`1`-`5`) from `TaCoS: Rate Summary Helpfulness`. |
 | `pauseActions` | integer | Count of pause actions taken during session. |
 | `snoozeActions` | integer | Count of snooze actions taken during session. |
+| `summaryQuietActions` | integer | Count of temporary quiet-mode actions taken (`Quiet now`, `until tomorrow`). |
 | `disableActions` | integer | Count of disable/toggle-off actions taken during session. |
 | `noteCreated` | integer | Count of checkpoint notes created during session. |
 | `noteMarkedDone` | integer | Count of checkpoint notes marked done during session. |
@@ -82,6 +83,7 @@ Track these explicitly for stabilization/adoption gating:
 - `companionPrimaryCtaClicks`
 - `companionPrimaryCtaCompletions`
 - `interruptionTimingClass`
+- `summaryQuietActions`
 - `noteCreated`
 - `noteMarkedDone`
 - `notePinned`

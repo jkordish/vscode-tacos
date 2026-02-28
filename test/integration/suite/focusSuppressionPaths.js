@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const vscode = require('vscode');
 
 function wait(ms) {
@@ -34,6 +36,13 @@ async function run() {
   const originalPauseGlobal = pauseInspected?.globalValue;
   const originalShowOnFocusGlobal = showOnFocusInspected?.globalValue;
   const originalQuietHoursGlobal = quietHoursInspected?.globalValue;
+  const workspaceRootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const workspaceSettingsPath = workspaceRootPath
+    ? path.join(workspaceRootPath, '.vscode', 'settings.json')
+    : '';
+  const workspaceSettingsExisted = workspaceSettingsPath
+    ? fs.existsSync(workspaceSettingsPath)
+    : false;
 
   try {
     await config.update('enabled', true, vscode.ConfigurationTarget.Global);
@@ -41,6 +50,7 @@ async function run() {
     await config.update('showOnFocus', true, vscode.ConfigurationTarget.Global);
     await config.update('summaryQuietHours', '', vscode.ConfigurationTarget.Global);
     await vscode.commands.executeCommand('tacos.__test.setSnoozeUntil', 0);
+    await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);
 
     await wait(1300);
     const baseline = await vscode.commands.executeCommand('tacos.__test.getFocusSuppressionSnapshot');
@@ -79,6 +89,37 @@ async function run() {
     );
 
     await vscode.commands.executeCommand('tacos.__test.setSnoozeUntil', 0);
+    await vscode.commands.executeCommand('tacos.quietNow');
+    const temporaryQuiet = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSuppressionSnapshot',
+    );
+    assert.equal(
+      temporaryQuiet?.suppressionReason,
+      'quiet-hours',
+      'Expected temporary quiet mode to suppress focus triggers.',
+    );
+    assert.equal(
+      temporaryQuiet?.temporaryQuiet,
+      true,
+      'Expected temporary quiet mode flag to be active after Quiet Now command.',
+    );
+    const statusSnapshot = await vscode.commands.executeCommand('tacos.__test.getStatusBarSnapshot');
+    assert.ok(
+      typeof statusSnapshot?.tooltip === 'string' &&
+        statusSnapshot.tooltip.includes('Temporary quiet until:'),
+      'Expected status bar tooltip to include temporary quiet expiry.',
+    );
+    await vscode.commands.executeCommand('tacos.resumeSummaries');
+    const resumedAfterTemporaryQuiet = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSuppressionSnapshot',
+    );
+    assert.equal(
+      resumedAfterTemporaryQuiet?.suppressionReason,
+      'none',
+      'Expected Resume Auto Summaries to clear temporary quiet suppression.',
+    );
+
+    await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);
     await config.update(
       'summaryQuietHours',
       quietWindowIncludingNow(Date.now()),
@@ -94,6 +135,9 @@ async function run() {
     );
   } finally {
     await vscode.commands.executeCommand('tacos.__test.setSnoozeUntil', 0);
+    await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);
+    await config.update('pauseSummaries', undefined, vscode.ConfigurationTarget.Workspace);
+    await config.update('summaryQuietHours', undefined, vscode.ConfigurationTarget.Workspace);
     await config.update(
       'enabled',
       typeof originalEnabledGlobal === 'undefined' ? undefined : originalEnabledGlobal,
@@ -114,6 +158,14 @@ async function run() {
       typeof originalQuietHoursGlobal === 'undefined' ? undefined : originalQuietHoursGlobal,
       vscode.ConfigurationTarget.Global,
     );
+
+    if (workspaceSettingsPath && !workspaceSettingsExisted && fs.existsSync(workspaceSettingsPath)) {
+      fs.rmSync(workspaceSettingsPath, { force: true });
+      const settingsDir = path.dirname(workspaceSettingsPath);
+      if (fs.existsSync(settingsDir) && fs.readdirSync(settingsDir).length === 0) {
+        fs.rmdirSync(settingsDir);
+      }
+    }
   }
 }
 

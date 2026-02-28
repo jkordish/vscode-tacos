@@ -73,7 +73,7 @@ import {
   inferTaskPartitionKey,
   resolveTaskPartitionKey as resolveTaskPartitionFromInputs,
 } from './partitionScope';
-import { isInQuietHours } from './quietHours';
+import { formatQuietHoursWindow, isInQuietHours, parseQuietHoursWindow } from './quietHours';
 import {
   redactList,
   redactText,
@@ -113,6 +113,7 @@ const KEY_LAST_SUMMARY_AT = 'tacos.lastSummaryAt';
 const KEY_LAST_WORKSPACE_ON_BLUR = 'tacos.lastWorkspaceOnBlur';
 const KEY_LAST_AUTO_TRIGGER_FINGERPRINT = 'tacos.lastAutoTriggerFingerprint';
 const KEY_SUMMARY_SNOOZE_UNTIL = 'tacos.summarySnoozeUntil';
+const KEY_SUMMARY_QUIET_UNTIL = 'tacos.summaryQuietUntil';
 
 const KEY_RECENT_FILES = 'tacos.recentFiles';
 const KEY_RECENT_TERMINAL = 'tacos.recentTerminal';
@@ -258,6 +259,7 @@ interface RuntimeState {
   meaningfulActivitySinceCheckpointPrompt: boolean;
   pauseUntilRestart: boolean;
   snoozeUntil: number;
+  summaryQuietUntil: number;
   vscodeLmModel?: VscodeLmModelLike;
   vscodeLmSelector?: VscodeLmModelSelector;
   vscodeLmUnavailableNotified: boolean;
@@ -384,6 +386,7 @@ export function activate(context: vscode.ExtensionContext): void {
     meaningfulActivitySinceCheckpointPrompt: false,
     pauseUntilRestart: false,
     snoozeUntil: context.workspaceState.get<number>(KEY_SUMMARY_SNOOZE_UNTIL, 0),
+    summaryQuietUntil: context.workspaceState.get<number>(KEY_SUMMARY_QUIET_UNTIL, 0),
     vscodeLmSelector: context.globalState.get<VscodeLmModelSelector | undefined>(
       KEY_VSCODE_LM_SELECTOR,
     ),
@@ -531,7 +534,8 @@ export function activate(context: vscode.ExtensionContext): void {
       const disabledOrPaused =
         !config.enabled || state.pauseUntilRestart || !config.showOnFocus || config.pauseSummaries;
       const snoozed = state.snoozeUntil > now;
-      const quietHours = isInQuietHours(now, config.summaryQuietHours);
+      const quietState = resolveSummaryQuietState(now, config.summaryQuietHours);
+      const quietHours = quietState.active;
 
       let suppressionReason:
         | 'none'
@@ -556,6 +560,8 @@ export function activate(context: vscode.ExtensionContext): void {
         disabledOrPaused,
         snoozed,
         quietHours,
+        temporaryQuiet: quietState.source === 'temporary',
+        configuredQuietHours: quietState.source === 'configured',
       };
     }),
     vscode.commands.registerCommand(
@@ -657,6 +663,17 @@ export function activate(context: vscode.ExtensionContext): void {
 
       state.snoozeUntil = 0;
       await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+      return true;
+    }),
+    vscode.commands.registerCommand('tacos.__test.setSummaryQuietUntil', async (value?: number) => {
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        state.summaryQuietUntil = value;
+        await context.workspaceState.update(KEY_SUMMARY_QUIET_UNTIL, value);
+        return true;
+      }
+
+      state.summaryQuietUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_QUIET_UNTIL, undefined);
       return true;
     }),
     vscode.commands.registerCommand('tacos.__test.switchTaskPartition', async (value?: string) => {
@@ -784,10 +801,17 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.snoozeAutoSummaries', async () => {
       await promptAndSetAutoSummarySnooze(context);
     }),
+    vscode.commands.registerCommand('tacos.quietNow', async () => {
+      await quietNowSummariesForOneHour(context);
+    }),
+    vscode.commands.registerCommand('tacos.configureSummaryQuietHours', async () => {
+      await promptAndConfigureSummaryQuietHours(context);
+    }),
     vscode.commands.registerCommand('tacos.resumeSummaries', async () => {
       state.pauseUntilRestart = false;
       state.snoozeUntil = 0;
       await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+      await setSummaryQuietUntil(context, 0);
       await setPaused(false);
       updateCompanionStatusBar();
       void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
@@ -1298,12 +1322,13 @@ async function handleFocusRegainSummaryTrigger(
     }
 
     await clearExpiredSnoozeIfNeeded(context, now);
+    await clearExpiredSummaryQuietIfNeeded(context, now);
     if (state.snoozeUntil > now) {
       outcome = 'snoozed';
       return;
     }
 
-    if (isInQuietHours(now, config.summaryQuietHours)) {
+    if (resolveSummaryQuietState(now, config.summaryQuietHours).active) {
       outcome = 'quiet-hours';
       return;
     }
@@ -1347,7 +1372,6 @@ async function handleFocusRegainSummaryTrigger(
     state.autoSummaryInFlight = true;
     const focusSummaryStartNs = monotonicNowNs();
     try {
-      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
       let deferPromptToBackground = false;
       if (config.uiSurface === 'notification') {
         await delay(FOCUS_TYPING_DEFERRAL_GRACE_MS);
@@ -1364,6 +1388,7 @@ async function handleFocusRegainSummaryTrigger(
       }
 
       await triggerSummary(context, 'focus', undefined, deferPromptToBackground, now);
+      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
     } finally {
       state.autoSummaryInFlight = false;
       recordPerformanceGuardrail(
@@ -2290,6 +2315,7 @@ function recordMetricCounter(
   field:
     | 'pauseActions'
     | 'snoozeActions'
+    | 'summaryQuietActions'
     | 'disableActions'
     | 'noteCreated'
     | 'noteMarkedDone'
@@ -2386,6 +2412,8 @@ function updateCompanionStatusBar(): void {
 
   const config = getConfig();
   const mode = resolveCompanionRuntimeMode(config);
+  const now = Date.now();
+  const quietState = resolveSummaryQuietState(now, config.summaryQuietHours);
   const summary = state.scratchSummary;
   const modeIcon =
     mode === 'restricted'
@@ -2414,8 +2442,9 @@ function updateCompanionStatusBar(): void {
   const topStep = summary?.nextSteps[0]?.trim();
   const blockerCount = summary?.lastFailingCommand ? 1 : 0;
   const blockerSuffix = blockerCount > 0 ? ` · ${blockerCount} blocker` : '';
+  const quietSuffix = mode === 'active' && quietState.active ? ' · quiet' : '';
   const trustCue = buildTrustCue(summary);
-  state.statusBar.text = `${modeIcon} TaCoS: ${statusHeadline}${blockerSuffix}`;
+  state.statusBar.text = `${modeIcon} TaCoS: ${statusHeadline}${blockerSuffix}${quietSuffix}`;
   state.statusBar.backgroundColor =
     mode === 'restricted'
       ? new vscode.ThemeColor('statusBarItem.warningBackground')
@@ -2430,7 +2459,15 @@ function updateCompanionStatusBar(): void {
     `Privacy preset: ${PRIVACY_PRESET_LABELS[config.privacyPreset]}`,
     `Retention: ${RETENTION_POLICY_LABELS[config.retentionPolicy]}`,
     `Summary quiet hours: ${config.summaryQuietHours || 'off'}`,
-    state.snoozeUntil > Date.now()
+    quietState.source === 'temporary'
+      ? `Temporary quiet until: ${formatTimestamp(quietState.temporaryUntil ?? 0)}`
+      : 'Temporary quiet: off',
+    quietState.source === 'configured'
+      ? 'Quiet window status: active now'
+      : config.summaryQuietHours
+        ? 'Quiet window status: inactive now'
+        : 'Quiet window status: off',
+    state.snoozeUntil > now
       ? `Snoozed until: ${formatTimestamp(state.snoozeUntil)}`
       : 'Snooze: off',
     trustCue.headline,
@@ -2459,6 +2496,8 @@ interface CompanionActionPick extends vscode.QuickPickItem {
     | 'copyPrompt'
     | 'togglePause'
     | 'snoozeAuto'
+    | 'quietNow'
+    | 'setSummaryQuietHours'
     | 'enable'
     | 'openPrivacy'
     | 'configureProvider'
@@ -2533,6 +2572,16 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'snoozeAuto',
       label: 'Snooze auto summaries',
       detail: 'Temporarily suppress focus-triggered summaries.',
+    },
+    {
+      id: 'quietNow',
+      label: 'Quiet now (1 hour)',
+      detail: 'Suppress focus-triggered summaries for the next hour.',
+    },
+    {
+      id: 'setSummaryQuietHours',
+      label: 'Configure summary quiet hours',
+      detail: `Current daily window: ${config.summaryQuietHours || 'off'}.`,
     },
     {
       id: 'configureProvider',
@@ -2641,6 +2690,12 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   } else if (picked.id === 'snoozeAuto') {
     recordCompanionQuickAction();
     await promptAndSetAutoSummarySnooze(context);
+  } else if (picked.id === 'quietNow') {
+    recordCompanionQuickAction();
+    await quietNowSummariesForOneHour(context);
+  } else if (picked.id === 'setSummaryQuietHours') {
+    recordCompanionQuickAction();
+    await promptAndConfigureSummaryQuietHours(context);
   } else if (picked.id === 'configureProvider') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.configureAiProvider');
@@ -2675,6 +2730,7 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       state.pauseUntilRestart = false;
       state.snoozeUntil = 0;
       await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+      await setSummaryQuietUntil(context, 0);
       await setPaused(false);
       void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
     } else {
@@ -2895,6 +2951,7 @@ async function showDetailsPanel(
           state.pauseUntilRestart = false;
           state.snoozeUntil = 0;
           await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+          await setSummaryQuietUntil(context, 0);
           await setPaused(false);
           void vscode.window.showInformationMessage('TaCoS: auto summaries resumed.');
         } else {
@@ -2927,13 +2984,15 @@ async function showDetailsPanel(
           return;
         }
 
-        recordCompanionQuickAction();
         const isPrimaryStep = message.stepIndex === 0;
         const outcome = await runNextStepActionDetailed(
           state.panelSummary,
           message.stepIndex,
           state.panelWorkspaceRoot,
         );
+        if (outcome.attempted) {
+          recordCompanionQuickAction();
+        }
         if (outcome.completed) {
           recordMetricCounter('resumePathCompletions');
         }
@@ -3619,6 +3678,9 @@ function renderWebview(
   const autoSummariesDisabled = !config.enabled;
   const autoSummariesPaused =
     !autoSummariesDisabled && (config.pauseSummaries || state.pauseUntilRestart);
+  const summaryQuietState = resolveSummaryQuietState(Date.now(), config.summaryQuietHours);
+  const autoSummariesQuieted =
+    !autoSummariesDisabled && !autoSummariesPaused && summaryQuietState.active;
   const companionRuntimeMode = resolveCompanionRuntimeMode(config);
   const trustTrackingLabel =
     companionRuntimeMode === 'restricted'
@@ -3641,14 +3703,20 @@ function renderWebview(
     ? 'Auto summaries disabled'
     : autoSummariesPaused
       ? 'Auto summaries paused'
-      : 'Auto summaries active';
+      : autoSummariesQuieted
+        ? 'Auto summaries quieted'
+        : 'Auto summaries active';
   const autoSummaryStatusDetail = autoSummariesDisabled
     ? 'Enable tacos.enabled in settings to restore automatic summaries.'
     : state.pauseUntilRestart
       ? 'Paused until restart.'
       : config.pauseSummaries
         ? 'Paused in settings.'
-        : 'Runs on focus after idle and cooldown checks.';
+        : summaryQuietState.source === 'temporary'
+          ? `Temporary quiet is active until ${formatTimestamp(summaryQuietState.temporaryUntil ?? 0)}.`
+          : summaryQuietState.source === 'configured'
+            ? `Within your configured quiet window (${config.summaryQuietHours}).`
+            : 'Runs on focus after idle and cooldown checks.';
   const autoSummaryToggleLabel = autoSummariesPaused
     ? 'Resume auto summaries'
     : 'Pause auto summaries';
@@ -5188,8 +5256,16 @@ async function runNextStepActionDetailed(
       return { attempted: false, completed: false };
     }
 
-    await vscode.env.openExternal(vscode.Uri.parse(safeUrl));
-    return { attempted: true, completed: true };
+    try {
+      const opened = await vscode.env.openExternal(vscode.Uri.parse(safeUrl));
+      if (!opened) {
+        void vscode.window.showWarningMessage('TaCoS: unable to open this URL in your browser.');
+      }
+      return { attempted: true, completed: opened };
+    } catch {
+      void vscode.window.showWarningMessage('TaCoS: failed to open this URL.');
+      return { attempted: true, completed: false };
+    }
   }
 
   return { attempted: false, completed: false };
@@ -6372,6 +6448,263 @@ function nextTomorrowMorning(now: number): number {
   return date.getTime();
 }
 
+type SummaryQuietSource = 'none' | 'temporary' | 'configured';
+
+interface SummaryQuietState {
+  active: boolean;
+  source: SummaryQuietSource;
+  temporaryUntil?: number;
+}
+
+function resolveSummaryQuietState(now: number, summaryQuietHours: string): SummaryQuietState {
+  if (state.summaryQuietUntil > now) {
+    return {
+      active: true,
+      source: 'temporary',
+      temporaryUntil: state.summaryQuietUntil,
+    };
+  }
+
+  if (isInQuietHours(now, summaryQuietHours)) {
+    return {
+      active: true,
+      source: 'configured',
+    };
+  }
+
+  return {
+    active: false,
+    source: 'none',
+  };
+}
+
+async function setSummaryQuietUntil(
+  context: vscode.ExtensionContext,
+  quietUntil: number,
+): Promise<void> {
+  if (Number.isFinite(quietUntil) && quietUntil > Date.now()) {
+    state.summaryQuietUntil = quietUntil;
+    await context.workspaceState.update(KEY_SUMMARY_QUIET_UNTIL, quietUntil);
+  } else {
+    state.summaryQuietUntil = 0;
+    await context.workspaceState.update(KEY_SUMMARY_QUIET_UNTIL, undefined);
+  }
+
+  updateCompanionStatusBar();
+  rerenderPanel();
+}
+
+async function clearExpiredSummaryQuietIfNeeded(
+  context: vscode.ExtensionContext,
+  now: number,
+): Promise<void> {
+  if (state.summaryQuietUntil <= 0 || now < state.summaryQuietUntil) {
+    return;
+  }
+
+  state.summaryQuietUntil = 0;
+  await context.workspaceState.update(KEY_SUMMARY_QUIET_UNTIL, undefined);
+  updateCompanionStatusBar();
+  rerenderPanel();
+}
+
+function resolveSummaryQuietHoursConfigurationTarget(): {
+  config: vscode.WorkspaceConfiguration;
+  target: vscode.ConfigurationTarget;
+} {
+  const workspaceRoot = pickWorkspaceRoot();
+  const workspaceFolder = workspaceRoot
+    ? vscode.workspace.workspaceFolders?.find((folder) => folder.uri.fsPath === workspaceRoot)
+    : undefined;
+  const scopedConfig = workspaceFolder
+    ? vscode.workspace.getConfiguration('tacos', workspaceFolder.uri)
+    : vscode.workspace.getConfiguration('tacos');
+  const inspected = scopedConfig.inspect<string>('summaryQuietHours');
+  if (typeof inspected?.workspaceFolderValue === 'string') {
+    return {
+      config: scopedConfig,
+      target: vscode.ConfigurationTarget.WorkspaceFolder,
+    };
+  }
+
+  if (typeof inspected?.workspaceValue === 'string') {
+    return {
+      config: vscode.workspace.getConfiguration('tacos'),
+      target: vscode.ConfigurationTarget.Workspace,
+    };
+  }
+
+  return {
+    config: vscode.workspace.getConfiguration('tacos'),
+    target: vscode.ConfigurationTarget.Global,
+  };
+}
+
+async function updateSummaryQuietHoursSetting(value: string): Promise<void> {
+  const { config, target } = resolveSummaryQuietHoursConfigurationTarget();
+  await config.update('summaryQuietHours', value, target);
+}
+
+async function quietNowSummariesForOneHour(context: vscode.ExtensionContext): Promise<void> {
+  const quietUntil = Date.now() + 60 * 60_000;
+  await setSummaryQuietUntil(context, quietUntil);
+  recordMetricCounter('summaryQuietActions');
+  void vscode.window.showInformationMessage(
+    `TaCoS: summary notifications quieted until ${formatTimestamp(quietUntil)}.`,
+  );
+}
+
+async function promptAndSetSummaryQuietHoursWindow(): Promise<void> {
+  const config = getConfig();
+  const value = await vscode.window.showInputBox({
+    title: 'TaCoS: Summary Quiet Hours',
+    prompt: 'Set a daily quiet window in HH:MM-HH:MM format.',
+    placeHolder: '22:00-07:00',
+    value: config.summaryQuietHours.trim(),
+    validateInput: (input) => {
+      if (!input.trim()) {
+        return 'Quiet window is required. Use Clear in the previous menu to remove it.';
+      }
+
+      const parsed = parseQuietHoursWindow(input);
+      if (!parsed) {
+        return 'Use HH:MM-HH:MM, for example 22:00-07:00.';
+      }
+
+      return null;
+    },
+    ignoreFocusOut: true,
+  });
+  if (!value) {
+    return;
+  }
+
+  const parsed = parseQuietHoursWindow(value);
+  if (!parsed) {
+    return;
+  }
+
+  const normalized = formatQuietHoursWindow(parsed);
+  await updateSummaryQuietHoursSetting(normalized);
+  updateCompanionStatusBar();
+  rerenderPanel();
+  void vscode.window.showInformationMessage(
+    `TaCoS: daily summary quiet hours set to ${normalized}.`,
+  );
+}
+
+async function promptAndConfigureSummaryQuietHours(
+  context: vscode.ExtensionContext,
+): Promise<void> {
+  const now = Date.now();
+  await clearExpiredSummaryQuietIfNeeded(context, now);
+
+  const config = getConfig();
+  const configuredQuietHours = config.summaryQuietHours.trim();
+  const hasConfiguredValue = configuredQuietHours.length > 0;
+  const hasConfiguredWindow = Boolean(parseQuietHoursWindow(configuredQuietHours));
+  const hasTemporaryQuiet = state.summaryQuietUntil > now;
+
+  type QuietHoursPick = vscode.QuickPickItem & {
+    id: 'quietNow' | 'untilTomorrow' | 'setWindow' | 'clearWindow' | 'clearTemporary' | 'clearAll';
+  };
+
+  const picks: QuietHoursPick[] = [
+    {
+      id: 'quietNow',
+      label: 'Quiet now (1 hour)',
+      detail: 'Suppress focus-triggered summaries for the next hour.',
+    },
+    {
+      id: 'untilTomorrow',
+      label: 'Quiet until tomorrow morning',
+      detail: 'Suppress focus-triggered summaries until 9:00 AM local time tomorrow.',
+    },
+    {
+      id: 'setWindow',
+      label: 'Set daily quiet window',
+      detail: hasConfiguredWindow
+        ? `Current: ${configuredQuietHours}`
+        : hasConfiguredValue
+          ? `Current value is invalid (${configuredQuietHours}); set a valid HH:MM-HH:MM window.`
+          : 'Set recurring quiet hours in HH:MM-HH:MM format.',
+    },
+  ];
+
+  if (hasTemporaryQuiet) {
+    picks.push({
+      id: 'clearTemporary',
+      label: 'Clear temporary quiet window',
+      detail: `Currently active until ${formatTimestamp(state.summaryQuietUntil)}.`,
+    });
+  }
+  if (hasConfiguredValue) {
+    picks.push({
+      id: 'clearWindow',
+      label: 'Clear daily quiet window',
+      detail: `Remove configured daily window value (${configuredQuietHours}).`,
+    });
+  }
+  if (hasTemporaryQuiet || hasConfiguredValue) {
+    picks.push({
+      id: 'clearAll',
+      label: 'Turn quiet mode off',
+      detail: 'Clear temporary and recurring summary quiet suppression.',
+    });
+  }
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Summary Quiet Hours',
+    placeHolder: 'Choose how long summary prompts should stay quiet',
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+
+  if (picked.id === 'quietNow') {
+    await quietNowSummariesForOneHour(context);
+    return;
+  }
+
+  if (picked.id === 'untilTomorrow') {
+    const quietUntil = nextTomorrowMorning(Date.now());
+    await setSummaryQuietUntil(context, quietUntil);
+    recordMetricCounter('summaryQuietActions');
+    void vscode.window.showInformationMessage(
+      `TaCoS: summary notifications quieted until ${formatTimestamp(quietUntil)}.`,
+    );
+    return;
+  }
+
+  if (picked.id === 'setWindow') {
+    await promptAndSetSummaryQuietHoursWindow();
+    return;
+  }
+
+  if (picked.id === 'clearTemporary') {
+    await setSummaryQuietUntil(context, 0);
+    void vscode.window.showInformationMessage('TaCoS: temporary summary quiet window cleared.');
+    return;
+  }
+
+  if (picked.id === 'clearWindow') {
+    await updateSummaryQuietHoursSetting('');
+    updateCompanionStatusBar();
+    rerenderPanel();
+    void vscode.window.showInformationMessage('TaCoS: daily summary quiet window cleared.');
+    return;
+  }
+
+  if (picked.id === 'clearAll') {
+    await setSummaryQuietUntil(context, 0);
+    await updateSummaryQuietHoursSetting('');
+    updateCompanionStatusBar();
+    rerenderPanel();
+    void vscode.window.showInformationMessage('TaCoS: summary quiet mode turned off.');
+  }
+}
+
 async function promptAndSetAutoSummarySnooze(context: vscode.ExtensionContext): Promise<void> {
   type SnoozePick = vscode.QuickPickItem & { id: '30m' | 'tomorrow' | 'clear' };
   const picks: SnoozePick[] = [
@@ -6961,6 +7294,10 @@ function collectWorkspaceScopedKeys(
       return true;
     }
 
+    if (key === KEY_SUMMARY_QUIET_UNTIL) {
+      return true;
+    }
+
     return (
       matchesEncodedWorkspaceKey(key, 'tacos.summary', workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, 'tacos.branch', workspaceRoot, false) ||
@@ -7026,6 +7363,7 @@ function resetRuntimeWorkspaceState(): void {
   state.lastBoundarySignalAt = 0;
   state.lastMeaningfulActivityAt = 0;
   state.snoozeUntil = 0;
+  state.summaryQuietUntil = 0;
   state.panelCheckpointNotes = [];
   state.panelPrimaryCheckpointNote = undefined;
   state.panelCheckpointScope = undefined;

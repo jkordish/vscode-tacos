@@ -144,6 +144,7 @@ export interface MetricRecord {
   helpfulnessRating?: 1 | 2 | 3 | 4 | 5;
   pauseActions?: number;
   snoozeActions?: number;
+  summaryQuietActions?: number;
   disableActions?: number;
   noteCreated?: number;
   noteMarkedDone?: number;
