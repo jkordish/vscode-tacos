@@ -3145,8 +3145,8 @@ async function showDetailsPanel(
           return;
         }
 
-        const primaryNextAction = resolvePrimaryNextStepAction(state.panelSummary);
-        const isPrimaryStep = message.stepIndex === primaryNextAction?.stepIndex;
+        const isPrimaryStep =
+          message.primarySurface === 'home' || message.primarySurface === 'recap';
         const outcome = await runNextStepActionDetailed(
           state.panelSummary,
           message.stepIndex,
@@ -3590,7 +3590,7 @@ function renderWebview(
     ? `<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}">${escapeHtml(primaryNextAction.label)}</button>`
     : '';
   const recapPrimaryNextActionButton = primaryNextAction
-    ? `<button type="button" class="secondary" data-primary-next-safe-action="recap" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}">${escapeHtml(primaryNextAction.label)}</button>`
+    ? `<button type="button" data-primary-next-safe-action="recap" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}">${escapeHtml(primaryNextAction.label)}</button>`
     : '';
 
   if (primaryNextAction) {
@@ -3949,7 +3949,7 @@ function renderWebview(
           <p class="companion-primary">${escapeHtml(recapFirstAction || 'Refresh summary to regenerate first-action guidance.')}</p>
           <div class="status-actions">
             ${recapPrimaryNextActionButton}
-            <button type="button" data-action="copyNextSteps">Copy next steps</button>
+            <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
             <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>
             <button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>
           </div>
@@ -4543,6 +4543,11 @@ function renderWebview(
             const stepIndex = parseDatasetInteger(actionElement.dataset.stepIndex);
             if (stepIndex === undefined) {
               vscode.postMessage({ type: 'blockedLink' });
+              return;
+            }
+            const primarySurface = actionElement.dataset.primaryNextSafeAction;
+            if (primarySurface === 'home' || primarySurface === 'recap') {
+              vscode.postMessage({ type: 'runNextStepAction', stepIndex, primarySurface });
               return;
             }
             vscode.postMessage({ type: 'runNextStepAction', stepIndex });
@@ -5385,12 +5390,6 @@ function buildNextStepActionCandidates(summary: ResumeSummary): Array<NextStepAc
     canRerunDebug: availability.canRerunDebug,
     canCopyFailingCommand: availability.canCopyFailingCommand,
   });
-}
-
-function resolvePrimaryNextStepAction(summary: ResumeSummary): NextStepAction | undefined {
-  return buildNextStepActionCandidates(summary).find((candidate): candidate is NextStepAction =>
-    Boolean(candidate),
-  );
 }
 
 async function runNextStepActionDetailed(

@@ -34,11 +34,12 @@ const RESTORE_MESSAGE_TYPES = [
 
 type SimpleWebviewMessageType = (typeof SIMPLE_MESSAGE_TYPES)[number];
 type RestoreWebviewMessageType = (typeof RESTORE_MESSAGE_TYPES)[number];
+type PrimaryNextSafeActionSurface = 'home' | 'recap';
 
 export type WebviewMessage =
   | { type: SimpleWebviewMessageType }
   | { type: RestoreWebviewMessageType }
-  | { type: 'runNextStepAction'; stepIndex: number }
+  | { type: 'runNextStepAction'; stepIndex: number; primarySurface?: PrimaryNextSafeActionSurface }
   | { type: 'openEvidence'; evidenceId: string }
   | { type: 'openTopFile'; index: number }
   | { type: 'openLink'; index: number };
@@ -106,7 +107,17 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
       return undefined;
     }
 
-    return { type: 'runNextStepAction', stepIndex: raw.stepIndex };
+    let primarySurface: PrimaryNextSafeActionSurface | undefined;
+    if (typeof raw.primarySurface !== 'undefined') {
+      if (raw.primarySurface !== 'home' && raw.primarySurface !== 'recap') {
+        return undefined;
+      }
+      primarySurface = raw.primarySurface;
+    }
+
+    return primarySurface
+      ? { type: 'runNextStepAction', stepIndex: raw.stepIndex, primarySurface }
+      : { type: 'runNextStepAction', stepIndex: raw.stepIndex };
   }
 
   return undefined;
