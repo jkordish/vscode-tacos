@@ -2,6 +2,30 @@
 
 This document records local dogfooding metrics used to evaluate TaCoS stabilization and adoption progress.
 
+## v0.6.0 Outcome Contract
+
+North star: after returning to a workspace, users can recover in about 5 seconds with one clear, safe next action.
+
+Parent epics:
+- #131 Cognitive Resume Kit for 5-Second Resume
+- #132 Opportune Timing + Noise Budget 2.0
+- #133 Companion IA Overhaul for 5-Second Scan
+- #134 Proof, Metrics, and Release Discipline
+
+Target deltas are evaluated against the most recent baseline snapshot that passes the sample gate.
+
+| Outcome | Primary metric | Formula / interpretation | v0.6.0 target delta |
+| --- | --- | --- | --- |
+| Faster recovery to first action | `firstActionLagMs` p50, p95 | Quantiles of ms from summary display to first meaningful action. Lower is better. | p50: `-25%`, p95: `-20%` |
+| Lower forced-click friction | `companionForcedOpenRate` | `companionForcedOpenDetailsClicks / companionPromptImpressions` (when prompt impressions > 0). Lower is better. | `<= 0.05` |
+| Fewer harmful interruptions | `interruptionEvent` rate | `sum(interruptionEvent) / sessions` where `interruptionEvent=1` for focus-triggered prompt-mode interruptions. Lower is better. | `-40%` relative |
+| Better action follow-through | `companionActionFollowThroughRate` | `companionQuickActionsTaken / companionPromptImpressions` (when prompt impressions > 0). Higher is better. | `+20%` relative |
+| Higher perceived usefulness | `helpfulnessRating` mean | Average local helpfulness rating (`1`-`5`) for sessions with ratings. Higher is better. | `+0.5` absolute |
+
+Target revision policy:
+- Keep initial targets until at least one gate-passing baseline sample (`>=30` sessions and `>=3` workspaces) is recorded.
+- If a target is shown to be unrealistic, revise in an issue comment with explicit rationale and timestamp before release sign-off.
+
 ## Minimum Sample Gate
 
 Before marking the epic gate complete:
@@ -21,6 +45,13 @@ npm run metrics:summary -- .tacos/metrics.csv
 ```
 
 5. Update the date and notes.
+
+## Snapshot Interpretation Rules
+
+- Use deltas, not absolute values alone, for go/no-go decisions.
+- Compare similar workflow windows where possible (same week/daypart and similar project type).
+- Treat very low-denominator ratio metrics (`promptImpressions < 10`) as directional only.
+- Keep all exports local-only and redact workspace paths before sharing externally.
 
 ## Current Baseline Snapshot
 
