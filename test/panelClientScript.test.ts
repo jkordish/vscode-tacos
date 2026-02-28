@@ -7,6 +7,7 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain("'restoreWorkingSet'");
     expect(script).toContain("'setIntentOverride'");
     expect(script).toContain("'clearIntentOverride'");
+    expect(script).toContain("'dismissDemoResume'");
     expect(script).toContain("'trustCenter'");
     expect(script).toContain("type: 'setPanelSectionExpanded'");
     expect(script).toContain('const panelSectionScope = "scope-token";');

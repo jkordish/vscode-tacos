@@ -197,6 +197,7 @@ const KEY_AI_PAYLOAD_CONSENT_PREFIX = 'tacos.aiPayloadConsent';
 const KEY_NOISE_BUDGET_EVENTS_PREFIX = 'tacos.noiseBudgetEvents';
 const KEY_PANEL_SECTION_STATE_PREFIX = 'tacos.panelSectionState';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
+const DEMO_RESUME_CONTEXT_HASH = '__tacos_demo_resume__';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
 const CHECKPOINT_PROMPT_COOLDOWN_MINUTES = 45;
@@ -1077,6 +1078,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.openSetupChecklist', async () => {
       await runSetupChecklist(context);
+    }),
+    vscode.commands.registerCommand('tacos.showDemoResumeCard', async () => {
+      await showDemoResumeCard(context);
     }),
     vscode.commands.registerCommand('tacos.resetSetupChecklist', async () => {
       await resetSetupChecklist(context);
@@ -2945,6 +2949,7 @@ function updateCompanionStatusBar(): void {
 interface CompanionActionPick extends vscode.QuickPickItem {
   id:
     | 'showNow'
+    | 'showDemo'
     | 'showLast'
     | 'standup'
     | 'restoreWorkingSet'
@@ -2978,6 +2983,11 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
       id: 'showNow',
       label: 'Show resume brief now',
       detail: 'Generate a fresh summary immediately.',
+    },
+    {
+      id: 'showDemo',
+      label: 'Show demo resume card',
+      detail: 'Open a clearly-labeled sample brief (no workspace evidence mixed in).',
     },
     {
       id: 'showLast',
@@ -3118,6 +3128,9 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
   if (picked.id === 'showNow') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.showNow');
+  } else if (picked.id === 'showDemo') {
+    recordCompanionQuickAction();
+    await showDemoResumeCard(context);
   } else if (picked.id === 'showLast') {
     recordCompanionQuickAction();
     await vscode.commands.executeCommand('tacos.showLastSummary');
@@ -3216,13 +3229,25 @@ async function showDetailsPanel(
     'workspaceRoot' | 'checkpointPrimaryNote' | 'checkpointNotes' | 'checkpointScope'
   > = {},
 ): Promise<void> {
-  const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
-  updateSummaryScratchpad(summary, workspaceRoot);
+  const demoMode = isDemoResumeSummary(summary);
+  const workspaceRoot = demoMode ? undefined : pickWorkspaceRoot(options.workspaceRoot);
+  if (!demoMode) {
+    updateSummaryScratchpad(summary, workspaceRoot);
+  }
   state.panelSummary = summary;
   state.panelWorkspaceRoot = workspaceRoot;
   state.panelCheckpointNotes = sortCheckpointNotes(options.checkpointNotes ?? []);
   state.panelPrimaryCheckpointNote = options.checkpointPrimaryNote;
   state.panelCheckpointScope = options.checkpointScope;
+  if (demoMode) {
+    state.panelCheckpointNotes = [];
+    state.panelPrimaryCheckpointNote = undefined;
+    state.panelCheckpointScope = undefined;
+    state.panelScratchpadPreviewLines = [];
+    state.panelScratchpadExists = false;
+    state.panelScratchpadHasContent = false;
+    state.panelScratchpadScopeLabel = undefined;
+  }
 
   if (!state.panel) {
     state.panel = vscode.window.createWebviewPanel(
@@ -3270,6 +3295,11 @@ async function showDetailsPanel(
 
       if (message.type === 'fixSummary') {
         await captureSummaryCorrection(context);
+        return;
+      }
+
+      if (message.type === 'dismissDemoResume') {
+        state.panel?.dispose();
         return;
       }
 
@@ -3745,7 +3775,7 @@ async function showDetailsPanel(
     });
   }
 
-  if (workspaceRoot) {
+  if (!demoMode && workspaceRoot) {
     if (options.checkpointNotes && options.checkpointScope) {
       state.panelCheckpointNotes = sortCheckpointNotes(options.checkpointNotes);
       state.panelPrimaryCheckpointNote =
@@ -3785,7 +3815,15 @@ function updateSummaryScratchpad(summary: ResumeSummary, workspaceRoot?: string)
 }
 
 function titleForSummary(summary: ResumeSummary): string {
+  if (isDemoResumeSummary(summary)) {
+    return 'TaCoS Resume Brief (Sample)';
+  }
+
   return summary.source === 'local' ? 'TaCoS Resume Brief' : 'TaCoS Resume Brief (Refined)';
+}
+
+function isDemoResumeSummary(summary: ResumeSummary | undefined): boolean {
+  return summary?.contextHash === DEMO_RESUME_CONTEXT_HASH;
 }
 
 function rerenderPanel(): void {
@@ -3848,6 +3886,7 @@ function renderWebview(
   const nonce = createNonce();
   const cspMetaTag = buildWebviewCspMetaTag(webview.cspSource, nonce);
   const config = getConfig();
+  const demoMode = isDemoResumeSummary(summary);
   const evidenceById = new Map(
     (summary.evidenceCatalog ?? []).map((item) => [item.id, item] as const),
   );
@@ -3861,31 +3900,35 @@ function renderWebview(
   const primaryOpenCheckpoint =
     primaryCheckpointNote?.status === 'open' ? primaryCheckpointNote : undefined;
   const currentCheckpointNote = primaryOpenCheckpoint ?? openCheckpointNotes[0];
-  const checkpointCard = renderCheckpointCard({
-    openCheckpointCount,
-    currentCheckpointNote: currentCheckpointNote
-      ? {
-          text: currentCheckpointNote.text,
-          file: currentCheckpointNote.file,
-          line: currentCheckpointNote.line,
-          branch: currentCheckpointNote.branch,
-          partition: currentCheckpointNote.partition,
-          pinned: currentCheckpointNote.pinned,
-        }
-      : undefined,
-  });
+  const checkpointCard = demoMode
+    ? ''
+    : renderCheckpointCard({
+        openCheckpointCount,
+        currentCheckpointNote: currentCheckpointNote
+          ? {
+              text: currentCheckpointNote.text,
+              file: currentCheckpointNote.file,
+              line: currentCheckpointNote.line,
+              branch: currentCheckpointNote.branch,
+              partition: currentCheckpointNote.partition,
+              pinned: currentCheckpointNote.pinned,
+            }
+          : undefined,
+      });
   const scratchpadPreviewLines = state.panelScratchpadPreviewLines.slice(
     0,
     SCRATCHPAD_PREVIEW_MAX_LINES,
   );
   const scratchpadScopeLabel = state.panelScratchpadScopeLabel?.trim() ?? '';
   const showScratchpadCard = state.panelScratchpadExists || state.panelScratchpadHasContent;
-  const scratchpadCard = renderScratchpadCard({
-    showScratchpadCard,
-    scratchpadScopeLabel,
-    scratchpadPreviewLines,
-    scratchpadHasContent: state.panelScratchpadHasContent,
-  });
+  const scratchpadCard = demoMode
+    ? ''
+    : renderScratchpadCard({
+        showScratchpadCard,
+        scratchpadScopeLabel,
+        scratchpadPreviewLines,
+        scratchpadHasContent: state.panelScratchpadHasContent,
+      });
   const hasLongGap = Boolean(summary.longGap);
   const confidenceCard = renderConfidenceCard({
     longGap: hasLongGap,
@@ -3909,15 +3952,18 @@ function renderWebview(
   const trusted = vscode.workspace.isTrusted;
   const availability = computeRestoreAvailability({
     trusted,
-    hasLastTask: Boolean(state.lastTaskName),
-    hasLastDebug: Boolean(state.lastDebugConfigName),
-    hasFailingCommand: Boolean(getCopyableFailingCommand()),
-    hasRecentEditLocation: state.recentEditLocations.length > 0,
-    currentBranch: summary.currentBranch,
-    previousBranch: summary.previousBranch,
+    hasLastTask: !demoMode && Boolean(state.lastTaskName),
+    hasLastDebug: !demoMode && Boolean(state.lastDebugConfigName),
+    hasFailingCommand: !demoMode && Boolean(getCopyableFailingCommand()),
+    hasRecentEditLocation: !demoMode && state.recentEditLocations.length > 0,
+    currentBranch: demoMode ? undefined : summary.currentBranch,
+    previousBranch: demoMode ? undefined : summary.previousBranch,
   });
-  const diagnostics = collectWorkspaceDiagnostics(pickWorkspaceRoot(state.panelWorkspaceRoot));
+  const diagnostics = demoMode
+    ? { errorCount: 0, warningCount: 0, top: undefined }
+    : collectWorkspaceDiagnostics(pickWorkspaceRoot(state.panelWorkspaceRoot));
   const hasFailingTask =
+    !demoMode &&
     Boolean(state.lastTaskName) &&
     Number.isInteger(state.lastTaskExitCode) &&
     (state.lastTaskExitCode ?? 0) !== 0;
@@ -3946,7 +3992,7 @@ function renderWebview(
     ? `<details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">${escapeHtml(primaryNextStepRationale)}</p></details>`
     : '';
 
-  if (primaryNextAction) {
+  if (primaryNextAction && !demoMode) {
     recordCompanionPrimaryCtaImpression();
   }
   const companionNextSteps = renderCompanionNextSteps({
@@ -3979,7 +4025,7 @@ function renderWebview(
     ? `<button type="button" class="secondary" data-action="openEvidence" data-evidence-id="${escapeHtml(summary.lastActionEvidenceId ?? '')}">Open last action</button>`
     : '';
   const activeNudgeDecision =
-    state.activeNudges?.contextHash === summary.contextHash
+    !demoMode && state.activeNudges?.contextHash === summary.contextHash
       ? state.activeNudges.decision
       : undefined;
   const primaryNudge = activeNudgeDecision?.primary;
@@ -4008,6 +4054,7 @@ function renderWebview(
       </details>`
       : '';
   const switchedBranches =
+    !demoMode &&
     Boolean(summary.currentBranch) &&
     Boolean(summary.previousBranch) &&
     summary.currentBranch !== summary.previousBranch;
@@ -4017,15 +4064,15 @@ function renderWebview(
     lowConfidence: Boolean(summary.lowConfidence),
     hasCheckpointNote: Boolean(currentCheckpointNote),
     hasFailingTask,
-    lastTaskName: state.lastTaskName,
-    lastTaskExitCode: state.lastTaskExitCode,
-    lastFailingCommand: summary.lastFailingCommand,
+    lastTaskName: demoMode ? undefined : state.lastTaskName,
+    lastTaskExitCode: demoMode ? undefined : state.lastTaskExitCode,
+    lastFailingCommand: demoMode ? undefined : summary.lastFailingCommand,
     diagnosticsErrorCount: diagnostics.errorCount,
     diagnosticsTopPath: diagnostics.top?.path,
     diagnosticsTopLine: diagnostics.top?.line,
     switchedBranches,
-    currentBranch: summary.currentBranch,
-    previousBranch: summary.previousBranch,
+    currentBranch: demoMode ? undefined : summary.currentBranch,
+    previousBranch: demoMode ? undefined : summary.previousBranch,
     hasNextSteps: summary.nextSteps.length > 0,
     canOpenProblems,
     canOpenDiagnosticFile,
@@ -4059,7 +4106,7 @@ function renderWebview(
     blockerDecision.hasBlocker && blockerAction?.disabled && blockerAction.disabledReason
       ? `<p class="muted blocker-disabled-reason">Unavailable: ${escapeHtml(blockerAction.disabledReason)}</p>`
       : '';
-  const panelWorkspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+  const panelWorkspaceRoot = demoMode ? undefined : pickWorkspaceRoot(state.panelWorkspaceRoot);
   const panelSectionState =
     activeExtensionContext && panelWorkspaceRoot
       ? resolvePanelSectionState(activeExtensionContext, panelWorkspaceRoot)
@@ -4084,13 +4131,12 @@ function renderWebview(
     })),
   });
 
+  const demoDisabledAttr = demoMode ? 'disabled aria-disabled="true"' : '';
   const restoreActionButtons = {
-    workingSet:
-      '<button type="button" data-action="restoreWorkingSet">Restore working set</button>',
+    workingSet: `<button type="button" data-action="restoreWorkingSet" ${demoDisabledAttr}>Restore working set</button>`,
     jumpToLastEdit: `<button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled aria-disabled="true"'}>Jump to last edit</button>`,
-    reopenFiles: '<button type="button" data-action="restoreReopenFiles">Reopen files</button>',
-    openChangedFiles:
-      '<button type="button" data-action="restoreOpenChangedFiles">Open changed files</button>',
+    reopenFiles: `<button type="button" data-action="restoreReopenFiles" ${demoDisabledAttr}>Reopen files</button>`,
+    openChangedFiles: `<button type="button" data-action="restoreOpenChangedFiles" ${demoDisabledAttr}>Open changed files</button>`,
     rerunTask: `<button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled aria-disabled="true"'}>Rerun task</button>`,
     rerunDebug: `<button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled aria-disabled="true"'}>Rerun debug</button>`,
     openProblems: `<button type="button" data-action="restoreOpenProblems" ${canOpenProblems ? '' : 'disabled aria-disabled="true"'}>Open Problems</button>`,
@@ -4167,8 +4213,11 @@ function renderWebview(
   });
 
   const detailsHtml = renderDetailsMarkdown(summary);
-  const sourceLabel =
-    summary.source === 'local' ? 'Local summary (instant)' : 'Refined summary (AI)';
+  const sourceLabel = demoMode
+    ? 'Sample resume brief (demo)'
+    : summary.source === 'local'
+      ? 'Local summary (instant)'
+      : 'Refined summary (AI)';
   const generatedAtLabel = formatTimestamp(summary.generatedAt);
   const localGeneratedAtLabel = summary.localGeneratedAt
     ? formatTimestamp(summary.localGeneratedAt)
@@ -4177,8 +4226,9 @@ function renderWebview(
     state.activeRefinementContextHash,
     summary.contextHash,
   );
-  const statusHint =
-    summary.source === 'local'
+  const statusHint = demoMode
+    ? 'Sample data only; no workspace evidence is mixed into this view.'
+    : summary.source === 'local'
       ? refinementActive
         ? 'AI refinement in progress.'
         : 'Running local-only summary.'
@@ -4197,22 +4247,25 @@ function renderWebview(
     !autoSummariesSnoozed &&
     summaryQuietState.active;
   const companionRuntimeMode = resolveCompanionRuntimeMode(config);
-  const trustTrackingLabel =
-    companionRuntimeMode === 'restricted'
+  const trustTrackingLabel = demoMode
+    ? 'sample'
+    : companionRuntimeMode === 'restricted'
       ? 'restricted'
       : companionRuntimeMode === 'paused'
         ? 'paused'
         : companionRuntimeMode === 'disabled'
           ? 'disabled'
           : 'on';
-  const sentToAiLabel =
-    config.summaryProvider === 'local'
+  const sentToAiLabel = demoMode
+    ? 'Nothing. Demo mode never sends sample data.'
+    : config.summaryProvider === 'local'
       ? 'Nothing (local-only mode).'
       : companionRuntimeMode === 'restricted'
         ? 'Nothing while Restricted Mode is active.'
         : 'Redacted summary context, evidence, and your checkpoint notes when AI refinement runs.';
-  const storedLocallyLabel =
-    'Redacted activity snapshots, summary cache, checkpoint notes, scratchpad files, and local metrics.';
+  const storedLocallyLabel = demoMode
+    ? 'Sample card is generated in memory and not mixed with workspace snapshots.'
+    : 'Redacted activity snapshots, summary cache, checkpoint notes, scratchpad files, and local metrics.';
   const trustCueDetails = trustCue.details.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const autoSummaryStatusLabel = autoSummariesDisabled
     ? 'Auto summaries disabled'
@@ -4304,7 +4357,20 @@ function renderWebview(
     expanded: expandedSections.has('evidence'),
   });
   const detailsCard = renderDetailsCard(detailsHtml, expandedSections.has('details'));
+  const demoCard = demoMode
+    ? `<div class="card">
+      <h3>Sample Resume Card</h3>
+      <p class="muted">
+        This is sample onboarding data only. It is separate from your workspace evidence.
+      </p>
+      <div class="status-actions">
+        <button type="button" data-action="dismissDemoResume">Dismiss sample</button>
+        <button type="button" class="secondary" data-action="refreshSummary">Show real resume now</button>
+      </div>
+    </div>`
+    : '';
   const bodyCards = [
+    demoCard,
     renderResumeStackCard({
       intent: summary.intent,
       intentOverridden: summary.intentOverridden,
@@ -8999,6 +9065,77 @@ async function resetSetupChecklist(context: vscode.ExtensionContext): Promise<vo
   void vscode.window.showInformationMessage('TaCoS: setup checklist reset for this workspace.');
 }
 
+function buildDemoResumeSummary(now = Date.now()): ResumeSummary {
+  return {
+    intent: 'Stabilize resume flow after interruption',
+    inferredIntent: 'Stabilize resume flow after interruption',
+    intentOverridden: false,
+    nextSteps: [
+      'Open the entry file and confirm where you stopped.',
+      'Run the smallest safe verification command.',
+      'Capture one checkpoint note before the next context switch.',
+    ],
+    nextStepEvidenceIds: [['git:sample-context'], ['git:sample-diff'], ['branch:sample']],
+    lastActionLabel: 'Edited a summary/render helper before switching tasks.',
+    lastActionContext: 'Sample data only; not from your workspace.',
+    lastActionEvidenceId: 'task:sample',
+    doneSinceLastResume: [
+      'Refactored panel fragments',
+      'Added regression coverage for webview cards',
+    ],
+    changesSinceLastResume: [
+      '2 files touched in sample flow',
+      'Unit tests updated for message parsing and render helpers',
+    ],
+    pendingBlocked: ['No active blocker in sample mode'],
+    recommendedFirstAction: 'Open the current task file and validate the next safe step.',
+    lowConfidence: false,
+    longGap: false,
+    resumeGapMinutes: 17,
+    candidateIntents: [
+      'Finish onboarding polish and docs updates',
+      'Validate demo flow before release',
+    ],
+    mode: 'coding',
+    topFiles: [],
+    links: [],
+    evidenceCatalog: [
+      {
+        id: 'git:sample-context',
+        kind: 'git',
+        label: 'Sample context snapshot',
+      },
+      {
+        id: 'git:sample-diff',
+        kind: 'git',
+        label: 'Sample diff summary',
+      },
+      {
+        id: 'branch:sample',
+        kind: 'branch',
+        label: 'Sample branch transition',
+      },
+    ],
+    detailsMarkdown: [
+      '## Sample Resume Brief',
+      '',
+      'This is **demo data** to show TaCoS layout and flow.',
+      'It does not include files, links, or telemetry from your workspace.',
+      '',
+      'Use **Show real resume now** to switch to live local context.',
+    ].join('\n'),
+    codexPrompt:
+      'Sample TaCoS prompt: summarize intent, next safe action, blockers, and restore steps.',
+    contextHash: DEMO_RESUME_CONTEXT_HASH,
+    generatedAt: now,
+    source: 'local',
+  };
+}
+
+async function showDemoResumeCard(context: vscode.ExtensionContext): Promise<void> {
+  await showDetailsPanel(context, buildDemoResumeSummary(), {});
+}
+
 async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void> {
   const workspaceRoot = pickWorkspaceRoot();
   if (!workspaceRoot) {
@@ -9025,9 +9162,14 @@ async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void
   }
 
   const start = await vscode.window.showInformationMessage(
-    'TaCoS setup checklist: local-only defaults, provider choice, and trust expectations in ~3 minutes.',
+    'TaCoS helps you resume in ~5 seconds with local-first cues. Setup covers privacy defaults, optional AI, and trust controls.',
     'Start setup',
+    'Show demo card',
   );
+  if (start === 'Show demo card') {
+    await showDemoResumeCard(context);
+    return;
+  }
   if (start !== 'Start setup') {
     return;
   }
@@ -9055,12 +9197,12 @@ async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void
       {
         id: 'skip',
         label: 'Skip this step',
-        detail: 'Keep current privacy preset.',
+        detail: 'Keep current privacy preset and continue.',
       },
     ],
     {
-      title: 'TaCoS Setup Checklist (1/3): Choose privacy preset',
-      placeHolder: 'Select the default context collection profile',
+      title: 'TaCoS Setup Checklist (1/3): Privacy defaults',
+      placeHolder: 'Choose how much local context TaCoS should collect',
       ignoreFocusOut: true,
     },
   );
@@ -9087,12 +9229,12 @@ async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void
       {
         id: 'skip',
         label: 'Skip this step',
-        detail: 'Keep current provider setting.',
+        detail: 'Keep current provider setting and continue.',
       },
     ],
     {
-      title: 'TaCoS Setup Checklist (2/3): Choose summary provider mode',
-      placeHolder: 'Local-only is safest and works instantly',
+      title: 'TaCoS Setup Checklist (2/3): Provider mode',
+      placeHolder: 'Local-only is safest and fastest by default',
       ignoreFocusOut: true,
     },
   );
@@ -9106,7 +9248,7 @@ async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void
   }
 
   const trustAction = await vscode.window.showInformationMessage(
-    'TaCoS trust expectations: Restricted Mode disables git/terminal collection, AI refinement, and task/debug/branch execution actions.',
+    'Trust behavior: Restricted Mode disables risky collection/actions. You can pause auto summaries or disable TaCoS at any time.',
     'Open Privacy & Safety',
     'Continue',
   );
@@ -9127,13 +9269,19 @@ async function maybeShowOnboardingNotice(context: vscode.ExtensionContext): Prom
 
   await context.globalState.update(KEY_ONBOARDING_NOTICE_SHOWN, true);
   const action = await vscode.window.showInformationMessage(
-    'TaCoS collects local editor/git/terminal context. AI receives redacted context only when an AI provider is enabled.',
+    'TaCoS gives a 5-second resume brief from local context by default. AI sends happen only when enabled with consent, and you can pause anytime.',
     'Run Setup Checklist',
+    'Show Demo Resume Card',
     'Open Privacy & Safety',
     'Pause Auto Summaries',
   );
   if (action === 'Run Setup Checklist') {
     await runSetupChecklist(context);
+    return;
+  }
+
+  if (action === 'Show Demo Resume Card') {
+    await showDemoResumeCard(context);
     return;
   }
 

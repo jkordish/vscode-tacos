@@ -21,6 +21,7 @@ const SIMPLE_MESSAGE_TYPES = [
   'sessionAddCheckpoint',
   'clearIntentOverride',
   'blockedLink',
+  'dismissDemoResume',
 ] as const;
 const RESTORE_MESSAGE_TYPES = [
   'restoreReopenFiles',
