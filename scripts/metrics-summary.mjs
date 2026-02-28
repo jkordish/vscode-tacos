@@ -276,11 +276,15 @@ function main() {
   const dogfoodingGateMet = rows.length >= 30 && workspaceCount >= 3;
   const timingClassCounts = summarizeTimingClassCounts(rows);
   const timingClassRate = (value) => (rows.length > 0 ? value / rows.length : undefined);
+  const classifiedTimingSessions =
+    timingClassCounts.boundary + timingClassCounts['mid-activity'] + timingClassCounts.unknown;
+  const classifiedTimingRate = (value) =>
+    classifiedTimingSessions > 0 ? value / classifiedTimingSessions : undefined;
   const firstActionLagP50 = lagMetrics.find((metric) => metric.field === 'firstActionLagMs')?.p50;
   const uxFriction = deriveUxFrictionScore({
     firstActionLagP50,
     forcedOpenRate,
-    midActivityRate: timingClassRate(timingClassCounts['mid-activity']),
+    midActivityRate: classifiedTimingRate(timingClassCounts['mid-activity']),
     followThroughRate,
   });
   const formatUxRaw = (component) => {

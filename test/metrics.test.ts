@@ -332,6 +332,22 @@ describe('deriveUxFrictionScore', () => {
     expect(score.interpretation).toBe('medium');
   });
 
+  it('supports classified-only interruption coverage for mid-activity component', () => {
+    const score = deriveUxFrictionScore({
+      firstActionLagP50: 2500,
+      forcedOpenRate: 0.4,
+      midActivityRate: 0.5,
+      followThroughRate: 0,
+    });
+
+    expect(score.score).toBeCloseTo(52.5, 4);
+    expect(score.interpretation).toBe('medium');
+    expect(
+      score.components.find((component) => component.key === 'midActivityRate')
+        ?.weightedContribution,
+    ).toBeCloseTo(10, 4);
+  });
+
   it('excludes non-finite inputs from score availability and weight', () => {
     const score = deriveUxFrictionScore({
       firstActionLagP50: Number.NaN,

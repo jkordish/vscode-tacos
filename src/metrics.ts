@@ -326,12 +326,16 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const promptPerSession = sessions > 0 ? promptImpressions / sessions : undefined;
   const nudgePerSession = sessions > 0 ? nudgeImpressions / sessions : undefined;
   const timingClassCounts = summarizeTimingClassCounts(metrics);
+  const classifiedTimingSessions =
+    timingClassCounts.boundary + timingClassCounts['mid-activity'] + timingClassCounts.unknown;
   const timingClassRate = (value: number): number | undefined =>
     sessions > 0 ? value / sessions : undefined;
+  const classifiedTimingRate = (value: number): number | undefined =>
+    classifiedTimingSessions > 0 ? value / classifiedTimingSessions : undefined;
   const uxFriction = deriveUxFrictionScore({
     firstActionLagP50: lagAction.p50,
     forcedOpenRate,
-    midActivityRate: timingClassRate(timingClassCounts['mid-activity']),
+    midActivityRate: classifiedTimingRate(timingClassCounts['mid-activity']),
     followThroughRate,
   });
   const formatFrictionRawValue = (component: UxFrictionScoreComponent): string => {
