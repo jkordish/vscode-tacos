@@ -47,7 +47,7 @@ Result summary:
   - `companionActionFollowThroughRate`
   - `companionPrimaryCtaClickThroughRate`
   - `companionPrimaryCtaCompletionRate`
-  - `interruptionTimingClass` (`boundary` vs `mid-activity`)
+  - `interruptionTimingClass` (`boundary` vs `mid-activity` vs `unknown` - `unknown` is valid; investigate if rate is high)
 
 Snapshot date/identifier: `__________`  
 Metrics notes: `__________`

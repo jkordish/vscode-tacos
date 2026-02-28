@@ -264,7 +264,7 @@ After running scenarios above:
    - `companionActionFollowThroughRate`
    - `companionPrimaryCtaClickThroughRate`
    - `companionPrimaryCtaCompletionRate`
-   - `interruptionTimingClass` distribution (`boundary` vs `mid-activity`)
+   - `interruptionTimingClass` distribution (`boundary` vs `mid-activity` vs `unknown`; PASS if `unknown` is rare/expected and reviewed, FAIL if `unknown` is common or unexplained)
 
 Snapshot/date reference: `__________`  
 Metric notes: `__________`
