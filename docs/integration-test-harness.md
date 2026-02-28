@@ -29,12 +29,19 @@ The harness launches Extension Development Host runs against `test/fixtures/work
 3. Focus refresh presentation suite:
    - verifies `autoRefreshInBackground=true` resolves focus-refresh behavior to background mode
    - verifies `autoRefreshInBackground=false` resolves focus-refresh behavior to prompt mode
-   - verifies companion status bar mode transitions for active/paused states
+   - verifies companion status bar mode transitions for active/paused/disabled states
+4. Resume flow critical-path suite:
+   - executes `TaCoS: Show Resume Brief Now`
+   - validates critical panel/runtime contract for v0.6 resume path:
+     - panel + scratch summary availability
+     - Companion Home card marker
+     - primary next-step action presence when next steps exist
+     - restore/trust affordance markers
 
 ## Files
 
 - Runner: `test/integration/runTest.js`
-- Suites: `test/integration/suite/trusted.js`, `test/integration/suite/isolatedProfileLocal.js`, `test/integration/suite/focusRefreshPresentation.js`
+- Suites: `test/integration/suite/trusted.js`, `test/integration/suite/isolatedProfileLocal.js`, `test/integration/suite/focusRefreshPresentation.js`, `test/integration/suite/resumeFlowCriticalPath.js`
 - Fixture workspace: `test/fixtures/workspace/`
 
 ## Notes

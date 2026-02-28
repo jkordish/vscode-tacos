@@ -1,0 +1,63 @@
+const assert = require('node:assert/strict');
+const vscode = require('vscode');
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function run() {
+  const extension = vscode.extensions.getExtension('jkordish.vscode-tacos');
+  assert.ok(extension, 'Expected extension jkordish.vscode-tacos to be installed in test host.');
+  await extension.activate();
+
+  await vscode.commands.executeCommand('tacos.showNow');
+  await wait(150);
+
+  const runtime = await vscode.commands.executeCommand('tacos.__test.getRuntimeStateSnapshot');
+  assert.equal(runtime?.panelOpen, true, 'Expected details panel to open after tacos.showNow.');
+  assert.equal(
+    runtime?.hasScratchSummary,
+    true,
+    'Expected scratch summary to be populated in critical resume flow.',
+  );
+
+  const resumeFlow = await vscode.commands.executeCommand('tacos.__test.getResumeFlowSnapshot');
+  assert.ok(resumeFlow, 'Expected resume flow snapshot payload.');
+  assert.equal(
+    resumeFlow?.hasPanelSummary,
+    true,
+    'Expected panel summary to be available for critical resume flow.',
+  );
+  assert.equal(
+    resumeFlow?.hasCompanionHomeCard,
+    true,
+    'Expected Companion Home card marker in panel render output.',
+  );
+  assert.equal(
+    resumeFlow?.hasRestoreWorkingSetAction,
+    true,
+    'Expected Restore working set action marker in panel render output.',
+  );
+  assert.equal(
+    resumeFlow?.hasTrustCenterCard,
+    true,
+    'Expected Trust Center card marker in panel render output.',
+  );
+
+  if ((resumeFlow?.nextStepsCount ?? 0) > 0) {
+    assert.equal(
+      resumeFlow?.hasPrimaryNextAction,
+      true,
+      'Expected first next step to resolve to a primary safe action when next steps exist.',
+    );
+    assert.ok(
+      typeof resumeFlow?.primaryNextActionLabel === 'string' &&
+        resumeFlow.primaryNextActionLabel.length > 0,
+      'Expected primary next action label to be non-empty.',
+    );
+  }
+}
+
+module.exports = {
+  run,
+};

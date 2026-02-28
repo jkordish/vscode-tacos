@@ -57,6 +57,13 @@ async function run() {
     await config.update('pauseSummaries', true, vscode.ConfigurationTarget.Global);
     const pausedStatusSnapshot = await vscode.commands.executeCommand('tacos.__test.getStatusBarSnapshot');
     assert.equal(pausedStatusSnapshot?.mode, 'paused');
+
+    await config.update('pauseSummaries', false, vscode.ConfigurationTarget.Global);
+    await config.update('enabled', false, vscode.ConfigurationTarget.Global);
+    const disabledStatusSnapshot = await vscode.commands.executeCommand(
+      'tacos.__test.getStatusBarSnapshot',
+    );
+    assert.equal(disabledStatusSnapshot?.mode, 'disabled');
   } finally {
     await config.update(
       'enabled',

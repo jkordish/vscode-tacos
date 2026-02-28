@@ -471,6 +471,37 @@ export function activate(context: vscode.ExtensionContext): void {
         doneItemsCount: state.doneItems.values().length,
       };
     }),
+    vscode.commands.registerCommand('tacos.__test.getResumeFlowSnapshot', async () => {
+      const summary = state.panelSummary ?? state.scratchSummary;
+      const nextStepActions = summary
+        ? buildNextStepActions({
+            summary,
+            ...computeRestoreAvailability({
+              trusted: vscode.workspace.isTrusted,
+              hasLastTask: Boolean(state.lastTaskName),
+              hasLastDebug: Boolean(state.lastDebugConfigName),
+              hasFailingCommand: Boolean(getCopyableFailingCommand()),
+              hasRecentEditLocation: state.recentEditLocations.length > 0,
+              currentBranch: summary.currentBranch,
+              previousBranch: summary.previousBranch,
+            }),
+          })
+        : [];
+      const panelHtml = state.panel?.webview.html ?? '';
+
+      return {
+        hasPanelSummary: Boolean(state.panelSummary),
+        hasScratchSummary: Boolean(state.scratchSummary),
+        nextStepsCount: summary?.nextSteps.length ?? 0,
+        nextStepActionsCount: nextStepActions.length,
+        hasPrimaryNextAction: Boolean(nextStepActions[0]),
+        primaryNextActionLabel: nextStepActions[0]?.label ?? '',
+        hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
+        hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
+        hasRestoreWorkingSetAction: panelHtml.includes('data-action="restoreWorkingSet"'),
+        hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
+      };
+    }),
     vscode.commands.registerCommand('tacos.__test.switchTaskPartition', async (value?: string) => {
       const workspaceRoot = pickWorkspaceRoot();
       if (!workspaceRoot) {
