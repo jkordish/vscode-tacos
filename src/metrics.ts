@@ -23,6 +23,7 @@ const CSV_HEADERS = [
   'helpfulnessRating',
   'pauseActions',
   'snoozeActions',
+  'summaryQuietActions',
   'disableActions',
   'noteCreated',
   'noteMarkedDone',
@@ -237,6 +238,7 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| redactionHighRiskDetectedTotal (total) | ${redactionHighRiskDetectedTotal} |`,
     `| aiSendBlockedBySanitizerTotal (total) | ${aiSendBlockedBySanitizerTotal} |`,
     `| aiSendAllowedAfterReviewTotal (total) | ${aiSendAllowedAfterReviewTotal} |`,
+    `| summaryQuietActions (total) | ${summarizeTotal(metrics, 'summaryQuietActions')} |`,
     '',
     'Interruption timing class:',
     '',
@@ -288,6 +290,7 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     typeof metric.helpfulnessRating === 'number' ||
     (metric.pauseActions ?? 0) > 0 ||
     (metric.snoozeActions ?? 0) > 0 ||
+    (metric.summaryQuietActions ?? 0) > 0 ||
     (metric.disableActions ?? 0) > 0 ||
     (metric.noteCreated ?? 0) > 0 ||
     (metric.noteMarkedDone ?? 0) > 0 ||
@@ -337,6 +340,7 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.helpfulnessRating),
       toOptionalNumber(metric.pauseActions),
       toOptionalNumber(metric.snoozeActions),
+      toOptionalNumber(metric.summaryQuietActions),
       toOptionalNumber(metric.disableActions),
       toOptionalNumber(metric.noteCreated),
       toOptionalNumber(metric.noteMarkedDone),

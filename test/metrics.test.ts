@@ -51,6 +51,17 @@ describe('hasAnyRecordedMetric', () => {
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
 
+  it('treats quiet-mode actions as recorded metric activity', () => {
+    const metric: MetricRecord = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      summaryQuietActions: 1,
+    };
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
+
   it('treats sanitizer counters as recorded metric activity', () => {
     const metric: MetricRecord = {
       startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
@@ -96,6 +107,7 @@ describe('buildMetricsCsv', () => {
         helpfulnessRating: 4,
         pauseActions: 1,
         snoozeActions: 0,
+        summaryQuietActions: 2,
         disableActions: 0,
         resumePathCompletions: 0,
         scratchpadOpened: 2,
@@ -107,6 +119,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('firstActionLagMs');
     expect(lines[0]).toContain('helpfulnessRating');
     expect(lines[0]).toContain('companionActionFollowThroughRate');
+    expect(lines[0]).toContain('summaryQuietActions');
     expect(lines[0]).toContain('interruptionTimingClass');
     expect(lines[0]).toContain('companionPrimaryCtaImpressions');
     expect(lines[0]).toContain('companionPrimaryCtaClicks');

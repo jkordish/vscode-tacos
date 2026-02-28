@@ -1,4 +1,6 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const vscode = require('vscode');
 
 function wait(ms) {
@@ -34,6 +36,13 @@ async function run() {
   const originalPauseGlobal = pauseInspected?.globalValue;
   const originalShowOnFocusGlobal = showOnFocusInspected?.globalValue;
   const originalQuietHoursGlobal = quietHoursInspected?.globalValue;
+  const workspaceRootPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const workspaceSettingsPath = workspaceRootPath
+    ? path.join(workspaceRootPath, '.vscode', 'settings.json')
+    : '';
+  const workspaceSettingsExisted = workspaceSettingsPath
+    ? fs.existsSync(workspaceSettingsPath)
+    : false;
 
   try {
     await config.update('enabled', true, vscode.ConfigurationTarget.Global);
@@ -100,6 +109,15 @@ async function run() {
         statusSnapshot.tooltip.includes('Temporary quiet until:'),
       'Expected status bar tooltip to include temporary quiet expiry.',
     );
+    await vscode.commands.executeCommand('tacos.resumeSummaries');
+    const resumedAfterTemporaryQuiet = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSuppressionSnapshot',
+    );
+    assert.equal(
+      resumedAfterTemporaryQuiet?.suppressionReason,
+      'none',
+      'Expected Resume Auto Summaries to clear temporary quiet suppression.',
+    );
 
     await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);
     await config.update(
@@ -118,6 +136,8 @@ async function run() {
   } finally {
     await vscode.commands.executeCommand('tacos.__test.setSnoozeUntil', 0);
     await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);
+    await config.update('pauseSummaries', undefined, vscode.ConfigurationTarget.Workspace);
+    await config.update('summaryQuietHours', undefined, vscode.ConfigurationTarget.Workspace);
     await config.update(
       'enabled',
       typeof originalEnabledGlobal === 'undefined' ? undefined : originalEnabledGlobal,
@@ -138,6 +158,14 @@ async function run() {
       typeof originalQuietHoursGlobal === 'undefined' ? undefined : originalQuietHoursGlobal,
       vscode.ConfigurationTarget.Global,
     );
+
+    if (workspaceSettingsPath && !workspaceSettingsExisted && fs.existsSync(workspaceSettingsPath)) {
+      fs.rmSync(workspaceSettingsPath, { force: true });
+      const settingsDir = path.dirname(workspaceSettingsPath);
+      if (fs.existsSync(settingsDir) && fs.readdirSync(settingsDir).length === 0) {
+        fs.rmdirSync(settingsDir);
+      }
+    }
   }
 }
 

@@ -145,7 +145,7 @@ Key companion fields:
 - `firstActionLagMs`: ms from summary display to first task/test/debug/companion action.
 - `interruptionEvent`: `1` for focus-triggered notification-mode prompts; else `0`.
 - `helpfulnessRating`: optional local user rating (`1`-`5`) via command.
-- `pauseActions` / `snoozeActions` / `disableActions`: local opt-out interaction counters.
+- `pauseActions` / `snoozeActions` / `summaryQuietActions` / `disableActions`: local opt-out interaction counters.
 - `companionActionFollowThroughRate` (CSV): quick actions ÷ prompt impressions.
 - `companionForcedOpenRate` (CSV): forced opens ÷ prompt impressions.
 - `noteCreated` / `noteMarkedDone` / `notePinned`: checkpoint note lifecycle counters.
