@@ -2290,6 +2290,7 @@ function recordMetricCounter(
     | 'noteCreated'
     | 'noteMarkedDone'
     | 'notePinned'
+    | 'resumePathCompletions'
     | 'scratchpadOpened'
     | 'scratchpadAppended'
     | 'redactionEventsTotal'
@@ -2929,6 +2930,9 @@ async function showDetailsPanel(
           message.stepIndex,
           state.panelWorkspaceRoot,
         );
+        if (outcome.completed) {
+          recordMetricCounter('resumePathCompletions');
+        }
         if (isPrimaryStep && outcome.attempted) {
           recordCompanionPrimaryCtaClick();
         }
