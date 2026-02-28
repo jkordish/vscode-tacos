@@ -8,6 +8,42 @@ All notable changes to this project are documented in this file.
 
 - No notable changes yet.
 
+## [0.6.1] - 2026-02-28
+
+### Added
+
+- Cognitive Resume Kit for fast interruption recovery:
+  - explicit `Last action` retrieval cue in Companion Home
+  - single primary `Next safe action` CTA with evidence/rationale
+  - `Resume Path` 3-step checklist with per-scope persistence
+  - blocker-first recovery card with one-click safe unblock actions
+- Opportune timing and noise controls:
+  - boundary-aware focus trigger gating
+  - typing deferral on focus regain to avoid mid-chunk interruption
+  - unified noise budget across summaries, nudges, and checkpoint prompts
+  - expanded suppression/gating integration coverage
+- Companion IA overhaul:
+  - composable webview rendering modules
+  - single resume card stack with progressive disclosure defaults
+  - accessibility pass for controls/keyboard flow
+  - timeline/evidence scannability improvements
+- Local-only proof and release discipline upgrades:
+  - metrics baseline/targets and friction scoring updates
+  - expanded integration harness + snapshot/unit coverage for panel surfaces
+  - focus-path performance guardrails and release runbook/checklist docs
+- Onboarding polish:
+  - sample/demo resume card command and onboarding entry point
+  - read-only sample mode behavior hardening and dedicated integration tests
+
+### Changed
+
+- Setup and onboarding copy now emphasizes local-first defaults, consented AI refinement, and pause/quiet controls.
+- Trust, evidence, and restore affordances are more explicit while preserving strict local safety boundaries.
+
+### Notes
+
+- `v0.6.1` is the first published tag in the `v0.6.x` line for this repository. A public `v0.6.0` tag was not published.
+
 ## [0.5.0] - 2026-02-27
 
 ### Added
