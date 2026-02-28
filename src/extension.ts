@@ -1371,7 +1371,6 @@ async function handleFocusRegainSummaryTrigger(
     state.autoSummaryInFlight = true;
     const focusSummaryStartNs = monotonicNowNs();
     try {
-      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
       let deferPromptToBackground = false;
       if (config.uiSurface === 'notification') {
         await delay(FOCUS_TYPING_DEFERRAL_GRACE_MS);
@@ -1388,6 +1387,7 @@ async function handleFocusRegainSummaryTrigger(
       }
 
       await triggerSummary(context, 'focus', undefined, deferPromptToBackground, now);
+      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
     } finally {
       state.autoSummaryInFlight = false;
       recordPerformanceGuardrail(
