@@ -331,4 +331,26 @@ describe('deriveUxFrictionScore', () => {
     expect(score.score).toBeCloseTo(58.5714, 4);
     expect(score.interpretation).toBe('medium');
   });
+
+  it('excludes non-finite inputs from score availability and weight', () => {
+    const score = deriveUxFrictionScore({
+      firstActionLagP50: Number.NaN,
+      forcedOpenRate: Number.POSITIVE_INFINITY,
+      midActivityRate: 0.5,
+      followThroughRate: Number.NaN,
+    });
+
+    expect(score.availableWeight).toBeCloseTo(0.2, 6);
+    expect(score.score).toBeCloseTo(50, 6);
+    expect(score.interpretation).toBe('medium');
+    expect(score.components.find((component) => component.key === 'lagP50')?.normalizedValue).toBe(
+      undefined,
+    );
+    expect(
+      score.components.find((component) => component.key === 'forcedOpenRate')?.normalizedValue,
+    ).toBe(undefined);
+    expect(
+      score.components.find((component) => component.key === 'followThroughGap')?.normalizedValue,
+    ).toBe(undefined);
+  });
 });

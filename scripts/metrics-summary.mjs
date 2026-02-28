@@ -140,27 +140,29 @@ function deriveUxFrictionScore({
       label: 'firstActionLagMs p50 / 5000ms',
       weight: 0.45,
       rawValue: firstActionLagP50,
-      normalizedValue:
-        typeof firstActionLagP50 === 'number' ? clamp01(firstActionLagP50 / 5000) : undefined,
+      normalizedValue: Number.isFinite(firstActionLagP50)
+        ? clamp01(firstActionLagP50 / 5000)
+        : undefined,
     },
     {
       label: 'companionForcedOpenRate',
       weight: 0.25,
       rawValue: forcedOpenRate,
-      normalizedValue: typeof forcedOpenRate === 'number' ? clamp01(forcedOpenRate) : undefined,
+      normalizedValue: Number.isFinite(forcedOpenRate) ? clamp01(forcedOpenRate) : undefined,
     },
     {
       label: 'mid-activity timing share',
       weight: 0.2,
       rawValue: midActivityRate,
-      normalizedValue: typeof midActivityRate === 'number' ? clamp01(midActivityRate) : undefined,
+      normalizedValue: Number.isFinite(midActivityRate) ? clamp01(midActivityRate) : undefined,
     },
     {
       label: '1 - companionActionFollowThroughRate',
       weight: 0.1,
-      rawValue: typeof followThroughRate === 'number' ? 1 - clamp01(followThroughRate) : undefined,
-      normalizedValue:
-        typeof followThroughRate === 'number' ? clamp01(1 - clamp01(followThroughRate)) : undefined,
+      rawValue: Number.isFinite(followThroughRate) ? 1 - clamp01(followThroughRate) : undefined,
+      normalizedValue: Number.isFinite(followThroughRate)
+        ? clamp01(1 - clamp01(followThroughRate))
+        : undefined,
     },
   ].map((component) => ({
     ...component,

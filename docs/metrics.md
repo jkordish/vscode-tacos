@@ -126,7 +126,7 @@ Default weights:
 Interpretation bands:
 
 - `0-33`: low friction
-- `33-66`: medium friction
-- `66-100`: high friction
+- `34-66`: medium friction
+- `67-100`: high friction
 
 When any component is missing, TaCoS reports coverage weight (`available/total`) and computes the weighted mean over available components only.

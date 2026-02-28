@@ -107,6 +107,10 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
+function finiteOrUndefined(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 export interface UxFrictionScoreInput {
   firstActionLagP50?: number;
   forcedOpenRate?: number;
@@ -136,6 +140,10 @@ const UX_FRICTION_FORMULA =
   'weighted mean of clamp01(firstActionLagMs_p50/5000), clamp01(companionForcedOpenRate), clamp01(midActivityShare), and clamp01(1-companionActionFollowThroughRate)';
 
 export function deriveUxFrictionScore(input: UxFrictionScoreInput): UxFrictionScoreBreakdown {
+  const lagP50 = finiteOrUndefined(input.firstActionLagP50);
+  const forcedOpenRate = finiteOrUndefined(input.forcedOpenRate);
+  const midActivityRate = finiteOrUndefined(input.midActivityRate);
+  const followThroughRate = finiteOrUndefined(input.followThroughRate);
   const componentDefs: Array<{
     key: UxFrictionScoreComponent['key'];
     label: string;
@@ -147,40 +155,30 @@ export function deriveUxFrictionScore(input: UxFrictionScoreInput): UxFrictionSc
       key: 'lagP50',
       label: 'firstActionLagMs p50 / 5000ms',
       weight: 0.45,
-      rawValue: input.firstActionLagP50,
-      normalizedValue:
-        typeof input.firstActionLagP50 === 'number'
-          ? clamp01(input.firstActionLagP50 / 5000)
-          : undefined,
+      rawValue: lagP50,
+      normalizedValue: lagP50 !== undefined ? clamp01(lagP50 / 5000) : undefined,
     },
     {
       key: 'forcedOpenRate',
       label: 'companionForcedOpenRate',
       weight: 0.25,
-      rawValue: input.forcedOpenRate,
-      normalizedValue:
-        typeof input.forcedOpenRate === 'number' ? clamp01(input.forcedOpenRate) : undefined,
+      rawValue: forcedOpenRate,
+      normalizedValue: forcedOpenRate !== undefined ? clamp01(forcedOpenRate) : undefined,
     },
     {
       key: 'midActivityRate',
       label: 'mid-activity timing share',
       weight: 0.2,
-      rawValue: input.midActivityRate,
-      normalizedValue:
-        typeof input.midActivityRate === 'number' ? clamp01(input.midActivityRate) : undefined,
+      rawValue: midActivityRate,
+      normalizedValue: midActivityRate !== undefined ? clamp01(midActivityRate) : undefined,
     },
     {
       key: 'followThroughGap',
       label: '1 - companionActionFollowThroughRate',
       weight: 0.1,
-      rawValue:
-        typeof input.followThroughRate === 'number'
-          ? 1 - clamp01(input.followThroughRate)
-          : undefined,
+      rawValue: followThroughRate !== undefined ? 1 - clamp01(followThroughRate) : undefined,
       normalizedValue:
-        typeof input.followThroughRate === 'number'
-          ? clamp01(1 - clamp01(input.followThroughRate))
-          : undefined,
+        followThroughRate !== undefined ? clamp01(1 - clamp01(followThroughRate)) : undefined,
     },
   ];
 
