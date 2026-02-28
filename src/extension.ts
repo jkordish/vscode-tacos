@@ -558,7 +558,7 @@ export function activate(context: vscode.ExtensionContext): void {
         hasRestoreWorkingSetAction: panelHtml.includes('data-action="restoreWorkingSet"'),
         hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
         hasResumePathCard: panelHtml.includes('<h3>Resume Path</h3>'),
-        resumePathStepCount: (panelHtml.match(/<input[^>]*data-action="resumePathToggle"/gu) ?? [])
+        resumePathStepCount: (panelHtml.match(/<input[^>]*data-resume-path-toggle="true"/gu) ?? [])
           .length,
       };
     }),
@@ -3916,7 +3916,7 @@ function renderWebview(
       const checked = resumePathState.completedStepIds.includes(step.id);
       return `<li class="resume-path-item">
         <label class="resume-path-toggle">
-          <input type="checkbox" data-action="resumePathToggle" data-resume-path-step-id="${escapeHtml(step.id)}" ${checked ? 'checked' : ''} />
+          <input type="checkbox" data-resume-path-toggle="true" data-resume-path-step-id="${escapeHtml(step.id)}" ${checked ? 'checked' : ''} />
           <span>${escapeHtml(step.label)}</span>
         </label>
         <p class="muted resume-path-detail">${escapeHtml(step.detail)}</p>
@@ -4722,7 +4722,7 @@ function renderWebview(
           return;
         }
 
-        const toggle = target.closest('[data-action="resumePathToggle"]');
+        const toggle = target.closest('[data-resume-path-toggle="true"]');
         if (!(toggle instanceof HTMLInputElement)) {
           return;
         }
@@ -7697,30 +7697,6 @@ function resumePathStorageKey(context: vscode.ExtensionContext, root: string): s
   return buildResumePathStorageKey(partitionScope(context, root));
 }
 
-function isPersistedResumePathStateEqual(raw: unknown, expected: ResumePathState): boolean {
-  if (!raw || typeof raw !== 'object') {
-    return false;
-  }
-
-  const record = raw as Record<string, unknown>;
-  if (record.contextHash !== expected.contextHash || record.collapsed !== expected.collapsed) {
-    return false;
-  }
-
-  if (!Array.isArray(record.completedStepIds)) {
-    return false;
-  }
-
-  const persistedCompletedStepIds = record.completedStepIds;
-  if (persistedCompletedStepIds.length !== expected.completedStepIds.length) {
-    return false;
-  }
-
-  return expected.completedStepIds.every(
-    (stepId, index) => persistedCompletedStepIds[index] === stepId,
-  );
-}
-
 function resolveResumePathStateForSummary(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
@@ -7741,9 +7717,6 @@ function resolveResumePathStateForSummary(
   const normalized = normalizeResumePathState(raw, summary.contextHash);
   state.panelResumePathState = normalized;
   state.panelResumePathScope = scope;
-  if (!isPersistedResumePathStateEqual(raw, normalized)) {
-    void context.workspaceState.update(storageKey, normalized);
-  }
   return normalized;
 }
 
