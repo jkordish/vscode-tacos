@@ -1663,8 +1663,14 @@ async function prepareTriggerSummary(
 ): Promise<PreparedTriggerSummary> {
   const config = getConfig();
   const providerPlan = await resolveProviderPlan(context, config, reason);
+  const resumeGapMinutes = computeResumeGapMinutes(context, root);
   const signals = await collectSignals(root, config);
-  const baseSummary = await applyBranchHistory(context, root, buildResumeSummary(signals));
+  signals.resumeGapMinutes = resumeGapMinutes;
+  const baseSummary = await applyBranchHistory(
+    context,
+    root,
+    buildResumeSummary(signals, { longGapMinutes: config.longGapMinutes }),
+  );
   const checkpointContext = await resolveCheckpointContext(
     context,
     root,
@@ -3548,15 +3554,40 @@ function renderWebview(
   const candidateIntentItems = (summary.candidateIntents ?? [])
     .map((candidate) => `<li>${escapeHtml(candidate)}</li>`)
     .join('');
-  const confidenceCard =
-    summary.lowConfidence && !currentCheckpointNote
-      ? `<div class="card">
-      <h3>Low Confidence</h3>
-      <p class="muted">Unclear intent (low evidence). Add one line of context before continuing.</p>
-      <ul class="compact-list">${candidateIntentItems || '<li>No strong candidates captured.</li>'}</ul>
-      <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add one-line checkpoint</button>
-    </div>`
+  const hasLongGap = Boolean(summary.longGap);
+  const showReorientationCard = hasLongGap || (summary.lowConfidence && !currentCheckpointNote);
+  const reorientationGapLine =
+    typeof summary.resumeGapMinutes === 'number'
+      ? `<li>Last captured activity was about ${summary.resumeGapMinutes} minute${summary.resumeGapMinutes === 1 ? '' : 's'} ago.</li>`
       : '';
+  const reorientationCardItems = hasLongGap
+    ? [
+        reorientationGapLine,
+        `<li><strong>Retrieval cue:</strong> ${escapeHtml(summary.lastActionLabel?.trim() || 'No last action captured yet.')}</li>`,
+        `<li><strong>Next safe action:</strong> ${escapeHtml(
+          summary.recommendedFirstAction?.trim() ||
+            summary.nextSteps[0] ||
+            'Open a recent file and reorient context.',
+        )}</li>`,
+      ]
+        .filter(Boolean)
+        .join('')
+    : candidateIntentItems || '<li>No strong candidates captured.</li>';
+  const reorientationCardTitle = hasLongGap ? 'Welcome back' : 'Low Confidence';
+  const reorientationCardDescription = hasLongGap
+    ? 'Welcome back — reorient before executing risky actions.'
+    : 'Unclear intent (low evidence). Add one line of context before continuing.';
+  const reorientationCardAction = !currentCheckpointNote
+    ? '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add one-line checkpoint</button>'
+    : '';
+  const confidenceCard = showReorientationCard
+    ? `<div class="card">
+      <h3>${reorientationCardTitle}</h3>
+      <p class="muted">${reorientationCardDescription}</p>
+      <ul class="compact-list">${reorientationCardItems}</ul>
+      ${reorientationCardAction}
+    </div>`
+    : '';
   const linkItems = summary.links
     .map(
       (link, index) =>
@@ -3732,15 +3763,31 @@ function renderWebview(
     blockerActionLabel = 'Add checkpoint';
     blockerAction = 'sessionAddCheckpoint';
   } else if (hasFailingTask) {
-    blockerTitle = 'Last task failed';
-    blockerDetail = `${state.lastTaskName} exited with code ${state.lastTaskExitCode}.`;
-    blockerActionLabel = 'Rerun last task';
-    blockerAction = 'restoreRerunTask';
-    blockerActionDisabled = !availability.canRerunTask;
+    if (summary.longGap) {
+      blockerTitle = 'Reorient after a long gap';
+      blockerDetail = `${state.lastTaskName} exited with code ${state.lastTaskExitCode}. Review context before rerunning.`;
+      if (availability.canCopyFailingCommand) {
+        blockerActionLabel = 'Copy failing command';
+        blockerAction = 'restoreCopyFailingCommand';
+      } else if (canOpenProblems) {
+        blockerActionLabel = 'Open Problems';
+        blockerAction = 'restoreOpenProblems';
+        blockerActionDisabled = !canOpenProblems;
+      }
+    } else {
+      blockerTitle = 'Last task failed';
+      blockerDetail = `${state.lastTaskName} exited with code ${state.lastTaskExitCode}.`;
+      blockerActionLabel = 'Rerun last task';
+      blockerAction = 'restoreRerunTask';
+      blockerActionDisabled = !availability.canRerunTask;
+    }
   } else if (summary.lastFailingCommand) {
     blockerTitle = 'Last command failed';
     blockerDetail = summary.lastFailingCommand;
-    if (availability.canRerunTask) {
+    if (summary.longGap && availability.canCopyFailingCommand) {
+      blockerActionLabel = 'Copy failing command';
+      blockerAction = 'restoreCopyFailingCommand';
+    } else if (availability.canRerunTask) {
       blockerActionLabel = 'Rerun last task';
       blockerAction = 'restoreRerunTask';
     } else if (availability.canCopyFailingCommand) {
@@ -7265,6 +7312,7 @@ function getConfig(): ExtensionConfig {
     showTimeline: config.get<boolean>('showTimeline', true),
     promptCheckpointOnBlur: config.get<boolean>('promptCheckpointOnBlur', false),
     minIdleMinutes: Math.max(1, config.get<number>('minIdleMinutes', 10)),
+    longGapMinutes: Math.max(5, config.get<number>('longGapMinutes', 30)),
     cooldownMinutes: Math.max(1, config.get<number>('cooldownMinutes', 5)),
     summaryQuietHours: config.get<string>('summaryQuietHours', ''),
     includeDiff: config.get<boolean>('includeDiff', false),
@@ -7496,6 +7544,24 @@ async function touchWorkspaceActivity(
   }
 
   await context.workspaceState.update(workspaceActivityKey(root), Date.now());
+}
+
+function computeResumeGapMinutes(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  now: number = Date.now(),
+): number | undefined {
+  if (!workspaceRoot) {
+    return undefined;
+  }
+
+  const lastActivityAt = context.workspaceState.get<number>(workspaceActivityKey(workspaceRoot), 0);
+  if (!Number.isFinite(lastActivityAt) || lastActivityAt <= 0 || lastActivityAt >= now) {
+    return undefined;
+  }
+
+  const gapMinutes = Math.floor((now - lastActivityAt) / 60_000);
+  return gapMinutes > 0 ? gapMinutes : undefined;
 }
 
 function decodeBase64UrlToken(token: string): string | undefined {

@@ -155,6 +155,52 @@ describe('buildResumeSummary', () => {
     expect(summary.links.length).toBe(0);
   });
 
+  it('enters long-gap reorientation mode with safe starter copy when threshold is exceeded', () => {
+    const signals = sampleSignals();
+    signals.resumeGapMinutes = 45;
+
+    const summary = buildResumeSummary(signals, { longGapMinutes: 30 });
+    expect(summary.longGap).toBe(true);
+    expect(summary.lowConfidence).toBe(false);
+    expect(summary.resumeGapMinutes).toBe(45);
+    expect(summary.intent).toBe('Welcome back — reorient before executing risky actions.');
+    expect(summary.nextSteps[0]).toContain('Open');
+    expect(summary.nextSteps.join(' ')).not.toContain('Re-run and fix:');
+    expect(summary.detailsMarkdown).toContain('## Reorientation');
+  });
+
+  it('keeps low-confidence and long-gap states distinct and simultaneously visible', () => {
+    const signals = sampleSignals();
+    signals.changedFiles = [];
+    signals.openFiles = [];
+    signals.recentFiles = [];
+    signals.recentTerminal = [];
+    signals.recentDebug = [];
+    signals.doneItems = [];
+    signals.failingCommand = undefined;
+    signals.recentUrls = [];
+    signals.lastEditPath = undefined;
+    signals.lastEditLine = undefined;
+    signals.lastEditCharacter = undefined;
+    signals.resumeGapMinutes = 80;
+
+    const summary = buildResumeSummary(signals, { longGapMinutes: 30 });
+    expect(summary.lowConfidence).toBe(true);
+    expect(summary.longGap).toBe(true);
+    expect(summary.intent).toBe('Welcome back — reorient before executing risky actions.');
+    expect(summary.detailsMarkdown).toContain('## Reorientation');
+    expect(summary.detailsMarkdown).toContain('## Confidence');
+  });
+
+  it('does not enter long-gap mode when resume gap is below threshold', () => {
+    const signals = sampleSignals();
+    signals.resumeGapMinutes = 20;
+
+    const summary = buildResumeSummary(signals, { longGapMinutes: 30 });
+    expect(summary.longGap).toBe(false);
+    expect(summary.intent).not.toContain('Welcome back — reorient');
+  });
+
   it('falls back to explicit retrieval-cue fallback when no last action is available', () => {
     const signals = sampleSignals();
     signals.lastEditPath = undefined;

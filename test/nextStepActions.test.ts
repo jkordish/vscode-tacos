@@ -152,6 +152,65 @@ describe('buildNextStepActions', () => {
     expect(actions).toEqual([undefined, undefined]);
   });
 
+  it('avoids risky rerun actions during long-gap reorientation mode', () => {
+    const summary = baseSummary({
+      longGap: true,
+      nextSteps: ['Copy the failing command before rerunning: npm test', 'Resume debug flow'],
+      nextStepEvidenceIds: [['terminal:fail'], ['debug:launch']],
+      evidenceCatalog: [
+        {
+          id: 'terminal:fail',
+          kind: 'terminal',
+          label: 'npm test',
+        },
+        {
+          id: 'debug:launch',
+          kind: 'debug',
+          label: 'Launch Extension',
+        },
+      ],
+    });
+
+    const actions = buildNextStepActions({
+      summary,
+      canRerunTask: true,
+      canRerunDebug: true,
+      canCopyFailingCommand: false,
+    });
+
+    expect(actions[0]).toBeUndefined();
+    expect(actions[1]).toBeUndefined();
+  });
+
+  it('still allows copy-failing-command in long-gap mode when available', () => {
+    const summary = baseSummary({
+      longGap: true,
+      nextSteps: ['Copy the failing command before rerunning: npm test'],
+      nextStepEvidenceIds: [['terminal:fail']],
+      evidenceCatalog: [
+        {
+          id: 'terminal:fail',
+          kind: 'terminal',
+          label: 'npm test',
+        },
+      ],
+    });
+
+    const actions = buildNextStepActions({
+      summary,
+      canRerunTask: true,
+      canRerunDebug: false,
+      canCopyFailingCommand: true,
+    });
+
+    expect(actions[0]).toEqual({
+      stepIndex: 0,
+      kind: 'copyFailingCommand',
+      label: 'Copy failing command',
+      evidenceId: 'terminal:fail',
+    });
+  });
+
   it('prefers semantically matching actions even when mapped evidence IDs are positional', () => {
     const evidence: SummaryEvidenceItem[] = [
       {

@@ -12,6 +12,7 @@ export interface ExtensionConfig {
   showTimeline: boolean;
   promptCheckpointOnBlur: boolean;
   minIdleMinutes: number;
+  longGapMinutes: number;
   cooldownMinutes: number;
   summaryQuietHours: string;
   includeDiff: boolean;
@@ -68,6 +69,7 @@ export interface ResumeSignals {
   lastEditLine?: number;
   lastEditCharacter?: number;
   failingCommand?: string;
+  resumeGapMinutes?: number;
   doneItems: string[];
 }
 
@@ -110,6 +112,8 @@ export interface ResumeSummary {
   pendingBlocked?: string[];
   recommendedFirstAction?: string;
   lowConfidence?: boolean;
+  longGap?: boolean;
+  resumeGapMinutes?: number;
   candidateIntents?: string[];
   mode?: ResumeMode;
   currentBranch?: string;
