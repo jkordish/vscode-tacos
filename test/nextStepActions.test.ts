@@ -1,4 +1,4 @@
-import { buildNextStepActions } from '../src/nextStepActions';
+import { buildNextStepActions, describeNextStepActionRationale } from '../src/nextStepActions';
 import type { ResumeSummary, SummaryEvidenceItem } from '../src/types';
 
 function baseSummary(overrides: Partial<ResumeSummary> = {}): ResumeSummary {
@@ -185,5 +185,24 @@ describe('buildNextStepActions', () => {
       label: 'Copy failing command',
       evidenceId: 'terminal:fail',
     });
+  });
+
+  it('describes a concise rationale for primary next action', () => {
+    const evidence: SummaryEvidenceItem = {
+      id: 'file:src/extension.ts',
+      kind: 'file',
+      label: 'src/extension.ts',
+      target: '/workspace/src/extension.ts',
+    };
+    const rationale = describeNextStepActionRationale(
+      {
+        stepIndex: 0,
+        kind: 'openFile',
+        label: 'Open file',
+        evidenceId: evidence.id,
+      },
+      evidence,
+    );
+    expect(rationale).toBe('Based on file evidence: src/extension.ts.');
   });
 });

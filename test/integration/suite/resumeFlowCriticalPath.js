@@ -72,6 +72,11 @@ async function run() {
         true,
         'Expected Session Recap to mirror the primary next action target.',
       );
+      assert.equal(
+        resumeFlow?.hasPrimaryNextActionRationale,
+        true,
+        'Expected primary next action rationale marker in Companion Home.',
+      );
     }
   }
 }
