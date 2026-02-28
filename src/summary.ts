@@ -51,6 +51,11 @@ function hashSignals(
   signals: ResumeSignals,
   options: Required<Pick<BuildResumeSummaryOptions, 'longGapMinutes'>>,
 ): string {
+  const normalizedResumeGapMinutes = normalizeResumeGapMinutes(signals.resumeGapMinutes);
+  const longGap = isLongGapResume(normalizedResumeGapMinutes, options.longGapMinutes);
+  const resumeGapState =
+    typeof normalizedResumeGapMinutes === 'number' ? (longGap ? 'long-gap' : 'recent') : 'unknown';
+
   const payload = {
     branch: signals.branch,
     changedFiles: signals.changedFiles,
@@ -68,7 +73,7 @@ function hashSignals(
     lastEditPath: signals.lastEditPath,
     lastEditLine: signals.lastEditLine,
     lastEditCharacter: signals.lastEditCharacter,
-    resumeGapMinutes: signals.resumeGapMinutes,
+    resumeGapState,
     longGapMinutes: options.longGapMinutes,
   };
 
@@ -754,9 +759,11 @@ export function buildResumeSummary(
       ? [
           '',
           '## Reorientation',
-          typeof resumeGapMinutes === 'number'
-            ? `- Long gap detected: about ${resumeGapMinutes} minute${resumeGapMinutes === 1 ? '' : 's'} since last captured activity.`
-            : '- Long gap detected from workspace activity history.',
+          ...(typeof resumeGapMinutes === 'number'
+            ? [
+                `- Long gap detected: about ${resumeGapMinutes} minute${resumeGapMinutes === 1 ? '' : 's'} since last captured activity.`,
+              ]
+            : []),
           '- Start with retrieval cues and a safe action before reruns.',
         ]
       : []),

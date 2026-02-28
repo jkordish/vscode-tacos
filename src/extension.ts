@@ -3782,17 +3782,27 @@ function renderWebview(
       blockerActionDisabled = !availability.canRerunTask;
     }
   } else if (summary.lastFailingCommand) {
-    blockerTitle = 'Last command failed';
-    blockerDetail = summary.lastFailingCommand;
-    if (summary.longGap && availability.canCopyFailingCommand) {
-      blockerActionLabel = 'Copy failing command';
-      blockerAction = 'restoreCopyFailingCommand';
-    } else if (availability.canRerunTask) {
-      blockerActionLabel = 'Rerun last task';
-      blockerAction = 'restoreRerunTask';
-    } else if (availability.canCopyFailingCommand) {
-      blockerActionLabel = 'Copy failing command';
-      blockerAction = 'restoreCopyFailingCommand';
+    if (summary.longGap) {
+      blockerTitle = 'Reorient after a long gap';
+      blockerDetail = `${summary.lastFailingCommand} Review context before rerunning.`;
+      if (availability.canCopyFailingCommand) {
+        blockerActionLabel = 'Copy failing command';
+        blockerAction = 'restoreCopyFailingCommand';
+      } else if (canOpenProblems) {
+        blockerActionLabel = 'Open Problems';
+        blockerAction = 'restoreOpenProblems';
+        blockerActionDisabled = !canOpenProblems;
+      }
+    } else {
+      blockerTitle = 'Last command failed';
+      blockerDetail = summary.lastFailingCommand;
+      if (availability.canRerunTask) {
+        blockerActionLabel = 'Rerun last task';
+        blockerAction = 'restoreRerunTask';
+      } else if (availability.canCopyFailingCommand) {
+        blockerActionLabel = 'Copy failing command';
+        blockerAction = 'restoreCopyFailingCommand';
+      }
     }
   } else if (diagnostics.errorCount > 0) {
     blockerTitle = 'Diagnostics need attention';
