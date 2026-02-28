@@ -1,6 +1,7 @@
 import {
   buildMetricsBaselineSnapshotMarkdown,
   buildMetricsCsv,
+  deriveUxFrictionScore,
   hasAnyRecordedMetric,
   pruneMetricsForWorkspace,
   removeMetricsForWorkspace,
@@ -249,6 +250,10 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| Forced-open rate (`forced/prompt`) | 0.4000 |');
     expect(markdown).toContain('| Nudge impressions (total) | 3 |');
     expect(markdown).toContain('| Nudge impressions per session | 1.00 |');
+    expect(markdown).toContain('| Companion quick actions taken (total) | 0 |');
+    expect(markdown).toContain(
+      '| Companion follow-through rate (`quickActions/prompt`) | 0.0000 |',
+    );
     expect(markdown).toContain('| Primary CTA impressions (total) | 3 |');
     expect(markdown).toContain('| Primary CTA clicks (total) | 2 |');
     expect(markdown).toContain('| Primary CTA completions (total) | 2 |');
@@ -259,6 +264,15 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| boundary | 1 | 0.3333 |');
     expect(markdown).toContain('| mid-activity | 1 | 0.3333 |');
     expect(markdown).toContain('| unknown | 1 | 0.3333 |');
+    expect(markdown).toContain('Derived UX friction score (lower is better):');
+    expect(markdown).toContain('- UX friction score (`0-100`): 49.17 (medium)');
+    expect(markdown).toContain(
+      '| firstActionLagMs p50 / 5000ms | 2500 (2.5s) | 0.45 | 0.5000 | 22.50 |',
+    );
+    expect(markdown).toContain('| companionForcedOpenRate | 0.4000 | 0.25 | 0.4000 | 10.00 |');
+    expect(markdown).toContain(
+      '| 1 - companionActionFollowThroughRate | 1.0000 | 0.10 | 1.0000 | 10.00 |',
+    );
     expect(markdown).toContain('| scratchpadOpened (total) | 1 |');
     expect(markdown).toContain('| scratchpadAppended (total) | 2 |');
   });
@@ -286,5 +300,35 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).not.toContain('/Users/private/workspace-0');
     expect(markdown).not.toContain('/Users/private/workspace-1');
     expect(markdown).not.toContain('/Users/private/workspace-2');
+  });
+});
+
+describe('deriveUxFrictionScore', () => {
+  it('computes a deterministic weighted score with explainable components', () => {
+    const score = deriveUxFrictionScore({
+      firstActionLagP50: 2500,
+      forcedOpenRate: 0.4,
+      midActivityRate: 1 / 3,
+      followThroughRate: 0,
+    });
+
+    expect(score.score).toBeCloseTo(49.1667, 4);
+    expect(score.interpretation).toBe('medium');
+    expect(score.availableWeight).toBeCloseTo(1, 6);
+    expect(score.totalWeight).toBeCloseTo(1, 6);
+    expect(score.components).toHaveLength(4);
+    expect(score.components[0]?.weightedContribution).toBeCloseTo(22.5, 4);
+    expect(score.components[1]?.weightedContribution).toBeCloseTo(10, 4);
+  });
+
+  it('uses only available components when partial data is present', () => {
+    const score = deriveUxFrictionScore({
+      firstActionLagP50: 4000,
+      forcedOpenRate: 0.2,
+    });
+
+    expect(score.availableWeight).toBeCloseTo(0.7, 6);
+    expect(score.score).toBeCloseTo(58.5714, 4);
+    expect(score.interpretation).toBe('medium');
   });
 });
