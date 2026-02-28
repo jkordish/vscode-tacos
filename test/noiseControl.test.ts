@@ -1,4 +1,5 @@
 import {
+  evaluateNoiseBudget,
   shouldAutoTriggerSummary,
   shouldDeferPromptAfterFocusRegain,
   shouldPromptCheckpointOnBlur,
@@ -293,5 +294,101 @@ describe('shouldDeferPromptAfterFocusRegain', () => {
         graceWindowMs: 2_000,
       }),
     ).toBe(false);
+  });
+});
+
+describe('evaluateNoiseBudget', () => {
+  const policy = {
+    windowMs: 15 * 60_000,
+    maxSignalsPerWindow: 2,
+    blockNudgesAfterSummaryMs: 5 * 60_000,
+    blockNudgesAfterCheckpointMs: 3 * 60_000,
+    blockCheckpointAfterSummaryMs: 5 * 60_000,
+  };
+
+  it('always allows summary prompts (highest priority) while pruning stale events', () => {
+    const now = 1_000_000;
+    const decision = evaluateNoiseBudget({
+      now,
+      signalKind: 'summary-prompt',
+      events: [
+        { kind: 'nudge', at: now - 10_000 },
+        { kind: 'checkpoint-prompt', at: now - 2_000_000 },
+      ],
+      policy,
+    });
+
+    expect(decision.allowed).toBe(true);
+    expect(decision.recentEvents).toEqual([{ kind: 'nudge', at: now - 10_000 }]);
+  });
+
+  it('suppresses nudges after a recent summary prompt', () => {
+    const now = 1_000_000;
+    const decision = evaluateNoiseBudget({
+      now,
+      signalKind: 'nudge',
+      events: [{ kind: 'summary-prompt', at: now - 60_000 }],
+      policy,
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('recent-summary');
+    expect(decision.nextEligibleAt).toBe(now - 60_000 + policy.blockNudgesAfterSummaryMs);
+  });
+
+  it('suppresses checkpoint prompts after a recent summary prompt', () => {
+    const now = 1_000_000;
+    const decision = evaluateNoiseBudget({
+      now,
+      signalKind: 'checkpoint-prompt',
+      events: [{ kind: 'summary-prompt', at: now - 120_000 }],
+      policy,
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('recent-summary');
+  });
+
+  it('suppresses nudges after a recent checkpoint prompt', () => {
+    const now = 1_000_000;
+    const decision = evaluateNoiseBudget({
+      now,
+      signalKind: 'nudge',
+      events: [{ kind: 'checkpoint-prompt', at: now - 60_000 }],
+      policy,
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('recent-checkpoint');
+  });
+
+  it('suppresses lower-priority signals when rolling window is full', () => {
+    const now = 1_000_000;
+    const decision = evaluateNoiseBudget({
+      now,
+      signalKind: 'nudge',
+      events: [
+        { kind: 'nudge', at: now - 120_000 },
+        { kind: 'nudge', at: now - 60_000 },
+      ],
+      policy,
+    });
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toBe('window-full');
+    expect(decision.nextEligibleAt).toBe(now - 120_000 + policy.windowMs);
+  });
+
+  it('allows nudge when no suppression condition is active', () => {
+    const now = 1_000_000;
+    const decision = evaluateNoiseBudget({
+      now,
+      signalKind: 'nudge',
+      events: [{ kind: 'summary-prompt', at: now - 600_000 }],
+      policy,
+    });
+
+    expect(decision.allowed).toBe(true);
+    expect(decision.reason).toBeUndefined();
   });
 });

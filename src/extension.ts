@@ -49,16 +49,19 @@ import {
   removeMetricsForWorkspace,
 } from './metrics';
 import {
+  evaluateNoiseBudget,
+  type NoiseBudgetEvent,
+  type NoiseBudgetSignalKind,
+  shouldAutoTriggerSummary,
+  shouldDeferPromptAfterFocusRegain,
+  shouldPromptCheckpointOnBlur,
+} from './noiseControl';
+import {
   createPerformanceCounter,
   recordPerformanceSample,
   summarizePerformanceCounter,
   type PerformanceCounter,
 } from './performanceGuard';
-import {
-  shouldAutoTriggerSummary,
-  shouldDeferPromptAfterFocusRegain,
-  shouldPromptCheckpointOnBlur,
-} from './noiseControl';
 import { buildNextStepActions } from './nextStepActions';
 import {
   isPathWithinWorkspaceRoot,
@@ -134,6 +137,7 @@ const KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX = 'tacos.lastCheckpointPromptAt';
 const KEY_LAST_NUDGE_AT_PREFIX = 'tacos.lastNudgeAt';
 const KEY_WORKSPACE_ACTIVITY_AT_PREFIX = 'tacos.workspaceActivityAt';
 const KEY_AI_PAYLOAD_CONSENT_PREFIX = 'tacos.aiPayloadConsent';
+const KEY_NOISE_BUDGET_EVENTS_PREFIX = 'tacos.noiseBudgetEvents';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
@@ -149,6 +153,11 @@ const PERF_FOCUS_HANDLING_SLOW_MS = 25;
 const PERF_FOCUS_SUMMARY_SLOW_MS = 750;
 const PERF_PANEL_RERENDER_SLOW_MS = 60;
 const PERF_WEBVIEW_RENDER_SLOW_MS = 50;
+const NOISE_BUDGET_WINDOW_MS = 15 * 60_000;
+const NOISE_BUDGET_MAX_SIGNALS_PER_WINDOW = 2;
+const NOISE_BUDGET_BLOCK_NUDGE_AFTER_SUMMARY_MS = 5 * 60_000;
+const NOISE_BUDGET_BLOCK_NUDGE_AFTER_CHECKPOINT_MS = 3 * 60_000;
+const NOISE_BUDGET_BLOCK_CHECKPOINT_AFTER_SUMMARY_MS = 5 * 60_000;
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const CHECKPOINT_WORKSPACE_GLOBAL_SCOPE = 'workspace-global';
 const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
@@ -1895,7 +1904,20 @@ async function presentSummary(
   options: PresentSummaryOptions = {},
 ): Promise<void> {
   const config = getConfig();
-  const presentationMode = resolveSummaryPresentationMode(config, options);
+  let presentationMode = resolveSummaryPresentationMode(config, options);
+  const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
+
+  if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
+    const budgetDecision = await consumeNoiseBudgetSignal(
+      context,
+      workspaceRoot,
+      'summary-prompt',
+      Date.now(),
+    );
+    if (!budgetDecision.allowed) {
+      presentationMode = 'background';
+    }
+  }
 
   if (config.metricsEnabled) {
     await finalizeCurrentMetric(context);
@@ -1914,7 +1936,6 @@ async function presentSummary(
     }
   }
 
-  const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
   await updateActiveNudges(context, summary, workspaceRoot, config);
   updateSummaryScratchpad(summary, options.workspaceRoot);
 
@@ -1996,6 +2017,74 @@ function nudgeShownAtKey(workspaceRoot: string): string {
   return `${KEY_LAST_NUDGE_AT_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
 }
 
+function noiseBudgetEventsKey(workspaceRoot: string): string {
+  return `${KEY_NOISE_BUDGET_EVENTS_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function isNoiseBudgetSignalKind(value: unknown): value is NoiseBudgetSignalKind {
+  return value === 'summary-prompt' || value === 'checkpoint-prompt' || value === 'nudge';
+}
+
+function readNoiseBudgetEvents(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): NoiseBudgetEvent[] {
+  const raw = context.workspaceState.get<unknown>(noiseBudgetEventsKey(workspaceRoot), []);
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const events: NoiseBudgetEvent[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const candidate = item as Record<string, unknown>;
+    if (!isNoiseBudgetSignalKind(candidate.kind)) {
+      continue;
+    }
+    if (typeof candidate.at !== 'number' || !Number.isFinite(candidate.at) || candidate.at <= 0) {
+      continue;
+    }
+    events.push({
+      kind: candidate.kind,
+      at: candidate.at,
+    });
+  }
+
+  return events;
+}
+
+async function consumeNoiseBudgetSignal(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  signalKind: NoiseBudgetSignalKind,
+  now: number,
+): Promise<ReturnType<typeof evaluateNoiseBudget>> {
+  const existing = readNoiseBudgetEvents(context, workspaceRoot);
+  const decision = evaluateNoiseBudget({
+    now,
+    signalKind,
+    events: existing,
+    policy: {
+      windowMs: NOISE_BUDGET_WINDOW_MS,
+      maxSignalsPerWindow: NOISE_BUDGET_MAX_SIGNALS_PER_WINDOW,
+      blockNudgesAfterSummaryMs: NOISE_BUDGET_BLOCK_NUDGE_AFTER_SUMMARY_MS,
+      blockNudgesAfterCheckpointMs: NOISE_BUDGET_BLOCK_NUDGE_AFTER_CHECKPOINT_MS,
+      blockCheckpointAfterSummaryMs: NOISE_BUDGET_BLOCK_CHECKPOINT_AFTER_SUMMARY_MS,
+    },
+  });
+
+  const nextEvents = decision.allowed
+    ? [...decision.recentEvents, { kind: signalKind, at: now }]
+    : decision.recentEvents;
+  await context.workspaceState.update(noiseBudgetEventsKey(workspaceRoot), nextEvents);
+  return {
+    ...decision,
+    recentEvents: nextEvents,
+  };
+}
+
 async function updateActiveNudges(
   context: vscode.ExtensionContext,
   summary: ResumeSummary,
@@ -2007,17 +2096,29 @@ async function updateActiveNudges(
     return;
   }
 
-  const decision = chooseCompanionNudges({
+  const now = Date.now();
+  let decision = chooseCompanionNudges({
     summary,
     provider: config.summaryProvider,
     mode: resolveCompanionRuntimeMode(config),
-    now: Date.now(),
+    now,
     enabled: config.companionNudgesEnabled,
     aggressiveness: config.companionNudgeAggressiveness,
     quietHours: config.companionNudgeQuietHours,
     cooldownMinutes: config.companionNudgeCooldownMinutes,
     lastShownAt: context.workspaceState.get<number>(nudgeShownAtKey(workspaceRoot), 0),
   });
+
+  if (decision.primary) {
+    const budgetDecision = await consumeNoiseBudgetSignal(context, workspaceRoot, 'nudge', now);
+    if (!budgetDecision.allowed) {
+      decision = {
+        suppressedReason: 'noise-budget',
+        nextEligibleAt: budgetDecision.nextEligibleAt,
+      };
+    }
+  }
+
   state.activeNudges = {
     contextHash: summary.contextHash,
     decision,
@@ -2027,7 +2128,7 @@ async function updateActiveNudges(
     return;
   }
 
-  await context.workspaceState.update(nudgeShownAtKey(workspaceRoot), Date.now());
+  await context.workspaceState.update(nudgeShownAtKey(workspaceRoot), now);
   recordCompanionNudgeImpression();
 }
 
@@ -8217,6 +8318,12 @@ async function maybePromptCheckpointOnBlur(
     meaningfulChangeSinceLastPrompt: state.meaningfulActivitySinceCheckpointPrompt,
   });
   if (!shouldPrompt) {
+    return;
+  }
+
+  const budgetDecision = await consumeNoiseBudgetSignal(context, root, 'checkpoint-prompt', now);
+  if (!budgetDecision.allowed) {
+    state.meaningfulActivitySinceCheckpointPrompt = false;
     return;
   }
 
