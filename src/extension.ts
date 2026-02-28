@@ -48,6 +48,12 @@ import {
   pruneMetricsForWorkspace,
   removeMetricsForWorkspace,
 } from './metrics';
+import {
+  createPerformanceCounter,
+  recordPerformanceSample,
+  summarizePerformanceCounter,
+  type PerformanceCounter,
+} from './performanceGuard';
 import { shouldAutoTriggerSummary, shouldPromptCheckpointOnBlur } from './noiseControl';
 import { buildNextStepActions } from './nextStepActions';
 import {
@@ -130,6 +136,11 @@ const CHECKPOINT_PROMPT_COOLDOWN_MINUTES = 45;
 const FOCUS_TRIGGER_DEBOUNCE_MS = 1200;
 const INTERRUPTION_TIMING_BOUNDARY_WINDOW_MS = 90_000;
 const INTERRUPTION_TIMING_MID_ACTIVITY_WINDOW_MS = 15_000;
+const PERF_WARN_COOLDOWN_MS = 60_000;
+const PERF_FOCUS_HANDLING_SLOW_MS = 25;
+const PERF_FOCUS_SUMMARY_SLOW_MS = 750;
+const PERF_PANEL_RERENDER_SLOW_MS = 60;
+const PERF_WEBVIEW_RENDER_SLOW_MS = 50;
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const CHECKPOINT_WORKSPACE_GLOBAL_SCOPE = 'workspace-global';
 const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
@@ -217,6 +228,15 @@ interface RuntimeState {
   lastAutoFocusTriggerAt: number;
   lastBoundarySignalAt: number;
   lastMeaningfulActivityAt: number;
+  perfFocusHandling: PerformanceCounter;
+  perfFocusSummary: PerformanceCounter;
+  perfPanelRerender: PerformanceCounter;
+  perfWebviewRender: PerformanceCounter;
+  detailsMarkdownCache?: {
+    contextHash: string;
+    detailsMarkdown: string;
+    html: string;
+  };
   meaningfulActivitySinceCheckpointPrompt: boolean;
   pauseUntilRestart: boolean;
   snoozeUntil: number;
@@ -335,6 +355,11 @@ export function activate(context: vscode.ExtensionContext): void {
     lastAutoFocusTriggerAt: 0,
     lastBoundarySignalAt: 0,
     lastMeaningfulActivityAt: 0,
+    perfFocusHandling: createPerformanceCounter(),
+    perfFocusSummary: createPerformanceCounter(),
+    perfPanelRerender: createPerformanceCounter(),
+    perfWebviewRender: createPerformanceCounter(),
+    detailsMarkdownCache: undefined,
     meaningfulActivitySinceCheckpointPrompt: false,
     pauseUntilRestart: false,
     snoozeUntil: context.workspaceState.get<number>(KEY_SUMMARY_SNOOZE_UNTIL, 0),
@@ -1008,72 +1033,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
 
-      if (
-        state.autoSummaryInFlight ||
-        now - state.lastAutoFocusTriggerAt < FOCUS_TRIGGER_DEBOUNCE_MS
-      ) {
-        return;
-      }
-
-      const config = getConfig();
-      if (
-        !config.enabled ||
-        state.pauseUntilRestart ||
-        !config.showOnFocus ||
-        config.pauseSummaries
-      ) {
-        return;
-      }
-
-      await clearExpiredSnoozeIfNeeded(context, now);
-      if (state.snoozeUntil > now) {
-        return;
-      }
-
-      if (isInQuietHours(now, config.summaryQuietHours)) {
-        return;
-      }
-
-      const root = pickWorkspaceRoot();
-      if (!root) {
-        return;
-      }
-
-      const lastBlurAt = context.workspaceState.get<number>(KEY_LAST_BLUR_AT, now);
-      const lastWorkspaceOnBlur = context.workspaceState.get<string>(
-        KEY_LAST_WORKSPACE_ON_BLUR,
-        '',
-      );
-      const projectSwitched = Boolean(lastWorkspaceOnBlur) && lastWorkspaceOnBlur !== root;
-      const lastSummaryAt = context.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0);
-      const fingerprint = computeAutoTriggerFingerprint(root);
-      const lastFingerprint = context.workspaceState.get<string>(
-        autoTriggerFingerprintKey(context, root),
-        '',
-      );
-      const significantChange = fingerprint !== lastFingerprint;
-
-      const shouldTrigger = shouldAutoTriggerSummary({
-        now,
-        lastBlurAt,
-        lastSummaryAt,
-        minIdleMinutes: config.minIdleMinutes,
-        cooldownMinutes: config.cooldownMinutes,
-        projectSwitched,
-        significantChange,
-      });
-      if (!shouldTrigger) {
-        return;
-      }
-
-      state.lastAutoFocusTriggerAt = now;
-      state.autoSummaryInFlight = true;
-      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
-      try {
-        await triggerSummary(context, 'focus');
-      } finally {
-        state.autoSummaryInFlight = false;
-      }
+      await handleFocusRegainSummaryTrigger(context, now);
     }),
   );
 
@@ -1084,6 +1044,134 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   // No-op.
+}
+
+function monotonicNowNs(): bigint {
+  return process.hrtime.bigint();
+}
+
+function durationMsSince(startNs: bigint): number {
+  return Number(process.hrtime.bigint() - startNs) / 1_000_000;
+}
+
+function recordPerformanceGuardrail(
+  label: string,
+  counter: PerformanceCounter,
+  durationMs: number,
+  thresholdMs: number,
+  details?: string,
+): void {
+  const sample = recordPerformanceSample(counter, durationMs, {
+    slowThresholdMs: thresholdMs,
+    warnCooldownMs: PERF_WARN_COOLDOWN_MS,
+  });
+  if (!sample.shouldWarn) {
+    return;
+  }
+
+  const detailsSuffix = details ? `; ${details}` : '';
+  state.output.appendLine(
+    `TaCoS perf: ${label} slow-path ${sample.durationMs.toFixed(1)}ms (avg ${sample.averageDurationMs.toFixed(1)}ms, threshold ${thresholdMs}ms)${detailsSuffix}.`,
+  );
+}
+
+async function handleFocusRegainSummaryTrigger(
+  context: vscode.ExtensionContext,
+  now: number,
+): Promise<void> {
+  const focusHandlingStartNs = monotonicNowNs();
+  let outcome = 'unknown';
+  let uiSurfaceLabel = getConfig().uiSurface;
+
+  try {
+    if (
+      state.autoSummaryInFlight ||
+      now - state.lastAutoFocusTriggerAt < FOCUS_TRIGGER_DEBOUNCE_MS
+    ) {
+      outcome = 'debounced';
+      return;
+    }
+
+    const config = getConfig();
+    uiSurfaceLabel = config.uiSurface;
+    if (
+      !config.enabled ||
+      state.pauseUntilRestart ||
+      !config.showOnFocus ||
+      config.pauseSummaries
+    ) {
+      outcome = 'disabled-or-paused';
+      return;
+    }
+
+    await clearExpiredSnoozeIfNeeded(context, now);
+    if (state.snoozeUntil > now) {
+      outcome = 'snoozed';
+      return;
+    }
+
+    if (isInQuietHours(now, config.summaryQuietHours)) {
+      outcome = 'quiet-hours';
+      return;
+    }
+
+    const root = pickWorkspaceRoot();
+    if (!root) {
+      outcome = 'no-workspace';
+      return;
+    }
+
+    const lastBlurAt = context.workspaceState.get<number>(KEY_LAST_BLUR_AT, now);
+    const lastWorkspaceOnBlur = context.workspaceState.get<string>(KEY_LAST_WORKSPACE_ON_BLUR, '');
+    const projectSwitched = Boolean(lastWorkspaceOnBlur) && lastWorkspaceOnBlur !== root;
+    const lastSummaryAt = context.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0);
+    const fingerprint = computeAutoTriggerFingerprint(root);
+    const lastFingerprint = context.workspaceState.get<string>(
+      autoTriggerFingerprintKey(context, root),
+      '',
+    );
+    const significantChange = fingerprint !== lastFingerprint;
+
+    const shouldTrigger = shouldAutoTriggerSummary({
+      now,
+      lastBlurAt,
+      lastSummaryAt,
+      minIdleMinutes: config.minIdleMinutes,
+      cooldownMinutes: config.cooldownMinutes,
+      projectSwitched,
+      significantChange,
+    });
+    if (!shouldTrigger) {
+      outcome = 'gated';
+      return;
+    }
+
+    outcome = 'triggered';
+    state.lastAutoFocusTriggerAt = now;
+    state.autoSummaryInFlight = true;
+    const focusSummaryStartNs = monotonicNowNs();
+    try {
+      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
+      await triggerSummary(context, 'focus');
+    } finally {
+      state.autoSummaryInFlight = false;
+      recordPerformanceGuardrail(
+        'focus-summary',
+        state.perfFocusSummary,
+        durationMsSince(focusSummaryStartNs),
+        PERF_FOCUS_SUMMARY_SLOW_MS,
+        `uiSurface=${uiSurfaceLabel}`,
+      );
+    }
+  } finally {
+    recordPerformanceGuardrail(
+      'focus-handling',
+      state.perfFocusHandling,
+      durationMsSince(focusHandlingStartNs),
+      PERF_FOCUS_HANDLING_SLOW_MS,
+      `outcome=${outcome}; uiSurface=${uiSurfaceLabel}`,
+    );
+  }
 }
 
 function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposable[] {
@@ -2327,6 +2415,7 @@ async function showDetailsPanel(
       state.panel = undefined;
       state.panelSummary = undefined;
       state.panelWorkspaceRoot = undefined;
+      state.detailsMarkdownCache = undefined;
       state.panelCheckpointNotes = [];
       state.panelPrimaryCheckpointNote = undefined;
       state.panelCheckpointScope = undefined;
@@ -2796,13 +2885,50 @@ function rerenderPanel(): void {
     return;
   }
 
+  const rerenderStartNs = monotonicNowNs();
   state.panel.title = titleForSummary(state.panelSummary);
-  state.panel.webview.html = renderWebview(
+  const webviewRenderStartNs = monotonicNowNs();
+  const webviewHtml = renderWebview(
     state.panel.webview,
     state.panelSummary,
     state.panelCheckpointNotes,
     state.panelPrimaryCheckpointNote,
   );
+  recordPerformanceGuardrail(
+    'webview-render',
+    state.perfWebviewRender,
+    durationMsSince(webviewRenderStartNs),
+    PERF_WEBVIEW_RENDER_SLOW_MS,
+    `evidence=${state.panelSummary.evidenceCatalog?.length ?? 0}`,
+  );
+  state.panel.webview.html = webviewHtml;
+  recordPerformanceGuardrail(
+    'panel-rerender',
+    state.perfPanelRerender,
+    durationMsSince(rerenderStartNs),
+    PERF_PANEL_RERENDER_SLOW_MS,
+    `evidence=${state.panelSummary.evidenceCatalog?.length ?? 0}`,
+  );
+}
+
+function renderDetailsMarkdown(summary: ResumeSummary): string {
+  const detailsMarkdown = summary.detailsMarkdown ?? '';
+  const cached = state.detailsMarkdownCache;
+  if (
+    cached &&
+    cached.contextHash === summary.contextHash &&
+    cached.detailsMarkdown === detailsMarkdown
+  ) {
+    return cached.html;
+  }
+
+  const html = markdownRenderer.render(detailsMarkdown);
+  state.detailsMarkdownCache = {
+    contextHash: summary.contextHash,
+    detailsMarkdown,
+    html,
+  };
+  return html;
 }
 
 function renderWebview(
@@ -3157,7 +3283,7 @@ function renderWebview(
     )
     .join('');
 
-  const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
+  const detailsHtml = renderDetailsMarkdown(summary);
   const sourceLabel =
     summary.source === 'local' ? 'Local summary (instant)' : 'Refined summary (AI)';
   const generatedAtLabel = formatTimestamp(summary.generatedAt);
@@ -4362,6 +4488,7 @@ async function applyTaskPartitionSwitch(
   state.lastBoundarySignalAt = 0;
   state.lastMeaningfulActivityAt = 0;
   state.scratchSummary = undefined;
+  state.detailsMarkdownCache = undefined;
   if (state.panel) {
     state.panel.dispose();
   }
@@ -6594,6 +6721,7 @@ function resetRuntimeWorkspaceState(): void {
   state.panelScratchpadScopeLabel = undefined;
   state.activeNudges = undefined;
   state.scratchSummary = undefined;
+  state.detailsMarkdownCache = undefined;
   if (state.panel) {
     state.panel.dispose();
   }
@@ -8374,6 +8502,12 @@ async function copyDiagnosticsBundle(context: vscode.ExtensionContext): Promise<
     companionRuntimeMode: resolveCompanionRuntimeMode(config),
     metricsEnabled: config.metricsEnabled,
     recentMetrics: metrics,
+    performanceCounters: {
+      focusHandling: summarizePerformanceCounter(state.perfFocusHandling),
+      focusSummary: summarizePerformanceCounter(state.perfFocusSummary),
+      panelRerender: summarizePerformanceCounter(state.perfPanelRerender),
+      webviewRender: summarizePerformanceCounter(state.perfWebviewRender),
+    },
   });
   await vscode.env.clipboard.writeText(diagnostics);
   void vscode.window.showInformationMessage('TaCoS: diagnostics copied to clipboard.');

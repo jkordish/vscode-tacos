@@ -12,6 +12,21 @@ export interface DiagnosticsInput {
   companionRuntimeMode: CompanionRuntimeMode;
   metricsEnabled: boolean;
   recentMetrics: MetricRecord[];
+  performanceCounters?: {
+    focusHandling?: PerformanceCounterSnapshot;
+    focusSummary?: PerformanceCounterSnapshot;
+    panelRerender?: PerformanceCounterSnapshot;
+    webviewRender?: PerformanceCounterSnapshot;
+  };
+}
+
+interface PerformanceCounterSnapshot {
+  samples: number;
+  slowSamples: number;
+  slowRate?: number;
+  averageDurationMs?: number;
+  maxDurationMs?: number;
+  lastDurationMs?: number;
 }
 
 interface RecentMetricsSummary {
@@ -71,6 +86,14 @@ function formatLag(value: number | undefined): string {
   }
 
   return `${Math.round(value)}`;
+}
+
+function formatMsValue(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value)) {
+    return 'n/a';
+  }
+
+  return value.toFixed(2);
 }
 
 function summarizeRecentMetrics(metrics: MetricRecord[], limit: number): RecentMetricsSummary {
@@ -137,6 +160,42 @@ export function buildDiagnosticsText(input: DiagnosticsInput): string {
     `companionNudgeImpressions.total: ${metricSummary.companionNudgeImpressionsTotal}`,
     `companionForcedOpenRate: ${formatRate(metricSummary.companionForcedOpenRate)}`,
   ];
+
+  if (input.performanceCounters) {
+    const formatCounter = (
+      label: string,
+      snapshot: PerformanceCounterSnapshot | undefined,
+    ): string[] => {
+      if (!snapshot || snapshot.samples <= 0) {
+        return [
+          `${label}.samples: 0`,
+          `${label}.slowSamples: 0`,
+          `${label}.slowRate: n/a`,
+          `${label}.avgMs: n/a`,
+          `${label}.maxMs: n/a`,
+          `${label}.lastMs: n/a`,
+        ];
+      }
+
+      return [
+        `${label}.samples: ${snapshot.samples}`,
+        `${label}.slowSamples: ${snapshot.slowSamples}`,
+        `${label}.slowRate: ${formatRate(snapshot.slowRate)}`,
+        `${label}.avgMs: ${formatMsValue(snapshot.averageDurationMs)}`,
+        `${label}.maxMs: ${formatMsValue(snapshot.maxDurationMs)}`,
+        `${label}.lastMs: ${formatMsValue(snapshot.lastDurationMs)}`,
+      ];
+    };
+
+    lines.push(
+      '',
+      'performanceCounters(runtime):',
+      ...formatCounter('focusHandling', input.performanceCounters.focusHandling),
+      ...formatCounter('focusSummary', input.performanceCounters.focusSummary),
+      ...formatCounter('panelRerender', input.performanceCounters.panelRerender),
+      ...formatCounter('webviewRender', input.performanceCounters.webviewRender),
+    );
+  }
 
   return `${lines.join('\n')}\n`;
 }

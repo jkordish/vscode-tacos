@@ -155,6 +155,25 @@ Expected:
 Result: `PASS / FAIL`
 Notes: `__________`
 
+### A10. Focus-path performance guardrails
+
+Steps:
+1. Open `Output` panel and select `TaCoS`.
+2. Run 5-10 focus cycles (blur/focus) while mixing:
+   - no-op returns (no significant change),
+   - one triggerable return (meaningful activity + idle/cooldown satisfied),
+   - one panel-heavy return (open details panel, then perform a small action that rerenders).
+3. Run `TaCoS: Copy Diagnostics Bundle`.
+4. Inspect diagnostics text for `performanceCounters(runtime)` summary.
+
+Expected:
+- No repeated `TaCoS perf: ... slow-path` warnings under normal dogfooding use.
+- Diagnostics include non-empty runtime counters for focus handling and panel/webview render paths.
+- No UI freezes or noticeable focus-path lag when summaries are suppressed or triggered.
+
+Result: `PASS / FAIL`
+Notes: `__________`
+
 ## Part B - Restricted Mode
 
 ### B1. Enter restricted mode
