@@ -4421,7 +4421,13 @@ function renderWebview(
   ]
     .filter(Boolean)
     .join('\n\n');
-  const clientScript = renderPanelClientScript(MAX_INTENT_OVERRIDE_CHARS);
+  const panelSectionScopeToken =
+    activeExtensionContext && panelWorkspaceRoot
+      ? Buffer.from(partitionScope(activeExtensionContext, panelWorkspaceRoot)).toString(
+          'base64url',
+        )
+      : 'global';
+  const clientScript = renderPanelClientScript(MAX_INTENT_OVERRIDE_CHARS, panelSectionScopeToken);
 
   return `<!doctype html>
 <html>

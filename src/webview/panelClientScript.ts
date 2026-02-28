@@ -1,7 +1,11 @@
-export function renderPanelClientScript(maxIntentOverrideChars: number): string {
+export function renderPanelClientScript(
+  maxIntentOverrideChars: number,
+  panelSectionScopeToken: string,
+): string {
   return `
       const vscode = acquireVsCodeApi();
       const panelSectionIds = new Set(['trustCenter', 'timeline', 'evidence', 'details']);
+      const panelSectionScope = ${JSON.stringify(panelSectionScopeToken)};
       const hostActions = new Set([
         'fixSummary',
         'checkpointPinToggle',
@@ -36,9 +40,15 @@ export function renderPanelClientScript(maxIntentOverrideChars: number): string 
         'restoreCopyFailingCommand'
       ]);
       const viewState = Object.assign(
-        { evidenceListExpanded: false, sectionExpanded: {} },
+        { evidenceListExpanded: false, sectionExpanded: {}, sectionScope: '' },
         vscode.getState() || {},
       );
+
+      if (viewState.sectionScope !== panelSectionScope) {
+        viewState.sectionExpanded = {};
+        viewState.sectionScope = panelSectionScope;
+        vscode.setState(viewState);
+      }
 
       function persistViewState() {
         vscode.setState(viewState);
@@ -63,6 +73,7 @@ export function renderPanelClientScript(maxIntentOverrideChars: number): string 
         const sectionExpanded = Object.assign({}, viewState.sectionExpanded || {});
         sectionExpanded[sectionId] = expanded;
         viewState.sectionExpanded = sectionExpanded;
+        viewState.sectionScope = panelSectionScope;
         persistViewState();
         vscode.postMessage({ type: 'setPanelSectionExpanded', sectionId, expanded });
       }
