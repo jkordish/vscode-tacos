@@ -385,6 +385,10 @@ export const PANEL_WEBVIEW_STYLE = `
       @media (forced-colors: active) {
         button,
         .badge,
+        .badge.kind-url,
+        .badge.kind-file,
+        button.badge.clickable.kind-url,
+        button.badge.clickable.kind-file,
         .text-link-button {
           forced-color-adjust: auto;
           border-color: ButtonText;

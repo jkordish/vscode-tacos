@@ -592,16 +592,19 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasTimelineSection = panelHtml.includes('data-panel-section="timeline"');
       const hasEvidenceSection = panelHtml.includes('data-panel-section="evidence"');
       const hasDetailsSection = panelHtml.includes('data-panel-section="details"');
-      const hasAnchorOpenLinkAction = panelHtml.includes('<a href="#" data-action="openLink"');
-      const hasAnchorOpenTopFileAction = panelHtml.includes(
-        '<a href="#" data-action="openTopFile"',
-      );
-      const hasAnchorOpenEvidenceAction = panelHtml.includes(
-        '<a href="#" data-action="openEvidence"',
+      const hasAnchorOpenLinkAction = /<a[^>]*data-action=["']openLink["']/u.test(panelHtml);
+      const hasAnchorOpenTopFileAction = /<a[^>]*data-action=["']openTopFile["']/u.test(panelHtml);
+      const hasAnchorOpenEvidenceAction = /<a[^>]*data-action=["']openEvidence["']/u.test(
+        panelHtml,
       );
       const hasButtonOpenLinkAction = /<button[^>]*data-action="openLink"/u.test(panelHtml);
       const hasButtonOpenTopFileAction = /<button[^>]*data-action="openTopFile"/u.test(panelHtml);
       const hasButtonOpenEvidenceAction = /<button[^>]*data-action="openEvidence"/u.test(panelHtml);
+      const linkCount = summary?.links.length ?? 0;
+      const topFilesCount = summary?.topFiles.length ?? 0;
+      const clickableEvidenceCount =
+        summary?.evidenceCatalog?.filter((item) => item.kind === 'file' || item.kind === 'url')
+          .length ?? 0;
       const trustCenterExpanded = /data-panel-section="trustCenter"[^>]*\sopen(?:\s|>)/u.test(
         panelHtml,
       );
@@ -646,6 +649,9 @@ export function activate(context: vscode.ExtensionContext): void {
         hasButtonOpenLinkAction,
         hasButtonOpenTopFileAction,
         hasButtonOpenEvidenceAction,
+        linkCount,
+        topFilesCount,
+        clickableEvidenceCount,
         trustCenterExpanded,
         timelineExpanded,
         evidenceExpanded,
