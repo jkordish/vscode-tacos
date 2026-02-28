@@ -64,7 +64,11 @@ export function renderPanelClientScript(
         }
 
         list.classList.toggle('show-more', expanded);
-        toggle.textContent = expanded ? 'Show less' : 'Show more';
+        const hiddenCount = Number.parseInt(toggle.dataset.hiddenCount || '', 10);
+        const collapsedLabel =
+          Number.isFinite(hiddenCount) && hiddenCount > 0 ? 'Show ' + hiddenCount + ' more' : 'Show more';
+        toggle.textContent = expanded ? 'Show less' : collapsedLabel;
+        toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         viewState.evidenceListExpanded = expanded;
         persistViewState();
       }

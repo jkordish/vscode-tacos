@@ -605,6 +605,27 @@ export function activate(context: vscode.ExtensionContext): void {
       const clickableEvidenceCount =
         summary?.evidenceCatalog?.filter((item) => item.kind === 'file' || item.kind === 'url')
           .length ?? 0;
+      const nonClickableEvidenceCount = Math.max(
+        0,
+        (summary?.evidenceCatalog?.length ?? 0) - clickableEvidenceCount,
+      );
+      const hiddenEvidenceCount = Math.max(0, (summary?.evidenceCatalog?.length ?? 0) - 5);
+      const evidenceShowMoreLabelMatch = panelHtml.match(
+        /data-action="toggleEvidenceMore"[^>]*>([^<]+)<\/button>/u,
+      );
+      const evidenceShowMoreLabel = evidenceShowMoreLabelMatch?.[1]?.trim() ?? '';
+      const timelineOpenAffordanceCount = (
+        panelHtml.match(/data-timeline-affordance="open"/gu) ?? []
+      ).length;
+      const timelineStaticAffordanceCount = (
+        panelHtml.match(/data-timeline-affordance="static"/gu) ?? []
+      ).length;
+      const evidenceOpenAffordanceCount = (
+        panelHtml.match(/data-evidence-affordance="open"/gu) ?? []
+      ).length;
+      const evidenceStaticAffordanceCount = (
+        panelHtml.match(/data-evidence-affordance="static"/gu) ?? []
+      ).length;
       const trustCenterExpanded = /data-panel-section="trustCenter"[^>]*\sopen(?:\s|>)/u.test(
         panelHtml,
       );
@@ -652,6 +673,13 @@ export function activate(context: vscode.ExtensionContext): void {
         linkCount,
         topFilesCount,
         clickableEvidenceCount,
+        nonClickableEvidenceCount,
+        hiddenEvidenceCount,
+        evidenceShowMoreLabel,
+        timelineOpenAffordanceCount,
+        timelineStaticAffordanceCount,
+        evidenceOpenAffordanceCount,
+        evidenceStaticAffordanceCount,
         trustCenterExpanded,
         timelineExpanded,
         evidenceExpanded,
@@ -4007,14 +4035,24 @@ function renderWebview(
     .join('');
   const evidenceItems = (summary.evidenceCatalog ?? [])
     .map((item, index) => {
+      const clickable = item.kind === 'file' || item.kind === 'url';
       const target = item.target
         ? ` <span class="evidence-target">${escapeHtml(item.target)}</span>`
         : '';
       const hiddenClass = index >= 5 ? 'extra-evidence' : '';
-      return `<li class="${hiddenClass}"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> ${escapeHtml(item.label)} <code>${escapeHtml(item.id)}</code>${target}</li>`;
+      const affordanceClass = clickable
+        ? 'evidence-affordance evidence-affordance-clickable'
+        : 'evidence-affordance evidence-affordance-static';
+      const affordance = `<span class="${affordanceClass}" data-evidence-affordance="${
+        clickable ? 'open' : 'static'
+      }">${clickable ? 'Open' : 'Not clickable'}</span>`;
+      const label = clickable
+        ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`
+        : `<span class="evidence-label">${escapeHtml(item.label)}</span>`;
+      return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> <code>${escapeHtml(item.id)}</code>${target}</div></li>`;
     })
     .join('');
-  const hasExtraEvidence = (summary.evidenceCatalog?.length ?? 0) > 5;
+  const hiddenEvidenceCount = Math.max(0, (summary.evidenceCatalog?.length ?? 0) - 5);
   const recapDoneItems = summary.doneSinceLastResume?.slice(0, 3) ?? [];
   const recapPendingItems = summary.pendingBlocked?.slice(0, 3) ?? [];
   const recapDoneList = recapDoneItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
@@ -4307,13 +4345,19 @@ function renderWebview(
     .map((group) => {
       const items = group.rows
         .map((row) => {
-          const label = row.clickable
+          const labelControl = row.clickable
             ? `<button type="button" class="text-link-button timeline-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}">${escapeHtml(row.label)}</button>`
-            : `<span>${escapeHtml(row.label)}</span>`;
+            : `<span class="timeline-label">${escapeHtml(row.label)}</span>`;
+          const affordanceClass = row.clickable
+            ? 'evidence-affordance evidence-affordance-clickable'
+            : 'evidence-affordance evidence-affordance-static';
+          const heading = `<div class="timeline-row-heading">${labelControl}<span class="${affordanceClass}" data-timeline-affordance="${
+            row.clickable ? 'open' : 'static'
+          }">${escapeHtml(row.interactionHint)}</span></div>`;
           const detail = row.detail
             ? `<span class="timeline-detail">${escapeHtml(row.detail)}</span>`
             : '';
-          return `<li><span class="timeline-time">${escapeHtml(row.relativeTime)}</span><div class="timeline-row">${label}${detail}</div></li>`;
+          return `<li><span class="timeline-time">${escapeHtml(row.relativeTime)}</span><div class="timeline-row">${heading}${detail}</div></li>`;
         })
         .join('');
       return `<section class="timeline-group"><h4>${escapeHtml(group.label)}</h4><ul>${items}</ul></section>`;
@@ -4397,7 +4441,7 @@ function renderWebview(
   const restorePackCard = renderRestorePackCard(restorePackGroups, trusted);
   const evidenceCard = renderEvidenceCard({
     evidenceItemsTrustedHtml: evidenceItems,
-    hasExtraEvidence,
+    hiddenEvidenceCount,
     expanded: expandedSections.has('evidence'),
   });
   const detailsCard = renderDetailsCard(detailsHtml, expandedSections.has('details'));

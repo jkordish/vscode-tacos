@@ -117,11 +117,51 @@ async function run() {
       true,
       'Expected evidence actions to be rendered as semantic buttons.',
     );
+    assert.ok(
+      (resumeFlow?.evidenceOpenAffordanceCount ?? 0) > 0,
+      'Expected at least one explicit Open affordance in evidence rows.',
+    );
+    if (resumeFlow?.hasTimelineSection) {
+      assert.ok(
+        (resumeFlow?.timelineOpenAffordanceCount ?? 0) > 0,
+        'Expected timeline rows with clickable evidence to include Open affordance chips.',
+      );
+    }
   } else {
     assert.equal(
       resumeFlow?.hasButtonOpenEvidenceAction,
       false,
       'Expected no evidence button markers when no clickable evidence is present.',
+    );
+    assert.equal(
+      resumeFlow?.evidenceOpenAffordanceCount,
+      0,
+      'Expected no Open affordance chips when clickable evidence is absent.',
+    );
+  }
+  if ((resumeFlow?.nonClickableEvidenceCount ?? 0) > 0) {
+    assert.ok(
+      (resumeFlow?.evidenceStaticAffordanceCount ?? 0) > 0,
+      'Expected non-clickable evidence rows to include Not clickable affordance chips.',
+    );
+    if (resumeFlow?.hasTimelineSection) {
+      assert.ok(
+        (resumeFlow?.timelineStaticAffordanceCount ?? 0) > 0,
+        'Expected non-clickable timeline rows to include Not clickable affordance chips.',
+      );
+    }
+  } else {
+    assert.equal(
+      resumeFlow?.evidenceStaticAffordanceCount,
+      0,
+      'Expected no static affordance chips when all evidence is clickable.',
+    );
+  }
+  if ((resumeFlow?.hiddenEvidenceCount ?? 0) > 0) {
+    assert.equal(
+      resumeFlow?.evidenceShowMoreLabel,
+      `Show ${resumeFlow.hiddenEvidenceCount} more`,
+      'Expected evidence Show more label to include the hidden item count.',
     );
   }
   assert.equal(

@@ -10,6 +10,7 @@ export interface TimelineRow {
   timestamp: number;
   relativeTime: string;
   clickable: boolean;
+  interactionHint: 'Open' | 'Not clickable';
 }
 
 export interface TimelineGroup {
@@ -106,9 +107,11 @@ export function buildTimelineGroups(
   evidenceCatalog: SummaryEvidenceItem[],
   now = Date.now(),
 ): TimelineGroup[] {
+  type PreparedTimelineRow = TimelineRow & { group: TimelineGroupKey };
   const sorted = evidenceCatalog
-    .map((item, index) => {
+    .map<PreparedTimelineRow>((item, index) => {
       const timestamp = resolveEvidenceTimestamp(item, now, index);
+      const clickable = isEvidenceTimelineClickable(item);
       return {
         evidenceId: item.id,
         kind: item.kind,
@@ -116,7 +119,8 @@ export function buildTimelineGroups(
         detail: resolveEvidenceDetail(item),
         timestamp,
         relativeTime: formatRelativeTime(timestamp, now),
-        clickable: isEvidenceTimelineClickable(item),
+        clickable,
+        interactionHint: clickable ? 'Open' : 'Not clickable',
         group: timelineGroupForKind(item.kind),
       };
     })
@@ -133,6 +137,7 @@ export function buildTimelineGroups(
       timestamp: item.timestamp,
       relativeTime: item.relativeTime,
       clickable: item.clickable,
+      interactionHint: item.interactionHint,
     });
     grouped.set(item.group, existing);
   }

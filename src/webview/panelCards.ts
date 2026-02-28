@@ -149,11 +149,13 @@ export function renderRestorePackCard(
 
 export interface EvidenceCardInput {
   evidenceItemsTrustedHtml: string;
-  hasExtraEvidence: boolean;
+  hiddenEvidenceCount: number;
   expanded: boolean;
 }
 
 export function renderEvidenceCard(input: EvidenceCardInput): string {
+  const hasExtraEvidence = input.hiddenEvidenceCount > 0;
+  const showMoreLabel = hasExtraEvidence ? `Show ${input.hiddenEvidenceCount} more` : 'Show more';
   return `<div class="card">
       <details data-panel-section="evidence" ${input.expanded ? 'open' : ''}>
         <summary><h3>Evidence</h3></summary>
@@ -162,8 +164,8 @@ export function renderEvidenceCard(input: EvidenceCardInput): string {
             input.evidenceItemsTrustedHtml || '<li>None captured</li>'
           }</ul>
           ${
-            input.hasExtraEvidence
-              ? '<button type="button" class="show-more-btn" data-action="toggleEvidenceMore">Show more</button>'
+            hasExtraEvidence
+              ? `<button type="button" class="show-more-btn" data-action="toggleEvidenceMore" data-hidden-count="${input.hiddenEvidenceCount}" aria-expanded="false">${escapeHtml(showMoreLabel)}</button>`
               : ''
           }
         </div>
