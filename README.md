@@ -53,7 +53,12 @@ References:
 
 Use `TaCoS: Show Demo Resume Card` for a clearly-labeled sample card that does not mix with workspace evidence.
 
-![TaCoS sample resume card](assets/demo-resume-card.svg)
+Sample copy shown in the demo banner:
+
+```text
+Sample Resume Card
+This is sample onboarding data only. It is separate from your workspace evidence.
+```
 
 ## Commands
 
