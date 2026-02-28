@@ -261,6 +261,38 @@
         "title": "TaCoS: Clear OpenAI API Key"
       }
     ],
+    "keybindings": [
+      {
+        "command": "tacos.showNow",
+        "key": "ctrl+alt+t ctrl+alt+s",
+        "mac": "cmd+alt+t cmd+alt+s",
+        "when": "workbenchState != empty"
+      },
+      {
+        "command": "tacos.copyPromptAndOpenCodex",
+        "key": "ctrl+alt+t ctrl+alt+p",
+        "mac": "cmd+alt+t cmd+alt+p",
+        "when": "workbenchState != empty"
+      },
+      {
+        "command": "tacos.addQuickCheckpointNote",
+        "key": "ctrl+alt+t ctrl+alt+k",
+        "mac": "cmd+alt+t cmd+alt+k",
+        "when": "workbenchState != empty"
+      },
+      {
+        "command": "tacos.jumpToLastEdit",
+        "key": "ctrl+alt+t ctrl+alt+j",
+        "mac": "cmd+alt+t cmd+alt+j",
+        "when": "workbenchState != empty"
+      },
+      {
+        "command": "tacos.restoreWorkingSet",
+        "key": "ctrl+alt+t ctrl+alt+r",
+        "mac": "cmd+alt+t cmd+alt+r",
+        "when": "workbenchState != empty"
+      }
+    ],
     "configuration": {
       "title": "TaCoS",
       "properties": {

@@ -81,6 +81,18 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Copy Metrics Baseline Snapshot`
 - `TaCoS: Copy Diagnostics`
 
+## Keyboard Shortcuts (Default Chords)
+
+These low-conflict defaults speed up the top resume actions without overriding common single-key editor shortcuts. You can override any of them in VS Code Keyboard Shortcuts.
+
+| Action                     | Windows/Linux                   | macOS                         |
+| -------------------------- | ------------------------------- | ----------------------------- |
+| Show Resume Brief Now      | `Ctrl+Alt+T`, then `Ctrl+Alt+S` | `Cmd+Alt+T`, then `Cmd+Alt+S` |
+| Copy Prompt and Open Codex | `Ctrl+Alt+T`, then `Ctrl+Alt+P` | `Cmd+Alt+T`, then `Cmd+Alt+P` |
+| Add Quick Checkpoint Note  | `Ctrl+Alt+T`, then `Ctrl+Alt+K` | `Cmd+Alt+T`, then `Cmd+Alt+K` |
+| Jump to Last Edit          | `Ctrl+Alt+T`, then `Ctrl+Alt+J` | `Cmd+Alt+T`, then `Cmd+Alt+J` |
+| Restore Working Set        | `Ctrl+Alt+T`, then `Ctrl+Alt+R` | `Cmd+Alt+T`, then `Cmd+Alt+R` |
+
 ### Codex / ChatGPT Interop
 
 `TaCoS: Copy Prompt and Open Codex` now tries known OpenAI ChatGPT extension commands first:
