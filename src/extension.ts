@@ -65,7 +65,7 @@ import {
   summarizePerformanceCounter,
   type PerformanceCounter,
 } from './performanceGuard';
-import { buildNextStepActions } from './nextStepActions';
+import { buildNextStepActions, type NextStepAction } from './nextStepActions';
 import {
   isPathWithinWorkspaceRoot,
   normalizeHttpUrl,
@@ -502,20 +502,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.__test.getResumeFlowSnapshot', async () => {
       const summary = state.panelSummary ?? state.scratchSummary;
-      const nextStepActions = summary
-        ? buildNextStepActions({
-            summary,
-            ...computeRestoreAvailability({
-              trusted: vscode.workspace.isTrusted,
-              hasLastTask: Boolean(state.lastTaskName),
-              hasLastDebug: Boolean(state.lastDebugConfigName),
-              hasFailingCommand: Boolean(getCopyableFailingCommand()),
-              hasRecentEditLocation: state.recentEditLocations.length > 0,
-              currentBranch: summary.currentBranch,
-              previousBranch: summary.previousBranch,
-            }),
-          })
-        : [];
+      const nextStepActions = summary ? buildNextStepActionCandidates(summary) : [];
+      const primaryNextAction = nextStepActions.find((candidate): candidate is NextStepAction =>
+        Boolean(candidate),
+      );
       const panelHtml = state.panel?.webview.html ?? '';
 
       return {
@@ -523,8 +513,11 @@ export function activate(context: vscode.ExtensionContext): void {
         hasScratchSummary: Boolean(state.scratchSummary),
         nextStepsCount: summary?.nextSteps.length ?? 0,
         nextStepActionsCount: nextStepActions.length,
-        hasPrimaryNextAction: Boolean(nextStepActions[0]),
-        primaryNextActionLabel: nextStepActions[0]?.label ?? '',
+        hasPrimaryNextAction: Boolean(primaryNextAction),
+        primaryNextActionLabel: primaryNextAction?.label ?? '',
+        primaryNextActionStepIndex: primaryNextAction?.stepIndex ?? -1,
+        hasHomePrimaryNextAction: panelHtml.includes('data-primary-next-safe-action="home"'),
+        hasRecapPrimaryNextAction: panelHtml.includes('data-primary-next-safe-action="recap"'),
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
         hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
         hasRestoreWorkingSetAction: panelHtml.includes('data-action="restoreWorkingSet"'),
@@ -1392,8 +1385,18 @@ async function handleFocusRegainSummaryTrigger(
         });
       }
 
-      await triggerSummary(context, 'focus', undefined, deferPromptToBackground, now);
-      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
+      const summaryTriggered = await triggerSummary(
+        context,
+        'focus',
+        undefined,
+        deferPromptToBackground,
+        now,
+      );
+      if (summaryTriggered) {
+        await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
+      } else {
+        outcome = 'trigger-aborted';
+      }
     } finally {
       state.autoSummaryInFlight = false;
       recordPerformanceGuardrail(
@@ -1573,11 +1576,11 @@ async function triggerSummary(
   preferredWorkspaceRoot?: string,
   deferPromptToBackground = false,
   focusRegainedAt?: number,
-): Promise<void> {
+): Promise<boolean> {
   const root = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!root) {
     void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
-    return;
+    return false;
   }
 
   state.activeRefinementSequence = undefined;
@@ -1601,6 +1604,8 @@ async function triggerSummary(
   if (prepared.shouldRefineWithAi) {
     void refineSummaryInBackground(context, prepared);
   }
+
+  return true;
 }
 
 interface ProviderPlan {
@@ -3140,7 +3145,8 @@ async function showDetailsPanel(
           return;
         }
 
-        const isPrimaryStep = message.stepIndex === 0;
+        const primaryNextAction = resolvePrimaryNextStepAction(state.panelSummary);
+        const isPrimaryStep = message.stepIndex === primaryNextAction?.stepIndex;
         const outcome = await runNextStepActionDetailed(
           state.panelSummary,
           message.stepIndex,
@@ -3571,13 +3577,23 @@ function renderWebview(
   const canOpenProblems = diagnostics.errorCount > 0 || diagnostics.warningCount > 0;
   const canOpenDiagnosticFile = Boolean(diagnostics.top);
   const trustCue = buildTrustCue(summary);
-  const nextStepActions = buildNextStepActions({
-    summary,
-    canRerunTask: availability.canRerunTask,
-    canRerunDebug: availability.canRerunDebug,
-    canCopyFailingCommand: availability.canCopyFailingCommand,
-  });
-  if (nextStepActions[0]) {
+  const nextStepActions = buildNextStepActionCandidates(summary);
+  const primaryNextAction = nextStepActions.find((candidate): candidate is NextStepAction =>
+    Boolean(candidate),
+  );
+  const primaryNextActionStepIndex = primaryNextAction?.stepIndex ?? -1;
+  const primaryNextActionSummary =
+    primaryNextActionStepIndex >= 0
+      ? (summary.nextSteps[primaryNextActionStepIndex] ?? '')
+      : (summary.recommendedFirstAction?.trim() ?? summary.nextSteps[0] ?? '');
+  const companionPrimaryNextActionButton = primaryNextAction
+    ? `<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}">${escapeHtml(primaryNextAction.label)}</button>`
+    : '';
+  const recapPrimaryNextActionButton = primaryNextAction
+    ? `<button type="button" class="secondary" data-primary-next-safe-action="recap" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}">${escapeHtml(primaryNextAction.label)}</button>`
+    : '';
+
+  if (primaryNextAction) {
     recordCompanionPrimaryCtaImpression();
   }
   const nextSteps = summary.nextSteps
@@ -3588,7 +3604,9 @@ function renderWebview(
         .join('');
       const action = nextStepActions[index];
       const actionButton = action
-        ? `<button type="button" class="secondary step-action" data-action="runNextStepAction" data-step-index="${index}">${escapeHtml(action.label)}</button>`
+        ? primaryNextActionStepIndex === index
+          ? ''
+          : `<button type="button" class="secondary step-action" data-action="runNextStepAction" data-step-index="${index}">${escapeHtml(action.label)}</button>`
         : '';
       const badgeRow = badges ? `<div class="step-evidence">${badges}</div>` : '';
       const actionRow = actionButton ? `<div class="step-actions">${actionButton}</div>` : '';
@@ -3622,7 +3640,7 @@ function renderWebview(
     .join('');
   const recapDoneItems = summary.doneSinceLastResume?.slice(0, 3) ?? [];
   const recapPendingItems = summary.pendingBlocked?.slice(0, 3) ?? [];
-  const recapFirstAction = summary.recommendedFirstAction?.trim() ?? summary.nextSteps[0] ?? '';
+  const recapFirstAction = primaryNextActionSummary;
   const recapDoneList = recapDoneItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const recapPendingList = recapPendingItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const nowCheckpointLine = currentCheckpointNote
@@ -3927,9 +3945,10 @@ function renderWebview(
           <ul class="compact-list">${recapPendingList || '<li>No blocker captured.</li>'}</ul>
         </section>
         <section>
-          <h4>Recommended first action</h4>
+          <h4>Next safe action</h4>
           <p class="companion-primary">${escapeHtml(recapFirstAction || 'Refresh summary to regenerate first-action guidance.')}</p>
           <div class="status-actions">
+            ${recapPrimaryNextActionButton}
             <button type="button" data-action="copyNextSteps">Copy next steps</button>
             <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>
             <button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>
@@ -4311,6 +4330,9 @@ function renderWebview(
       intent: summary.intent,
       mode,
       nowCheckpointLineTrustedHtml: nowCheckpointLine,
+      nextSafeActionSummary:
+        primaryNextActionSummary || 'Refresh summary to regenerate first-action guidance.',
+      primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
       nextStepsListTrustedHtml: companionNextSteps,
       blockerTitle,
       blockerDetail,
@@ -5347,6 +5369,30 @@ interface NextStepActionOutcome {
   completed: boolean;
 }
 
+function buildNextStepActionCandidates(summary: ResumeSummary): Array<NextStepAction | undefined> {
+  const availability = computeRestoreAvailability({
+    trusted: vscode.workspace.isTrusted,
+    hasLastTask: Boolean(state.lastTaskName),
+    hasLastDebug: Boolean(state.lastDebugConfigName),
+    hasFailingCommand: Boolean(getCopyableFailingCommand()),
+    hasRecentEditLocation: state.recentEditLocations.length > 0,
+    currentBranch: summary.currentBranch,
+    previousBranch: summary.previousBranch,
+  });
+  return buildNextStepActions({
+    summary,
+    canRerunTask: availability.canRerunTask,
+    canRerunDebug: availability.canRerunDebug,
+    canCopyFailingCommand: availability.canCopyFailingCommand,
+  });
+}
+
+function resolvePrimaryNextStepAction(summary: ResumeSummary): NextStepAction | undefined {
+  return buildNextStepActionCandidates(summary).find((candidate): candidate is NextStepAction =>
+    Boolean(candidate),
+  );
+}
+
 async function runNextStepActionDetailed(
   summary: ResumeSummary,
   stepIndex: number,
@@ -5357,21 +5403,7 @@ async function runNextStepActionDetailed(
     return { attempted: false, completed: false };
   }
 
-  const availability = computeRestoreAvailability({
-    trusted: vscode.workspace.isTrusted,
-    hasLastTask: Boolean(state.lastTaskName),
-    hasLastDebug: Boolean(state.lastDebugConfigName),
-    hasFailingCommand: Boolean(getCopyableFailingCommand()),
-    hasRecentEditLocation: state.recentEditLocations.length > 0,
-    currentBranch: summary.currentBranch,
-    previousBranch: summary.previousBranch,
-  });
-  const actions = buildNextStepActions({
-    summary,
-    canRerunTask: availability.canRerunTask,
-    canRerunDebug: availability.canRerunDebug,
-    canCopyFailingCommand: availability.canCopyFailingCommand,
-  });
+  const actions = buildNextStepActionCandidates(summary);
   const action = actions[stepIndex];
   if (!action) {
     void vscode.window.showInformationMessage(

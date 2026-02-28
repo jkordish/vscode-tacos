@@ -10,6 +10,8 @@ export interface RenderResumeStackCardInput {
   intent: string;
   mode: string;
   nowCheckpointLineTrustedHtml?: TrustedHtml;
+  nextSafeActionSummary: string;
+  primaryNextActionTrustedHtml?: TrustedHtml;
   nextStepsListTrustedHtml: TrustedHtml;
   blockerTitle: string;
   blockerDetail: string;
@@ -30,10 +32,13 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
         </section>
         <section class="companion-block">
           <h4>Next</h4>
+          <p class="companion-kicker">Next safe action</p>
+          <p class="companion-primary">${escapeHtml(input.nextSafeActionSummary)}</p>
           <ul class="compact-list">${
             input.nextStepsListTrustedHtml || '<li>No next steps captured yet.</li>'
           }</ul>
           <div class="status-actions">
+            ${input.primaryNextActionTrustedHtml ?? ''}
             <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
             <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
           </div>

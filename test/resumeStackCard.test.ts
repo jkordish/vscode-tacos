@@ -6,6 +6,9 @@ describe('renderResumeStackCard', () => {
       intent: 'Implement gating tests',
       mode: 'coding',
       nowCheckpointLineTrustedHtml: '',
+      nextSafeActionSummary: 'Open src/extension.ts and run verify',
+      primaryNextActionTrustedHtml:
+        '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open file</button>',
       nextStepsListTrustedHtml: '',
       blockerTitle: 'No active blocker',
       blockerDetail: 'Continue with the first suggested next step.',
@@ -27,8 +30,11 @@ describe('renderResumeStackCard', () => {
              </section>
              <section class="companion-block">
                <h4>Next</h4>
+               <p class="companion-kicker">Next safe action</p>
+               <p class="companion-primary">Open src/extension.ts and run verify</p>
                <ul class="compact-list"><li>No next steps captured yet.</li></ul>
                <div class="status-actions">
+                 <button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open file</button>
                  <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
                  <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
                </div>
@@ -54,6 +60,9 @@ describe('renderResumeStackCard', () => {
       mode: 'review & tune',
       nowCheckpointLineTrustedHtml:
         '<p class="companion-meta"><strong>Checkpoint:</strong> Verify blocker copy.</p>',
+      nextSafeActionSummary: 'Open diagnostics and fix top error',
+      primaryNextActionTrustedHtml:
+        '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open Problems</button>',
       nextStepsListTrustedHtml: '<li>Run focused verify pass</li>',
       blockerTitle: 'Diagnostics <error>',
       blockerDetail: 'Fix warning "line 10".',
@@ -65,8 +74,10 @@ describe('renderResumeStackCard', () => {
 
     expect(html).toContain('Ship &lt;v0.6&gt; safely');
     expect(html).toContain('Mode: review &amp; tune');
+    expect(html).toContain('Open diagnostics and fix top error');
     expect(html).toContain('Diagnostics &lt;error&gt;');
     expect(html).toContain('data-action="restoreOpenProblems"');
+    expect(html).toContain('data-primary-next-safe-action="home"');
     expect(html).toContain('<li>Run focused verify pass</li>');
   });
 });
