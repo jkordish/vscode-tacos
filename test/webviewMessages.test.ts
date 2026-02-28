@@ -100,10 +100,39 @@ describe('parseWebviewMessage', () => {
       type: 'runNextStepAction',
       stepIndex: 1,
     });
+    expect(
+      parseWebviewMessage({
+        type: 'runNextStepAction',
+        stepIndex: 2,
+        primarySurface: 'home',
+      }),
+    ).toEqual({
+      type: 'runNextStepAction',
+      stepIndex: 2,
+      primarySurface: 'home',
+    });
+    expect(
+      parseWebviewMessage({
+        type: 'runNextStepAction',
+        stepIndex: 2,
+        primarySurface: 'recap',
+      }),
+    ).toEqual({
+      type: 'runNextStepAction',
+      stepIndex: 2,
+      primarySurface: 'recap',
+    });
     expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: -1 })).toBeUndefined();
     expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: 201 })).toBeUndefined();
     expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: 2.1 })).toBeUndefined();
     expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: '1' })).toBeUndefined();
+    expect(
+      parseWebviewMessage({
+        type: 'runNextStepAction',
+        stepIndex: 1,
+        primarySurface: 'elsewhere',
+      }),
+    ).toBeUndefined();
   });
 
   it('validates openEvidence payload shape', () => {

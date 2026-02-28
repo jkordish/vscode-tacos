@@ -57,6 +57,16 @@ async function run() {
           resumeFlow.primaryNextActionLabel.length > 0,
         'Expected primary next action label to be non-empty.',
       );
+      assert.equal(
+        resumeFlow?.hasHomePrimaryNextAction,
+        true,
+        'Expected primary next action CTA marker in Companion Home.',
+      );
+      assert.equal(
+        resumeFlow?.hasRecapPrimaryNextAction,
+        true,
+        'Expected Session Recap to mirror the primary next action target.',
+      );
     }
   }
 }
