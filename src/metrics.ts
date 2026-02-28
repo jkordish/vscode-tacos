@@ -136,8 +136,18 @@ export interface UxFrictionScoreBreakdown {
   components: UxFrictionScoreComponent[];
 }
 
-const UX_FRICTION_FORMULA =
-  'weighted mean of clamp01(firstActionLagMs_p50/5000), clamp01(companionForcedOpenRate), clamp01(midActivityShare), and clamp01(1-companionActionFollowThroughRate)';
+// Keep in sync with scripts/metrics-summary.mjs (UX_FRICTION_SCORE_CONFIG).
+const UX_FRICTION_SCORE_CONFIG = {
+  lagDenominatorMs: 5000,
+  weights: {
+    lagP50: 0.45,
+    forcedOpenRate: 0.25,
+    midActivityRate: 0.2,
+    followThroughGap: 0.1,
+  },
+  formula:
+    'weighted mean of clamp01(firstActionLagMs_p50/5000), clamp01(companionForcedOpenRate), clamp01(midActivityShare(boundary+mid-activity only)), and clamp01(1-companionActionFollowThroughRate)',
+} as const;
 
 export function deriveUxFrictionScore(input: UxFrictionScoreInput): UxFrictionScoreBreakdown {
   const lagP50 = finiteOrUndefined(input.firstActionLagP50);
@@ -154,28 +164,31 @@ export function deriveUxFrictionScore(input: UxFrictionScoreInput): UxFrictionSc
     {
       key: 'lagP50',
       label: 'firstActionLagMs p50 / 5000ms',
-      weight: 0.45,
+      weight: UX_FRICTION_SCORE_CONFIG.weights.lagP50,
       rawValue: lagP50,
-      normalizedValue: lagP50 !== undefined ? clamp01(lagP50 / 5000) : undefined,
+      normalizedValue:
+        lagP50 !== undefined
+          ? clamp01(lagP50 / UX_FRICTION_SCORE_CONFIG.lagDenominatorMs)
+          : undefined,
     },
     {
       key: 'forcedOpenRate',
       label: 'companionForcedOpenRate',
-      weight: 0.25,
+      weight: UX_FRICTION_SCORE_CONFIG.weights.forcedOpenRate,
       rawValue: forcedOpenRate,
       normalizedValue: forcedOpenRate !== undefined ? clamp01(forcedOpenRate) : undefined,
     },
     {
       key: 'midActivityRate',
-      label: 'mid-activity timing share',
-      weight: 0.2,
+      label: 'mid-activity timing share (boundary+mid-activity only)',
+      weight: UX_FRICTION_SCORE_CONFIG.weights.midActivityRate,
       rawValue: midActivityRate,
       normalizedValue: midActivityRate !== undefined ? clamp01(midActivityRate) : undefined,
     },
     {
       key: 'followThroughGap',
       label: '1 - companionActionFollowThroughRate',
-      weight: 0.1,
+      weight: UX_FRICTION_SCORE_CONFIG.weights.followThroughGap,
       rawValue: followThroughRate !== undefined ? 1 - clamp01(followThroughRate) : undefined,
       normalizedValue:
         followThroughRate !== undefined ? clamp01(1 - clamp01(followThroughRate)) : undefined,
@@ -226,7 +239,7 @@ export function deriveUxFrictionScore(input: UxFrictionScoreInput): UxFrictionSc
     interpretation,
     availableWeight,
     totalWeight,
-    formula: UX_FRICTION_FORMULA,
+    formula: UX_FRICTION_SCORE_CONFIG.formula,
     components,
   };
 }
@@ -326,16 +339,15 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const promptPerSession = sessions > 0 ? promptImpressions / sessions : undefined;
   const nudgePerSession = sessions > 0 ? nudgeImpressions / sessions : undefined;
   const timingClassCounts = summarizeTimingClassCounts(metrics);
-  const classifiedTimingSessions =
-    timingClassCounts.boundary + timingClassCounts['mid-activity'] + timingClassCounts.unknown;
+  const comparableTimingSessions = timingClassCounts.boundary + timingClassCounts['mid-activity'];
   const timingClassRate = (value: number): number | undefined =>
     sessions > 0 ? value / sessions : undefined;
-  const classifiedTimingRate = (value: number): number | undefined =>
-    classifiedTimingSessions > 0 ? value / classifiedTimingSessions : undefined;
+  const comparableTimingRate = (value: number): number | undefined =>
+    comparableTimingSessions > 0 ? value / comparableTimingSessions : undefined;
   const uxFriction = deriveUxFrictionScore({
     firstActionLagP50: lagAction.p50,
     forcedOpenRate,
-    midActivityRate: classifiedTimingRate(timingClassCounts['mid-activity']),
+    midActivityRate: comparableTimingRate(timingClassCounts['mid-activity']),
     followThroughRate,
   });
   const formatFrictionRawValue = (component: UxFrictionScoreComponent): string => {

@@ -265,11 +265,14 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| mid-activity | 1 | 0.3333 |');
     expect(markdown).toContain('| unknown | 1 | 0.3333 |');
     expect(markdown).toContain('Derived UX friction score (lower is better):');
-    expect(markdown).toContain('- UX friction score (`0-100`): 49.17 (medium)');
+    expect(markdown).toContain('- UX friction score (`0-100`): 52.50 (medium)');
     expect(markdown).toContain(
       '| firstActionLagMs p50 / 5000ms | 2500 (2.5s) | 0.45 | 0.5000 | 22.50 |',
     );
     expect(markdown).toContain('| companionForcedOpenRate | 0.4000 | 0.25 | 0.4000 | 10.00 |');
+    expect(markdown).toContain(
+      '| mid-activity timing share (boundary+mid-activity only) | 0.5000 | 0.20 | 0.5000 | 10.00 |',
+    );
     expect(markdown).toContain(
       '| 1 - companionActionFollowThroughRate | 1.0000 | 0.10 | 1.0000 | 10.00 |',
     );

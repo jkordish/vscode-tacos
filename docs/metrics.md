@@ -113,7 +113,8 @@ Formula:
 - weighted mean of:
   - `clamp01(firstActionLagMs_p50 / 5000)`
   - `clamp01(companionForcedOpenRate)`
-  - `clamp01(midActivityShare)`
+  - `clamp01(midActivityShare(boundary+mid-activity only))`
+    - `midActivityShare` is computed over sessions classified as `boundary` or `mid-activity` (excluding `unknown` and unclassified rows)
   - `clamp01(1 - companionActionFollowThroughRate)`
 
 Default weights:

@@ -129,6 +129,19 @@ function summarizeTimingClassCounts(rows) {
   return counts;
 }
 
+// Keep in sync with src/metrics.ts (UX_FRICTION_SCORE_CONFIG).
+const UX_FRICTION_SCORE_CONFIG = {
+  lagDenominatorMs: 5000,
+  weights: {
+    lagP50: 0.45,
+    forcedOpenRate: 0.25,
+    midActivityRate: 0.2,
+    followThroughGap: 0.1,
+  },
+  formula:
+    'weighted mean of clamp01(firstActionLagMs_p50/5000), clamp01(companionForcedOpenRate), clamp01(midActivityShare(boundary+mid-activity only)), and clamp01(1-companionActionFollowThroughRate)',
+};
+
 function deriveUxFrictionScore({
   firstActionLagP50,
   forcedOpenRate,
@@ -138,27 +151,27 @@ function deriveUxFrictionScore({
   const components = [
     {
       label: 'firstActionLagMs p50 / 5000ms',
-      weight: 0.45,
+      weight: UX_FRICTION_SCORE_CONFIG.weights.lagP50,
       rawValue: firstActionLagP50,
       normalizedValue: Number.isFinite(firstActionLagP50)
-        ? clamp01(firstActionLagP50 / 5000)
+        ? clamp01(firstActionLagP50 / UX_FRICTION_SCORE_CONFIG.lagDenominatorMs)
         : undefined,
     },
     {
       label: 'companionForcedOpenRate',
-      weight: 0.25,
+      weight: UX_FRICTION_SCORE_CONFIG.weights.forcedOpenRate,
       rawValue: forcedOpenRate,
       normalizedValue: Number.isFinite(forcedOpenRate) ? clamp01(forcedOpenRate) : undefined,
     },
     {
-      label: 'mid-activity timing share',
-      weight: 0.2,
+      label: 'mid-activity timing share (boundary+mid-activity only)',
+      weight: UX_FRICTION_SCORE_CONFIG.weights.midActivityRate,
       rawValue: midActivityRate,
       normalizedValue: Number.isFinite(midActivityRate) ? clamp01(midActivityRate) : undefined,
     },
     {
       label: '1 - companionActionFollowThroughRate',
-      weight: 0.1,
+      weight: UX_FRICTION_SCORE_CONFIG.weights.followThroughGap,
       rawValue: Number.isFinite(followThroughRate) ? 1 - clamp01(followThroughRate) : undefined,
       normalizedValue: Number.isFinite(followThroughRate)
         ? clamp01(1 - clamp01(followThroughRate))
@@ -200,8 +213,7 @@ function deriveUxFrictionScore({
     interpretation,
     availableWeight,
     totalWeight,
-    formula:
-      'weighted mean of clamp01(firstActionLagMs_p50/5000), clamp01(companionForcedOpenRate), clamp01(midActivityShare), and clamp01(1-companionActionFollowThroughRate)',
+    formula: UX_FRICTION_SCORE_CONFIG.formula,
     components,
   };
 }
@@ -276,15 +288,14 @@ function main() {
   const dogfoodingGateMet = rows.length >= 30 && workspaceCount >= 3;
   const timingClassCounts = summarizeTimingClassCounts(rows);
   const timingClassRate = (value) => (rows.length > 0 ? value / rows.length : undefined);
-  const classifiedTimingSessions =
-    timingClassCounts.boundary + timingClassCounts['mid-activity'] + timingClassCounts.unknown;
-  const classifiedTimingRate = (value) =>
-    classifiedTimingSessions > 0 ? value / classifiedTimingSessions : undefined;
+  const comparableTimingSessions = timingClassCounts.boundary + timingClassCounts['mid-activity'];
+  const comparableTimingRate = (value) =>
+    comparableTimingSessions > 0 ? value / comparableTimingSessions : undefined;
   const firstActionLagP50 = lagMetrics.find((metric) => metric.field === 'firstActionLagMs')?.p50;
   const uxFriction = deriveUxFrictionScore({
     firstActionLagP50,
     forcedOpenRate,
-    midActivityRate: classifiedTimingRate(timingClassCounts['mid-activity']),
+    midActivityRate: comparableTimingRate(timingClassCounts['mid-activity']),
     followThroughRate,
   });
   const formatUxRaw = (component) => {
