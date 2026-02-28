@@ -17,8 +17,11 @@ export interface RenderResumeStackCardInput {
   primaryNextActionTrustedHtml?: TrustedHtml;
   nextStepRationaleTrustedHtml?: TrustedHtml;
   nextStepsListTrustedHtml: TrustedHtml;
+  hasBlocker: boolean;
   blockerTitle: string;
   blockerDetail: string;
+  blockerMetaTrustedHtml?: TrustedHtml;
+  blockerDisabledReasonTrustedHtml?: TrustedHtml;
   blockerActionTrustedHtml?: TrustedHtml;
   restoreSectionsTrustedHtml: TrustedHtml;
 }
@@ -60,10 +63,12 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
             <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
           </div>
         </section>
-        <section class="companion-block">
+        <section class="companion-block" data-blocked-card="${input.hasBlocker ? 'active' : 'none'}">
           <h4>Blocked</h4>
           <p class="companion-primary">${escapeHtml(input.blockerTitle)}</p>
           <p class="muted">${escapeHtml(input.blockerDetail)}</p>
+          ${input.blockerMetaTrustedHtml ?? ''}
+          ${input.blockerDisabledReasonTrustedHtml ?? ''}
           ${input.blockerActionTrustedHtml ?? ''}
         </section>
         <section class="companion-block">

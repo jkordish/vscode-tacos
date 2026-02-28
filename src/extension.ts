@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
 import { buildAiPayloadPreviewMarkdown } from './aiPayloadPreview';
+import { decidePrimaryBlocker } from './blockerModel';
 import {
   applyCompanionNudgeFeedback,
   chooseCompanionNudges,
@@ -511,6 +512,10 @@ export function activate(context: vscode.ExtensionContext): void {
         Boolean(candidate),
       );
       const panelHtml = state.panel?.webview.html ?? '';
+      const hasPrimaryBlockerAction = panelHtml.includes('data-blocker-primary-action="true"');
+      const hasDisabledPrimaryBlockerAction =
+        /data-blocker-primary-action="true"[^>]*disabled/u.test(panelHtml);
+      const hasActiveBlockedCard = panelHtml.includes('data-blocked-card="active"');
 
       return {
         hasPanelSummary: Boolean(state.panelSummary),
@@ -526,6 +531,9 @@ export function activate(context: vscode.ExtensionContext): void {
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
         hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
         hasLastActionCue: panelHtml.includes('data-last-action-cue="true"'),
+        hasActiveBlockedCard,
+        hasPrimaryBlockerAction,
+        hasDisabledPrimaryBlockerAction,
         hasRestoreWorkingSetAction: panelHtml.includes('data-action="restoreWorkingSet"'),
         hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
       };
@@ -3746,88 +3754,53 @@ function renderWebview(
     Boolean(summary.currentBranch) &&
     Boolean(summary.previousBranch) &&
     summary.currentBranch !== summary.previousBranch;
-
-  let blockerTitle = 'No active blocker';
-  let blockerDetail = 'Continue with the first suggested next step.';
-  let blockerActionLabel: string | undefined;
-  let blockerAction: string | undefined;
-  let blockerActionDisabled = false;
-
-  if (!trusted) {
-    blockerTitle = 'Workspace is in Restricted Mode';
-    blockerDetail =
-      'Task/debug reruns and branch checkout are disabled until workspace trust is granted.';
-  } else if (summary.lowConfidence && !currentCheckpointNote) {
-    blockerTitle = 'Low-confidence resume context';
-    blockerDetail = 'Evidence is sparse. Add a one-line checkpoint before taking risky actions.';
-    blockerActionLabel = 'Add checkpoint';
-    blockerAction = 'sessionAddCheckpoint';
-  } else if (hasFailingTask) {
-    if (summary.longGap) {
-      blockerTitle = 'Reorient after a long gap';
-      blockerDetail = `${state.lastTaskName} exited with code ${state.lastTaskExitCode}. Review context before rerunning.`;
-      if (availability.canCopyFailingCommand) {
-        blockerActionLabel = 'Copy failing command';
-        blockerAction = 'restoreCopyFailingCommand';
-      } else if (canOpenProblems) {
-        blockerActionLabel = 'Open Problems';
-        blockerAction = 'restoreOpenProblems';
-        blockerActionDisabled = !canOpenProblems;
-      }
-    } else {
-      blockerTitle = 'Last task failed';
-      blockerDetail = `${state.lastTaskName} exited with code ${state.lastTaskExitCode}.`;
-      blockerActionLabel = 'Rerun last task';
-      blockerAction = 'restoreRerunTask';
-      blockerActionDisabled = !availability.canRerunTask;
-    }
-  } else if (summary.lastFailingCommand) {
-    if (summary.longGap) {
-      blockerTitle = 'Reorient after a long gap';
-      blockerDetail = `${summary.lastFailingCommand} Review context before rerunning.`;
-      if (availability.canCopyFailingCommand) {
-        blockerActionLabel = 'Copy failing command';
-        blockerAction = 'restoreCopyFailingCommand';
-      } else if (canOpenProblems) {
-        blockerActionLabel = 'Open Problems';
-        blockerAction = 'restoreOpenProblems';
-        blockerActionDisabled = !canOpenProblems;
-      }
-    } else {
-      blockerTitle = 'Last command failed';
-      blockerDetail = summary.lastFailingCommand;
-      if (availability.canRerunTask) {
-        blockerActionLabel = 'Rerun last task';
-        blockerAction = 'restoreRerunTask';
-      } else if (availability.canCopyFailingCommand) {
-        blockerActionLabel = 'Copy failing command';
-        blockerAction = 'restoreCopyFailingCommand';
-      }
-    }
-  } else if (diagnostics.errorCount > 0) {
-    blockerTitle = 'Diagnostics need attention';
-    blockerDetail = diagnostics.top
-      ? `${diagnostics.errorCount} error(s). First at ${diagnostics.top.path}:${diagnostics.top.line + 1}.`
-      : `${diagnostics.errorCount} error(s) in Problems view.`;
-    blockerActionLabel = diagnostics.top ? 'Open diagnostic file' : 'Open Problems';
-    blockerAction = diagnostics.top ? 'restoreOpenDiagnosticFile' : 'restoreOpenProblems';
-    blockerActionDisabled = diagnostics.top ? !canOpenDiagnosticFile : !canOpenProblems;
-  } else if (switchedBranches) {
-    blockerTitle = 'Branch context changed';
-    blockerDetail = `You moved from ${summary.previousBranch} to ${summary.currentBranch}.`;
-    blockerActionLabel = 'Checkout previous branch';
-    blockerAction = 'restoreCheckoutPreviousBranch';
-    blockerActionDisabled = !availability.canCheckoutPreviousBranch;
-  } else if (summary.nextSteps.length === 0) {
-    blockerTitle = 'No next steps available';
-    blockerDetail = 'Refresh summary to regenerate guidance.';
-    blockerActionLabel = 'Refresh summary';
-    blockerAction = 'refreshSummary';
-  }
-
-  const blockerActionHtml =
-    blockerAction && blockerActionLabel
-      ? `<button type="button" class="secondary" data-action="${escapeHtml(blockerAction)}" ${blockerActionDisabled ? 'disabled aria-disabled="true"' : ''}>${escapeHtml(blockerActionLabel)}</button>`
+  const blockerDecision = decidePrimaryBlocker({
+    trusted,
+    longGap: Boolean(summary.longGap),
+    lowConfidence: Boolean(summary.lowConfidence),
+    hasCheckpointNote: Boolean(currentCheckpointNote),
+    hasFailingTask,
+    lastTaskName: state.lastTaskName,
+    lastTaskExitCode: state.lastTaskExitCode,
+    lastFailingCommand: summary.lastFailingCommand,
+    diagnosticsErrorCount: diagnostics.errorCount,
+    diagnosticsTopPath: diagnostics.top?.path,
+    diagnosticsTopLine: diagnostics.top?.line,
+    switchedBranches,
+    currentBranch: summary.currentBranch,
+    previousBranch: summary.previousBranch,
+    hasNextSteps: summary.nextSteps.length > 0,
+    canOpenProblems,
+    canOpenDiagnosticFile,
+    availability,
+  });
+  const blockerTitle = blockerDecision.title;
+  const blockerDetail = blockerDecision.detail;
+  const blockerAction = blockerDecision.action;
+  const blockerActionDisabledAttr = blockerAction?.disabled ? 'disabled aria-disabled="true"' : '';
+  const blockerActionHtml = blockerAction
+    ? `<button type="button" class="secondary" data-blocker-primary-action="true" data-action="${escapeHtml(
+        blockerAction.type,
+      )}" ${blockerActionDisabledAttr}>${escapeHtml(blockerAction.label)}</button>`
+    : '';
+  const blockerMetaBadges = blockerDecision.hasBlocker
+    ? [
+        blockerDecision.evidenceLabel
+          ? `<span class="badge">Evidence: ${escapeHtml(blockerDecision.evidenceLabel)}</span>`
+          : '',
+        blockerDecision.confidenceLabel
+          ? `<span class="badge">Confidence: ${escapeHtml(blockerDecision.confidenceLabel)}</span>`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('')
+    : '';
+  const blockerMetaHtml = blockerMetaBadges
+    ? `<div class="step-evidence">${blockerMetaBadges}</div>`
+    : '';
+  const blockerDisabledReasonHtml =
+    blockerDecision.hasBlocker && blockerAction?.disabled && blockerAction.disabledReason
+      ? `<p class="muted blocker-disabled-reason">Unavailable: ${escapeHtml(blockerAction.disabledReason)}</p>`
       : '';
 
   const restoreActionButtons = {
@@ -4236,6 +4209,9 @@ function renderWebview(
       .muted {
         color: var(--surface-muted);
       }
+      .blocker-disabled-reason {
+        margin-top: 8px;
+      }
       .restore-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
@@ -4435,8 +4411,11 @@ function renderWebview(
       primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
       nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
       nextStepsListTrustedHtml: companionNextSteps,
+      hasBlocker: blockerDecision.hasBlocker,
       blockerTitle,
       blockerDetail,
+      blockerMetaTrustedHtml: blockerMetaHtml,
+      blockerDisabledReasonTrustedHtml: blockerDisabledReasonHtml,
       blockerActionTrustedHtml: blockerActionHtml,
       restoreSectionsTrustedHtml: companionRestoreSections,
     })}
