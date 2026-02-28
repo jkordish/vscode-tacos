@@ -128,6 +128,8 @@ const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
 const CHECKPOINT_PROMPT_COOLDOWN_MINUTES = 45;
 const FOCUS_TRIGGER_DEBOUNCE_MS = 1200;
+const INTERRUPTION_TIMING_BOUNDARY_WINDOW_MS = 90_000;
+const INTERRUPTION_TIMING_MID_ACTIVITY_WINDOW_MS = 15_000;
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const CHECKPOINT_WORKSPACE_GLOBAL_SCOPE = 'workspace-global';
 const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
@@ -213,6 +215,8 @@ interface RuntimeState {
   activeRefinementContextHash?: string;
   autoSummaryInFlight: boolean;
   lastAutoFocusTriggerAt: number;
+  lastBoundarySignalAt: number;
+  lastMeaningfulActivityAt: number;
   meaningfulActivitySinceCheckpointPrompt: boolean;
   pauseUntilRestart: boolean;
   snoozeUntil: number;
@@ -329,6 +333,8 @@ export function activate(context: vscode.ExtensionContext): void {
     activeRefinementContextHash: undefined,
     autoSummaryInFlight: false,
     lastAutoFocusTriggerAt: 0,
+    lastBoundarySignalAt: 0,
+    lastMeaningfulActivityAt: 0,
     meaningfulActivitySinceCheckpointPrompt: false,
     pauseUntilRestart: false,
     snoozeUntil: context.workspaceState.get<number>(KEY_SUMMARY_SNOOZE_UNTIL, 0),
@@ -823,6 +829,14 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.debug.onDidTerminateDebugSession(async () => {
+      markBoundarySignal();
+      markMeaningfulActivity();
+      await persistActivity(context);
+    }),
+  );
+
+  context.subscriptions.push(
     vscode.tasks.onDidStartTaskProcess((event) => {
       const task = event.execution.task;
       recordFirstActionLag();
@@ -843,6 +857,7 @@ export function activate(context: vscode.ExtensionContext): void {
         state.lastTaskEndedAt = Date.now();
       }
 
+      markBoundarySignal();
       markMeaningfulActivity();
       await persistTaskMetadata(context);
       rerenderPanel();
@@ -1143,12 +1158,17 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       workspaceRoot,
       config.redactionPatterns,
     );
+    const testOrBuildCommand = isTestOrBuildCommand(command);
+    if (typeof exitCode === 'number' && testOrBuildCommand) {
+      markBoundarySignal();
+      markMeaningfulActivity();
+    }
 
     if (
       config.includeTerminalHistory &&
       typeof exitCode === 'number' &&
       exitCode !== 0 &&
-      isTestOrBuildCommand(command)
+      testOrBuildCommand
     ) {
       state.lastFailingCommandRaw = command;
       state.lastFailingCommand = sanitizedCommand;
@@ -1159,7 +1179,7 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       config.includeTerminalHistory &&
       typeof exitCode === 'number' &&
       exitCode === 0 &&
-      isTestOrBuildCommand(command)
+      testOrBuildCommand
     ) {
       state.doneItems.push(sanitizedCommand);
 
@@ -1599,8 +1619,12 @@ async function presentSummary(
       trigger: triggerReason,
       uiSurface: config.uiSurface,
       interruptionEvent: triggerReason === 'focus' && config.uiSurface === 'notification' ? 1 : 0,
+      interruptionTimingClass: classifyInterruptionTiming(triggerReason),
       resumeWithNote: options.checkpointPrimaryNote ? 1 : 0,
     };
+    if (summary.nextSteps[0]) {
+      recordCompanionPrimaryCtaImpression();
+    }
   }
 
   const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
@@ -1759,6 +1783,31 @@ function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeM
   return 'active';
 }
 
+function classifyInterruptionTiming(
+  triggerReason: TriggerReason,
+): 'boundary' | 'mid-activity' | 'unknown' {
+  if (triggerReason !== 'focus') {
+    return 'unknown';
+  }
+
+  const now = Date.now();
+  if (
+    state.lastBoundarySignalAt > 0 &&
+    now - state.lastBoundarySignalAt <= INTERRUPTION_TIMING_BOUNDARY_WINDOW_MS
+  ) {
+    return 'boundary';
+  }
+
+  if (
+    state.lastMeaningfulActivityAt > 0 &&
+    now - state.lastMeaningfulActivityAt <= INTERRUPTION_TIMING_MID_ACTIVITY_WINDOW_MS
+  ) {
+    return 'mid-activity';
+  }
+
+  return 'unknown';
+}
+
 function recordFirstActionLag(): void {
   if (!state.metricSession || state.metricSession.firstActionLagMs !== undefined) {
     return;
@@ -1812,6 +1861,34 @@ function recordCompanionNudgeImpression(): void {
 
   state.metricSession.companionNudgeImpressions =
     (state.metricSession.companionNudgeImpressions ?? 0) + 1;
+}
+
+function recordCompanionPrimaryCtaImpression(): void {
+  if (!state.metricSession) {
+    return;
+  }
+
+  state.metricSession.companionPrimaryCtaImpressions =
+    (state.metricSession.companionPrimaryCtaImpressions ?? 0) + 1;
+}
+
+function recordCompanionPrimaryCtaClick(): void {
+  if (!state.metricSession) {
+    return;
+  }
+
+  recordCompanionFirstActionLag();
+  state.metricSession.companionPrimaryCtaClicks =
+    (state.metricSession.companionPrimaryCtaClicks ?? 0) + 1;
+}
+
+function recordCompanionPrimaryCtaCompletion(): void {
+  if (!state.metricSession) {
+    return;
+  }
+
+  state.metricSession.companionPrimaryCtaCompletions =
+    (state.metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
 }
 
 function recordMetricCounter(
@@ -2454,7 +2531,18 @@ async function showDetailsPanel(
         }
 
         recordCompanionQuickAction();
-        await runNextStepAction(state.panelSummary, message.stepIndex, state.panelWorkspaceRoot);
+        const isPrimaryStep = message.stepIndex === 0;
+        if (isPrimaryStep) {
+          recordCompanionPrimaryCtaClick();
+        }
+        const completed = await runNextStepAction(
+          state.panelSummary,
+          message.stepIndex,
+          state.panelWorkspaceRoot,
+        );
+        if (isPrimaryStep && completed) {
+          recordCompanionPrimaryCtaCompletion();
+        }
         return;
       }
 
@@ -3830,7 +3918,12 @@ function renderStepEvidenceBadge(evidenceId: string, evidence?: SummaryEvidenceI
   return `<span class="badge">${escapeHtml(label)}</span>`;
 }
 
+function markBoundarySignal(): void {
+  state.lastBoundarySignalAt = Date.now();
+}
+
 function markMeaningfulActivity(): void {
+  state.lastMeaningfulActivityAt = Date.now();
   state.meaningfulActivitySinceCheckpointPrompt = true;
 }
 
@@ -4266,6 +4359,8 @@ async function applyTaskPartitionSwitch(
   state.doneItems = new RingBuffer(10, snapshot.sanitized.doneItems);
   state.lastFailingCommand = snapshot.sanitized.lastFailingCommand;
   state.lastFailingCommandRaw = undefined;
+  state.lastBoundarySignalAt = 0;
+  state.lastMeaningfulActivityAt = 0;
   state.scratchSummary = undefined;
   if (state.panel) {
     state.panel.dispose();
@@ -4592,10 +4687,10 @@ async function runNextStepAction(
   summary: ResumeSummary,
   stepIndex: number,
   preferredWorkspaceRoot?: string,
-): Promise<void> {
+): Promise<boolean> {
   if (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= summary.nextSteps.length) {
     void vscode.window.showWarningMessage('TaCoS blocked an invalid next-step action target.');
-    return;
+    return false;
   }
 
   const availability = computeRestoreAvailability({
@@ -4618,28 +4713,26 @@ async function runNextStepAction(
     void vscode.window.showInformationMessage(
       'TaCoS: this step has no verified clickable action yet. Use evidence links to continue.',
     );
-    return;
+    return false;
   }
 
   const evidence = (summary.evidenceCatalog ?? []).find((item) => item.id === action.evidenceId);
   if (!evidence) {
     void vscode.window.showWarningMessage('TaCoS blocked a stale next-step action.');
-    return;
+    return false;
   }
 
   if (action.kind === 'copyFailingCommand') {
     await copyFailingCommand();
-    return;
+    return true;
   }
 
   if (action.kind === 'rerunTask') {
-    await rerunLastTask();
-    return;
+    return rerunLastTask();
   }
 
   if (action.kind === 'rerunDebug') {
-    await rerunLastDebugSession();
-    return;
+    return rerunLastDebugSession();
   }
 
   if (action.kind === 'openFile') {
@@ -4648,28 +4741,31 @@ async function runNextStepAction(
       void vscode.window.showWarningMessage(
         'TaCoS blocked file action because no workspace root is available for validation.',
       );
-      return;
+      return false;
     }
 
     const safeTarget = resolveFileTargetInWorkspace(evidence.target ?? '', workspaceRoot);
     if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
       void vscode.window.showWarningMessage('TaCoS blocked an unsafe next-step file target.');
-      return;
+      return false;
     }
 
     await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(safeTarget));
-    return;
+    return true;
   }
 
   if (action.kind === 'openUrl') {
     const safeUrl = normalizeHttpUrl(evidence.target ?? '');
     if (!safeUrl) {
       void vscode.window.showWarningMessage('TaCoS blocked an unsafe next-step URL.');
-      return;
+      return false;
     }
 
     await vscode.env.openExternal(vscode.Uri.parse(safeUrl));
+    return true;
   }
+
+  return false;
 }
 
 function recentEditLocationsStorageKey(workspaceRoot: string): string {
@@ -6486,6 +6582,8 @@ function resetRuntimeWorkspaceState(): void {
   state.lastTerminalCwd = undefined;
   state.lastDebugConfigName = undefined;
   state.lastDebugWorkspaceRoot = undefined;
+  state.lastBoundarySignalAt = 0;
+  state.lastMeaningfulActivityAt = 0;
   state.snoozeUntil = 0;
   state.panelCheckpointNotes = [];
   state.panelPrimaryCheckpointNote = undefined;

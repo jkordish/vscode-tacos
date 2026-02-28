@@ -19,6 +19,8 @@ TaCoS metrics are local-only. No telemetry upload or external analytics pipeline
 The copied snapshot includes:
 - lag p50/p95 for `firstMeaningfulEditLagMs`, `firstRunLagMs`, and `firstActionLagMs`
 - prompt/nudge/forced-open totals and rates
+- primary CTA impression/click/completion totals and rates
+- interruption timing class breakdown (`boundary`, `mid-activity`, `unknown`)
 - dogfooding gate status (`>=30` sessions and `>=3` workspaces)
 
 The snapshot is aggregate-only and excludes raw workspace paths.
@@ -34,6 +36,7 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `trigger` | enum | Summary trigger (`focus`, `manual`, `cached`). |
 | `uiSurface` | enum | UI surface mode (`statusbar`, `notification`, `silent`). |
 | `interruptionEvent` | integer | `1` when focus-triggered summary used notification prompt mode, else `0`/empty. |
+| `interruptionTimingClass` | enum | Focus-return timing class: `boundary`, `mid-activity`, or `unknown`. |
 | `firstMeaningfulEditLagMs` | integer | Milliseconds from session start to first meaningful edit. |
 | `firstRunLagMs` | integer | Milliseconds from session start to first run/test/debug action. |
 | `firstActionLagMs` | integer | Milliseconds from session start to first meaningful action of any tracked type. |
@@ -42,6 +45,9 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `companionForcedOpenDetailsClicks` | integer | Number of "Open details" forced-open clicks from prompt mode. |
 | `companionQuickActionsTaken` | integer | Number of prompt-mode quick actions taken (copy/pause/open flows). |
 | `companionNudgeImpressions` | integer | Number of accepted companion nudge impressions in session. |
+| `companionPrimaryCtaImpressions` | integer | Number of sessions where TaCoS rendered a primary next-action CTA. |
+| `companionPrimaryCtaClicks` | integer | Number of primary CTA clicks taken by the user. |
+| `companionPrimaryCtaCompletions` | integer | Number of primary CTA attempts that completed successfully. |
 | `helpfulnessRating` | integer | Optional local rating (`1`-`5`) from `TaCoS: Rate Summary Helpfulness`. |
 | `pauseActions` | integer | Count of pause actions taken during session. |
 | `snoozeActions` | integer | Count of snooze actions taken during session. |
@@ -49,6 +55,7 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `noteCreated` | integer | Count of checkpoint notes created during session. |
 | `noteMarkedDone` | integer | Count of checkpoint notes marked done during session. |
 | `notePinned` | integer | Count of checkpoint notes pinned during session. |
+| `resumePathCompletions` | integer | Count of completed resume-path checklist steps (when feature is enabled). |
 | `resumeWithNote` | integer | `1` if an open checkpoint note was present in the resume context, else `0`. |
 | `scratchpadOpened` | integer | Count of `TaCoS: Open Scratchpad` actions during session. |
 | `scratchpadAppended` | integer | Count of `TaCoS: Append to Scratchpad` actions during session. |
@@ -58,6 +65,8 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `aiSendAllowedAfterReviewTotal` | integer | Count of AI sends explicitly approved after payload review. |
 | `companionActionFollowThroughRate` | ratio | Derived as `companionQuickActionsTaken / companionPromptImpressions`. |
 | `companionForcedOpenRate` | ratio | Derived as `companionForcedOpenDetailsClicks / companionPromptImpressions`. |
+| `companionPrimaryCtaClickThroughRate` | ratio | Derived as `companionPrimaryCtaClicks / companionPrimaryCtaImpressions`. |
+| `companionPrimaryCtaCompletionRate` | ratio | Derived as `companionPrimaryCtaCompletions / companionPrimaryCtaClicks`. |
 
 ## Epic #72 Key Fields
 
@@ -69,9 +78,14 @@ Track these explicitly for stabilization/adoption gating:
 - `companionPromptImpressions`
 - `companionForcedOpenDetailsClicks`
 - `companionNudgeImpressions`
+- `companionPrimaryCtaImpressions`
+- `companionPrimaryCtaClicks`
+- `companionPrimaryCtaCompletions`
+- `interruptionTimingClass`
 - `noteCreated`
 - `noteMarkedDone`
 - `notePinned`
+- `resumePathCompletions`
 - `resumeWithNote`
 - `scratchpadOpened`
 - `scratchpadAppended`
