@@ -9,6 +9,12 @@ import type {
   SummaryLink,
 } from './types';
 
+export interface BuildResumeSummaryOptions {
+  longGapMinutes?: number;
+}
+
+const DEFAULT_LONG_GAP_MINUTES = 30;
+
 function dedupe(values: string[], limit: number): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -41,7 +47,15 @@ function stableStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function hashSignals(signals: ResumeSignals): string {
+function hashSignals(
+  signals: ResumeSignals,
+  options: Required<Pick<BuildResumeSummaryOptions, 'longGapMinutes'>>,
+): string {
+  const normalizedResumeGapMinutes = normalizeResumeGapMinutes(signals.resumeGapMinutes);
+  const longGap = isLongGapResume(normalizedResumeGapMinutes, options.longGapMinutes);
+  const resumeGapState =
+    typeof normalizedResumeGapMinutes === 'number' ? (longGap ? 'long-gap' : 'recent') : 'unknown';
+
   const payload = {
     branch: signals.branch,
     changedFiles: signals.changedFiles,
@@ -59,6 +73,8 @@ function hashSignals(signals: ResumeSignals): string {
     lastEditPath: signals.lastEditPath,
     lastEditLine: signals.lastEditLine,
     lastEditCharacter: signals.lastEditCharacter,
+    resumeGapState,
+    longGapMinutes: options.longGapMinutes,
   };
 
   return createHash('sha256').update(stableStringify(payload)).digest('hex');
@@ -514,9 +530,38 @@ function inferEvidenceKindPreference(stepText: string): SummaryEvidenceKind[] {
   return ['file', 'url', 'terminal', 'task', 'debug', 'git', 'branch', 'commit'];
 }
 
-function buildCandidateIntents(signals: ResumeSignals, topFiles: string[]): string[] {
+function normalizeResumeGapMinutes(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value) || (value ?? 0) <= 0) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.floor(value ?? 0));
+}
+
+function resolveLongGapThresholdMinutes(value: number | undefined): number {
+  if (!Number.isFinite(value) || (value ?? 0) <= 0) {
+    return DEFAULT_LONG_GAP_MINUTES;
+  }
+
+  return Math.max(5, Math.floor(value ?? DEFAULT_LONG_GAP_MINUTES));
+}
+
+function isLongGapResume(resumeGapMinutes: number | undefined, longGapMinutes: number): boolean {
+  if (typeof resumeGapMinutes !== 'number') {
+    return false;
+  }
+
+  return resumeGapMinutes >= longGapMinutes;
+}
+
+function buildCandidateIntents(
+  signals: ResumeSignals,
+  topFiles: string[],
+  longGap: boolean,
+): string[] {
   const candidates = dedupe(
     [
+      longGap ? 'Reorient from your last action before running commands.' : '',
       topFiles[0] ? `Continue edits around ${topFiles[0]}.` : '',
       signals.branch ? `Continue work on branch ${signals.branch}.` : '',
       signals.recentDebug[0] ? `Resume debugging flow from ${signals.recentDebug[0]}.` : '',
@@ -548,6 +593,33 @@ function buildLowConfidenceNextSteps(topFiles: string[]): string[] {
     focusTarget,
     'Run one focused test/build step to rebuild context and confidence.',
   ];
+}
+
+function buildLongGapNextSteps(
+  signals: ResumeSignals,
+  topFiles: string[],
+  lowConfidence: boolean,
+): string[] {
+  const lastEditPath = signals.lastEditPath?.trim() ?? '';
+  const lineSuffix =
+    typeof signals.lastEditLine === 'number' && Number.isInteger(signals.lastEditLine)
+      ? `:${signals.lastEditLine + 1}`
+      : '';
+  const retrievalStep = lastEditPath
+    ? `Open your last edit at ${lastEditPath}${lineSuffix} and scan unfinished context before running commands.`
+    : topFiles[0]
+      ? `Open ${topFiles[0]} and review the pending change path before executing anything.`
+      : 'Open your most recent file and reorient on intent before executing anything.';
+
+  const safeStarter = signals.failingCommand
+    ? `Copy the failing command for review before rerunning: ${signals.failingCommand}`
+    : 'Open Problems and confirm blockers before executing commands.';
+
+  const checkpointStep = lowConfidence
+    ? 'Add a one-line checkpoint note with your next safe action.'
+    : 'Optional: add a one-line checkpoint note for your next return.';
+
+  return dedupe([retrievalStep, safeStarter, checkpointStep], 3).slice(0, 3);
 }
 
 interface LastActionCue {
@@ -638,17 +710,25 @@ function buildLastActionCue(
   };
 }
 
-export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
+export function buildResumeSummary(
+  signals: ResumeSignals,
+  options: BuildResumeSummaryOptions = {},
+): ResumeSummary {
+  const longGapMinutes = resolveLongGapThresholdMinutes(options.longGapMinutes);
+  const resumeGapMinutes = normalizeResumeGapMinutes(signals.resumeGapMinutes);
+  const longGap = isLongGapResume(resumeGapMinutes, longGapMinutes);
   const topFiles = dedupe(
     [...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles],
     3,
   );
   const recentFilesSnapshot = dedupe([...signals.openFiles, ...signals.recentFiles], 10);
   const lowConfidence = isLowConfidenceSummary(signals, topFiles);
-  const candidateIntents = buildCandidateIntents(signals, topFiles);
-  const nextSteps = lowConfidence
-    ? buildLowConfidenceNextSteps(topFiles)
-    : buildNextSteps(signals, topFiles).slice(0, 3);
+  const candidateIntents = buildCandidateIntents(signals, topFiles, longGap);
+  const nextSteps = longGap
+    ? buildLongGapNextSteps(signals, topFiles, lowConfidence)
+    : lowConfidence
+      ? buildLowConfidenceNextSteps(topFiles)
+      : buildNextSteps(signals, topFiles).slice(0, 3);
   const doneSinceLastResume = buildDoneSinceLastResume(signals);
   const changesSinceLastResume = buildChangesSinceLastResume(signals, topFiles);
   const pendingBlocked = buildPendingBlocked(signals, topFiles);
@@ -667,10 +747,26 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
       })
     : ['- None captured'];
 
-  const intent = lowConfidence ? 'Unclear intent (low evidence).' : buildIntent(signals, topFiles);
+  const intent = longGap
+    ? 'Welcome back — reorient before executing risky actions.'
+    : lowConfidence
+      ? 'Unclear intent (low evidence).'
+      : buildIntent(signals, topFiles);
   const detailsSections = [
     '## Intent',
     `- ${intent}`,
+    ...(longGap
+      ? [
+          '',
+          '## Reorientation',
+          ...(typeof resumeGapMinutes === 'number'
+            ? [
+                `- Long gap detected: about ${resumeGapMinutes} minute${resumeGapMinutes === 1 ? '' : 's'} since last captured activity.`,
+              ]
+            : []),
+          '- Start with retrieval cues and a safe action before reruns.',
+        ]
+      : []),
     ...(lowConfidence
       ? [
           '',
@@ -760,6 +856,8 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     pendingBlocked,
     recommendedFirstAction,
     lowConfidence,
+    longGap,
+    resumeGapMinutes,
     candidateIntents,
     mode,
     currentBranch: signals.branch || undefined,
@@ -770,7 +868,7 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     evidenceCatalog,
     detailsMarkdown,
     codexPrompt,
-    contextHash: hashSignals(signals),
+    contextHash: hashSignals(signals, { longGapMinutes }),
     generatedAt: Date.now(),
     source: 'local',
   };

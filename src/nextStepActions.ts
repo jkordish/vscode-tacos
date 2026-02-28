@@ -111,6 +111,8 @@ function toAction(
   stepIndex: number,
   input: BuildNextStepActionsInput,
 ): NextStepAction | undefined {
+  const allowExecutionActions = !input.summary.longGap;
+
   if (evidence.kind === 'file' && hasTarget(evidence)) {
     return {
       stepIndex,
@@ -138,7 +140,7 @@ function toAction(
         evidenceId,
       };
     }
-    if (input.canRerunTask) {
+    if (allowExecutionActions && input.canRerunTask) {
       return {
         stepIndex,
         kind: 'rerunTask',
@@ -149,7 +151,7 @@ function toAction(
     return undefined;
   }
 
-  if (evidence.kind === 'task' && input.canRerunTask) {
+  if (evidence.kind === 'task' && allowExecutionActions && input.canRerunTask) {
     return {
       stepIndex,
       kind: 'rerunTask',
@@ -158,7 +160,7 @@ function toAction(
     };
   }
 
-  if (evidence.kind === 'debug' && input.canRerunDebug) {
+  if (evidence.kind === 'debug' && allowExecutionActions && input.canRerunDebug) {
     return {
       stepIndex,
       kind: 'rerunDebug',

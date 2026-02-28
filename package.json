@@ -295,6 +295,12 @@
           "minimum": 1,
           "description": "Minimum idle minutes before auto summary may trigger."
         },
+        "tacos.longGapMinutes": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "description": "Threshold in minutes for long-gap reorientation mode, which prioritizes retrieval cues and safe first actions."
+        },
         "tacos.cooldownMinutes": {
           "type": "number",
           "default": 5,
