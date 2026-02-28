@@ -165,7 +165,7 @@ export function renderEvidenceCard(input: EvidenceCardInput): string {
           }</ul>
           ${
             hasExtraEvidence
-              ? `<button type="button" class="show-more-btn" data-action="toggleEvidenceMore" data-hidden-count="${input.hiddenEvidenceCount}" aria-expanded="false">${escapeHtml(showMoreLabel)}</button>`
+              ? `<button type="button" class="show-more-btn" data-action="toggleEvidenceMore" data-hidden-count="${input.hiddenEvidenceCount}" aria-controls="evidence-list" aria-expanded="false">${escapeHtml(showMoreLabel)}</button>`
               : ''
           }
         </div>
