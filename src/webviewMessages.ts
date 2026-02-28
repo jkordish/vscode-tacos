@@ -1,3 +1,5 @@
+import { normalizeIntentOverrideText } from './intentOverride';
+
 const SIMPLE_MESSAGE_TYPES = [
   'fixSummary',
   'checkpointPinToggle',
@@ -142,11 +144,7 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
   }
 
   if (raw.type === 'setIntentOverride') {
-    if (typeof raw.intent !== 'string') {
-      return undefined;
-    }
-
-    const intent = raw.intent.replace(/\r?\n/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, 280);
+    const intent = normalizeIntentOverrideText(raw.intent);
     if (!intent) {
       return undefined;
     }

@@ -60,6 +60,30 @@ async function run() {
     overrideIntent,
     'Expected second partition summary intent to not inherit first partition override.',
   );
+  const inferredIntentB = flowB?.summaryIntent;
+  assert.ok(
+    typeof inferredIntentB === 'string' && inferredIntentB.length > 0,
+    'Expected inferred intent text to be available in second partition.',
+  );
+
+  const sameAsInferred = await vscode.commands.executeCommand(
+    'tacos.__test.setIntentOverride',
+    inferredIntentB,
+  );
+  assert.equal(
+    sameAsInferred,
+    null,
+    'Expected saving intent equal to inferred value to clear override storage.',
+  );
+
+  const flowBAfterSameIntent = await vscode.commands.executeCommand(
+    'tacos.__test.getResumeFlowSnapshot',
+  );
+  assert.equal(
+    flowBAfterSameIntent?.intentOverridden,
+    false,
+    'Expected intentOverridden to remain false when override matches inferred intent.',
+  );
 
   const snapshotB = await vscode.commands.executeCommand('tacos.__test.getIntentOverrideSnapshot');
   assert.ok(snapshotB, 'Expected intent override snapshot for second partition.');

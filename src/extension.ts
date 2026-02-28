@@ -98,6 +98,7 @@ import {
 import {
   buildIntentOverrideStorageKey,
   createIntentOverrideState,
+  MAX_INTENT_OVERRIDE_CHARS,
   normalizeIntentOverrideState,
   normalizeIntentOverrideText,
 } from './intentOverride';
@@ -4839,6 +4840,20 @@ function renderWebview(
         return parsed;
       }
 
+      const maxIntentOverrideChars = ${MAX_INTENT_OVERRIDE_CHARS};
+      function normalizeIntentOverrideInput(rawValue) {
+        if (typeof rawValue !== 'string') {
+          return undefined;
+        }
+
+        const normalized = rawValue
+          .replace(/\\r?\\n/g, ' ')
+          .replace(/\\s+/g, ' ')
+          .trim()
+          .slice(0, maxIntentOverrideChars);
+        return normalized || undefined;
+      }
+
       document.addEventListener('change', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) {
@@ -4880,11 +4895,7 @@ function renderWebview(
         }
 
         event.preventDefault();
-        const intent = event.target.value
-          .replace(/\\r?\\n/g, ' ')
-          .replace(/\\s+/g, ' ')
-          .trim()
-          .slice(0, 280);
+        const intent = normalizeIntentOverrideInput(event.target.value);
         if (!intent) {
           return;
         }
@@ -4968,15 +4979,10 @@ function renderWebview(
           if (action === 'setIntentOverride') {
             const input = document.getElementById('intent-override-input');
             if (!(input instanceof HTMLInputElement)) {
-              vscode.postMessage({ type: 'blockedLink' });
               return;
             }
 
-            const intent = input.value
-              .replace(/\\r?\\n/g, ' ')
-              .replace(/\\s+/g, ' ')
-              .trim()
-              .slice(0, 280);
+            const intent = normalizeIntentOverrideInput(input.value);
             if (!intent) {
               input.focus();
               return;
@@ -7889,10 +7895,15 @@ async function persistIntentOverrideForContext(
   workspaceRoot: string,
   contextHash: string,
   rawIntent: unknown,
+  inferredIntentCandidate?: unknown,
 ): Promise<string | undefined> {
   const normalizedIntent = normalizeIntentOverrideText(rawIntent);
+  const normalizedInferredIntent = normalizeIntentOverrideText(inferredIntentCandidate);
   const storageKey = intentOverrideStorageKey(context, workspaceRoot);
-  if (!normalizedIntent) {
+  if (
+    !normalizedIntent ||
+    (normalizedInferredIntent && normalizedIntent === normalizedInferredIntent)
+  ) {
     await context.workspaceState.update(storageKey, undefined);
     return undefined;
   }
@@ -7908,11 +7919,19 @@ async function applyIntentOverrideToActiveContext(
   contextHash: string,
   rawIntent: unknown,
 ): Promise<string | undefined> {
+  const contextSummary =
+    state.panelSummary?.contextHash === contextHash
+      ? state.panelSummary
+      : state.scratchSummary?.contextHash === contextHash
+        ? state.scratchSummary
+        : undefined;
+  const inferredIntent = contextSummary?.inferredIntent ?? contextSummary?.intent;
   const persistedIntent = await persistIntentOverrideForContext(
     context,
     workspaceRoot,
     contextHash,
     rawIntent,
+    inferredIntent,
   );
 
   if (state.scratchSummary?.contextHash === contextHash) {
