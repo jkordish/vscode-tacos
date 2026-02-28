@@ -158,7 +158,7 @@ import type {
   VscodeLmModelSelector,
 } from './types';
 import { tryGenerateVscodeLmSummary, type VscodeLmModelLike } from './vscodeLm';
-import { parseWebviewMessage } from './webviewMessages';
+import { parseWebviewMessage, type WebviewMessage } from './webviewMessages';
 import { buildWebviewCspMetaTag, escapeHtml } from './webviewSecurity';
 
 const KEY_LAST_BLUR_AT = 'tacos.lastBlurAt';
@@ -217,7 +217,7 @@ const NOISE_BUDGET_MAX_SIGNALS_PER_WINDOW = 2;
 const NOISE_BUDGET_BLOCK_NUDGE_AFTER_SUMMARY_MS = 5 * 60_000;
 const NOISE_BUDGET_BLOCK_NUDGE_AFTER_CHECKPOINT_MS = 3 * 60_000;
 const NOISE_BUDGET_BLOCK_CHECKPOINT_AFTER_SUMMARY_MS = 5 * 60_000;
-const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<string>([
+const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>([
   'setPanelSectionExpanded',
   'sessionAddCheckpoint',
   'checkpointOpenList',

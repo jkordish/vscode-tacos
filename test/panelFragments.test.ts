@@ -85,6 +85,7 @@ describe('panelFragments', () => {
     });
 
     expect(intentEditor).toContain('data-intent-editor-readonly="true"');
+    expect(intentEditor).toContain('Intent (read-only in sample mode)');
     expect(intentEditor).toContain('Sample mode is read-only');
     expect(intentEditor).toContain('data-action="setIntentOverride" disabled aria-disabled="true"');
     expect(resumePath).toContain('data-resume-path-readonly="true"');

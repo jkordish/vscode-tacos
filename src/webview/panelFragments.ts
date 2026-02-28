@@ -168,6 +168,7 @@ export interface IntentEditorInput {
 export function renderIntentEditor(input: IntentEditorInput): string {
   const intentInputId = escapeHtml(input.intentInputId);
   const readOnly = Boolean(input.readOnly);
+  const intentLabel = readOnly ? 'Intent (read-only in sample mode)' : 'Intent (editable)';
   const disabledAttr = readOnly ? 'disabled aria-disabled="true"' : '';
   const resetDisabledAttr =
     readOnly || !input.intentOverridden ? 'disabled aria-disabled="true"' : '';
@@ -178,7 +179,7 @@ export function renderIntentEditor(input: IntentEditorInput): string {
     ? ' data-intent-editor-readonly="true"'
     : ' data-intent-editor-readonly="false"';
   return `<div class="intent-editor"${modeAttr}>
-      <label class="companion-kicker" for="${intentInputId}">Intent (editable)</label>
+      <label class="companion-kicker" for="${intentInputId}">${intentLabel}</label>
       <div class="intent-editor-row">
         <input id="${intentInputId}" type="text" maxlength="280" value="${escapeHtml(
           input.intent,
