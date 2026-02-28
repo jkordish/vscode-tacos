@@ -1,4 +1,4 @@
-import { isInQuietHours, parseQuietHoursWindow } from '../src/quietHours';
+import { formatQuietHoursWindow, isInQuietHours, parseQuietHoursWindow } from '../src/quietHours';
 
 describe('quiet hours utilities', () => {
   it('parses valid windows and rejects invalid inputs', () => {
@@ -19,5 +19,14 @@ describe('quiet hours utilities', () => {
     expect(isInQuietHours(night, '22:00-07:00')).toBe(true);
     expect(isInQuietHours(morning, '22:00-07:00')).toBe(true);
     expect(isInQuietHours(day, '22:00-07:00')).toBe(false);
+  });
+
+  it('formats quiet-hour windows in canonical HH:MM-HH:MM format', () => {
+    expect(
+      formatQuietHoursWindow({
+        startMinute: 22 * 60,
+        endMinute: 7 * 60,
+      }),
+    ).toBe('22:00-07:00');
   });
 });

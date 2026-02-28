@@ -1,4 +1,4 @@
-interface QuietHoursWindow {
+export interface QuietHoursWindow {
   startMinute: number;
   endMinute: number;
 }
@@ -38,6 +38,17 @@ export function parseQuietHoursWindow(raw: string): QuietHoursWindow | undefined
   }
 
   return { startMinute, endMinute };
+}
+
+function formatMinuteOfDay(minute: number): string {
+  const normalized = ((minute % 1440) + 1440) % 1440;
+  const hour = Math.floor(normalized / 60);
+  const minuteOfHour = normalized % 60;
+  return `${String(hour).padStart(2, '0')}:${String(minuteOfHour).padStart(2, '0')}`;
+}
+
+export function formatQuietHoursWindow(window: QuietHoursWindow): string {
+  return `${formatMinuteOfDay(window.startMinute)}-${formatMinuteOfDay(window.endMinute)}`;
 }
 
 export function isInQuietHours(now: number, quietHours: string): boolean {

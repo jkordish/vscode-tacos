@@ -41,6 +41,7 @@ async function run() {
     await config.update('showOnFocus', true, vscode.ConfigurationTarget.Global);
     await config.update('summaryQuietHours', '', vscode.ConfigurationTarget.Global);
     await vscode.commands.executeCommand('tacos.__test.setSnoozeUntil', 0);
+    await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);
 
     await wait(1300);
     const baseline = await vscode.commands.executeCommand('tacos.__test.getFocusSuppressionSnapshot');
@@ -79,6 +80,28 @@ async function run() {
     );
 
     await vscode.commands.executeCommand('tacos.__test.setSnoozeUntil', 0);
+    await vscode.commands.executeCommand('tacos.quietNow');
+    const temporaryQuiet = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSuppressionSnapshot',
+    );
+    assert.equal(
+      temporaryQuiet?.suppressionReason,
+      'quiet-hours',
+      'Expected temporary quiet mode to suppress focus triggers.',
+    );
+    assert.equal(
+      temporaryQuiet?.temporaryQuiet,
+      true,
+      'Expected temporary quiet mode flag to be active after Quiet Now command.',
+    );
+    const statusSnapshot = await vscode.commands.executeCommand('tacos.__test.getStatusBarSnapshot');
+    assert.ok(
+      typeof statusSnapshot?.tooltip === 'string' &&
+        statusSnapshot.tooltip.includes('Temporary quiet until:'),
+      'Expected status bar tooltip to include temporary quiet expiry.',
+    );
+
+    await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);
     await config.update(
       'summaryQuietHours',
       quietWindowIncludingNow(Date.now()),
@@ -94,6 +117,7 @@ async function run() {
     );
   } finally {
     await vscode.commands.executeCommand('tacos.__test.setSnoozeUntil', 0);
+    await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);
     await config.update(
       'enabled',
       typeof originalEnabledGlobal === 'undefined' ? undefined : originalEnabledGlobal,

@@ -60,6 +60,8 @@
     "onCommand:tacos.rateSummaryHelpfulness",
     "onCommand:tacos.pauseSummaries",
     "onCommand:tacos.snoozeAutoSummaries",
+    "onCommand:tacos.quietNow",
+    "onCommand:tacos.configureSummaryQuietHours",
     "onCommand:tacos.generateStandupUpdate",
     "onCommand:tacos.restoreWorkingSet",
     "onCommand:tacos.captureRestoreSearchQuery",
@@ -145,6 +147,14 @@
       {
         "command": "tacos.snoozeAutoSummaries",
         "title": "TaCoS: Snooze Auto Summaries"
+      },
+      {
+        "command": "tacos.quietNow",
+        "title": "TaCoS: Quiet Now (1 hour)"
+      },
+      {
+        "command": "tacos.configureSummaryQuietHours",
+        "title": "TaCoS: Configure Summary Quiet Hours"
       },
       {
         "command": "tacos.generateStandupUpdate",
@@ -294,7 +304,7 @@
         "tacos.summaryQuietHours": {
           "type": "string",
           "default": "",
-          "description": "Optional quiet window for auto summaries in `HH:MM-HH:MM` format, for example `22:00-07:00`."
+          "description": "Optional daily quiet window for auto summaries in `HH:MM-HH:MM` format, for example `22:00-07:00`. Use `TaCoS: Configure Summary Quiet Hours` for guided setup."
         },
         "tacos.includeDiff": {
           "type": "boolean",

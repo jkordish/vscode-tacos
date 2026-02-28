@@ -57,6 +57,8 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Rate Summary Helpfulness`
 - `TaCoS: Pause Auto Summaries`
 - `TaCoS: Snooze Auto Summaries`
+- `TaCoS: Quiet Now (1 hour)`
+- `TaCoS: Configure Summary Quiet Hours`
 - `TaCoS: Resume Auto Summaries`
 - `TaCoS: Toggle Summaries Enabled`
 - `TaCoS: Pause Summaries Until Restart`

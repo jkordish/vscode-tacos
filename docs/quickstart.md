@@ -36,6 +36,8 @@ Default safety posture:
 Control later:
 - Run `TaCoS: Revoke AI Payload Consent` to require payload review again.
 - Run `TaCoS: Configure AI Provider` and switch back to `local` at any time.
+- Run `TaCoS: Quiet Now (1 hour)` for one-tap temporary suppression.
+- Run `TaCoS: Configure Summary Quiet Hours` for recurring quiet windows or temporary quiet presets.
 - Run `TaCoS: Test Sanitizer` to validate local redaction behavior without AI send.
 
 ## Privacy Presets (Plain Language)
