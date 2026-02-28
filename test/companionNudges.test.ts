@@ -221,6 +221,15 @@ describe('nudge explainability helpers', () => {
     const inactive = describeCompanionNudgeSuppression({ suppressedReason: 'inactive-mode' });
     const quiet = describeCompanionNudgeSuppression({ suppressedReason: 'quiet-hours' });
     const noCandidate = describeCompanionNudgeSuppression({ suppressedReason: 'no-candidate' });
+    const noiseBudget = describeCompanionNudgeSuppression(
+      {
+        suppressedReason: 'noise-budget',
+        nextEligibleAt: 1_700_000_120_000,
+      },
+      {
+        formatTimestamp: () => 'later',
+      },
+    );
     const cooldown = describeCompanionNudgeSuppression(
       {
         suppressedReason: 'cooldown',
@@ -235,6 +244,7 @@ describe('nudge explainability helpers', () => {
     expect(inactive).toBe('Nudges are hidden while companion mode is paused or restricted.');
     expect(quiet).toBe('Nudges are currently in your configured quiet hours window.');
     expect(noCandidate).toBe('No high-confidence nudge is available for this context yet.');
+    expect(noiseBudget).toBe('Nudges are temporarily suppressed by noise budget until later.');
     expect(cooldown).toBe('Nudges are cooling down until soon.');
   });
 });

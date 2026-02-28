@@ -76,4 +76,34 @@ describe('buildDiagnosticsText', () => {
     expect(diagnostics).toContain('workspaceTrust: restricted');
     expect(diagnostics).toContain('summaryProvider: openai');
   });
+
+  it('includes runtime performance counters when provided', () => {
+    const diagnostics = buildDiagnosticsText({
+      generatedAt: Date.now(),
+      extensionVersion: '0.6.0',
+      vscodeVersion: '1.100.0',
+      workspaceTrusted: true,
+      summaryProvider: 'local',
+      uiSurface: 'statusbar',
+      companionRuntimeMode: 'active',
+      metricsEnabled: true,
+      recentMetrics: [buildMetric()],
+      performanceCounters: {
+        focusHandling: {
+          samples: 8,
+          slowSamples: 1,
+          slowRate: 0.125,
+          averageDurationMs: 9.4,
+          maxDurationMs: 31.2,
+          lastDurationMs: 7.1,
+        },
+      },
+    });
+
+    expect(diagnostics).toContain('performanceCounters(runtime):');
+    expect(diagnostics).toContain('focusHandling.samples: 8');
+    expect(diagnostics).toContain('focusHandling.slowRate: 0.1250');
+    expect(diagnostics).toContain('focusSummary.samples: 0');
+    expect(diagnostics).toContain('panelRerender.avgMs: n/a');
+  });
 });

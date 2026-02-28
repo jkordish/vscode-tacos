@@ -8,6 +8,7 @@ const CSV_HEADERS = [
   'trigger',
   'uiSurface',
   'interruptionEvent',
+  'interruptionTimingClass',
   'firstMeaningfulEditLagMs',
   'firstRunLagMs',
   'firstActionLagMs',
@@ -16,6 +17,9 @@ const CSV_HEADERS = [
   'companionForcedOpenDetailsClicks',
   'companionQuickActionsTaken',
   'companionNudgeImpressions',
+  'companionPrimaryCtaImpressions',
+  'companionPrimaryCtaClicks',
+  'companionPrimaryCtaCompletions',
   'helpfulnessRating',
   'pauseActions',
   'snoozeActions',
@@ -23,6 +27,7 @@ const CSV_HEADERS = [
   'noteCreated',
   'noteMarkedDone',
   'notePinned',
+  'resumePathCompletions',
   'resumeWithNote',
   'scratchpadOpened',
   'scratchpadAppended',
@@ -32,6 +37,8 @@ const CSV_HEADERS = [
   'aiSendAllowedAfterReviewTotal',
   'companionActionFollowThroughRate',
   'companionForcedOpenRate',
+  'companionPrimaryCtaClickThroughRate',
+  'companionPrimaryCtaCompletionRate',
 ] as const;
 
 function csvEscape(value: string): string {
@@ -113,6 +120,23 @@ function summarizeTotal(metrics: MetricRecord[], field: keyof MetricRecord): num
   return metrics.reduce((sum, metric) => sum + (toFiniteNumber(metric[field]) ?? 0), 0);
 }
 
+function summarizeTimingClassCounts(
+  metrics: MetricRecord[],
+): Record<'boundary' | 'mid-activity' | 'unknown', number> {
+  const counts = {
+    boundary: 0,
+    'mid-activity': 0,
+    unknown: 0,
+  };
+  for (const metric of metrics) {
+    const value = metric.interruptionTimingClass;
+    if (value === 'boundary' || value === 'mid-activity' || value === 'unknown') {
+      counts[value] += 1;
+    }
+  }
+  return counts;
+}
+
 export interface MetricsBaselineSnapshotOptions {
   generatedAt?: number;
   sourceLabel?: string;
@@ -136,9 +160,13 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const promptImpressions = summarizeTotal(metrics, 'companionPromptImpressions');
   const forcedOpenClicks = summarizeTotal(metrics, 'companionForcedOpenDetailsClicks');
   const nudgeImpressions = summarizeTotal(metrics, 'companionNudgeImpressions');
+  const primaryCtaImpressions = summarizeTotal(metrics, 'companionPrimaryCtaImpressions');
+  const primaryCtaClicks = summarizeTotal(metrics, 'companionPrimaryCtaClicks');
+  const primaryCtaCompletions = summarizeTotal(metrics, 'companionPrimaryCtaCompletions');
   const notesCreated = summarizeTotal(metrics, 'noteCreated');
   const notesMarkedDone = summarizeTotal(metrics, 'noteMarkedDone');
   const notesPinned = summarizeTotal(metrics, 'notePinned');
+  const resumePathCompletions = summarizeTotal(metrics, 'resumePathCompletions');
   const scratchpadOpened = summarizeTotal(metrics, 'scratchpadOpened');
   const scratchpadAppended = summarizeTotal(metrics, 'scratchpadAppended');
   const redactionEventsTotal = summarizeTotal(metrics, 'redactionEventsTotal');
@@ -155,8 +183,15 @@ export function buildMetricsBaselineSnapshotMarkdown(
     'firstActionLagMs',
   );
   const forcedOpenRate = promptImpressions > 0 ? forcedOpenClicks / promptImpressions : undefined;
+  const primaryCtaClickThroughRate =
+    primaryCtaImpressions > 0 ? primaryCtaClicks / primaryCtaImpressions : undefined;
+  const primaryCtaCompletionRate =
+    primaryCtaClicks > 0 ? primaryCtaCompletions / primaryCtaClicks : undefined;
   const promptPerSession = sessions > 0 ? promptImpressions / sessions : undefined;
   const nudgePerSession = sessions > 0 ? nudgeImpressions / sessions : undefined;
+  const timingClassCounts = summarizeTimingClassCounts(metrics);
+  const timingClassRate = (value: number): number | undefined =>
+    sessions > 0 ? value / sessions : undefined;
 
   const lines = [
     '# TaCoS Metrics Baseline Snapshot',
@@ -187,15 +222,29 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| Forced-open rate (\`forced/prompt\`) | ${formatNumber(forcedOpenRate, 4)} |`,
     `| Nudge impressions (total) | ${nudgeImpressions} |`,
     `| Nudge impressions per session | ${formatNumber(nudgePerSession)} |`,
+    `| Primary CTA impressions (total) | ${primaryCtaImpressions} |`,
+    `| Primary CTA clicks (total) | ${primaryCtaClicks} |`,
+    `| Primary CTA completions (total) | ${primaryCtaCompletions} |`,
+    `| Primary CTA click-through rate (\`clicks/impressions\`) | ${formatNumber(primaryCtaClickThroughRate, 4)} |`,
+    `| Primary CTA completion rate (\`completions/clicks\`) | ${formatNumber(primaryCtaCompletionRate, 4)} |`,
     `| noteCreated (total) | ${notesCreated} |`,
     `| noteMarkedDone (total) | ${notesMarkedDone} |`,
     `| notePinned (total) | ${notesPinned} |`,
+    `| resumePathCompletions (total) | ${resumePathCompletions} |`,
     `| scratchpadOpened (total) | ${scratchpadOpened} |`,
     `| scratchpadAppended (total) | ${scratchpadAppended} |`,
     `| redactionEventsTotal (total) | ${redactionEventsTotal} |`,
     `| redactionHighRiskDetectedTotal (total) | ${redactionHighRiskDetectedTotal} |`,
     `| aiSendBlockedBySanitizerTotal (total) | ${aiSendBlockedBySanitizerTotal} |`,
     `| aiSendAllowedAfterReviewTotal (total) | ${aiSendAllowedAfterReviewTotal} |`,
+    '',
+    'Interruption timing class:',
+    '',
+    '| Class | Sessions | Share |',
+    '| --- | ---: | ---: |',
+    `| boundary | ${timingClassCounts.boundary} | ${formatNumber(timingClassRate(timingClassCounts.boundary), 4)} |`,
+    `| mid-activity | ${timingClassCounts['mid-activity']} | ${formatNumber(timingClassRate(timingClassCounts['mid-activity']), 4)} |`,
+    `| unknown | ${timingClassCounts.unknown} | ${formatNumber(timingClassRate(timingClassCounts.unknown), 4)} |`,
     '',
     'Resumption lag by note usage (`firstActionLagMs`):',
     '',
@@ -222,6 +271,9 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     metric.trigger === 'focus' ||
     metric.trigger === 'manual' ||
     metric.trigger === 'cached' ||
+    metric.interruptionTimingClass === 'boundary' ||
+    metric.interruptionTimingClass === 'mid-activity' ||
+    metric.interruptionTimingClass === 'unknown' ||
     metric.firstMeaningfulEditLagMs !== undefined ||
     metric.firstRunLagMs !== undefined ||
     metric.firstActionLagMs !== undefined ||
@@ -230,6 +282,9 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.companionForcedOpenDetailsClicks ?? 0) > 0 ||
     (metric.companionQuickActionsTaken ?? 0) > 0 ||
     (metric.companionNudgeImpressions ?? 0) > 0 ||
+    (metric.companionPrimaryCtaImpressions ?? 0) > 0 ||
+    (metric.companionPrimaryCtaClicks ?? 0) > 0 ||
+    (metric.companionPrimaryCtaCompletions ?? 0) > 0 ||
     typeof metric.helpfulnessRating === 'number' ||
     (metric.pauseActions ?? 0) > 0 ||
     (metric.snoozeActions ?? 0) > 0 ||
@@ -237,6 +292,7 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.noteCreated ?? 0) > 0 ||
     (metric.noteMarkedDone ?? 0) > 0 ||
     (metric.notePinned ?? 0) > 0 ||
+    (metric.resumePathCompletions ?? 0) > 0 ||
     metric.resumeWithNote === 1 ||
     (metric.scratchpadOpened ?? 0) > 0 ||
     (metric.scratchpadAppended ?? 0) > 0 ||
@@ -254,6 +310,9 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
     const prompts = metric.companionPromptImpressions ?? 0;
     const forcedOpens = metric.companionForcedOpenDetailsClicks ?? 0;
     const quickActions = metric.companionQuickActionsTaken ?? 0;
+    const primaryCtaImpressions = metric.companionPrimaryCtaImpressions ?? 0;
+    const primaryCtaClicks = metric.companionPrimaryCtaClicks ?? 0;
+    const primaryCtaCompletions = metric.companionPrimaryCtaCompletions ?? 0;
     const sessionDate = new Date(metric.startedAt).toISOString().slice(0, 10);
     const fields = [
       String(metric.startedAt),
@@ -263,6 +322,7 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       metric.trigger,
       metric.uiSurface ?? '',
       toOptionalNumber(metric.interruptionEvent),
+      metric.interruptionTimingClass ?? '',
       toOptionalNumber(metric.firstMeaningfulEditLagMs),
       toOptionalNumber(metric.firstRunLagMs),
       toOptionalNumber(metric.firstActionLagMs),
@@ -271,6 +331,9 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.companionForcedOpenDetailsClicks),
       toOptionalNumber(metric.companionQuickActionsTaken),
       toOptionalNumber(metric.companionNudgeImpressions),
+      toOptionalNumber(metric.companionPrimaryCtaImpressions),
+      toOptionalNumber(metric.companionPrimaryCtaClicks),
+      toOptionalNumber(metric.companionPrimaryCtaCompletions),
       toOptionalNumber(metric.helpfulnessRating),
       toOptionalNumber(metric.pauseActions),
       toOptionalNumber(metric.snoozeActions),
@@ -278,6 +341,7 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.noteCreated),
       toOptionalNumber(metric.noteMarkedDone),
       toOptionalNumber(metric.notePinned),
+      toOptionalNumber(metric.resumePathCompletions),
       toOptionalNumber(metric.resumeWithNote),
       toOptionalNumber(metric.scratchpadOpened),
       toOptionalNumber(metric.scratchpadAppended),
@@ -287,6 +351,8 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.aiSendAllowedAfterReviewTotal),
       toRatio(quickActions, prompts),
       toRatio(forcedOpens, prompts),
+      toRatio(primaryCtaClicks, primaryCtaImpressions),
+      toRatio(primaryCtaCompletions, primaryCtaClicks),
     ];
 
     lines.push(fields.map((value) => csvEscape(value)).join(','));

@@ -14,7 +14,8 @@ export type CompanionNudgeSuppressedReason =
   | 'inactive-mode'
   | 'cooldown'
   | 'quiet-hours'
-  | 'no-candidate';
+  | 'no-candidate'
+  | 'noise-budget';
 
 export interface CompanionNudgeDecision {
   primary?: CompanionNudge;
@@ -188,6 +189,15 @@ export function describeCompanionNudgeSuppression(
 
   if (decision.suppressedReason === 'no-candidate') {
     return 'No high-confidence nudge is available for this context yet.';
+  }
+
+  if (decision.suppressedReason === 'noise-budget') {
+    if (!decision.nextEligibleAt) {
+      return 'Nudges are temporarily suppressed to reduce interruption bursts.';
+    }
+
+    const formatter = options.formatTimestamp ?? ((value: number) => new Date(value).toISOString());
+    return `Nudges are temporarily suppressed by noise budget until ${formatter(decision.nextEligibleAt)}.`;
   }
 
   return '';

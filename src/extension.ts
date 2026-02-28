@@ -48,7 +48,20 @@ import {
   pruneMetricsForWorkspace,
   removeMetricsForWorkspace,
 } from './metrics';
-import { shouldAutoTriggerSummary, shouldPromptCheckpointOnBlur } from './noiseControl';
+import {
+  evaluateNoiseBudget,
+  type NoiseBudgetEvent,
+  type NoiseBudgetSignalKind,
+  shouldAutoTriggerSummary,
+  shouldDeferPromptAfterFocusRegain,
+  shouldPromptCheckpointOnBlur,
+} from './noiseControl';
+import {
+  createPerformanceCounter,
+  recordPerformanceSample,
+  summarizePerformanceCounter,
+  type PerformanceCounter,
+} from './performanceGuard';
 import { buildNextStepActions } from './nextStepActions';
 import {
   isPathWithinWorkspaceRoot,
@@ -74,6 +87,7 @@ import {
   scratchpadFileNameForScope,
   workspaceScratchpadRootSegments,
 } from './scratchpadStorage';
+import { renderResumeStackCard } from './resumeStackCard';
 import { resolveScopeBranch as resolveScopeBranchFromInputs } from './scopeBranch';
 import { buildResumeSummary } from './summary';
 import { buildStandupUpdate } from './standup';
@@ -123,11 +137,27 @@ const KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX = 'tacos.lastCheckpointPromptAt';
 const KEY_LAST_NUDGE_AT_PREFIX = 'tacos.lastNudgeAt';
 const KEY_WORKSPACE_ACTIVITY_AT_PREFIX = 'tacos.workspaceActivityAt';
 const KEY_AI_PAYLOAD_CONSENT_PREFIX = 'tacos.aiPayloadConsent';
+const KEY_NOISE_BUDGET_EVENTS_PREFIX = 'tacos.noiseBudgetEvents';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
 const CHECKPOINT_PROMPT_COOLDOWN_MINUTES = 45;
 const FOCUS_TRIGGER_DEBOUNCE_MS = 1200;
+const FOCUS_BOUNDARY_WINDOW_MS = 90_000;
+const FOCUS_MAX_DEFERRAL_WITHOUT_BOUNDARY_MS = 180_000;
+const FOCUS_TYPING_DEFERRAL_GRACE_MS = 2_000;
+const INTERRUPTION_TIMING_BOUNDARY_WINDOW_MS = 90_000;
+const INTERRUPTION_TIMING_MID_ACTIVITY_WINDOW_MS = 15_000;
+const PERF_WARN_COOLDOWN_MS = 60_000;
+const PERF_FOCUS_HANDLING_SLOW_MS = 25;
+const PERF_FOCUS_SUMMARY_SLOW_MS = 750;
+const PERF_PANEL_RERENDER_SLOW_MS = 60;
+const PERF_WEBVIEW_RENDER_SLOW_MS = 50;
+const NOISE_BUDGET_WINDOW_MS = 15 * 60_000;
+const NOISE_BUDGET_MAX_SIGNALS_PER_WINDOW = 2;
+const NOISE_BUDGET_BLOCK_NUDGE_AFTER_SUMMARY_MS = 5 * 60_000;
+const NOISE_BUDGET_BLOCK_NUDGE_AFTER_CHECKPOINT_MS = 3 * 60_000;
+const NOISE_BUDGET_BLOCK_CHECKPOINT_AFTER_SUMMARY_MS = 5 * 60_000;
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const CHECKPOINT_WORKSPACE_GLOBAL_SCOPE = 'workspace-global';
 const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
@@ -213,6 +243,18 @@ interface RuntimeState {
   activeRefinementContextHash?: string;
   autoSummaryInFlight: boolean;
   lastAutoFocusTriggerAt: number;
+  lastFocusGainedAt: number;
+  lastBoundarySignalAt: number;
+  lastMeaningfulActivityAt: number;
+  perfFocusHandling: PerformanceCounter;
+  perfFocusSummary: PerformanceCounter;
+  perfPanelRerender: PerformanceCounter;
+  perfWebviewRender: PerformanceCounter;
+  detailsMarkdownCache?: {
+    contextHash: string;
+    detailsMarkdown: string;
+    html: string;
+  };
   meaningfulActivitySinceCheckpointPrompt: boolean;
   pauseUntilRestart: boolean;
   snoozeUntil: number;
@@ -262,6 +304,8 @@ function maybeWarnRedactionPatternGuardrails(patterns: string[]): void {
 
 interface PresentSummaryOptions {
   autoOpenDetails?: boolean;
+  preferBackgroundPresentation?: boolean;
+  focusRegainedAt?: number;
   workspaceRoot?: string;
   checkpointPrimaryNote?: CheckpointNote;
   checkpointNotes?: CheckpointNote[];
@@ -329,6 +373,14 @@ export function activate(context: vscode.ExtensionContext): void {
     activeRefinementContextHash: undefined,
     autoSummaryInFlight: false,
     lastAutoFocusTriggerAt: 0,
+    lastFocusGainedAt: 0,
+    lastBoundarySignalAt: 0,
+    lastMeaningfulActivityAt: 0,
+    perfFocusHandling: createPerformanceCounter(),
+    perfFocusSummary: createPerformanceCounter(),
+    perfPanelRerender: createPerformanceCounter(),
+    perfWebviewRender: createPerformanceCounter(),
+    detailsMarkdownCache: undefined,
     meaningfulActivitySinceCheckpointPrompt: false,
     pauseUntilRestart: false,
     snoozeUntil: context.workspaceState.get<number>(KEY_SUMMARY_SNOOZE_UNTIL, 0),
@@ -439,6 +491,173 @@ export function activate(context: vscode.ExtensionContext): void {
         recentUrlsCount: state.recentUrls.values().length,
         doneItemsCount: state.doneItems.values().length,
       };
+    }),
+    vscode.commands.registerCommand('tacos.__test.getResumeFlowSnapshot', async () => {
+      const summary = state.panelSummary ?? state.scratchSummary;
+      const nextStepActions = summary
+        ? buildNextStepActions({
+            summary,
+            ...computeRestoreAvailability({
+              trusted: vscode.workspace.isTrusted,
+              hasLastTask: Boolean(state.lastTaskName),
+              hasLastDebug: Boolean(state.lastDebugConfigName),
+              hasFailingCommand: Boolean(getCopyableFailingCommand()),
+              hasRecentEditLocation: state.recentEditLocations.length > 0,
+              currentBranch: summary.currentBranch,
+              previousBranch: summary.previousBranch,
+            }),
+          })
+        : [];
+      const panelHtml = state.panel?.webview.html ?? '';
+
+      return {
+        hasPanelSummary: Boolean(state.panelSummary),
+        hasScratchSummary: Boolean(state.scratchSummary),
+        nextStepsCount: summary?.nextSteps.length ?? 0,
+        nextStepActionsCount: nextStepActions.length,
+        hasPrimaryNextAction: Boolean(nextStepActions[0]),
+        primaryNextActionLabel: nextStepActions[0]?.label ?? '',
+        hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
+        hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
+        hasRestoreWorkingSetAction: panelHtml.includes('data-action="restoreWorkingSet"'),
+        hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
+      };
+    }),
+    vscode.commands.registerCommand('tacos.__test.getFocusSuppressionSnapshot', async () => {
+      const now = Date.now();
+      const config = getConfig();
+      const debounced =
+        state.autoSummaryInFlight || now - state.lastAutoFocusTriggerAt < FOCUS_TRIGGER_DEBOUNCE_MS;
+      const disabledOrPaused =
+        !config.enabled || state.pauseUntilRestart || !config.showOnFocus || config.pauseSummaries;
+      const snoozed = state.snoozeUntil > now;
+      const quietHours = isInQuietHours(now, config.summaryQuietHours);
+
+      let suppressionReason:
+        | 'none'
+        | 'debounced'
+        | 'disabled-or-paused'
+        | 'snoozed'
+        | 'quiet-hours' = 'none';
+      if (debounced) {
+        suppressionReason = 'debounced';
+      } else if (disabledOrPaused) {
+        suppressionReason = 'disabled-or-paused';
+      } else if (snoozed) {
+        suppressionReason = 'snoozed';
+      } else if (quietHours) {
+        suppressionReason = 'quiet-hours';
+      }
+
+      return {
+        now,
+        suppressionReason,
+        debounced,
+        disabledOrPaused,
+        snoozed,
+        quietHours,
+      };
+    }),
+    vscode.commands.registerCommand(
+      'tacos.__test.evaluateAutoTriggerDecision',
+      async (rawInput?: unknown) => {
+        const overrides =
+          rawInput && typeof rawInput === 'object' ? (rawInput as Record<string, unknown>) : {};
+        const config = getConfig();
+        const now =
+          typeof overrides.now === 'number' && Number.isFinite(overrides.now)
+            ? overrides.now
+            : Date.now();
+        const lastBlurAt =
+          typeof overrides.lastBlurAt === 'number' && Number.isFinite(overrides.lastBlurAt)
+            ? overrides.lastBlurAt
+            : now - config.minIdleMinutes * 60_000 - 1_000;
+        const lastSummaryAt =
+          typeof overrides.lastSummaryAt === 'number' && Number.isFinite(overrides.lastSummaryAt)
+            ? overrides.lastSummaryAt
+            : now - config.cooldownMinutes * 60_000 - 1_000;
+        const projectSwitched = Boolean(overrides.projectSwitched);
+        const significantChange =
+          typeof overrides.significantChange === 'boolean' ? overrides.significantChange : true;
+        const lastBoundarySignalAt =
+          typeof overrides.lastBoundarySignalAt === 'number' &&
+          Number.isFinite(overrides.lastBoundarySignalAt)
+            ? overrides.lastBoundarySignalAt
+            : state.lastBoundarySignalAt;
+
+        const shouldTrigger = shouldAutoTriggerSummary({
+          now,
+          lastBlurAt,
+          lastSummaryAt,
+          minIdleMinutes: config.minIdleMinutes,
+          cooldownMinutes: config.cooldownMinutes,
+          projectSwitched,
+          significantChange,
+          lastBoundarySignalAt,
+          boundaryWindowMs: FOCUS_BOUNDARY_WINDOW_MS,
+          maxDeferralWithoutBoundaryMs: FOCUS_MAX_DEFERRAL_WITHOUT_BOUNDARY_MS,
+        });
+
+        const hasRecentBoundary =
+          typeof lastBoundarySignalAt === 'number' &&
+          lastBoundarySignalAt > 0 &&
+          now - lastBoundarySignalAt <= FOCUS_BOUNDARY_WINDOW_MS;
+
+        return {
+          shouldTrigger,
+          hasRecentBoundary,
+          now,
+          lastBlurAt,
+          lastSummaryAt,
+          lastBoundarySignalAt,
+          projectSwitched,
+          significantChange,
+          boundaryWindowMs: FOCUS_BOUNDARY_WINDOW_MS,
+          maxDeferralWithoutBoundaryMs: FOCUS_MAX_DEFERRAL_WITHOUT_BOUNDARY_MS,
+        };
+      },
+    ),
+    vscode.commands.registerCommand(
+      'tacos.__test.evaluateFocusPromptDeferral',
+      async (rawInput?: unknown) => {
+        const input =
+          rawInput && typeof rawInput === 'object' ? (rawInput as Record<string, unknown>) : {};
+        const focusGainedAt =
+          typeof input.focusGainedAt === 'number' && Number.isFinite(input.focusGainedAt)
+            ? input.focusGainedAt
+            : state.lastFocusGainedAt;
+        const observedAt =
+          typeof input.observedAt === 'number' && Number.isFinite(input.observedAt)
+            ? input.observedAt
+            : Date.now();
+        const lastMeaningfulActivityAt =
+          typeof input.lastMeaningfulActivityAt === 'number' &&
+          Number.isFinite(input.lastMeaningfulActivityAt)
+            ? input.lastMeaningfulActivityAt
+            : state.lastMeaningfulActivityAt;
+        const graceWindowMs =
+          typeof input.graceWindowMs === 'number' && Number.isFinite(input.graceWindowMs)
+            ? input.graceWindowMs
+            : FOCUS_TYPING_DEFERRAL_GRACE_MS;
+
+        return shouldDeferPromptAfterFocusRegain({
+          focusGainedAt,
+          observedAt,
+          lastMeaningfulActivityAt,
+          graceWindowMs,
+        });
+      },
+    ),
+    vscode.commands.registerCommand('tacos.__test.setSnoozeUntil', async (value?: number) => {
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        state.snoozeUntil = value;
+        await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, value);
+        return true;
+      }
+
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+      return true;
     }),
     vscode.commands.registerCommand('tacos.__test.switchTaskPartition', async (value?: string) => {
       const workspaceRoot = pickWorkspaceRoot();
@@ -785,6 +1004,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(async (document) => {
+      if (document.uri.scheme === 'file') {
+        markBoundarySignal();
+        markMeaningfulActivity();
+      }
+
       if (!state.panel) {
         return;
       }
@@ -823,6 +1047,14 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
+    vscode.debug.onDidTerminateDebugSession(async () => {
+      markBoundarySignal();
+      markMeaningfulActivity();
+      await persistActivity(context);
+    }),
+  );
+
+  context.subscriptions.push(
     vscode.tasks.onDidStartTaskProcess((event) => {
       const task = event.execution.task;
       recordFirstActionLag();
@@ -843,6 +1075,7 @@ export function activate(context: vscode.ExtensionContext): void {
         state.lastTaskEndedAt = Date.now();
       }
 
+      markBoundarySignal();
       markMeaningfulActivity();
       await persistTaskMetadata(context);
       rerenderPanel();
@@ -992,73 +1225,8 @@ export function activate(context: vscode.ExtensionContext): void {
         await maybePromptCheckpointOnBlur(context, now, workspaceRoot || undefined);
         return;
       }
-
-      if (
-        state.autoSummaryInFlight ||
-        now - state.lastAutoFocusTriggerAt < FOCUS_TRIGGER_DEBOUNCE_MS
-      ) {
-        return;
-      }
-
-      const config = getConfig();
-      if (
-        !config.enabled ||
-        state.pauseUntilRestart ||
-        !config.showOnFocus ||
-        config.pauseSummaries
-      ) {
-        return;
-      }
-
-      await clearExpiredSnoozeIfNeeded(context, now);
-      if (state.snoozeUntil > now) {
-        return;
-      }
-
-      if (isInQuietHours(now, config.summaryQuietHours)) {
-        return;
-      }
-
-      const root = pickWorkspaceRoot();
-      if (!root) {
-        return;
-      }
-
-      const lastBlurAt = context.workspaceState.get<number>(KEY_LAST_BLUR_AT, now);
-      const lastWorkspaceOnBlur = context.workspaceState.get<string>(
-        KEY_LAST_WORKSPACE_ON_BLUR,
-        '',
-      );
-      const projectSwitched = Boolean(lastWorkspaceOnBlur) && lastWorkspaceOnBlur !== root;
-      const lastSummaryAt = context.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0);
-      const fingerprint = computeAutoTriggerFingerprint(root);
-      const lastFingerprint = context.workspaceState.get<string>(
-        autoTriggerFingerprintKey(context, root),
-        '',
-      );
-      const significantChange = fingerprint !== lastFingerprint;
-
-      const shouldTrigger = shouldAutoTriggerSummary({
-        now,
-        lastBlurAt,
-        lastSummaryAt,
-        minIdleMinutes: config.minIdleMinutes,
-        cooldownMinutes: config.cooldownMinutes,
-        projectSwitched,
-        significantChange,
-      });
-      if (!shouldTrigger) {
-        return;
-      }
-
-      state.lastAutoFocusTriggerAt = now;
-      state.autoSummaryInFlight = true;
-      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
-      try {
-        await triggerSummary(context, 'focus');
-      } finally {
-        state.autoSummaryInFlight = false;
-      }
+      state.lastFocusGainedAt = now;
+      await handleFocusRegainSummaryTrigger(context, now);
     }),
   );
 
@@ -1069,6 +1237,152 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   // No-op.
+}
+
+function monotonicNowNs(): bigint {
+  return process.hrtime.bigint();
+}
+
+function durationMsSince(startNs: bigint): number {
+  return Number(process.hrtime.bigint() - startNs) / 1_000_000;
+}
+
+function recordPerformanceGuardrail(
+  label: string,
+  counter: PerformanceCounter,
+  durationMs: number,
+  thresholdMs: number,
+  details?: string,
+): void {
+  const sample = recordPerformanceSample(counter, durationMs, {
+    slowThresholdMs: thresholdMs,
+    warnCooldownMs: PERF_WARN_COOLDOWN_MS,
+  });
+  if (!sample.shouldWarn) {
+    return;
+  }
+
+  const detailsSuffix = details ? `; ${details}` : '';
+  state.output.appendLine(
+    `TaCoS perf: ${label} slow-path ${sample.durationMs.toFixed(1)}ms (avg ${sample.averageDurationMs.toFixed(1)}ms, threshold ${thresholdMs}ms)${detailsSuffix}.`,
+  );
+}
+
+async function handleFocusRegainSummaryTrigger(
+  context: vscode.ExtensionContext,
+  now: number,
+): Promise<void> {
+  const focusHandlingStartNs = monotonicNowNs();
+  let outcome = 'unknown';
+  let uiSurfaceLabel = getConfig().uiSurface;
+
+  try {
+    if (
+      state.autoSummaryInFlight ||
+      now - state.lastAutoFocusTriggerAt < FOCUS_TRIGGER_DEBOUNCE_MS
+    ) {
+      outcome = 'debounced';
+      return;
+    }
+
+    const config = getConfig();
+    uiSurfaceLabel = config.uiSurface;
+    if (
+      !config.enabled ||
+      state.pauseUntilRestart ||
+      !config.showOnFocus ||
+      config.pauseSummaries
+    ) {
+      outcome = 'disabled-or-paused';
+      return;
+    }
+
+    await clearExpiredSnoozeIfNeeded(context, now);
+    if (state.snoozeUntil > now) {
+      outcome = 'snoozed';
+      return;
+    }
+
+    if (isInQuietHours(now, config.summaryQuietHours)) {
+      outcome = 'quiet-hours';
+      return;
+    }
+
+    const root = pickWorkspaceRoot();
+    if (!root) {
+      outcome = 'no-workspace';
+      return;
+    }
+
+    const lastBlurAt = context.workspaceState.get<number>(KEY_LAST_BLUR_AT, now);
+    const lastWorkspaceOnBlur = context.workspaceState.get<string>(KEY_LAST_WORKSPACE_ON_BLUR, '');
+    const projectSwitched = Boolean(lastWorkspaceOnBlur) && lastWorkspaceOnBlur !== root;
+    const lastSummaryAt = context.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0);
+    const fingerprint = computeAutoTriggerFingerprint(root);
+    const lastFingerprint = context.workspaceState.get<string>(
+      autoTriggerFingerprintKey(context, root),
+      '',
+    );
+    const significantChange = fingerprint !== lastFingerprint;
+
+    const shouldTrigger = shouldAutoTriggerSummary({
+      now,
+      lastBlurAt,
+      lastSummaryAt,
+      minIdleMinutes: config.minIdleMinutes,
+      cooldownMinutes: config.cooldownMinutes,
+      projectSwitched,
+      significantChange,
+      lastBoundarySignalAt: state.lastBoundarySignalAt,
+      boundaryWindowMs: FOCUS_BOUNDARY_WINDOW_MS,
+      maxDeferralWithoutBoundaryMs: FOCUS_MAX_DEFERRAL_WITHOUT_BOUNDARY_MS,
+    });
+    if (!shouldTrigger) {
+      outcome = 'gated';
+      return;
+    }
+
+    outcome = 'triggered';
+    state.lastAutoFocusTriggerAt = now;
+    state.autoSummaryInFlight = true;
+    const focusSummaryStartNs = monotonicNowNs();
+    try {
+      await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
+      let deferPromptToBackground = false;
+      if (config.uiSurface === 'notification') {
+        await delay(FOCUS_TYPING_DEFERRAL_GRACE_MS);
+        if (!vscode.window.state.focused) {
+          outcome = 'blurred-during-deferral';
+          return;
+        }
+        deferPromptToBackground = shouldDeferPromptAfterFocusRegain({
+          focusGainedAt: now,
+          observedAt: Date.now(),
+          lastMeaningfulActivityAt: state.lastMeaningfulActivityAt,
+          graceWindowMs: FOCUS_TYPING_DEFERRAL_GRACE_MS,
+        });
+      }
+
+      await triggerSummary(context, 'focus', undefined, deferPromptToBackground, now);
+    } finally {
+      state.autoSummaryInFlight = false;
+      recordPerformanceGuardrail(
+        'focus-summary',
+        state.perfFocusSummary,
+        durationMsSince(focusSummaryStartNs),
+        PERF_FOCUS_SUMMARY_SLOW_MS,
+        `uiSurface=${uiSurfaceLabel}`,
+      );
+    }
+  } finally {
+    recordPerformanceGuardrail(
+      'focus-handling',
+      state.perfFocusHandling,
+      durationMsSince(focusHandlingStartNs),
+      PERF_FOCUS_HANDLING_SLOW_MS,
+      `outcome=${outcome}; uiSurface=${uiSurfaceLabel}`,
+    );
+  }
 }
 
 function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposable[] {
@@ -1143,12 +1457,17 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       workspaceRoot,
       config.redactionPatterns,
     );
+    const testOrBuildCommand = isTestOrBuildCommand(command);
+    if (typeof exitCode === 'number' && testOrBuildCommand) {
+      markBoundarySignal();
+      markMeaningfulActivity();
+    }
 
     if (
       config.includeTerminalHistory &&
       typeof exitCode === 'number' &&
       exitCode !== 0 &&
-      isTestOrBuildCommand(command)
+      testOrBuildCommand
     ) {
       state.lastFailingCommandRaw = command;
       state.lastFailingCommand = sanitizedCommand;
@@ -1159,7 +1478,7 @@ function registerTerminalHooks(context: vscode.ExtensionContext): vscode.Disposa
       config.includeTerminalHistory &&
       typeof exitCode === 'number' &&
       exitCode === 0 &&
-      isTestOrBuildCommand(command)
+      testOrBuildCommand
     ) {
       state.doneItems.push(sanitizedCommand);
 
@@ -1222,6 +1541,8 @@ async function triggerSummary(
   context: vscode.ExtensionContext,
   reason: Exclude<TriggerReason, 'cached'>,
   preferredWorkspaceRoot?: string,
+  deferPromptToBackground = false,
+  focusRegainedAt?: number,
 ): Promise<void> {
   const root = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!root) {
@@ -1238,6 +1559,8 @@ async function triggerSummary(
 
   await presentSummary(context, prepared.summary, prepared.triggerReason, {
     autoOpenDetails: reason === 'manual',
+    preferBackgroundPresentation: reason === 'focus' && deferPromptToBackground,
+    focusRegainedAt: reason === 'focus' ? focusRegainedAt : undefined,
     workspaceRoot: root,
     checkpointPrimaryNote: prepared.checkpointPrimaryNote,
     checkpointNotes: prepared.checkpointNotes,
@@ -1589,6 +1912,11 @@ async function presentSummary(
 ): Promise<void> {
   const config = getConfig();
   const presentationMode = resolveSummaryPresentationMode(config, options);
+  const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
+
+  if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
+    await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
+  }
 
   if (config.metricsEnabled) {
     await finalizeCurrentMetric(context);
@@ -1598,12 +1926,12 @@ async function presentSummary(
       workspaceRoot: root,
       trigger: triggerReason,
       uiSurface: config.uiSurface,
-      interruptionEvent: triggerReason === 'focus' && config.uiSurface === 'notification' ? 1 : 0,
+      interruptionEvent: triggerReason === 'focus' && presentationMode === 'prompt' ? 1 : 0,
+      interruptionTimingClass: classifyInterruptionTiming(triggerReason, options.focusRegainedAt),
       resumeWithNote: options.checkpointPrimaryNote ? 1 : 0,
     };
   }
 
-  const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
   await updateActiveNudges(context, summary, workspaceRoot, config);
   updateSummaryScratchpad(summary, options.workspaceRoot);
 
@@ -1685,6 +2013,74 @@ function nudgeShownAtKey(workspaceRoot: string): string {
   return `${KEY_LAST_NUDGE_AT_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
 }
 
+function noiseBudgetEventsKey(workspaceRoot: string): string {
+  return `${KEY_NOISE_BUDGET_EVENTS_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function isNoiseBudgetSignalKind(value: unknown): value is NoiseBudgetSignalKind {
+  return value === 'summary-prompt' || value === 'checkpoint-prompt' || value === 'nudge';
+}
+
+function readNoiseBudgetEvents(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): NoiseBudgetEvent[] {
+  const raw = context.workspaceState.get<unknown>(noiseBudgetEventsKey(workspaceRoot), []);
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  const events: NoiseBudgetEvent[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') {
+      continue;
+    }
+    const candidate = item as Record<string, unknown>;
+    if (!isNoiseBudgetSignalKind(candidate.kind)) {
+      continue;
+    }
+    if (typeof candidate.at !== 'number' || !Number.isFinite(candidate.at) || candidate.at <= 0) {
+      continue;
+    }
+    events.push({
+      kind: candidate.kind,
+      at: candidate.at,
+    });
+  }
+
+  return events;
+}
+
+async function consumeNoiseBudgetSignal(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  signalKind: NoiseBudgetSignalKind,
+  now: number,
+): Promise<ReturnType<typeof evaluateNoiseBudget>> {
+  const existing = readNoiseBudgetEvents(context, workspaceRoot);
+  const decision = evaluateNoiseBudget({
+    now,
+    signalKind,
+    events: existing,
+    policy: {
+      windowMs: NOISE_BUDGET_WINDOW_MS,
+      maxSignalsPerWindow: NOISE_BUDGET_MAX_SIGNALS_PER_WINDOW,
+      blockNudgesAfterSummaryMs: NOISE_BUDGET_BLOCK_NUDGE_AFTER_SUMMARY_MS,
+      blockNudgesAfterCheckpointMs: NOISE_BUDGET_BLOCK_NUDGE_AFTER_CHECKPOINT_MS,
+      blockCheckpointAfterSummaryMs: NOISE_BUDGET_BLOCK_CHECKPOINT_AFTER_SUMMARY_MS,
+    },
+  });
+
+  const nextEvents = decision.allowed
+    ? [...decision.recentEvents, { kind: signalKind, at: now }]
+    : decision.recentEvents;
+  await context.workspaceState.update(noiseBudgetEventsKey(workspaceRoot), nextEvents);
+  return {
+    ...decision,
+    recentEvents: nextEvents,
+  };
+}
+
 async function updateActiveNudges(
   context: vscode.ExtensionContext,
   summary: ResumeSummary,
@@ -1696,17 +2092,29 @@ async function updateActiveNudges(
     return;
   }
 
-  const decision = chooseCompanionNudges({
+  const now = Date.now();
+  let decision = chooseCompanionNudges({
     summary,
     provider: config.summaryProvider,
     mode: resolveCompanionRuntimeMode(config),
-    now: Date.now(),
+    now,
     enabled: config.companionNudgesEnabled,
     aggressiveness: config.companionNudgeAggressiveness,
     quietHours: config.companionNudgeQuietHours,
     cooldownMinutes: config.companionNudgeCooldownMinutes,
     lastShownAt: context.workspaceState.get<number>(nudgeShownAtKey(workspaceRoot), 0),
   });
+
+  if (decision.primary) {
+    const budgetDecision = await consumeNoiseBudgetSignal(context, workspaceRoot, 'nudge', now);
+    if (!budgetDecision.allowed) {
+      decision = {
+        suppressedReason: 'noise-budget',
+        nextEligibleAt: budgetDecision.nextEligibleAt,
+      };
+    }
+  }
+
   state.activeNudges = {
     contextHash: summary.contextHash,
     decision,
@@ -1716,16 +2124,20 @@ async function updateActiveNudges(
     return;
   }
 
-  await context.workspaceState.update(nudgeShownAtKey(workspaceRoot), Date.now());
+  await context.workspaceState.update(nudgeShownAtKey(workspaceRoot), now);
   recordCompanionNudgeImpression();
 }
 
 function resolveSummaryPresentationMode(
   config: ExtensionConfig,
-  options: Pick<PresentSummaryOptions, 'autoOpenDetails'>,
+  options: Pick<PresentSummaryOptions, 'autoOpenDetails' | 'preferBackgroundPresentation'>,
 ): SummaryPresentationMode {
   if (options.autoOpenDetails) {
     return 'auto-open-details';
+  }
+
+  if (options.preferBackgroundPresentation) {
+    return 'background';
   }
 
   if (config.uiSurface === 'silent') {
@@ -1757,6 +2169,35 @@ function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeM
   }
 
   return 'active';
+}
+
+function classifyInterruptionTiming(
+  triggerReason: TriggerReason,
+  referenceAt?: number,
+): 'boundary' | 'mid-activity' | 'unknown' {
+  if (triggerReason !== 'focus') {
+    return 'unknown';
+  }
+
+  const now =
+    typeof referenceAt === 'number' && Number.isFinite(referenceAt) && referenceAt > 0
+      ? referenceAt
+      : Date.now();
+  const boundaryDelta =
+    state.lastBoundarySignalAt > 0 ? now - state.lastBoundarySignalAt : Number.POSITIVE_INFINITY;
+  if (boundaryDelta >= 0 && boundaryDelta <= INTERRUPTION_TIMING_BOUNDARY_WINDOW_MS) {
+    return 'boundary';
+  }
+
+  const activityDelta =
+    state.lastMeaningfulActivityAt > 0
+      ? now - state.lastMeaningfulActivityAt
+      : Number.POSITIVE_INFINITY;
+  if (activityDelta >= 0 && activityDelta <= INTERRUPTION_TIMING_MID_ACTIVITY_WINDOW_MS) {
+    return 'mid-activity';
+  }
+
+  return 'unknown';
 }
 
 function recordFirstActionLag(): void {
@@ -1814,6 +2255,37 @@ function recordCompanionNudgeImpression(): void {
     (state.metricSession.companionNudgeImpressions ?? 0) + 1;
 }
 
+function recordCompanionPrimaryCtaImpression(): void {
+  if (!state.metricSession) {
+    return;
+  }
+
+  if ((state.metricSession.companionPrimaryCtaImpressions ?? 0) > 0) {
+    return;
+  }
+
+  state.metricSession.companionPrimaryCtaImpressions = 1;
+}
+
+function recordCompanionPrimaryCtaClick(): void {
+  if (!state.metricSession) {
+    return;
+  }
+
+  recordCompanionFirstActionLag();
+  state.metricSession.companionPrimaryCtaClicks =
+    (state.metricSession.companionPrimaryCtaClicks ?? 0) + 1;
+}
+
+function recordCompanionPrimaryCtaCompletion(): void {
+  if (!state.metricSession) {
+    return;
+  }
+
+  state.metricSession.companionPrimaryCtaCompletions =
+    (state.metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
+}
+
 function recordMetricCounter(
   field:
     | 'pauseActions'
@@ -1822,6 +2294,7 @@ function recordMetricCounter(
     | 'noteCreated'
     | 'noteMarkedDone'
     | 'notePinned'
+    | 'resumePathCompletions'
     | 'scratchpadOpened'
     | 'scratchpadAppended'
     | 'redactionEventsTotal'
@@ -2250,6 +2723,7 @@ async function showDetailsPanel(
       state.panel = undefined;
       state.panelSummary = undefined;
       state.panelWorkspaceRoot = undefined;
+      state.detailsMarkdownCache = undefined;
       state.panelCheckpointNotes = [];
       state.panelPrimaryCheckpointNote = undefined;
       state.panelCheckpointScope = undefined;
@@ -2454,7 +2928,21 @@ async function showDetailsPanel(
         }
 
         recordCompanionQuickAction();
-        await runNextStepAction(state.panelSummary, message.stepIndex, state.panelWorkspaceRoot);
+        const isPrimaryStep = message.stepIndex === 0;
+        const outcome = await runNextStepActionDetailed(
+          state.panelSummary,
+          message.stepIndex,
+          state.panelWorkspaceRoot,
+        );
+        if (outcome.completed) {
+          recordMetricCounter('resumePathCompletions');
+        }
+        if (isPrimaryStep && outcome.attempted) {
+          recordCompanionPrimaryCtaClick();
+        }
+        if (isPrimaryStep && outcome.completed) {
+          recordCompanionPrimaryCtaCompletion();
+        }
         return;
       }
 
@@ -2708,13 +3196,50 @@ function rerenderPanel(): void {
     return;
   }
 
+  const rerenderStartNs = monotonicNowNs();
   state.panel.title = titleForSummary(state.panelSummary);
-  state.panel.webview.html = renderWebview(
+  const webviewRenderStartNs = monotonicNowNs();
+  const webviewHtml = renderWebview(
     state.panel.webview,
     state.panelSummary,
     state.panelCheckpointNotes,
     state.panelPrimaryCheckpointNote,
   );
+  recordPerformanceGuardrail(
+    'webview-render',
+    state.perfWebviewRender,
+    durationMsSince(webviewRenderStartNs),
+    PERF_WEBVIEW_RENDER_SLOW_MS,
+    `evidence=${state.panelSummary.evidenceCatalog?.length ?? 0}`,
+  );
+  state.panel.webview.html = webviewHtml;
+  recordPerformanceGuardrail(
+    'panel-rerender',
+    state.perfPanelRerender,
+    durationMsSince(rerenderStartNs),
+    PERF_PANEL_RERENDER_SLOW_MS,
+    `evidence=${state.panelSummary.evidenceCatalog?.length ?? 0}`,
+  );
+}
+
+function renderDetailsMarkdown(summary: ResumeSummary): string {
+  const detailsMarkdown = summary.detailsMarkdown ?? '';
+  const cached = state.detailsMarkdownCache;
+  if (
+    cached &&
+    cached.contextHash === summary.contextHash &&
+    cached.detailsMarkdown === detailsMarkdown
+  ) {
+    return cached.html;
+  }
+
+  const html = markdownRenderer.render(detailsMarkdown);
+  state.detailsMarkdownCache = {
+    contextHash: summary.contextHash,
+    detailsMarkdown,
+    html,
+  };
+  return html;
 }
 
 function renderWebview(
@@ -2837,6 +3362,9 @@ function renderWebview(
     canRerunDebug: availability.canRerunDebug,
     canCopyFailingCommand: availability.canCopyFailingCommand,
   });
+  if (nextStepActions[0]) {
+    recordCompanionPrimaryCtaImpression();
+  }
   const nextSteps = summary.nextSteps
     .map((step, index) => {
       const evidenceIds = summary.nextStepEvidenceIds?.[index] ?? [];
@@ -3069,7 +3597,7 @@ function renderWebview(
     )
     .join('');
 
-  const detailsHtml = markdownRenderer.render(summary.detailsMarkdown);
+  const detailsHtml = renderDetailsMarkdown(summary);
   const sourceLabel =
     summary.source === 'local' ? 'Local summary (instant)' : 'Refined summary (AI)';
   const generatedAtLabel = formatTimestamp(summary.generatedAt);
@@ -3544,36 +4072,16 @@ function renderWebview(
     ${recapCard}
     ${changesSinceCard}
     ${nudgeCard}
-    <div class="card">
-      <h3>Companion Home</h3>
-      <div class="companion-grid">
-        <section class="companion-block">
-          <h4>Now</h4>
-          <p class="companion-kicker">Current focus</p>
-          <p class="companion-primary">${escapeHtml(summary.intent)}</p>
-          <p class="companion-meta">Mode: ${escapeHtml(mode)}</p>
-          ${nowCheckpointLine}
-        </section>
-        <section class="companion-block">
-          <h4>Next</h4>
-          <ul class="compact-list">${companionNextSteps || '<li>No next steps captured yet.</li>'}</ul>
-          <div class="status-actions">
-            <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
-            <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
-          </div>
-        </section>
-        <section class="companion-block">
-          <h4>Blocked</h4>
-          <p class="companion-primary">${escapeHtml(blockerTitle)}</p>
-          <p class="muted">${escapeHtml(blockerDetail)}</p>
-          ${blockerActionHtml}
-        </section>
-        <section class="companion-block">
-          <h4>Restore</h4>
-          ${companionRestoreSections}
-        </section>
-      </div>
-    </div>
+    ${renderResumeStackCard({
+      intent: summary.intent,
+      mode,
+      nowCheckpointLineTrustedHtml: nowCheckpointLine,
+      nextStepsListTrustedHtml: companionNextSteps,
+      blockerTitle,
+      blockerDetail,
+      blockerActionTrustedHtml: blockerActionHtml,
+      restoreSectionsTrustedHtml: companionRestoreSections,
+    })}
 
     ${confidenceCard}
 
@@ -3830,7 +4338,12 @@ function renderStepEvidenceBadge(evidenceId: string, evidence?: SummaryEvidenceI
   return `<span class="badge">${escapeHtml(label)}</span>`;
 }
 
+function markBoundarySignal(): void {
+  state.lastBoundarySignalAt = Date.now();
+}
+
 function markMeaningfulActivity(): void {
+  state.lastMeaningfulActivityAt = Date.now();
   state.meaningfulActivitySinceCheckpointPrompt = true;
 }
 
@@ -4266,7 +4779,11 @@ async function applyTaskPartitionSwitch(
   state.doneItems = new RingBuffer(10, snapshot.sanitized.doneItems);
   state.lastFailingCommand = snapshot.sanitized.lastFailingCommand;
   state.lastFailingCommandRaw = undefined;
+  state.lastFocusGainedAt = 0;
+  state.lastBoundarySignalAt = 0;
+  state.lastMeaningfulActivityAt = 0;
   state.scratchSummary = undefined;
+  state.detailsMarkdownCache = undefined;
   if (state.panel) {
     state.panel.dispose();
   }
@@ -4588,14 +5105,19 @@ async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promi
   editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }
 
-async function runNextStepAction(
+interface NextStepActionOutcome {
+  attempted: boolean;
+  completed: boolean;
+}
+
+async function runNextStepActionDetailed(
   summary: ResumeSummary,
   stepIndex: number,
   preferredWorkspaceRoot?: string,
-): Promise<void> {
+): Promise<NextStepActionOutcome> {
   if (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= summary.nextSteps.length) {
     void vscode.window.showWarningMessage('TaCoS blocked an invalid next-step action target.');
-    return;
+    return { attempted: false, completed: false };
   }
 
   const availability = computeRestoreAvailability({
@@ -4618,28 +5140,26 @@ async function runNextStepAction(
     void vscode.window.showInformationMessage(
       'TaCoS: this step has no verified clickable action yet. Use evidence links to continue.',
     );
-    return;
+    return { attempted: false, completed: false };
   }
 
   const evidence = (summary.evidenceCatalog ?? []).find((item) => item.id === action.evidenceId);
   if (!evidence) {
     void vscode.window.showWarningMessage('TaCoS blocked a stale next-step action.');
-    return;
+    return { attempted: false, completed: false };
   }
 
   if (action.kind === 'copyFailingCommand') {
     await copyFailingCommand();
-    return;
+    return { attempted: true, completed: true };
   }
 
   if (action.kind === 'rerunTask') {
-    await rerunLastTask();
-    return;
+    return { attempted: true, completed: await rerunLastTask() };
   }
 
   if (action.kind === 'rerunDebug') {
-    await rerunLastDebugSession();
-    return;
+    return { attempted: true, completed: await rerunLastDebugSession() };
   }
 
   if (action.kind === 'openFile') {
@@ -4648,28 +5168,40 @@ async function runNextStepAction(
       void vscode.window.showWarningMessage(
         'TaCoS blocked file action because no workspace root is available for validation.',
       );
-      return;
+      return { attempted: false, completed: false };
     }
 
     const safeTarget = resolveFileTargetInWorkspace(evidence.target ?? '', workspaceRoot);
     if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
       void vscode.window.showWarningMessage('TaCoS blocked an unsafe next-step file target.');
-      return;
+      return { attempted: false, completed: false };
     }
 
     await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(safeTarget));
-    return;
+    return { attempted: true, completed: true };
   }
 
   if (action.kind === 'openUrl') {
     const safeUrl = normalizeHttpUrl(evidence.target ?? '');
     if (!safeUrl) {
       void vscode.window.showWarningMessage('TaCoS blocked an unsafe next-step URL.');
-      return;
+      return { attempted: false, completed: false };
     }
 
     await vscode.env.openExternal(vscode.Uri.parse(safeUrl));
+    return { attempted: true, completed: true };
   }
+
+  return { attempted: false, completed: false };
+}
+
+async function runNextStepAction(
+  summary: ResumeSummary,
+  stepIndex: number,
+  preferredWorkspaceRoot?: string,
+): Promise<boolean> {
+  const outcome = await runNextStepActionDetailed(summary, stepIndex, preferredWorkspaceRoot);
+  return outcome.completed;
 }
 
 function recentEditLocationsStorageKey(workspaceRoot: string): string {
@@ -5220,6 +5752,10 @@ function uniqueStrings(values: string[]): string[] {
   }
 
   return result;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 interface SummaryCorrectionEntry {
@@ -6486,6 +7022,9 @@ function resetRuntimeWorkspaceState(): void {
   state.lastTerminalCwd = undefined;
   state.lastDebugConfigName = undefined;
   state.lastDebugWorkspaceRoot = undefined;
+  state.lastFocusGainedAt = 0;
+  state.lastBoundarySignalAt = 0;
+  state.lastMeaningfulActivityAt = 0;
   state.snoozeUntil = 0;
   state.panelCheckpointNotes = [];
   state.panelPrimaryCheckpointNote = undefined;
@@ -6496,6 +7035,7 @@ function resetRuntimeWorkspaceState(): void {
   state.panelScratchpadScopeLabel = undefined;
   state.activeNudges = undefined;
   state.scratchSummary = undefined;
+  state.detailsMarkdownCache = undefined;
   if (state.panel) {
     state.panel.dispose();
   }
@@ -7805,6 +8345,13 @@ async function maybePromptCheckpointOnBlur(
     return;
   }
 
+  const budgetDecision = await consumeNoiseBudgetSignal(context, root, 'checkpoint-prompt', now);
+  if (!budgetDecision.allowed) {
+    // Preserve pending activity signal when the prompt is suppressed by budget.
+    // This defers the prompt instead of dropping it permanently.
+    return;
+  }
+
   await context.workspaceState.update(checkpointPromptAtKey(root), now);
   const action = await vscode.window.showInformationMessage(
     'One-line next step for Future You (optional).',
@@ -8276,6 +8823,12 @@ async function copyDiagnosticsBundle(context: vscode.ExtensionContext): Promise<
     companionRuntimeMode: resolveCompanionRuntimeMode(config),
     metricsEnabled: config.metricsEnabled,
     recentMetrics: metrics,
+    performanceCounters: {
+      focusHandling: summarizePerformanceCounter(state.perfFocusHandling),
+      focusSummary: summarizePerformanceCounter(state.perfFocusSummary),
+      panelRerender: summarizePerformanceCounter(state.perfPanelRerender),
+      webviewRender: summarizePerformanceCounter(state.perfWebviewRender),
+    },
   });
   await vscode.env.clipboard.writeText(diagnostics);
   void vscode.window.showInformationMessage('TaCoS: diagnostics copied to clipboard.');

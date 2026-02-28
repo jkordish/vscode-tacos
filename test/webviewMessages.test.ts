@@ -4,6 +4,12 @@ describe('parseWebviewMessage', () => {
   it('accepts known simple host actions', () => {
     expect(parseWebviewMessage({ type: 'fixSummary' })).toEqual({ type: 'fixSummary' });
     expect(parseWebviewMessage({ type: 'copySummary' })).toEqual({ type: 'copySummary' });
+    expect(parseWebviewMessage({ type: 'copyNextSteps' })).toEqual({
+      type: 'copyNextSteps',
+    });
+    expect(parseWebviewMessage({ type: 'copyPromptAndOpenCodex' })).toEqual({
+      type: 'copyPromptAndOpenCodex',
+    });
     expect(parseWebviewMessage({ type: 'refreshSummary' })).toEqual({
       type: 'refreshSummary',
     });
@@ -40,8 +46,20 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'sessionAddCheckpoint' })).toEqual({
       type: 'sessionAddCheckpoint',
     });
+    expect(parseWebviewMessage({ type: 'blockedLink' })).toEqual({
+      type: 'blockedLink',
+    });
     expect(parseWebviewMessage({ type: 'restoreReopenFiles' })).toEqual({
       type: 'restoreReopenFiles',
+    });
+    expect(parseWebviewMessage({ type: 'restoreRerunDebug' })).toEqual({
+      type: 'restoreRerunDebug',
+    });
+    expect(parseWebviewMessage({ type: 'restoreJumpToLastEdit' })).toEqual({
+      type: 'restoreJumpToLastEdit',
+    });
+    expect(parseWebviewMessage({ type: 'restoreCopyFailingCommand' })).toEqual({
+      type: 'restoreCopyFailingCommand',
     });
     expect(parseWebviewMessage({ type: 'restoreOpenProblems' })).toEqual({
       type: 'restoreOpenProblems',
@@ -77,6 +95,7 @@ describe('parseWebviewMessage', () => {
       stepIndex: 1,
     });
     expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: -1 })).toBeUndefined();
+    expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: 201 })).toBeUndefined();
     expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: 2.1 })).toBeUndefined();
     expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: '1' })).toBeUndefined();
   });

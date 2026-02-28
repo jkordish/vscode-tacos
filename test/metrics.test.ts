@@ -61,6 +61,17 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
+
+  it('treats interruption timing class annotations as recorded metric activity', () => {
+    const metric = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'other',
+      interruptionTimingClass: 'boundary',
+    } as unknown as MetricRecord;
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -72,16 +83,21 @@ describe('buildMetricsCsv', () => {
         trigger: 'manual',
         uiSurface: 'statusbar',
         interruptionEvent: 0,
+        interruptionTimingClass: 'unknown',
         firstMeaningfulEditLagMs: 1200,
         firstRunLagMs: 2100,
         firstActionLagMs: 1300,
         companionPromptImpressions: 4,
         companionForcedOpenDetailsClicks: 1,
         companionQuickActionsTaken: 3,
+        companionPrimaryCtaImpressions: 2,
+        companionPrimaryCtaClicks: 1,
+        companionPrimaryCtaCompletions: 1,
         helpfulnessRating: 4,
         pauseActions: 1,
         snoozeActions: 0,
         disableActions: 0,
+        resumePathCompletions: 0,
         scratchpadOpened: 2,
         scratchpadAppended: 1,
       },
@@ -91,6 +107,13 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('firstActionLagMs');
     expect(lines[0]).toContain('helpfulnessRating');
     expect(lines[0]).toContain('companionActionFollowThroughRate');
+    expect(lines[0]).toContain('interruptionTimingClass');
+    expect(lines[0]).toContain('companionPrimaryCtaImpressions');
+    expect(lines[0]).toContain('companionPrimaryCtaClicks');
+    expect(lines[0]).toContain('companionPrimaryCtaCompletions');
+    expect(lines[0]).toContain('resumePathCompletions');
+    expect(lines[0]).toContain('companionPrimaryCtaClickThroughRate');
+    expect(lines[0]).toContain('companionPrimaryCtaCompletionRate');
     expect(lines[0]).toContain('noteCreated');
     expect(lines[0]).toContain('resumeWithNote');
     expect(lines[0]).toContain('scratchpadOpened');
@@ -101,10 +124,8 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('aiSendAllowedAfterReviewTotal');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('"/workspace/repo,feature"');
-    expect(lines[1]).toContain(',statusbar,0,');
-    expect(lines[1]).toContain(',2,1,,,,,0.7500,');
-    expect(lines[1]).toContain(',0.7500,');
-    expect(lines[1]).toContain(',0.2500');
+    expect(lines[1]).toContain(',statusbar,0,unknown,');
+    expect(lines[1]).toContain(',0.7500,0.2500,0.5000,1.0000');
   });
 });
 
@@ -167,6 +188,10 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
           companionPromptImpressions: 2,
           companionForcedOpenDetailsClicks: 1,
           companionNudgeImpressions: 1,
+          companionPrimaryCtaImpressions: 1,
+          companionPrimaryCtaClicks: 1,
+          companionPrimaryCtaCompletions: 1,
+          interruptionTimingClass: 'boundary',
           scratchpadOpened: 1,
         },
         {
@@ -179,6 +204,10 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
           companionPromptImpressions: 3,
           companionForcedOpenDetailsClicks: 1,
           companionNudgeImpressions: 2,
+          companionPrimaryCtaImpressions: 2,
+          companionPrimaryCtaClicks: 1,
+          companionPrimaryCtaCompletions: 1,
+          interruptionTimingClass: 'mid-activity',
           scratchpadAppended: 2,
         },
         {
@@ -187,6 +216,7 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
           trigger: 'cached',
           firstMeaningfulEditLagMs: 3000,
           firstActionLagMs: 3500,
+          interruptionTimingClass: 'unknown',
         },
       ],
       { generatedAt: Date.UTC(2026, 1, 1, 12, 0, 0) },
@@ -206,6 +236,16 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| Forced-open rate (`forced/prompt`) | 0.4000 |');
     expect(markdown).toContain('| Nudge impressions (total) | 3 |');
     expect(markdown).toContain('| Nudge impressions per session | 1.00 |');
+    expect(markdown).toContain('| Primary CTA impressions (total) | 3 |');
+    expect(markdown).toContain('| Primary CTA clicks (total) | 2 |');
+    expect(markdown).toContain('| Primary CTA completions (total) | 2 |');
+    expect(markdown).toContain(
+      '| Primary CTA click-through rate (`clicks/impressions`) | 0.6667 |',
+    );
+    expect(markdown).toContain('| Primary CTA completion rate (`completions/clicks`) | 1.0000 |');
+    expect(markdown).toContain('| boundary | 1 | 0.3333 |');
+    expect(markdown).toContain('| mid-activity | 1 | 0.3333 |');
+    expect(markdown).toContain('| unknown | 1 | 0.3333 |');
     expect(markdown).toContain('| scratchpadOpened (total) | 1 |');
     expect(markdown).toContain('| scratchpadAppended (total) | 2 |');
   });
