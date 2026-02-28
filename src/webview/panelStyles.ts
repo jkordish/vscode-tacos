@@ -137,6 +137,18 @@ export const PANEL_WEBVIEW_STYLE = `
       details summary {
         cursor: pointer;
       }
+      .card > details[data-panel-section] > summary {
+        list-style: none;
+      }
+      .card > details[data-panel-section] > summary::-webkit-details-marker {
+        display: none;
+      }
+      .card > details[data-panel-section] > summary h3 {
+        margin-bottom: 0;
+      }
+      .panel-section-body {
+        margin-top: 10px;
+      }
       .show-more-btn {
         margin-top: 8px;
       }

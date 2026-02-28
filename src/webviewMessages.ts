@@ -39,12 +39,14 @@ type SimpleWebviewMessageType = (typeof SIMPLE_MESSAGE_TYPES)[number];
 type RestoreWebviewMessageType = (typeof RESTORE_MESSAGE_TYPES)[number];
 type PrimaryNextSafeActionSurface = 'home';
 type ResumePathStepId = 'confirmIntent' | 'runNextSafeAction' | 'clearBlocker';
+type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details';
 
 export type WebviewMessage =
   | { type: SimpleWebviewMessageType }
   | { type: RestoreWebviewMessageType }
   | { type: 'runNextStepAction'; stepIndex: number; primarySurface?: PrimaryNextSafeActionSurface }
   | { type: 'resumePathToggle'; stepId: ResumePathStepId; completed: boolean }
+  | { type: 'setPanelSectionExpanded'; sectionId: PanelSectionId; expanded: boolean }
   | { type: 'setIntentOverride'; intent: string }
   | { type: 'openEvidence'; evidenceId: string }
   | { type: 'openTopFile'; index: number }
@@ -140,6 +142,28 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
       type: 'resumePathToggle',
       stepId,
       completed: raw.completed,
+    };
+  }
+
+  if (raw.type === 'setPanelSectionExpanded') {
+    const sectionId = raw.sectionId;
+    if (
+      sectionId !== 'trustCenter' &&
+      sectionId !== 'timeline' &&
+      sectionId !== 'evidence' &&
+      sectionId !== 'details'
+    ) {
+      return undefined;
+    }
+
+    if (typeof raw.expanded !== 'boolean') {
+      return undefined;
+    }
+
+    return {
+      type: 'setPanelSectionExpanded',
+      sectionId,
+      expanded: raw.expanded,
     };
   }
 

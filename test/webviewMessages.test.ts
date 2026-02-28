@@ -173,6 +173,34 @@ describe('parseWebviewMessage', () => {
     ).toBeUndefined();
   });
 
+  it('validates setPanelSectionExpanded payload shape', () => {
+    expect(
+      parseWebviewMessage({
+        type: 'setPanelSectionExpanded',
+        sectionId: 'timeline',
+        expanded: true,
+      }),
+    ).toEqual({
+      type: 'setPanelSectionExpanded',
+      sectionId: 'timeline',
+      expanded: true,
+    });
+    expect(
+      parseWebviewMessage({
+        type: 'setPanelSectionExpanded',
+        sectionId: 'recap',
+        expanded: true,
+      }),
+    ).toBeUndefined();
+    expect(
+      parseWebviewMessage({
+        type: 'setPanelSectionExpanded',
+        sectionId: 'details',
+        expanded: 'yes',
+      }),
+    ).toBeUndefined();
+  });
+
   it('validates setIntentOverride payload shape', () => {
     expect(
       parseWebviewMessage({

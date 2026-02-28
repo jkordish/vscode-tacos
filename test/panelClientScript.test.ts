@@ -7,6 +7,8 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain("'restoreWorkingSet'");
     expect(script).toContain("'setIntentOverride'");
     expect(script).toContain("'clearIntentOverride'");
+    expect(script).toContain("'trustCenter'");
+    expect(script).toContain("type: 'setPanelSectionExpanded'");
     expect(script).toContain('const maxIntentOverrideChars = 280;');
     expect(script).toContain("type: 'blockedLink'");
   });

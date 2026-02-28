@@ -30,11 +30,13 @@ describe('panelCards', () => {
       trustCueDetailsTrustedHtml: '<li>Recent files: 2</li>',
       autoSummaryToggleDisabledAttr: '',
       autoSummaryToggleLabel: 'Pause auto summaries',
+      expanded: false,
     });
 
     expect(status).toContain('<h3>Status</h3>');
     expect(status).toContain('data-action="refreshSummary"');
     expect(trust).toContain('<h3>Trust Center</h3>');
+    expect(trust).toContain('data-panel-section="trustCenter"');
     expect(trust).toContain('data-action="openPrivacySafety"');
     expect(trust).toContain('<li>Recent files: 2</li>');
   });
@@ -43,6 +45,7 @@ describe('panelCards', () => {
     const timeline = renderTimelineCard({
       showTimeline: true,
       timelineGroupsTrustedHtml: '',
+      expanded: false,
     });
     const list = renderTitledListCard({
       title: 'Top Files',
@@ -52,14 +55,17 @@ describe('panelCards', () => {
     const evidence = renderEvidenceCard({
       evidenceItemsTrustedHtml: '',
       hasExtraEvidence: true,
+      expanded: false,
     });
-    const details = renderDetailsCard('<p>Summary</p>');
+    const details = renderDetailsCard('<p>Summary</p>', false);
 
-    expect(timeline).toContain('data-action="toggleTimeline"');
+    expect(timeline).toContain('data-panel-section="timeline"');
     expect(timeline).toContain('No timeline entries captured yet.');
     expect(list).toContain('<h3>Top Files</h3>');
     expect(list).toContain('<li>None captured</li>');
     expect(evidence).toContain('data-action="toggleEvidenceMore"');
+    expect(evidence).toContain('data-panel-section="evidence"');
+    expect(details).toContain('data-panel-section="details"');
     expect(details).toContain('<div class="details-markdown"><p>Summary</p></div>');
   });
 

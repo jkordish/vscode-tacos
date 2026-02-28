@@ -34,25 +34,30 @@ export interface TrustCenterCardInput {
   trustCueDetailsTrustedHtml: string;
   autoSummaryToggleDisabledAttr: string;
   autoSummaryToggleLabel: string;
+  expanded: boolean;
 }
 
 export function renderTrustCenterCard(input: TrustCenterCardInput): string {
   return `<div class="card">
-      <h3>Trust Center</h3>
-      <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(input.trustTrackingLabel)}</div>
-      <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
-      <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(input.sentToAiLabel)}</div>
-      <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(input.trustBasedOn)}</div>
-      <details>
-        <summary><strong>Why am I seeing this?</strong></summary>
-        <ul class="compact-list">${input.trustCueDetailsTrustedHtml || '<li>No evidence counts yet.</li>'}</ul>
+      <details data-panel-section="trustCenter" ${input.expanded ? 'open' : ''}>
+        <summary><h3>Trust Center</h3></summary>
+        <div class="panel-section-body">
+          <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(input.trustTrackingLabel)}</div>
+          <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
+          <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(input.sentToAiLabel)}</div>
+          <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(input.trustBasedOn)}</div>
+          <details>
+            <summary><strong>Why am I seeing this?</strong></summary>
+            <ul class="compact-list">${input.trustCueDetailsTrustedHtml || '<li>No evidence counts yet.</li>'}</ul>
+          </details>
+          <div class="status-actions">
+            <button type="button" class="secondary" data-action="toggleAutoSummaries" ${
+              input.autoSummaryToggleDisabledAttr
+            }>${escapeHtml(input.autoSummaryToggleLabel)}</button>
+            <button type="button" class="secondary" data-action="openPrivacySafety">Open Privacy & Safety</button>
+          </div>
+        </div>
       </details>
-      <div class="status-actions">
-        <button type="button" class="secondary" data-action="toggleAutoSummaries" ${
-          input.autoSummaryToggleDisabledAttr
-        }>${escapeHtml(input.autoSummaryToggleLabel)}</button>
-        <button type="button" class="secondary" data-action="openPrivacySafety">Open Privacy & Safety</button>
-      </div>
     </div>`;
 }
 
@@ -87,6 +92,7 @@ export function renderChangesSinceCard(changesSinceItemsTrustedHtml: string): st
 export interface TimelineCardInput {
   showTimeline: boolean;
   timelineGroupsTrustedHtml: string;
+  expanded: boolean;
 }
 
 export function renderTimelineCard(input: TimelineCardInput): string {
@@ -95,11 +101,12 @@ export function renderTimelineCard(input: TimelineCardInput): string {
   }
 
   return `<div class="card">
-      <h3>Timeline</h3>
-      <button type="button" class="secondary" data-action="toggleTimeline" aria-expanded="false" aria-controls="timeline-content">Show timeline</button>
-      <div id="timeline-content" hidden>
-        ${input.timelineGroupsTrustedHtml || '<p class="muted">No timeline entries captured yet.</p>'}
-      </div>
+      <details data-panel-section="timeline" ${input.expanded ? 'open' : ''}>
+        <summary><h3>Timeline</h3></summary>
+        <div class="panel-section-body">
+          ${input.timelineGroupsTrustedHtml || '<p class="muted">No timeline entries captured yet.</p>'}
+        </div>
+      </details>
     </div>`;
 }
 
@@ -143,27 +150,34 @@ export function renderRestorePackCard(
 export interface EvidenceCardInput {
   evidenceItemsTrustedHtml: string;
   hasExtraEvidence: boolean;
+  expanded: boolean;
 }
 
 export function renderEvidenceCard(input: EvidenceCardInput): string {
   return `<div class="card">
-      <details>
-        <summary><strong>Evidence</strong></summary>
-        <ul class="evidence-list" id="evidence-list">${
-          input.evidenceItemsTrustedHtml || '<li>None captured</li>'
-        }</ul>
-        ${
-          input.hasExtraEvidence
-            ? '<button type="button" class="show-more-btn" data-action="toggleEvidenceMore">Show more</button>'
-            : ''
-        }
+      <details data-panel-section="evidence" ${input.expanded ? 'open' : ''}>
+        <summary><h3>Evidence</h3></summary>
+        <div class="panel-section-body">
+          <ul class="evidence-list" id="evidence-list">${
+            input.evidenceItemsTrustedHtml || '<li>None captured</li>'
+          }</ul>
+          ${
+            input.hasExtraEvidence
+              ? '<button type="button" class="show-more-btn" data-action="toggleEvidenceMore">Show more</button>'
+              : ''
+          }
+        </div>
       </details>
     </div>`;
 }
 
-export function renderDetailsCard(detailsTrustedHtml: string): string {
+export function renderDetailsCard(detailsTrustedHtml: string, expanded: boolean): string {
   return `<div class="card">
-      <h3>Details</h3>
-      <div class="details-markdown">${detailsTrustedHtml}</div>
+      <details data-panel-section="details" ${expanded ? 'open' : ''}>
+        <summary><h3>Details</h3></summary>
+        <div class="panel-section-body">
+          <div class="details-markdown">${detailsTrustedHtml}</div>
+        </div>
+      </details>
     </div>`;
 }
