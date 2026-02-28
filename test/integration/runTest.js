@@ -93,6 +93,13 @@ async function main() {
     );
 
     await runSuite(
+      'panel-section-persistence',
+      path.resolve(__dirname, 'suite', 'panelSectionPersistence.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'focus-suppression-paths',
       path.resolve(__dirname, 'suite', 'focusSuppressionPaths.js'),
       [fixtureWorkspace, '--disable-extensions'],

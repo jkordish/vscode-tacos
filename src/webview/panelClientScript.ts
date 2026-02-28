@@ -1,6 +1,11 @@
-export function renderPanelClientScript(maxIntentOverrideChars: number): string {
+export function renderPanelClientScript(
+  maxIntentOverrideChars: number,
+  panelSectionScopeToken: string,
+): string {
   return `
       const vscode = acquireVsCodeApi();
+      const panelSectionIds = new Set(['trustCenter', 'timeline', 'evidence', 'details']);
+      const panelSectionScope = ${JSON.stringify(panelSectionScopeToken)};
       const hostActions = new Set([
         'fixSummary',
         'checkpointPinToggle',
@@ -35,53 +40,62 @@ export function renderPanelClientScript(maxIntentOverrideChars: number): string 
         'restoreCopyFailingCommand'
       ]);
       const viewState = Object.assign(
-        { evidenceExpanded: false, timelineExpanded: false },
+        { evidenceListExpanded: false, sectionExpanded: {}, sectionScope: '' },
         vscode.getState() || {},
       );
+
+      if (viewState.sectionScope !== panelSectionScope) {
+        viewState.sectionExpanded = {};
+        viewState.sectionScope = panelSectionScope;
+        vscode.setState(viewState);
+      }
 
       function persistViewState() {
         vscode.setState(viewState);
       }
 
-      function setEvidenceExpanded(expanded) {
+      function setEvidenceListExpanded(expanded) {
         const list = document.getElementById('evidence-list');
         const toggle = document.querySelector('[data-action="toggleEvidenceMore"]');
         if (!(list instanceof HTMLElement) || !(toggle instanceof HTMLElement)) {
-          viewState.evidenceExpanded = false;
+          viewState.evidenceListExpanded = false;
           persistViewState();
           return;
         }
 
         list.classList.toggle('show-more', expanded);
         toggle.textContent = expanded ? 'Show less' : 'Show more';
-        viewState.evidenceExpanded = expanded;
+        viewState.evidenceListExpanded = expanded;
         persistViewState();
       }
 
-      function setTimelineExpanded(expanded) {
-        const timeline = document.getElementById('timeline-content');
-        const toggle = document.querySelector('[data-action="toggleTimeline"]');
-        if (!(timeline instanceof HTMLElement) || !(toggle instanceof HTMLElement)) {
-          viewState.timelineExpanded = false;
-          persistViewState();
-          return;
-        }
-
-        if (expanded) {
-          timeline.removeAttribute('hidden');
-          toggle.textContent = 'Hide timeline';
-          toggle.setAttribute('aria-expanded', 'true');
-        } else {
-          timeline.setAttribute('hidden', 'true');
-          toggle.textContent = 'Show timeline';
-          toggle.setAttribute('aria-expanded', 'false');
-        }
-        viewState.timelineExpanded = expanded;
+      function persistPanelSectionExpanded(sectionId, expanded) {
+        const sectionExpanded = Object.assign({}, viewState.sectionExpanded || {});
+        sectionExpanded[sectionId] = expanded;
+        viewState.sectionExpanded = sectionExpanded;
+        viewState.sectionScope = panelSectionScope;
         persistViewState();
+        vscode.postMessage({ type: 'setPanelSectionExpanded', sectionId, expanded });
       }
 
-      setEvidenceExpanded(Boolean(viewState.evidenceExpanded));
-      setTimelineExpanded(Boolean(viewState.timelineExpanded));
+      function restorePanelSectionExpansion() {
+        const sectionExpanded = viewState.sectionExpanded || {};
+        for (const [sectionId, expanded] of Object.entries(sectionExpanded)) {
+          if (!panelSectionIds.has(sectionId)) {
+            continue;
+          }
+
+          const details = document.querySelector('details[data-panel-section="' + sectionId + '"]');
+          if (!(details instanceof HTMLDetailsElement)) {
+            continue;
+          }
+
+          details.open = Boolean(expanded);
+        }
+      }
+
+      setEvidenceListExpanded(Boolean(viewState.evidenceListExpanded));
+      restorePanelSectionExpansion();
 
       function parseDatasetInteger(rawValue) {
         if (typeof rawValue !== 'string') {
@@ -135,6 +149,20 @@ export function renderPanelClientScript(maxIntentOverrideChars: number): string 
         });
       });
 
+      document.addEventListener('toggle', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLDetailsElement)) {
+          return;
+        }
+
+        const sectionId = target.dataset.panelSection;
+        if (typeof sectionId !== 'string' || !panelSectionIds.has(sectionId)) {
+          return;
+        }
+
+        persistPanelSectionExpanded(sectionId, target.open);
+      });
+
       document.addEventListener('keydown', (event) => {
         if (!(event.target instanceof HTMLInputElement)) {
           return;
@@ -176,12 +204,7 @@ export function renderPanelClientScript(maxIntentOverrideChars: number): string 
           }
 
           if (action === 'toggleEvidenceMore') {
-            setEvidenceExpanded(!Boolean(viewState.evidenceExpanded));
-            return;
-          }
-
-          if (action === 'toggleTimeline') {
-            setTimelineExpanded(!Boolean(viewState.timelineExpanded));
+            setEvidenceListExpanded(!Boolean(viewState.evidenceListExpanded));
             return;
           }
 

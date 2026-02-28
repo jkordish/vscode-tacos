@@ -81,6 +81,37 @@ async function run() {
     'Expected Trust Center card marker in panel render output.',
   );
   assert.equal(
+    resumeFlow?.hasTrustCenterSection,
+    true,
+    'Expected Trust Center to render as a collapsible panel section.',
+  );
+  assert.equal(
+    resumeFlow?.trustCenterExpanded,
+    false,
+    'Expected Trust Center to default collapsed for progressive disclosure.',
+  );
+  if (resumeFlow?.hasTimelineSection) {
+    assert.equal(
+      resumeFlow?.timelineExpanded,
+      false,
+      'Expected Timeline to default collapsed for progressive disclosure.',
+    );
+  }
+  if (resumeFlow?.hasEvidenceSection) {
+    assert.equal(
+      resumeFlow?.evidenceExpanded,
+      false,
+      'Expected Evidence to default collapsed for progressive disclosure.',
+    );
+  }
+  if (resumeFlow?.hasDetailsSection) {
+    assert.equal(
+      resumeFlow?.detailsExpanded,
+      false,
+      'Expected Details to default collapsed for progressive disclosure.',
+    );
+  }
+  assert.equal(
     resumeFlow?.hasResumePathCard,
     true,
     'Expected Resume Path checklist card marker in panel render output.',

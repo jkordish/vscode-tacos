@@ -181,6 +181,7 @@ const KEY_RESUME_PATH_PREFIX = 'tacos.resumePath';
 const KEY_INTENT_OVERRIDE_PREFIX = 'tacos.intentOverride';
 const KEY_AI_PAYLOAD_CONSENT_PREFIX = 'tacos.aiPayloadConsent';
 const KEY_NOISE_BUDGET_EVENTS_PREFIX = 'tacos.noiseBudgetEvents';
+const KEY_PANEL_SECTION_STATE_PREFIX = 'tacos.panelSectionState';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
@@ -274,6 +275,8 @@ interface RuntimeState {
   panelScratchpadScopeLabel?: string;
   panelResumePathState?: ResumePathState;
   panelResumePathScope?: string;
+  panelSectionState?: PanelSectionState;
+  panelSectionScope?: string;
   lastTaskName?: string;
   lastTaskWorkspaceRoot?: string;
   lastTaskExitCode?: number;
@@ -387,6 +390,14 @@ interface DiagnosticBlockerSnapshot {
   top?: DiagnosticBlockerReference;
 }
 
+type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details';
+
+interface PanelSectionState {
+  expandedSectionIds: PanelSectionId[];
+}
+
+const PANEL_SECTION_IDS: PanelSectionId[] = ['trustCenter', 'timeline', 'evidence', 'details'];
+
 export function activate(context: vscode.ExtensionContext): void {
   activeExtensionContext = context;
   const initialWorkspaceRoot = pickWorkspaceRoot() ?? '';
@@ -413,6 +424,8 @@ export function activate(context: vscode.ExtensionContext): void {
     panelScratchpadScopeLabel: undefined,
     panelResumePathState: undefined,
     panelResumePathScope: undefined,
+    panelSectionState: undefined,
+    panelSectionScope: undefined,
     lastTaskName: persistedTaskMetadata?.taskName,
     lastTaskWorkspaceRoot: persistedTaskMetadata?.workspaceRoot,
     lastTaskExitCode: persistedTaskMetadata?.exitCode,
@@ -544,6 +557,14 @@ export function activate(context: vscode.ExtensionContext): void {
         doneItemsCount: state.doneItems.values().length,
       };
     }),
+    vscode.commands.registerCommand('tacos.__test.disposePanel', async () => {
+      if (!state.panel) {
+        return false;
+      }
+
+      state.panel.dispose();
+      return true;
+    }),
     vscode.commands.registerCommand('tacos.__test.getResumeFlowSnapshot', async () => {
       const summary = state.panelSummary ?? state.scratchSummary;
       const nextStepActions = summary ? buildNextStepActionCandidates(summary) : [];
@@ -567,6 +588,16 @@ export function activate(context: vscode.ExtensionContext): void {
         /<div class="card(?: [^"]*)?">\s*<h3>([^<]+)<\/h3>/u,
       );
       const firstCardTitle = firstCardTitleMatch?.[1] ?? '';
+      const hasTrustCenterSection = panelHtml.includes('data-panel-section="trustCenter"');
+      const hasTimelineSection = panelHtml.includes('data-panel-section="timeline"');
+      const hasEvidenceSection = panelHtml.includes('data-panel-section="evidence"');
+      const hasDetailsSection = panelHtml.includes('data-panel-section="details"');
+      const trustCenterExpanded = /data-panel-section="trustCenter"[^>]*\sopen(?:\s|>)/u.test(
+        panelHtml,
+      );
+      const timelineExpanded = /data-panel-section="timeline"[^>]*\sopen(?:\s|>)/u.test(panelHtml);
+      const evidenceExpanded = /data-panel-section="evidence"[^>]*\sopen(?:\s|>)/u.test(panelHtml);
+      const detailsExpanded = /data-panel-section="details"[^>]*\sopen(?:\s|>)/u.test(panelHtml);
 
       return {
         hasPanelSummary: Boolean(state.panelSummary),
@@ -595,6 +626,14 @@ export function activate(context: vscode.ExtensionContext): void {
         hasRestoreWorkingSetAction: restoreWorkingSetActionCount > 0,
         restoreWorkingSetActionCount,
         hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
+        hasTrustCenterSection,
+        hasTimelineSection,
+        hasEvidenceSection,
+        hasDetailsSection,
+        trustCenterExpanded,
+        timelineExpanded,
+        evidenceExpanded,
+        detailsExpanded,
         hasResumePathCard: panelHtml.includes('<h3>Resume Path</h3>'),
         resumePathStepCount: (panelHtml.match(/<input[^>]*data-resume-path-toggle="true"/gu) ?? [])
           .length,
@@ -619,6 +658,36 @@ export function activate(context: vscode.ExtensionContext): void {
         collapsed: snapshot.collapsed,
       };
     }),
+    vscode.commands.registerCommand('tacos.__test.getPanelSectionStateSnapshot', async () => {
+      const contextRef = activeExtensionContext;
+      const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+      if (!contextRef || !workspaceRoot) {
+        return undefined;
+      }
+
+      const scope = partitionScope(contextRef, workspaceRoot);
+      const storageKey = panelSectionStateStorageKey(contextRef, workspaceRoot);
+      const snapshot = resolvePanelSectionState(contextRef, workspaceRoot);
+      return {
+        scope,
+        storageKey,
+        expandedSectionIds: [...snapshot.expandedSectionIds],
+      };
+    }),
+    vscode.commands.registerCommand(
+      'tacos.__test.setPanelSectionExpanded',
+      async (sectionId: PanelSectionId, expanded = true) => {
+        const contextRef = activeExtensionContext;
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!contextRef || !workspaceRoot || !isPanelSectionId(sectionId)) {
+          return false;
+        }
+
+        await setPanelSectionExpanded(contextRef, workspaceRoot, sectionId, expanded);
+        rerenderPanel();
+        return true;
+      },
+    ),
     vscode.commands.registerCommand(
       'tacos.__test.setIntentOverride',
       async (intentValue?: unknown) => {
@@ -3115,11 +3184,23 @@ async function showDetailsPanel(
       state.panelScratchpadExists = false;
       state.panelScratchpadHasContent = false;
       state.panelScratchpadScopeLabel = undefined;
+      state.panelSectionState = undefined;
+      state.panelSectionScope = undefined;
     });
 
     state.panel.webview.onDidReceiveMessage(async (rawMessage: unknown) => {
       const message = parseWebviewMessage(rawMessage);
       if (!message) {
+        return;
+      }
+
+      if (message.type === 'setPanelSectionExpanded') {
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!workspaceRoot) {
+          return;
+        }
+
+        await setPanelSectionExpanded(context, workspaceRoot, message.sectionId, message.expanded);
         return;
       }
 
@@ -4012,6 +4093,11 @@ function renderWebview(
       ? `<p class="muted blocker-disabled-reason">Unavailable: ${escapeHtml(blockerAction.disabledReason)}</p>`
       : '';
   const panelWorkspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+  const panelSectionState =
+    activeExtensionContext && panelWorkspaceRoot
+      ? resolvePanelSectionState(activeExtensionContext, panelWorkspaceRoot)
+      : createPanelSectionState(undefined);
+  const expandedSections = new Set(panelSectionState.expandedSectionIds);
   const resumePathState =
     activeExtensionContext && panelWorkspaceRoot
       ? resolveResumePathStateForSummary(activeExtensionContext, panelWorkspaceRoot, summary)
@@ -4214,6 +4300,7 @@ function renderWebview(
   const timelineCard = renderTimelineCard({
     showTimeline: config.showTimeline,
     timelineGroupsTrustedHtml: timelineGroupsHtml,
+    expanded: expandedSections.has('timeline'),
   });
   const recapCard =
     recapDoneItems.length > 0 || recapPendingItems.length > 0
@@ -4272,6 +4359,7 @@ function renderWebview(
     trustCueDetailsTrustedHtml: trustCueDetails,
     autoSummaryToggleDisabledAttr,
     autoSummaryToggleLabel,
+    expanded: expandedSections.has('trustCenter'),
   });
   const topFilesCard = renderTitledListCard({
     title: 'Top Files',
@@ -4288,8 +4376,9 @@ function renderWebview(
   const evidenceCard = renderEvidenceCard({
     evidenceItemsTrustedHtml: evidenceItems,
     hasExtraEvidence,
+    expanded: expandedSections.has('evidence'),
   });
-  const detailsCard = renderDetailsCard(detailsHtml);
+  const detailsCard = renderDetailsCard(detailsHtml, expandedSections.has('details'));
   const bodyCards = [
     renderResumeStackCard({
       intent: summary.intent,
@@ -4332,7 +4421,13 @@ function renderWebview(
   ]
     .filter(Boolean)
     .join('\n\n');
-  const clientScript = renderPanelClientScript(MAX_INTENT_OVERRIDE_CHARS);
+  const panelSectionScopeToken =
+    activeExtensionContext && panelWorkspaceRoot
+      ? Buffer.from(partitionScope(activeExtensionContext, panelWorkspaceRoot)).toString(
+          'base64url',
+        )
+      : 'global';
+  const clientScript = renderPanelClientScript(MAX_INTENT_OVERRIDE_CHARS, panelSectionScopeToken);
 
   return `<!doctype html>
 <html>
@@ -7296,6 +7391,80 @@ async function applyIntentOverrideToActiveContext(
 
 function resumePathStorageKey(context: vscode.ExtensionContext, root: string): string {
   return buildResumePathStorageKey(partitionScope(context, root));
+}
+
+function isPanelSectionId(value: unknown): value is PanelSectionId {
+  return PANEL_SECTION_IDS.includes(value as PanelSectionId);
+}
+
+function createPanelSectionState(raw: unknown): PanelSectionState {
+  if (!raw || typeof raw !== 'object') {
+    return { expandedSectionIds: [] };
+  }
+
+  const candidate = (raw as { expandedSectionIds?: unknown }).expandedSectionIds;
+  if (!Array.isArray(candidate)) {
+    return { expandedSectionIds: [] };
+  }
+
+  const normalized = Array.from(
+    new Set(candidate.filter((value): value is PanelSectionId => isPanelSectionId(value))),
+  );
+  return { expandedSectionIds: normalized };
+}
+
+function panelSectionStateStorageKey(context: vscode.ExtensionContext, root: string): string {
+  const scope = partitionScope(context, root);
+  return `${KEY_PANEL_SECTION_STATE_PREFIX}.${Buffer.from(scope).toString('base64url')}`;
+}
+
+function resolvePanelSectionState(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): PanelSectionState {
+  const scope = partitionScope(context, workspaceRoot);
+  const cached = state.panelSectionState;
+  if (cached && state.panelSectionScope === scope) {
+    return cached;
+  }
+
+  const raw = context.workspaceState.get<unknown>(
+    panelSectionStateStorageKey(context, workspaceRoot),
+  );
+  const normalized = createPanelSectionState(raw);
+  state.panelSectionState = normalized;
+  state.panelSectionScope = scope;
+  return normalized;
+}
+
+async function setPanelSectionExpanded(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  sectionId: PanelSectionId,
+  expanded: boolean,
+): Promise<void> {
+  const current = resolvePanelSectionState(context, workspaceRoot);
+  const expandedIds = new Set(current.expandedSectionIds);
+  if (expanded) {
+    expandedIds.add(sectionId);
+  } else {
+    expandedIds.delete(sectionId);
+  }
+
+  const next: PanelSectionState = { expandedSectionIds: [...expandedIds] };
+  const currentSerialized = JSON.stringify(current.expandedSectionIds);
+  const nextSerialized = JSON.stringify(next.expandedSectionIds);
+  if (currentSerialized === nextSerialized) {
+    return;
+  }
+
+  const storageKey = panelSectionStateStorageKey(context, workspaceRoot);
+  await context.workspaceState.update(
+    storageKey,
+    next.expandedSectionIds.length > 0 ? next : undefined,
+  );
+  state.panelSectionState = next;
+  state.panelSectionScope = partitionScope(context, workspaceRoot);
 }
 
 function resolveResumePathStateForSummary(
