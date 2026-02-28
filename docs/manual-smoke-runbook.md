@@ -24,7 +24,8 @@ Branch/commit: `__________`
 4. Confirm:
    - `tacos.enabled=true`
    - `tacos.showOnFocus=true`
-   - `tacos.autoRefreshInBackground=true` (default path)
+   - `tacos.autoRefreshInBackground=true` (default path; only applies when `tacos.uiSurface` is not explicitly set)
+   - `tacos.uiSurface` is left unset/default, or explicitly set to `statusbar`, when validating background vs prompt behavior
 5. Keep Output panel available (`TaCoS`) for troubleshooting.
 
 ## 2) Must-Pass v0.6.0 Scenarios (Trusted Workspace)
@@ -191,7 +192,7 @@ Record:
 
 Steps:
 
-1. Configure provider (`vscode-lm` or `openai`).
+1. Run `TaCoS: Configure AI Provider` and select `vscode-lm` or `openai`.
 2. Trigger summary and inspect payload preview/consent flow.
 
 Expected:
@@ -256,7 +257,7 @@ Notes: `__________`
 After running scenarios above:
 
 1. Run `TaCoS: Copy Metrics Baseline Snapshot` and paste into `docs/metrics-baseline.md`.
-2. Run `TaCoS: Export Local Metrics` and inspect `.tacos/metrics.csv`.
+2. Run `TaCoS: Export Local Metrics` and inspect `.tacos/metrics.csv` (required) and `.tacos/metrics.json` (optional structured view).
 3. Record key v0.6.0 metrics:
    - `firstActionLagMs` (p50/p95)
    - `companionForcedOpenRate`

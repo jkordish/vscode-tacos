@@ -10,7 +10,7 @@ Branch/commit: `__________`
 
 - [ ] `npm run verify`
 - [ ] CI checks green on release PR
-- [ ] VSIX package generated successfully
+- [ ] `vscode-tacos-verify.vsix` generated successfully
 
 Notes: `__________`
 
@@ -40,7 +40,7 @@ Result summary:
 ## 3) Metrics Snapshot Capture
 
 - [ ] `TaCoS: Copy Metrics Baseline Snapshot` captured and pasted into `docs/metrics-baseline.md`
-- [ ] `TaCoS: Export Local Metrics` reviewed locally (`.tacos/metrics.csv`)
+- [ ] `TaCoS: Export Local Metrics` reviewed locally (`.tacos/metrics.csv` required for gate; `.tacos/metrics.json` optional for deeper inspection/debugging)
 - [ ] Key fields reviewed:
   - `firstActionLagMs` p50/p95
   - `companionForcedOpenRate`
