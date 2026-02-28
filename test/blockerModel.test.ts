@@ -74,6 +74,20 @@ describe('decidePrimaryBlocker', () => {
     expect(decision.action?.type).toBe('restoreOpenProblems');
   });
 
+  it('prefers opening the diagnostic file when top diagnostic target is available', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      diagnosticsErrorCount: 2,
+      diagnosticsTopPath: 'src/summary.ts',
+      diagnosticsTopLine: 18,
+      canOpenDiagnosticFile: true,
+    });
+
+    expect(decision.kind).toBe('diagnostics');
+    expect(decision.action?.type).toBe('restoreOpenDiagnosticFile');
+    expect(decision.action?.disabled).toBe(false);
+  });
+
   it('uses exactly one primary action with clear disabled reason in restricted mode', () => {
     const decision = decidePrimaryBlocker({
       ...baseInput(),
@@ -87,6 +101,72 @@ describe('decidePrimaryBlocker', () => {
     expect(decision.action).toBeDefined();
     expect(decision.action?.disabled).toBe(true);
     expect(decision.action?.disabledReason).toContain('Restricted Mode');
+  });
+
+  it('returns restricted fallback when no stronger blockers are present', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      trusted: false,
+      hasFailingTask: false,
+      lastFailingCommand: undefined,
+      diagnosticsErrorCount: 0,
+      switchedBranches: false,
+      lowConfidence: false,
+      hasNextSteps: true,
+    });
+
+    expect(decision.kind).toBe('restricted');
+    expect(decision.action?.type).toBe('restoreRerunTask');
+    expect(decision.action?.disabled).toBe(true);
+    expect(decision.action?.disabledReason).toContain('Restricted Mode');
+  });
+
+  it('returns low-confidence checkpoint action when confidence is low and no note exists', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      lowConfidence: true,
+      hasCheckpointNote: false,
+      hasFailingTask: false,
+      lastFailingCommand: undefined,
+      diagnosticsErrorCount: 0,
+      switchedBranches: false,
+    });
+
+    expect(decision.kind).toBe('lowConfidence');
+    expect(decision.action?.type).toBe('sessionAddCheckpoint');
+    expect(decision.action?.disabled).toBe(false);
+  });
+
+  it('returns no-next-steps fallback with refresh action', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      hasNextSteps: false,
+      hasFailingTask: false,
+      lastFailingCommand: undefined,
+      diagnosticsErrorCount: 0,
+      switchedBranches: false,
+      lowConfidence: false,
+    });
+
+    expect(decision.kind).toBe('noNextSteps');
+    expect(decision.action?.type).toBe('refreshSummary');
+    expect(decision.action?.disabled).toBe(false);
+  });
+
+  it('provides disabled branch-context action reason when checkout target is unavailable', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      switchedBranches: true,
+      hasFailingTask: false,
+      lastFailingCommand: undefined,
+      diagnosticsErrorCount: 0,
+      availability: availability({ canCheckoutPreviousBranch: false }),
+    });
+
+    expect(decision.kind).toBe('branchContext');
+    expect(decision.action?.type).toBe('restoreCheckoutPreviousBranch');
+    expect(decision.action?.disabled).toBe(true);
+    expect(decision.action?.disabledReason).toContain('No previous branch target');
   });
 
   it('suppresses rerun as primary action for long-gap command recovery', () => {

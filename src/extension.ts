@@ -512,7 +512,10 @@ export function activate(context: vscode.ExtensionContext): void {
         Boolean(candidate),
       );
       const panelHtml = state.panel?.webview.html ?? '';
-      const hasPrimaryBlockerAction = panelHtml.includes('data-blocker-primary-action="true"');
+      const primaryBlockerActionCount = (
+        panelHtml.match(/data-blocker-primary-action="true"/gu) ?? []
+      ).length;
+      const hasPrimaryBlockerAction = primaryBlockerActionCount > 0;
       const hasDisabledPrimaryBlockerAction =
         /data-blocker-primary-action="true"[^>]*disabled/u.test(panelHtml);
       const hasActiveBlockedCard = panelHtml.includes('data-blocked-card="active"');
@@ -532,6 +535,7 @@ export function activate(context: vscode.ExtensionContext): void {
         hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
         hasLastActionCue: panelHtml.includes('data-last-action-cue="true"'),
         hasActiveBlockedCard,
+        primaryBlockerActionCount,
         hasPrimaryBlockerAction,
         hasDisabledPrimaryBlockerAction,
         hasRestoreWorkingSetAction: panelHtml.includes('data-action="restoreWorkingSet"'),

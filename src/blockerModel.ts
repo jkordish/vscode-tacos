@@ -141,7 +141,7 @@ export function decidePrimaryBlocker(input: BlockerModelInput): BlockerDecision 
         kind: 'commandFailure',
         hasBlocker: true,
         title: 'Reorient after a long gap',
-        detail: `${input.lastFailingCommand} Review context before rerunning.`,
+        detail: `${input.lastFailingCommand}. Review context before rerunning.`,
         evidenceLabel: 'failing command',
         confidenceLabel: 'high',
         action,

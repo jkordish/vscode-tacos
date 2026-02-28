@@ -40,8 +40,8 @@ async function run() {
   );
   if (resumeFlow?.hasActiveBlockedCard) {
     assert.equal(
-      resumeFlow?.hasPrimaryBlockerAction,
-      true,
+      resumeFlow?.primaryBlockerActionCount,
+      1,
       'Expected exactly one primary unblock action marker when a blocker is active.',
     );
   }
