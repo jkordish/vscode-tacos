@@ -54,7 +54,11 @@ import {
   summarizePerformanceCounter,
   type PerformanceCounter,
 } from './performanceGuard';
-import { shouldAutoTriggerSummary, shouldPromptCheckpointOnBlur } from './noiseControl';
+import {
+  shouldAutoTriggerSummary,
+  shouldDeferPromptAfterFocusRegain,
+  shouldPromptCheckpointOnBlur,
+} from './noiseControl';
 import { buildNextStepActions } from './nextStepActions';
 import {
   isPathWithinWorkspaceRoot,
@@ -137,6 +141,7 @@ const CHECKPOINT_PROMPT_COOLDOWN_MINUTES = 45;
 const FOCUS_TRIGGER_DEBOUNCE_MS = 1200;
 const FOCUS_BOUNDARY_WINDOW_MS = 90_000;
 const FOCUS_MAX_DEFERRAL_WITHOUT_BOUNDARY_MS = 180_000;
+const FOCUS_TYPING_DEFERRAL_GRACE_MS = 2_000;
 const INTERRUPTION_TIMING_BOUNDARY_WINDOW_MS = 90_000;
 const INTERRUPTION_TIMING_MID_ACTIVITY_WINDOW_MS = 15_000;
 const PERF_WARN_COOLDOWN_MS = 60_000;
@@ -229,6 +234,7 @@ interface RuntimeState {
   activeRefinementContextHash?: string;
   autoSummaryInFlight: boolean;
   lastAutoFocusTriggerAt: number;
+  lastFocusGainedAt: number;
   lastBoundarySignalAt: number;
   lastMeaningfulActivityAt: number;
   perfFocusHandling: PerformanceCounter;
@@ -289,6 +295,7 @@ function maybeWarnRedactionPatternGuardrails(patterns: string[]): void {
 
 interface PresentSummaryOptions {
   autoOpenDetails?: boolean;
+  preferBackgroundPresentation?: boolean;
   workspaceRoot?: string;
   checkpointPrimaryNote?: CheckpointNote;
   checkpointNotes?: CheckpointNote[];
@@ -356,6 +363,7 @@ export function activate(context: vscode.ExtensionContext): void {
     activeRefinementContextHash: undefined,
     autoSummaryInFlight: false,
     lastAutoFocusTriggerAt: 0,
+    lastFocusGainedAt: 0,
     lastBoundarySignalAt: 0,
     lastMeaningfulActivityAt: 0,
     perfFocusHandling: createPerformanceCounter(),
@@ -597,6 +605,37 @@ export function activate(context: vscode.ExtensionContext): void {
           boundaryWindowMs: FOCUS_BOUNDARY_WINDOW_MS,
           maxDeferralWithoutBoundaryMs: FOCUS_MAX_DEFERRAL_WITHOUT_BOUNDARY_MS,
         };
+      },
+    ),
+    vscode.commands.registerCommand(
+      'tacos.__test.evaluateFocusPromptDeferral',
+      async (rawInput?: unknown) => {
+        const input =
+          rawInput && typeof rawInput === 'object' ? (rawInput as Record<string, unknown>) : {};
+        const focusGainedAt =
+          typeof input.focusGainedAt === 'number' && Number.isFinite(input.focusGainedAt)
+            ? input.focusGainedAt
+            : state.lastFocusGainedAt;
+        const observedAt =
+          typeof input.observedAt === 'number' && Number.isFinite(input.observedAt)
+            ? input.observedAt
+            : Date.now();
+        const lastMeaningfulActivityAt =
+          typeof input.lastMeaningfulActivityAt === 'number' &&
+          Number.isFinite(input.lastMeaningfulActivityAt)
+            ? input.lastMeaningfulActivityAt
+            : state.lastMeaningfulActivityAt;
+        const graceWindowMs =
+          typeof input.graceWindowMs === 'number' && Number.isFinite(input.graceWindowMs)
+            ? input.graceWindowMs
+            : FOCUS_TYPING_DEFERRAL_GRACE_MS;
+
+        return shouldDeferPromptAfterFocusRegain({
+          focusGainedAt,
+          observedAt,
+          lastMeaningfulActivityAt,
+          graceWindowMs,
+        });
       },
     ),
     vscode.commands.registerCommand('tacos.__test.setSnoozeUntil', async (value?: number) => {
@@ -1176,7 +1215,7 @@ export function activate(context: vscode.ExtensionContext): void {
         await maybePromptCheckpointOnBlur(context, now, workspaceRoot || undefined);
         return;
       }
-
+      state.lastFocusGainedAt = now;
       await handleFocusRegainSummaryTrigger(context, now);
     }),
   );
@@ -1299,7 +1338,18 @@ async function handleFocusRegainSummaryTrigger(
     const focusSummaryStartNs = monotonicNowNs();
     try {
       await context.workspaceState.update(autoTriggerFingerprintKey(context, root), fingerprint);
-      await triggerSummary(context, 'focus');
+      let deferPromptToBackground = false;
+      if (config.uiSurface === 'notification') {
+        await delay(FOCUS_TYPING_DEFERRAL_GRACE_MS);
+        deferPromptToBackground = shouldDeferPromptAfterFocusRegain({
+          focusGainedAt: now,
+          observedAt: Date.now(),
+          lastMeaningfulActivityAt: state.lastMeaningfulActivityAt,
+          graceWindowMs: FOCUS_TYPING_DEFERRAL_GRACE_MS,
+        });
+      }
+
+      await triggerSummary(context, 'focus', undefined, deferPromptToBackground);
     } finally {
       state.autoSummaryInFlight = false;
       recordPerformanceGuardrail(
@@ -1477,6 +1527,7 @@ async function triggerSummary(
   context: vscode.ExtensionContext,
   reason: Exclude<TriggerReason, 'cached'>,
   preferredWorkspaceRoot?: string,
+  deferPromptToBackground = false,
 ): Promise<void> {
   const root = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!root) {
@@ -1493,6 +1544,7 @@ async function triggerSummary(
 
   await presentSummary(context, prepared.summary, prepared.triggerReason, {
     autoOpenDetails: reason === 'manual',
+    preferBackgroundPresentation: reason === 'focus' && deferPromptToBackground,
     workspaceRoot: root,
     checkpointPrimaryNote: prepared.checkpointPrimaryNote,
     checkpointNotes: prepared.checkpointNotes,
@@ -1853,7 +1905,7 @@ async function presentSummary(
       workspaceRoot: root,
       trigger: triggerReason,
       uiSurface: config.uiSurface,
-      interruptionEvent: triggerReason === 'focus' && config.uiSurface === 'notification' ? 1 : 0,
+      interruptionEvent: triggerReason === 'focus' && presentationMode === 'prompt' ? 1 : 0,
       interruptionTimingClass: classifyInterruptionTiming(triggerReason),
       resumeWithNote: options.checkpointPrimaryNote ? 1 : 0,
     };
@@ -1981,10 +2033,14 @@ async function updateActiveNudges(
 
 function resolveSummaryPresentationMode(
   config: ExtensionConfig,
-  options: Pick<PresentSummaryOptions, 'autoOpenDetails'>,
+  options: Pick<PresentSummaryOptions, 'autoOpenDetails' | 'preferBackgroundPresentation'>,
 ): SummaryPresentationMode {
   if (options.autoOpenDetails) {
     return 'auto-open-details';
+  }
+
+  if (options.preferBackgroundPresentation) {
+    return 'background';
   }
 
   if (config.uiSurface === 'silent') {
@@ -4612,6 +4668,7 @@ async function applyTaskPartitionSwitch(
   state.doneItems = new RingBuffer(10, snapshot.sanitized.doneItems);
   state.lastFailingCommand = snapshot.sanitized.lastFailingCommand;
   state.lastFailingCommandRaw = undefined;
+  state.lastFocusGainedAt = 0;
   state.lastBoundarySignalAt = 0;
   state.lastMeaningfulActivityAt = 0;
   state.scratchSummary = undefined;
@@ -5570,6 +5627,10 @@ function uniqueStrings(values: string[]): string[] {
   }
 
   return result;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 interface SummaryCorrectionEntry {
@@ -6836,6 +6897,7 @@ function resetRuntimeWorkspaceState(): void {
   state.lastTerminalCwd = undefined;
   state.lastDebugConfigName = undefined;
   state.lastDebugWorkspaceRoot = undefined;
+  state.lastFocusGainedAt = 0;
   state.lastBoundarySignalAt = 0;
   state.lastMeaningfulActivityAt = 0;
   state.snoozeUntil = 0;

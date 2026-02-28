@@ -1,4 +1,8 @@
-import { shouldAutoTriggerSummary, shouldPromptCheckpointOnBlur } from '../src/noiseControl';
+import {
+  shouldAutoTriggerSummary,
+  shouldDeferPromptAfterFocusRegain,
+  shouldPromptCheckpointOnBlur,
+} from '../src/noiseControl';
 
 describe('shouldAutoTriggerSummary', () => {
   it('blocks triggers when idle, project switch, and significant-change gates are all false', () => {
@@ -252,6 +256,41 @@ describe('shouldPromptCheckpointOnBlur', () => {
         cooldownMinutes: 5,
         promptCooldownMinutes: 0,
         meaningfulChangeSinceLastPrompt: true,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('shouldDeferPromptAfterFocusRegain', () => {
+  it('returns true when meaningful activity happens within grace window', () => {
+    expect(
+      shouldDeferPromptAfterFocusRegain({
+        focusGainedAt: 1_000,
+        observedAt: 3_100,
+        lastMeaningfulActivityAt: 2_000,
+        graceWindowMs: 2_000,
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false when no activity occurred in grace window', () => {
+    expect(
+      shouldDeferPromptAfterFocusRegain({
+        focusGainedAt: 1_000,
+        observedAt: 3_100,
+        lastMeaningfulActivityAt: 0,
+        graceWindowMs: 2_000,
+      }),
+    ).toBe(false);
+  });
+
+  it('returns false when observed before grace window elapsed', () => {
+    expect(
+      shouldDeferPromptAfterFocusRegain({
+        focusGainedAt: 1_000,
+        observedAt: 2_500,
+        lastMeaningfulActivityAt: 2_000,
+        graceWindowMs: 2_000,
       }),
     ).toBe(false);
   });

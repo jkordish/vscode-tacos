@@ -106,6 +106,36 @@ async function run() {
       'Expected boundary deferral cap to eventually allow trigger after longer gap.',
     );
 
+    const typingDeferral = await vscode.commands.executeCommand(
+      'tacos.__test.evaluateFocusPromptDeferral',
+      {
+        focusGainedAt: now,
+        observedAt: now + 2_100,
+        lastMeaningfulActivityAt: now + 600,
+        graceWindowMs: 2_000,
+      },
+    );
+    assert.equal(
+      typingDeferral,
+      true,
+      'Expected prompt deferral when meaningful activity occurs shortly after focus regain.',
+    );
+
+    const passiveReturn = await vscode.commands.executeCommand(
+      'tacos.__test.evaluateFocusPromptDeferral',
+      {
+        focusGainedAt: now,
+        observedAt: now + 2_100,
+        lastMeaningfulActivityAt: now - 5_000,
+        graceWindowMs: 2_000,
+      },
+    );
+    assert.equal(
+      passiveReturn,
+      false,
+      'Expected no prompt deferral when no recent interaction occurred after focus regain.',
+    );
+
     await config.update('pauseSummaries', true, vscode.ConfigurationTarget.Global);
     const pausedStatusSnapshot = await vscode.commands.executeCommand('tacos.__test.getStatusBarSnapshot');
     assert.equal(pausedStatusSnapshot?.mode, 'paused');

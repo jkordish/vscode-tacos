@@ -30,8 +30,8 @@ The harness launches Extension Development Host runs against `test/fixtures/work
    - verifies `autoRefreshInBackground=true` resolves focus-refresh behavior to background mode
    - verifies `autoRefreshInBackground=false` resolves focus-refresh behavior to prompt mode
    - verifies companion status bar mode transitions for active/paused/disabled states
-   - verifies companion status bar mode transitions for active/paused/disabled states
    - verifies boundary-aware focus gating (recent boundary vs no-boundary short return, plus deferral-cap release)
+   - verifies typing-deferral behavior for prompt-mode focus resumes
 4. Resume flow critical-path suite:
    - executes `TaCoS: Show Resume Brief Now`
    - validates critical panel/runtime contract for v0.6 resume path:

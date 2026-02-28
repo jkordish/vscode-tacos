@@ -65,6 +65,32 @@ export interface BlurCheckpointDecisionInput {
   meaningfulChangeSinceLastPrompt: boolean;
 }
 
+export interface FocusPromptDeferralInput {
+  focusGainedAt: number;
+  observedAt: number;
+  lastMeaningfulActivityAt: number;
+  graceWindowMs: number;
+}
+
+export function shouldDeferPromptAfterFocusRegain(input: FocusPromptDeferralInput): boolean {
+  if (input.graceWindowMs <= 0) {
+    return false;
+  }
+
+  if (input.observedAt < input.focusGainedAt + input.graceWindowMs) {
+    return false;
+  }
+
+  if (!Number.isFinite(input.lastMeaningfulActivityAt) || input.lastMeaningfulActivityAt <= 0) {
+    return false;
+  }
+
+  return (
+    input.lastMeaningfulActivityAt >= input.focusGainedAt &&
+    input.lastMeaningfulActivityAt <= input.focusGainedAt + input.graceWindowMs
+  );
+}
+
 export function shouldPromptCheckpointOnBlur(input: BlurCheckpointDecisionInput): boolean {
   if (!input.meaningfulChangeSinceLastPrompt) {
     return false;
