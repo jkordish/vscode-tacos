@@ -128,7 +128,7 @@ describe('panelFragments', () => {
       groups: [
         {
           label: 'Open',
-          buttons: [
+          buttonsTrustedHtml: [
             '<button type="button" data-action="restoreWorkingSet">Restore working set</button>',
           ],
         },

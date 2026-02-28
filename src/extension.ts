@@ -4103,7 +4103,7 @@ function renderWebview(
     groups: [
       {
         label: 'Open',
-        buttons: [
+        buttonsTrustedHtml: [
           restoreActionButtons.workingSet,
           restoreActionButtons.jumpToLastEdit,
           restoreActionButtons.reopenFiles,
@@ -4112,11 +4112,14 @@ function renderWebview(
       },
       {
         label: 'Run',
-        buttons: [restoreActionButtons.rerunTask, restoreActionButtons.rerunDebug],
+        buttonsTrustedHtml: [restoreActionButtons.rerunTask, restoreActionButtons.rerunDebug],
       },
       {
         label: 'Diagnose',
-        buttons: [restoreActionButtons.openProblems, restoreActionButtons.openDiagnosticFile],
+        buttonsTrustedHtml: [
+          restoreActionButtons.openProblems,
+          restoreActionButtons.openDiagnosticFile,
+        ],
       },
     ],
     headingTag: 'h5',
@@ -4128,11 +4131,13 @@ function renderWebview(
     groups: [
       {
         label: 'Copy',
-        buttons: ['<button type="button" data-action="copySummary">Copy summary</button>'],
+        buttonsTrustedHtml: [
+          '<button type="button" data-action="copySummary">Copy summary</button>',
+        ],
       },
       {
         label: 'Notes & Feedback',
-        buttons: [
+        buttonsTrustedHtml: [
           '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>',
           '<button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>',
           '<button type="button" data-action="rateHelpfulness">Rate helpfulness</button>',
@@ -4149,11 +4154,11 @@ function renderWebview(
     groups: [
       {
         label: 'Context',
-        buttons: [restoreActionButtons.checkoutPreviousBranch],
+        buttonsTrustedHtml: [restoreActionButtons.checkoutPreviousBranch],
       },
       {
         label: 'Copy',
-        buttons: [restoreActionButtons.copyFailingCommand],
+        buttonsTrustedHtml: [restoreActionButtons.copyFailingCommand],
       },
     ],
     headingTag: 'h4',

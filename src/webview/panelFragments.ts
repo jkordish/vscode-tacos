@@ -5,6 +5,12 @@ import type { TimelineGroup } from '../timeline';
 import type { SummaryEvidenceItem, SummaryLink } from '../types';
 import { escapeHtml } from '../webviewSecurity';
 
+/**
+ * Trusted HTML fragments are pre-rendered by extension-owned helpers.
+ * Callers must escape or sanitize any dynamic values before passing them here.
+ */
+export type TrustedHtml = string;
+
 interface CheckpointNoteView {
   text: string;
   file?: CheckpointNote['file'];
@@ -159,10 +165,11 @@ export interface IntentEditorInput {
 }
 
 export function renderIntentEditor(input: IntentEditorInput): string {
+  const intentInputId = escapeHtml(input.intentInputId);
   return `<div class="intent-editor">
-      <label class="companion-kicker" for="${input.intentInputId}">Intent (editable)</label>
+      <label class="companion-kicker" for="${intentInputId}">Intent (editable)</label>
       <div class="intent-editor-row">
-        <input id="${input.intentInputId}" type="text" maxlength="280" value="${escapeHtml(
+        <input id="${intentInputId}" type="text" maxlength="280" value="${escapeHtml(
           input.intent,
         )}" />
       </div>
@@ -278,7 +285,7 @@ export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]):
 
 interface GroupedActionSection {
   label: string;
-  buttons: string[];
+  buttonsTrustedHtml: TrustedHtml[];
 }
 
 export interface GroupedActionSectionsInput {
@@ -294,7 +301,7 @@ export function renderGroupedActionSections(input: GroupedActionSectionsInput): 
       (group) =>
         `<section class="${escapeHtml(input.sectionClassName)}"><${input.headingTag}>${escapeHtml(
           group.label,
-        )}</${input.headingTag}><div class="${escapeHtml(input.buttonContainerClassName)}">${group.buttons.join('')}</div></section>`,
+        )}</${input.headingTag}><div class="${escapeHtml(input.buttonContainerClassName)}">${group.buttonsTrustedHtml.join('')}</div></section>`,
     )
     .join('');
 }
@@ -370,7 +377,7 @@ export interface CompanionNudgeCardInput {
   primaryNudge?: CompanionNudge;
   secondaryNudge?: CompanionNudge;
   nudgeSuppressionLabel: string;
-  nudgeExplainabilityTrustedHtml: string;
+  nudgeExplainabilityTrustedHtml: TrustedHtml;
   actionLabelForId: (actionId: string) => string;
 }
 
@@ -411,25 +418,26 @@ export function renderCompanionNudgeCard(input: CompanionNudgeCardInput): string
 }
 
 export interface WebviewDocumentInput {
-  cspMetaTag: string;
+  cspMetaTag: TrustedHtml;
   nonce: string;
   panelStyle: string;
-  bodyCardsTrustedHtml: string;
+  bodyCardsTrustedHtml: TrustedHtml;
   clientScript: string;
 }
 
 export function renderWebviewDocument(input: WebviewDocumentInput): string {
+  const escapedNonce = escapeHtml(input.nonce);
   return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     ${input.cspMetaTag}
-    <style nonce="${input.nonce}">${input.panelStyle}</style>
+    <style nonce="${escapedNonce}">${input.panelStyle}</style>
   </head>
   <body>
     ${input.bodyCardsTrustedHtml}
 
-    <script nonce="${input.nonce}">
+    <script nonce="${escapedNonce}">
 ${input.clientScript}
     </script>
   </body>
