@@ -162,22 +162,32 @@ export interface IntentEditorInput {
   intentInputId: string;
   intent: string;
   intentOverridden?: boolean;
+  readOnly?: boolean;
 }
 
 export function renderIntentEditor(input: IntentEditorInput): string {
   const intentInputId = escapeHtml(input.intentInputId);
-  return `<div class="intent-editor">
+  const readOnly = Boolean(input.readOnly);
+  const disabledAttr = readOnly ? 'disabled aria-disabled="true"' : '';
+  const resetDisabledAttr =
+    readOnly || !input.intentOverridden ? 'disabled aria-disabled="true"' : '';
+  const readOnlyHint = readOnly
+    ? '<p class="muted">Sample mode is read-only. Switch to a real resume to edit intent.</p>'
+    : '';
+  const modeAttr = readOnly
+    ? ' data-intent-editor-readonly="true"'
+    : ' data-intent-editor-readonly="false"';
+  return `<div class="intent-editor"${modeAttr}>
       <label class="companion-kicker" for="${intentInputId}">Intent (editable)</label>
       <div class="intent-editor-row">
         <input id="${intentInputId}" type="text" maxlength="280" value="${escapeHtml(
           input.intent,
-        )}" />
+        )}" ${disabledAttr} />
       </div>
+      ${readOnlyHint}
       <div class="intent-editor-actions">
-        <button type="button" class="secondary" data-action="setIntentOverride">Save</button>
-        <button type="button" class="secondary" data-action="clearIntentOverride" ${
-          input.intentOverridden ? '' : 'disabled'
-        }>Reset to inferred</button>
+        <button type="button" class="secondary" data-action="setIntentOverride" ${disabledAttr}>Save</button>
+        <button type="button" class="secondary" data-action="clearIntentOverride" ${resetDisabledAttr}>Reset to inferred</button>
       </div>
     </div>`;
 }
@@ -340,6 +350,7 @@ export function renderTimelineGroupsHtml(input: TimelineGroupsHtmlInput): string
 export interface ResumePathCardInput {
   completed: boolean;
   collapsed: boolean;
+  readOnly?: boolean;
   steps: Array<{
     id: string;
     label: string;
@@ -349,25 +360,34 @@ export interface ResumePathCardInput {
 }
 
 export function renderResumePathCard(input: ResumePathCardInput): string {
+  const readOnly = Boolean(input.readOnly);
+  const disabledAttr = readOnly ? 'disabled aria-disabled="true"' : '';
+  const readOnlyHint = readOnly
+    ? '<p class="muted">Sample mode is read-only. Resume Path toggles are disabled.</p>'
+    : '';
+  const readOnlyAttr = readOnly
+    ? ' data-resume-path-readonly="true"'
+    : ' data-resume-path-readonly="false"';
   const resumePathItems = input.steps
     .map(
       (step) => `<li class="resume-path-item">
         <label class="resume-path-toggle">
           <input type="checkbox" data-resume-path-toggle="true" data-resume-path-step-id="${escapeHtml(step.id)}" ${
             step.checked ? 'checked' : ''
-          } />
+          } ${disabledAttr} />
           <span>${escapeHtml(step.label)}</span>
         </label>
         <p class="muted resume-path-detail">${escapeHtml(step.detail)}</p>
       </li>`,
     )
     .join('');
-  return `<div class="card">
+  return `<div class="card"${readOnlyAttr}>
       <h3>Resume Path</h3>
       <details data-resume-path-details="true" ${input.completed && input.collapsed ? '' : 'open'}>
         <summary><strong>${
           input.completed ? 'Resume Path complete' : 'Complete this 3-step re-entry path'
         }</strong></summary>
+        ${readOnlyHint}
         <ul class="compact-list resume-path-list">${resumePathItems}</ul>
       </details>
     </div>`;

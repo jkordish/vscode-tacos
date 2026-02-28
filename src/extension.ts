@@ -217,6 +217,33 @@ const NOISE_BUDGET_MAX_SIGNALS_PER_WINDOW = 2;
 const NOISE_BUDGET_BLOCK_NUDGE_AFTER_SUMMARY_MS = 5 * 60_000;
 const NOISE_BUDGET_BLOCK_NUDGE_AFTER_CHECKPOINT_MS = 3 * 60_000;
 const NOISE_BUDGET_BLOCK_CHECKPOINT_AFTER_SUMMARY_MS = 5 * 60_000;
+const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<string>([
+  'setPanelSectionExpanded',
+  'sessionAddCheckpoint',
+  'checkpointOpenList',
+  'openScratchpad',
+  'appendScratchpad',
+  'setScratchpadScope',
+  'checkpointPinToggle',
+  'checkpointMarkDone',
+  'checkpointDismiss',
+  'acknowledgeNudge',
+  'dismissNudge',
+  'resumePathToggle',
+  'setIntentOverride',
+  'clearIntentOverride',
+  'runNextStepAction',
+  'restoreWorkingSet',
+  'restoreJumpToLastEdit',
+  'restoreReopenFiles',
+  'restoreOpenChangedFiles',
+  'restoreRerunTask',
+  'restoreRerunDebug',
+  'restoreOpenProblems',
+  'restoreOpenDiagnosticFile',
+  'restoreCheckoutPreviousBranch',
+  'restoreCopyFailingCommand',
+]);
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const MAX_NUDGE_FEEDBACK_ENTRIES_PER_SCOPE = 40;
 const CHECKPOINT_WORKSPACE_GLOBAL_SCOPE = 'workspace-global';
@@ -562,6 +589,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.__test.getRuntimeStateSnapshot', async () => {
       return {
         panelOpen: Boolean(state.panel),
+        panelTitle: state.panel?.title,
         panelWorkspaceRoot: state.panelWorkspaceRoot,
         hasScratchSummary: Boolean(state.scratchSummary),
         scratchContextHash: state.scratchSummary?.contextHash,
@@ -587,6 +615,12 @@ export function activate(context: vscode.ExtensionContext): void {
         Boolean(candidate),
       );
       const panelHtml = state.panel?.webview.html ?? '';
+      const panelTitle = state.panel?.title ?? '';
+      const isDemoSummary = isDemoResumeSummary(summary);
+      const hasDemoResumeCard = panelHtml.includes('data-demo-resume-card="true"');
+      const hasDismissDemoResumeAction = panelHtml.includes('data-action="dismissDemoResume"');
+      const hasDemoIntentEditorReadOnly = panelHtml.includes('data-intent-editor-readonly="true"');
+      const hasDemoResumePathReadOnly = panelHtml.includes('data-resume-path-readonly="true"');
       const primaryBlockerActionCount = (
         panelHtml.match(/data-blocker-primary-action="true"/gu) ?? []
       ).length;
@@ -647,10 +681,28 @@ export function activate(context: vscode.ExtensionContext): void {
       const timelineExpanded = /data-panel-section="timeline"[^>]*\sopen(?:\s|>)/u.test(panelHtml);
       const evidenceExpanded = /data-panel-section="evidence"[^>]*\sopen(?:\s|>)/u.test(panelHtml);
       const detailsExpanded = /data-panel-section="details"[^>]*\sopen(?:\s|>)/u.test(panelHtml);
+      const hasDisabledRestoreWorkingSet = /data-action="restoreWorkingSet"[^>]*disabled/u.test(
+        panelHtml,
+      );
+      const hasDisabledRestoreRerunTask = /data-action="restoreRerunTask"[^>]*disabled/u.test(
+        panelHtml,
+      );
+      const hasDisabledRestoreRerunDebug = /data-action="restoreRerunDebug"[^>]*disabled/u.test(
+        panelHtml,
+      );
+      const disabledResumePathToggleCount = (
+        panelHtml.match(/<input[^>]*data-resume-path-toggle="true"[^>]*disabled/gu) ?? []
+      ).length;
 
       return {
+        panelTitle,
         hasPanelSummary: Boolean(state.panelSummary),
         hasScratchSummary: Boolean(state.scratchSummary),
+        isDemoSummary,
+        hasDemoResumeCard,
+        hasDismissDemoResumeAction,
+        hasDemoIntentEditorReadOnly,
+        hasDemoResumePathReadOnly,
         summaryIntent: summary?.intent ?? '',
         intentOverridden: Boolean(summary?.intentOverridden),
         nextStepsCount: summary?.nextSteps.length ?? 0,
@@ -702,6 +754,10 @@ export function activate(context: vscode.ExtensionContext): void {
         hasResumePathCard: panelHtml.includes('<h3>Resume Path</h3>'),
         resumePathStepCount: (panelHtml.match(/<input[^>]*data-resume-path-toggle="true"/gu) ?? [])
           .length,
+        disabledResumePathToggleCount,
+        hasDisabledRestoreWorkingSet,
+        hasDisabledRestoreRerunTask,
+        hasDisabledRestoreRerunDebug,
       };
     }),
     vscode.commands.registerCommand('tacos.__test.getResumePathSnapshot', async () => {
@@ -3282,6 +3338,10 @@ async function showDetailsPanel(
       if (!message) {
         return;
       }
+      const demoMode = isDemoResumeSummary(state.panelSummary);
+      if (demoMode && DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES.has(message.type)) {
+        return;
+      }
 
       if (message.type === 'setPanelSectionExpanded') {
         const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
@@ -3948,6 +4008,7 @@ function renderWebview(
     intentInputId,
     intent: summary.intent,
     intentOverridden: summary.intentOverridden,
+    readOnly: demoMode,
   });
   const trusted = vscode.workspace.isTrusted;
   const availability = computeRestoreAvailability({
@@ -3970,7 +4031,7 @@ function renderWebview(
   const canOpenProblems = diagnostics.errorCount > 0 || diagnostics.warningCount > 0;
   const canOpenDiagnosticFile = Boolean(diagnostics.top);
   const trustCue = buildTrustCue(summary);
-  const nextStepActions = buildNextStepActionCandidates(summary);
+  const nextStepActions = demoMode ? [] : buildNextStepActionCandidates(summary);
   const primaryNextAction = nextStepActions.find((candidate): candidate is NextStepAction =>
     Boolean(candidate),
   );
@@ -3979,8 +4040,9 @@ function renderWebview(
     primaryNextActionStepIndex >= 0
       ? (summary.nextSteps[primaryNextActionStepIndex] ?? '')
       : (summary.recommendedFirstAction?.trim() ?? summary.nextSteps[0] ?? '');
+  const primaryNextActionDisabledAttr = demoMode ? 'disabled aria-disabled="true"' : '';
   const companionPrimaryNextActionButton = primaryNextAction
-    ? `<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}">${escapeHtml(primaryNextAction.label)}</button>`
+    ? `<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}" ${primaryNextActionDisabledAttr}>${escapeHtml(primaryNextAction.label)}</button>`
     : '';
   const primaryNextActionEvidence = primaryNextAction
     ? evidenceById.get(primaryNextAction.evidenceId)
@@ -4123,6 +4185,7 @@ function renderWebview(
   const resumePathCard = renderResumePathCard({
     completed: resumePathCompleted,
     collapsed: resumePathState.collapsed,
+    readOnly: demoMode,
     steps: resumePathSteps.map((step) => ({
       id: step.id,
       label: step.label,
@@ -4134,15 +4197,15 @@ function renderWebview(
   const demoDisabledAttr = demoMode ? 'disabled aria-disabled="true"' : '';
   const restoreActionButtons = {
     workingSet: `<button type="button" data-action="restoreWorkingSet" ${demoDisabledAttr}>Restore working set</button>`,
-    jumpToLastEdit: `<button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit ? '' : 'disabled aria-disabled="true"'}>Jump to last edit</button>`,
+    jumpToLastEdit: `<button type="button" data-action="restoreJumpToLastEdit" ${availability.canJumpToLastEdit && !demoMode ? '' : 'disabled aria-disabled="true"'}>Jump to last edit</button>`,
     reopenFiles: `<button type="button" data-action="restoreReopenFiles" ${demoDisabledAttr}>Reopen files</button>`,
     openChangedFiles: `<button type="button" data-action="restoreOpenChangedFiles" ${demoDisabledAttr}>Open changed files</button>`,
-    rerunTask: `<button type="button" data-action="restoreRerunTask" ${availability.canRerunTask ? '' : 'disabled aria-disabled="true"'}>Rerun task</button>`,
-    rerunDebug: `<button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug ? '' : 'disabled aria-disabled="true"'}>Rerun debug</button>`,
-    openProblems: `<button type="button" data-action="restoreOpenProblems" ${canOpenProblems ? '' : 'disabled aria-disabled="true"'}>Open Problems</button>`,
-    openDiagnosticFile: `<button type="button" data-action="restoreOpenDiagnosticFile" ${canOpenDiagnosticFile ? '' : 'disabled aria-disabled="true"'}>Open diagnostic file</button>`,
-    checkoutPreviousBranch: `<button type="button" data-action="restoreCheckoutPreviousBranch" ${availability.canCheckoutPreviousBranch ? '' : 'disabled aria-disabled="true"'}>Checkout previous branch</button>`,
-    copyFailingCommand: `<button type="button" data-action="restoreCopyFailingCommand" ${availability.canCopyFailingCommand ? '' : 'disabled aria-disabled="true"'}>Copy failing command</button>`,
+    rerunTask: `<button type="button" data-action="restoreRerunTask" ${availability.canRerunTask && !demoMode ? '' : 'disabled aria-disabled="true"'}>Rerun task</button>`,
+    rerunDebug: `<button type="button" data-action="restoreRerunDebug" ${availability.canRerunDebug && !demoMode ? '' : 'disabled aria-disabled="true"'}>Rerun debug</button>`,
+    openProblems: `<button type="button" data-action="restoreOpenProblems" ${canOpenProblems && !demoMode ? '' : 'disabled aria-disabled="true"'}>Open Problems</button>`,
+    openDiagnosticFile: `<button type="button" data-action="restoreOpenDiagnosticFile" ${canOpenDiagnosticFile && !demoMode ? '' : 'disabled aria-disabled="true"'}>Open diagnostic file</button>`,
+    checkoutPreviousBranch: `<button type="button" data-action="restoreCheckoutPreviousBranch" ${availability.canCheckoutPreviousBranch && !demoMode ? '' : 'disabled aria-disabled="true"'}>Checkout previous branch</button>`,
+    copyFailingCommand: `<button type="button" data-action="restoreCopyFailingCommand" ${availability.canCopyFailingCommand && !demoMode ? '' : 'disabled aria-disabled="true"'}>Copy failing command</button>`,
   };
 
   const companionRestoreSections = renderGroupedActionSections({
@@ -4358,7 +4421,7 @@ function renderWebview(
   });
   const detailsCard = renderDetailsCard(detailsHtml, expandedSections.has('details'));
   const demoCard = demoMode
-    ? `<div class="card">
+    ? `<div class="card" data-demo-resume-card="true">
       <h3>Sample Resume Card</h3>
       <p class="muted">
         This is sample onboarding data only. It is separate from your workspace evidence.
@@ -9137,12 +9200,23 @@ async function showDemoResumeCard(context: vscode.ExtensionContext): Promise<voi
 }
 
 async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void> {
+  const start = await vscode.window.showInformationMessage(
+    'TaCoS helps you resume in ~5 seconds with local-first cues. Setup covers privacy defaults, optional AI, and trust controls.',
+    'Start setup',
+    'Show demo card',
+  );
+  if (start === 'Show demo card') {
+    await showDemoResumeCard(context);
+    return;
+  }
+  if (start !== 'Start setup') {
+    return;
+  }
   const workspaceRoot = pickWorkspaceRoot();
   if (!workspaceRoot) {
     void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
     return;
   }
-
   if (isSetupChecklistCompleted(context, workspaceRoot)) {
     const action = await vscode.window.showInformationMessage(
       'TaCoS: setup checklist is already complete for this workspace.',
@@ -9159,19 +9233,6 @@ async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void
     if (action !== 'Rerun checklist') {
       return;
     }
-  }
-
-  const start = await vscode.window.showInformationMessage(
-    'TaCoS helps you resume in ~5 seconds with local-first cues. Setup covers privacy defaults, optional AI, and trust controls.',
-    'Start setup',
-    'Show demo card',
-  );
-  if (start === 'Show demo card') {
-    await showDemoResumeCard(context);
-    return;
-  }
-  if (start !== 'Start setup') {
-    return;
   }
 
   type PresetPick = vscode.QuickPickItem & {

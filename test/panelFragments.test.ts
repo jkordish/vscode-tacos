@@ -60,6 +60,37 @@ describe('panelFragments', () => {
     expect(intentEditor).toContain('Intent (editable)');
     expect(intentEditor).toContain('data-action="setIntentOverride"');
     expect(intentEditor).toContain('data-action="clearIntentOverride" disabled');
+    expect(intentEditor).toContain('data-intent-editor-readonly="false"');
+  });
+
+  it('renders read-only intent and resume path fragments for demo mode', () => {
+    const intentEditor = renderIntentEditor({
+      intentInputId: 'intent-override-input',
+      intent: 'Sample intent',
+      intentOverridden: true,
+      readOnly: true,
+    });
+    const resumePath = renderResumePathCard({
+      completed: false,
+      collapsed: false,
+      readOnly: true,
+      steps: [
+        {
+          id: 'confirmIntent',
+          label: 'Confirm intent',
+          detail: 'Read current intent',
+          checked: false,
+        },
+      ],
+    });
+
+    expect(intentEditor).toContain('data-intent-editor-readonly="true"');
+    expect(intentEditor).toContain('Sample mode is read-only');
+    expect(intentEditor).toContain('data-action="setIntentOverride" disabled aria-disabled="true"');
+    expect(resumePath).toContain('data-resume-path-readonly="true"');
+    expect(resumePath).toContain('Resume Path toggles are disabled');
+    expect(resumePath).toContain('data-resume-path-toggle="true"');
+    expect(resumePath).toContain('disabled aria-disabled="true"');
   });
 
   it('renders next-step, list, and evidence fragments with stable affordances', () => {
