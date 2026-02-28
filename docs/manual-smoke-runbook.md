@@ -7,6 +7,7 @@ Related:
 - Epic: [#134](https://github.com/jkordish/vscode-tacos/issues/134) (Proof, Metrics, and Release Discipline)
 - Epic acceptance anchors: [#131](https://github.com/jkordish/vscode-tacos/issues/131), [#132](https://github.com/jkordish/vscode-tacos/issues/132), [#133](https://github.com/jkordish/vscode-tacos/issues/133)
 - Release checklist tracking: [#161](https://github.com/jkordish/vscode-tacos/issues/161)
+- Release checklist doc: `docs/release-0.6.0-checklist.md`
 - Metrics contract: `docs/metrics-baseline.md`
 - Local metrics dictionary: `docs/metrics.md`
 
