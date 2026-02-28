@@ -50,6 +50,7 @@ Top-level companion home sections:
 2. `Next`: top 1-3 high-confidence actions.
 3. `Blocked`: strongest blocker with an unblock suggestion.
 4. `Restore`: fast continuation actions (open files, rerun task/debug, copy failing command).
+5. `Resume Path`: compact 3-step checklist (`Confirm intent`, `Run next safe action`, `Clear blocker`).
 
 Design rules:
 
@@ -57,6 +58,7 @@ Design rules:
 2. Keep each section scannable in under 5 seconds.
 3. Include inline actions where safe and possible.
 4. Collapse low-priority details behind secondary affordances.
+5. Persist `Resume Path` completion per workspace partition and auto-reset when the summary context hash changes.
 
 ## 8. Interaction Model
 
