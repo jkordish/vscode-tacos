@@ -135,6 +135,8 @@ const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
 const CHECKPOINT_PROMPT_COOLDOWN_MINUTES = 45;
 const FOCUS_TRIGGER_DEBOUNCE_MS = 1200;
+const FOCUS_BOUNDARY_WINDOW_MS = 90_000;
+const FOCUS_MAX_DEFERRAL_WITHOUT_BOUNDARY_MS = 180_000;
 const INTERRUPTION_TIMING_BOUNDARY_WINDOW_MS = 90_000;
 const INTERRUPTION_TIMING_MID_ACTIVITY_WINDOW_MS = 15_000;
 const PERF_WARN_COOLDOWN_MS = 60_000;
@@ -538,6 +540,65 @@ export function activate(context: vscode.ExtensionContext): void {
         quietHours,
       };
     }),
+    vscode.commands.registerCommand(
+      'tacos.__test.evaluateAutoTriggerDecision',
+      async (rawInput?: unknown) => {
+        const overrides =
+          rawInput && typeof rawInput === 'object' ? (rawInput as Record<string, unknown>) : {};
+        const config = getConfig();
+        const now =
+          typeof overrides.now === 'number' && Number.isFinite(overrides.now)
+            ? overrides.now
+            : Date.now();
+        const lastBlurAt =
+          typeof overrides.lastBlurAt === 'number' && Number.isFinite(overrides.lastBlurAt)
+            ? overrides.lastBlurAt
+            : now - config.minIdleMinutes * 60_000 - 1_000;
+        const lastSummaryAt =
+          typeof overrides.lastSummaryAt === 'number' && Number.isFinite(overrides.lastSummaryAt)
+            ? overrides.lastSummaryAt
+            : now - config.cooldownMinutes * 60_000 - 1_000;
+        const projectSwitched = Boolean(overrides.projectSwitched);
+        const significantChange =
+          typeof overrides.significantChange === 'boolean' ? overrides.significantChange : true;
+        const lastBoundarySignalAt =
+          typeof overrides.lastBoundarySignalAt === 'number' &&
+          Number.isFinite(overrides.lastBoundarySignalAt)
+            ? overrides.lastBoundarySignalAt
+            : state.lastBoundarySignalAt;
+
+        const shouldTrigger = shouldAutoTriggerSummary({
+          now,
+          lastBlurAt,
+          lastSummaryAt,
+          minIdleMinutes: config.minIdleMinutes,
+          cooldownMinutes: config.cooldownMinutes,
+          projectSwitched,
+          significantChange,
+          lastBoundarySignalAt,
+          boundaryWindowMs: FOCUS_BOUNDARY_WINDOW_MS,
+          maxDeferralWithoutBoundaryMs: FOCUS_MAX_DEFERRAL_WITHOUT_BOUNDARY_MS,
+        });
+
+        const hasRecentBoundary =
+          typeof lastBoundarySignalAt === 'number' &&
+          lastBoundarySignalAt > 0 &&
+          now - lastBoundarySignalAt <= FOCUS_BOUNDARY_WINDOW_MS;
+
+        return {
+          shouldTrigger,
+          hasRecentBoundary,
+          now,
+          lastBlurAt,
+          lastSummaryAt,
+          lastBoundarySignalAt,
+          projectSwitched,
+          significantChange,
+          boundaryWindowMs: FOCUS_BOUNDARY_WINDOW_MS,
+          maxDeferralWithoutBoundaryMs: FOCUS_MAX_DEFERRAL_WITHOUT_BOUNDARY_MS,
+        };
+      },
+    ),
     vscode.commands.registerCommand('tacos.__test.setSnoozeUntil', async (value?: number) => {
       if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
         state.snoozeUntil = value;
@@ -894,6 +955,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(async (document) => {
+      if (document.uri.scheme === 'file') {
+        markBoundarySignal();
+        markMeaningfulActivity();
+      }
+
       if (!state.panel) {
         return;
       }
@@ -1218,6 +1284,9 @@ async function handleFocusRegainSummaryTrigger(
       cooldownMinutes: config.cooldownMinutes,
       projectSwitched,
       significantChange,
+      lastBoundarySignalAt: state.lastBoundarySignalAt,
+      boundaryWindowMs: FOCUS_BOUNDARY_WINDOW_MS,
+      maxDeferralWithoutBoundaryMs: FOCUS_MAX_DEFERRAL_WITHOUT_BOUNDARY_MS,
     });
     if (!shouldTrigger) {
       outcome = 'gated';

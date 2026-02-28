@@ -98,6 +98,77 @@ describe('shouldAutoTriggerSummary', () => {
 
     expect(result).toBe(true);
   });
+
+  it('defers short-gap focus trigger when boundary mode is enabled and no boundary exists', () => {
+    const result = shouldAutoTriggerSummary({
+      now: 20 * 60_000,
+      lastBlurAt: 20 * 60_000 - 30_000,
+      lastSummaryAt: 5 * 60_000,
+      minIdleMinutes: 10,
+      cooldownMinutes: 5,
+      projectSwitched: false,
+      significantChange: true,
+      lastBoundarySignalAt: 0,
+      boundaryWindowMs: 90_000,
+      maxDeferralWithoutBoundaryMs: 180_000,
+    });
+
+    expect(result).toBe(false);
+  });
+
+  it('allows short-gap focus trigger when recent boundary exists', () => {
+    const now = 20 * 60_000;
+    const result = shouldAutoTriggerSummary({
+      now,
+      lastBlurAt: now - 30_000,
+      lastSummaryAt: 5 * 60_000,
+      minIdleMinutes: 10,
+      cooldownMinutes: 5,
+      projectSwitched: false,
+      significantChange: true,
+      lastBoundarySignalAt: now - 20_000,
+      boundaryWindowMs: 90_000,
+      maxDeferralWithoutBoundaryMs: 180_000,
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it('allows trigger once max deferral window has elapsed without boundary', () => {
+    const now = 20 * 60_000;
+    const result = shouldAutoTriggerSummary({
+      now,
+      lastBlurAt: now - 4 * 60_000,
+      lastSummaryAt: 5 * 60_000,
+      minIdleMinutes: 10,
+      cooldownMinutes: 5,
+      projectSwitched: false,
+      significantChange: true,
+      lastBoundarySignalAt: 0,
+      boundaryWindowMs: 90_000,
+      maxDeferralWithoutBoundaryMs: 180_000,
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it('allows project switch even when no boundary exists in window', () => {
+    const now = 20 * 60_000;
+    const result = shouldAutoTriggerSummary({
+      now,
+      lastBlurAt: now - 30_000,
+      lastSummaryAt: 5 * 60_000,
+      minIdleMinutes: 10,
+      cooldownMinutes: 5,
+      projectSwitched: true,
+      significantChange: false,
+      lastBoundarySignalAt: 0,
+      boundaryWindowMs: 90_000,
+      maxDeferralWithoutBoundaryMs: 180_000,
+    });
+
+    expect(result).toBe(true);
+  });
 });
 
 describe('shouldPromptCheckpointOnBlur', () => {

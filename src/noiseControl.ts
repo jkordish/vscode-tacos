@@ -6,6 +6,9 @@ export interface AutoTriggerDecisionInput {
   cooldownMinutes: number;
   projectSwitched: boolean;
   significantChange: boolean;
+  lastBoundarySignalAt?: number;
+  boundaryWindowMs?: number;
+  maxDeferralWithoutBoundaryMs?: number;
 }
 
 export function shouldAutoTriggerSummary(input: AutoTriggerDecisionInput): boolean {
@@ -22,7 +25,34 @@ export function shouldAutoTriggerSummary(input: AutoTriggerDecisionInput): boole
   }
 
   const cooldownMs = input.cooldownMinutes * 60_000;
-  return input.now - input.lastSummaryAt >= cooldownMs;
+  if (input.now - input.lastSummaryAt < cooldownMs) {
+    return false;
+  }
+
+  const boundaryWindowMs = input.boundaryWindowMs ?? 0;
+  if (boundaryWindowMs <= 0) {
+    return true;
+  }
+
+  const hasRecentBoundary =
+    typeof input.lastBoundarySignalAt === 'number' &&
+    Number.isFinite(input.lastBoundarySignalAt) &&
+    input.lastBoundarySignalAt > 0 &&
+    input.now - input.lastBoundarySignalAt <= boundaryWindowMs;
+  if (hasRecentBoundary) {
+    return true;
+  }
+
+  if (input.projectSwitched || idleMs >= idleThresholdMs) {
+    return true;
+  }
+
+  const maxDeferralMs = Math.max(0, input.maxDeferralWithoutBoundaryMs ?? 0);
+  if (maxDeferralMs <= 0) {
+    return true;
+  }
+
+  return idleMs >= maxDeferralMs;
 }
 
 export interface BlurCheckpointDecisionInput {

@@ -54,6 +54,58 @@ async function run() {
       'Expected focus summaries to use silent flow when uiSurface=silent.',
     );
 
+    const now = Date.now();
+    const boundaryDeferred = await vscode.commands.executeCommand(
+      'tacos.__test.evaluateAutoTriggerDecision',
+      {
+        now,
+        lastBlurAt: now - 30_000,
+        lastSummaryAt: now - 10 * 60_000,
+        significantChange: true,
+        projectSwitched: false,
+        lastBoundarySignalAt: 0,
+      },
+    );
+    assert.equal(
+      boundaryDeferred?.shouldTrigger,
+      false,
+      'Expected short-gap focus return to defer when no recent boundary signal exists.',
+    );
+
+    const boundaryAllowed = await vscode.commands.executeCommand(
+      'tacos.__test.evaluateAutoTriggerDecision',
+      {
+        now,
+        lastBlurAt: now - 30_000,
+        lastSummaryAt: now - 10 * 60_000,
+        significantChange: true,
+        projectSwitched: false,
+        lastBoundarySignalAt: now - 15_000,
+      },
+    );
+    assert.equal(
+      boundaryAllowed?.shouldTrigger,
+      true,
+      'Expected short-gap focus return to trigger when recent boundary signal exists.',
+    );
+
+    const deferralCapRelease = await vscode.commands.executeCommand(
+      'tacos.__test.evaluateAutoTriggerDecision',
+      {
+        now,
+        lastBlurAt: now - 4 * 60_000,
+        lastSummaryAt: now - 10 * 60_000,
+        significantChange: true,
+        projectSwitched: false,
+        lastBoundarySignalAt: 0,
+      },
+    );
+    assert.equal(
+      deferralCapRelease?.shouldTrigger,
+      true,
+      'Expected boundary deferral cap to eventually allow trigger after longer gap.',
+    );
+
     await config.update('pauseSummaries', true, vscode.ConfigurationTarget.Global);
     const pausedStatusSnapshot = await vscode.commands.executeCommand('tacos.__test.getStatusBarSnapshot');
     assert.equal(pausedStatusSnapshot?.mode, 'paused');
