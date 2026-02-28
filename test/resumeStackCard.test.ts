@@ -6,6 +6,10 @@ describe('renderResumeStackCard', () => {
       intent: 'Implement gating tests',
       mode: 'coding',
       nowCheckpointLineTrustedHtml: '',
+      lastActionLabel: 'Edited src/extension.ts:42',
+      lastActionContext: 'retrieval cue: last edit',
+      lastActionActionTrustedHtml:
+        '<button type="button" class="secondary" data-action="openEvidence" data-evidence-id="file:src/extension.ts">Open last action</button>',
       nextSafeActionSummary: 'Open src/extension.ts and run verify',
       primaryNextActionTrustedHtml:
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open file</button>',
@@ -27,6 +31,10 @@ describe('renderResumeStackCard', () => {
                <p class="companion-primary">Implement gating tests</p>
                <p class="companion-meta">Mode: coding</p>
                
+               <p class="companion-kicker">Last action</p>
+               <p class="companion-primary" data-last-action-cue="true">Edited src/extension.ts:42</p>
+               <p class="companion-meta">retrieval cue: last edit</p>
+               <div class="status-actions"><button type="button" class="secondary" data-action="openEvidence" data-evidence-id="file:src/extension.ts">Open last action</button></div>
              </section>
              <section class="companion-block">
                <h4>Next</h4>
@@ -60,6 +68,9 @@ describe('renderResumeStackCard', () => {
       mode: 'review & tune',
       nowCheckpointLineTrustedHtml:
         '<p class="companion-meta"><strong>Checkpoint:</strong> Verify blocker copy.</p>',
+      lastActionLabel: 'No last action captured yet.',
+      lastActionContext: 'retrieval cue unavailable',
+      lastActionActionTrustedHtml: '',
       nextSafeActionSummary: 'Open diagnostics and fix top error',
       primaryNextActionTrustedHtml:
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open Problems</button>',
@@ -74,6 +85,7 @@ describe('renderResumeStackCard', () => {
 
     expect(html).toContain('Ship &lt;v0.6&gt; safely');
     expect(html).toContain('Mode: review &amp; tune');
+    expect(html).toContain('No last action captured yet.');
     expect(html).toContain('Open diagnostics and fix top error');
     expect(html).toContain('Diagnostics &lt;error&gt;');
     expect(html).toContain('data-action="restoreOpenProblems"');
