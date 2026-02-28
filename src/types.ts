@@ -129,6 +129,7 @@ export interface MetricRecord {
   trigger: TriggerReason;
   uiSurface?: UiSurface;
   interruptionEvent?: number;
+  interruptionTimingClass?: 'boundary' | 'mid-activity' | 'unknown';
   firstMeaningfulEditLagMs?: number;
   firstRunLagMs?: number;
   firstActionLagMs?: number;
@@ -137,6 +138,9 @@ export interface MetricRecord {
   companionForcedOpenDetailsClicks?: number;
   companionQuickActionsTaken?: number;
   companionNudgeImpressions?: number;
+  companionPrimaryCtaImpressions?: number;
+  companionPrimaryCtaClicks?: number;
+  companionPrimaryCtaCompletions?: number;
   helpfulnessRating?: 1 | 2 | 3 | 4 | 5;
   pauseActions?: number;
   snoozeActions?: number;
@@ -144,6 +148,7 @@ export interface MetricRecord {
   noteCreated?: number;
   noteMarkedDone?: number;
   notePinned?: number;
+  resumePathCompletions?: number;
   resumeWithNote?: 0 | 1;
   scratchpadOpened?: number;
   scratchpadAppended?: number;
