@@ -71,6 +71,60 @@ async function run() {
     'Expected Restore working set action marker in panel render output.',
   );
   assert.equal(
+    resumeFlow?.hasAnchorOpenLinkAction,
+    false,
+    'Expected link actions to avoid anchor-only controls for keyboard flow consistency.',
+  );
+  assert.equal(
+    resumeFlow?.hasAnchorOpenTopFileAction,
+    false,
+    'Expected top file actions to avoid anchor-only controls for keyboard flow consistency.',
+  );
+  assert.equal(
+    resumeFlow?.hasAnchorOpenEvidenceAction,
+    false,
+    'Expected evidence actions to avoid anchor-only controls for keyboard flow consistency.',
+  );
+  if ((resumeFlow?.linkCount ?? 0) > 0) {
+    assert.equal(
+      resumeFlow?.hasButtonOpenLinkAction,
+      true,
+      'Expected link actions to be rendered as semantic buttons.',
+    );
+  } else {
+    assert.equal(
+      resumeFlow?.hasButtonOpenLinkAction,
+      false,
+      'Expected no link button markers when no links are present.',
+    );
+  }
+  if ((resumeFlow?.topFilesCount ?? 0) > 0) {
+    assert.equal(
+      resumeFlow?.hasButtonOpenTopFileAction,
+      true,
+      'Expected top file actions to be rendered as semantic buttons.',
+    );
+  } else {
+    assert.equal(
+      resumeFlow?.hasButtonOpenTopFileAction,
+      false,
+      'Expected no top file button markers when no top files are present.',
+    );
+  }
+  if ((resumeFlow?.clickableEvidenceCount ?? 0) > 0) {
+    assert.equal(
+      resumeFlow?.hasButtonOpenEvidenceAction,
+      true,
+      'Expected evidence actions to be rendered as semantic buttons.',
+    );
+  } else {
+    assert.equal(
+      resumeFlow?.hasButtonOpenEvidenceAction,
+      false,
+      'Expected no evidence button markers when no clickable evidence is present.',
+    );
+  }
+  assert.equal(
     resumeFlow?.restoreWorkingSetActionCount,
     1,
     'Expected Restore working set to be presented as a single canonical action.',

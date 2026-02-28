@@ -116,11 +116,36 @@ export const PANEL_WEBVIEW_STYLE = `
       .badge.clickable {
         cursor: pointer;
       }
+      button.badge.clickable {
+        background: transparent;
+        color: inherit;
+        border-width: 1px;
+        border-style: solid;
+        padding: 2px 8px;
+        font-size: 12px;
+      }
       .badge.kind-url {
         border-color: var(--vscode-textLink-foreground);
       }
       .badge.kind-file {
         border-color: var(--vscode-charts-green);
+      }
+      .text-link-button {
+        border: none;
+        background: transparent;
+        color: var(--vscode-textLink-foreground);
+        padding: 0;
+        border-radius: 4px;
+        text-align: left;
+        text-decoration: underline;
+        font: inherit;
+        cursor: pointer;
+      }
+      .text-link-button:hover {
+        color: var(--vscode-textLink-activeForeground);
+      }
+      .timeline-link-button {
+        align-self: flex-start;
       }
       .evidence-kind {
         color: var(--vscode-descriptionForeground);
@@ -192,6 +217,10 @@ export const PANEL_WEBVIEW_STYLE = `
         padding: 8px 10px;
       }
       button:focus-visible {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
+      }
+      summary:focus-visible {
         outline: 2px solid var(--vscode-focusBorder);
         outline-offset: 2px;
       }
@@ -352,5 +381,23 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .recap-card h4 {
         margin-top: 0;
+      }
+      @media (forced-colors: active) {
+        button,
+        .badge,
+        .badge.kind-url,
+        .badge.kind-file,
+        button.badge.clickable.kind-url,
+        button.badge.clickable.kind-file,
+        .text-link-button {
+          forced-color-adjust: auto;
+          border-color: ButtonText;
+        }
+        button:focus-visible,
+        summary:focus-visible,
+        .text-link-button:focus-visible {
+          outline: 2px solid Highlight;
+          outline-offset: 2px;
+        }
       }
 `;
