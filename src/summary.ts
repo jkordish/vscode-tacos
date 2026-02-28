@@ -377,10 +377,12 @@ function buildStepEvidenceIds(
 
   return nextSteps.map((stepText, index) => {
     const kindPreference = inferEvidenceKindPreference(stepText);
+    const stepTokens = extractStepTokens(stepText);
 
     for (const kind of kindPreference) {
-      const unusedMatch = evidenceCatalog.find(
-        (item) => item.kind === kind && !usedIds.has(item.id),
+      const unusedMatch = pickBestEvidenceCandidate(
+        evidenceCatalog.filter((item) => item.kind === kind && !usedIds.has(item.id)),
+        stepTokens,
       );
       if (unusedMatch) {
         usedIds.add(unusedMatch.id);
@@ -389,7 +391,10 @@ function buildStepEvidenceIds(
     }
 
     for (const kind of kindPreference) {
-      const fallbackMatch = evidenceCatalog.find((item) => item.kind === kind);
+      const fallbackMatch = pickBestEvidenceCandidate(
+        evidenceCatalog.filter((item) => item.kind === kind),
+        stepTokens,
+      );
       if (fallbackMatch) {
         return [fallbackMatch.id];
       }
@@ -398,6 +403,85 @@ function buildStepEvidenceIds(
     const positional = evidenceIds[Math.min(index, evidenceIds.length - 1)] ?? defaultEvidenceId;
     return positional ? [positional] : [];
   });
+}
+
+const STEP_TOKEN_STOP_WORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'from',
+  'that',
+  'this',
+  'into',
+  'after',
+  'before',
+  'then',
+  'your',
+  'next',
+  'step',
+  'safe',
+  'action',
+  'resume',
+  'open',
+  'run',
+  'fix',
+  'review',
+  'continue',
+]);
+
+function extractStepTokens(text: string): string[] {
+  const tokens = text
+    .toLowerCase()
+    .split(/[^a-z0-9/_\-.]+/u)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !STEP_TOKEN_STOP_WORDS.has(token));
+  return [...new Set(tokens)];
+}
+
+function normalizeEvidenceText(item: SummaryEvidenceItem): string {
+  const segments: string[] = [item.id, item.label];
+  if (typeof item.target === 'string') {
+    segments.push(item.target);
+  }
+  if (item.meta && typeof item.meta === 'object') {
+    for (const value of Object.values(item.meta)) {
+      if (typeof value === 'string') {
+        segments.push(value);
+      }
+    }
+  }
+  return segments.join(' ').toLowerCase();
+}
+
+function scoreEvidenceCandidate(item: SummaryEvidenceItem, tokens: string[]): number {
+  if (tokens.length === 0) {
+    return 0;
+  }
+  const haystack = normalizeEvidenceText(item);
+  let score = 0;
+  for (const token of tokens) {
+    if (haystack.includes(token)) {
+      score += 1;
+    }
+  }
+  return score;
+}
+
+function pickBestEvidenceCandidate(
+  candidates: SummaryEvidenceItem[],
+  tokens: string[],
+): SummaryEvidenceItem | undefined {
+  let best: SummaryEvidenceItem | undefined;
+  let bestScore = -1;
+  for (const candidate of candidates) {
+    const score = scoreEvidenceCandidate(candidate, tokens);
+    if (!best || score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+  return best;
 }
 
 function inferEvidenceKindPreference(stepText: string): SummaryEvidenceKind[] {

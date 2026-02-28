@@ -15,6 +15,7 @@ export interface RenderResumeStackCardInput {
   lastActionActionTrustedHtml?: TrustedHtml;
   nextSafeActionSummary: string;
   primaryNextActionTrustedHtml?: TrustedHtml;
+  nextStepRationaleTrustedHtml?: TrustedHtml;
   nextStepsListTrustedHtml: TrustedHtml;
   blockerTitle: string;
   blockerDetail: string;
@@ -49,6 +50,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <h4>Next</h4>
           <p class="companion-kicker">Next safe action</p>
           <p class="companion-primary">${escapeHtml(input.nextSafeActionSummary)}</p>
+          ${input.nextStepRationaleTrustedHtml ?? ''}
           <ul class="compact-list">${
             input.nextStepsListTrustedHtml || '<li>No next steps captured yet.</li>'
           }</ul>

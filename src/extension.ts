@@ -65,7 +65,11 @@ import {
   summarizePerformanceCounter,
   type PerformanceCounter,
 } from './performanceGuard';
-import { buildNextStepActions, type NextStepAction } from './nextStepActions';
+import {
+  buildNextStepActions,
+  describeNextStepActionRationale,
+  type NextStepAction,
+} from './nextStepActions';
 import {
   isPathWithinWorkspaceRoot,
   normalizeHttpUrl,
@@ -516,6 +520,7 @@ export function activate(context: vscode.ExtensionContext): void {
         hasPrimaryNextAction: Boolean(primaryNextAction),
         primaryNextActionLabel: primaryNextAction?.label ?? '',
         primaryNextActionStepIndex: primaryNextAction?.stepIndex ?? -1,
+        hasPrimaryNextActionRationale: panelHtml.includes('data-next-step-rationale="true"'),
         hasHomePrimaryNextAction: panelHtml.includes('data-primary-next-safe-action="home"'),
         hasRecapPrimaryNextAction: panelHtml.includes('data-primary-next-safe-action="recap"'),
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
@@ -3593,6 +3598,15 @@ function renderWebview(
   const recapPrimaryNextActionButton = primaryNextAction
     ? `<button type="button" data-primary-next-safe-action="recap" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}">${escapeHtml(primaryNextAction.label)}</button>`
     : '';
+  const primaryNextActionEvidence = primaryNextAction
+    ? evidenceById.get(primaryNextAction.evidenceId)
+    : undefined;
+  const primaryNextStepRationale = primaryNextAction
+    ? describeNextStepActionRationale(primaryNextAction, primaryNextActionEvidence)
+    : '';
+  const primaryNextStepRationaleHtml = primaryNextStepRationale
+    ? `<details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">${escapeHtml(primaryNextStepRationale)}</p></details>`
+    : '';
 
   if (primaryNextAction) {
     recordCompanionPrimaryCtaImpression();
@@ -3609,9 +3623,19 @@ function renderWebview(
           ? ''
           : `<button type="button" class="secondary step-action" data-action="runNextStepAction" data-step-index="${index}">${escapeHtml(action.label)}</button>`
         : '';
+      const advisoryReason = !action
+        ? evidenceIds.length === 0
+          ? 'Advisory only: no captured evidence for this step yet.'
+          : summary.lowConfidence
+            ? 'Advisory only: evidence confidence is low right now.'
+            : 'Advisory only: no safe one-click action is available for this step.'
+        : '';
       const badgeRow = badges ? `<div class="step-evidence">${badges}</div>` : '';
       const actionRow = actionButton ? `<div class="step-actions">${actionButton}</div>` : '';
-      return `<li>${escapeHtml(step)}${badgeRow}${actionRow}</li>`;
+      const advisoryRow = advisoryReason
+        ? `<div class="step-advisory muted">${escapeHtml(advisoryReason)}</div>`
+        : '';
+      return `<li>${escapeHtml(step)}${badgeRow}${actionRow}${advisoryRow}</li>`;
     })
     .join('');
   const topFiles = summary.topFiles
@@ -4112,6 +4136,10 @@ function renderWebview(
         padding: 4px 10px;
         font-size: 12px;
       }
+      .step-advisory {
+        margin-top: 6px;
+        font-size: 12px;
+      }
       .badge {
         display: inline-block;
         border: 1px solid var(--vscode-widget-border);
@@ -4348,6 +4376,7 @@ function renderWebview(
       nextSafeActionSummary:
         primaryNextActionSummary || 'Refresh summary to regenerate first-action guidance.',
       primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
+      nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
       nextStepsListTrustedHtml: companionNextSteps,
       blockerTitle,
       blockerDetail,

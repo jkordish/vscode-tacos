@@ -14,6 +14,31 @@ export interface NextStepAction {
   evidenceId: string;
 }
 
+export function describeNextStepActionRationale(
+  action: NextStepAction,
+  evidence?: SummaryEvidenceItem,
+): string {
+  const evidenceLabel = evidence?.label?.trim() || 'recent captured evidence';
+
+  if (action.kind === 'openFile') {
+    return `Based on file evidence: ${evidenceLabel}.`;
+  }
+
+  if (action.kind === 'openUrl') {
+    return `Based on linked context: ${evidenceLabel}.`;
+  }
+
+  if (action.kind === 'copyFailingCommand') {
+    return `Based on failing terminal activity: ${evidenceLabel}.`;
+  }
+
+  if (action.kind === 'rerunTask') {
+    return `Based on recent task/terminal activity: ${evidenceLabel}.`;
+  }
+
+  return `Based on recent debug activity: ${evidenceLabel}.`;
+}
+
 export interface BuildNextStepActionsInput {
   summary: ResumeSummary;
   canRerunTask: boolean;

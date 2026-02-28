@@ -13,6 +13,8 @@ describe('renderResumeStackCard', () => {
       nextSafeActionSummary: 'Open src/extension.ts and run verify',
       primaryNextActionTrustedHtml:
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open file</button>',
+      nextStepRationaleTrustedHtml:
+        '<details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">Based on file evidence: src/extension.ts.</p></details>',
       nextStepsListTrustedHtml: '',
       blockerTitle: 'No active blocker',
       blockerDetail: 'Continue with the first suggested next step.',
@@ -40,6 +42,7 @@ describe('renderResumeStackCard', () => {
                <h4>Next</h4>
                <p class="companion-kicker">Next safe action</p>
                <p class="companion-primary">Open src/extension.ts and run verify</p>
+               <details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">Based on file evidence: src/extension.ts.</p></details>
                <ul class="compact-list"><li>No next steps captured yet.</li></ul>
                <div class="status-actions">
                  <button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open file</button>
@@ -74,6 +77,7 @@ describe('renderResumeStackCard', () => {
       nextSafeActionSummary: 'Open diagnostics and fix top error',
       primaryNextActionTrustedHtml:
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open Problems</button>',
+      nextStepRationaleTrustedHtml: '',
       nextStepsListTrustedHtml: '<li>Run focused verify pass</li>',
       blockerTitle: 'Diagnostics <error>',
       blockerDetail: 'Fix warning "line 10".',
