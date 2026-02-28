@@ -1,224 +1,289 @@
-# Manual Smoke Runbook (Trusted + Restricted)
+# Manual Smoke Runbook (v0.6.0 Trusted + Restricted)
 
-For sticky notes/scratchpad specific edge cases, also run: `docs/sticky-notes-qa-matrix.md`.
-Record final outcomes in: `docs/sticky-notes-qa-signoff-template.md`.
+Use this runbook for v0.6.0 sign-off and release gating.
 
-Date: `__________`
-Tester: `__________`
-VS Code version: `__________`
-OS: `__________`
-Branch/commit: `feature/epic-must-have-tracking @ __________`
+Related:
 
-## Preconditions
+- Epic: [#134](https://github.com/jkordish/vscode-tacos/issues/134) (Proof, Metrics, and Release Discipline)
+- Epic acceptance anchors: [#131](https://github.com/jkordish/vscode-tacos/issues/131), [#132](https://github.com/jkordish/vscode-tacos/issues/132), [#133](https://github.com/jkordish/vscode-tacos/issues/133)
+- Release checklist tracking: [#161](https://github.com/jkordish/vscode-tacos/issues/161)
+- Metrics contract: `docs/metrics-baseline.md`
+- Local metrics dictionary: `docs/metrics.md`
 
-1. Install extension VSIX from this branch.
-2. Open a git-backed workspace with at least one npm script and tests.
-3. Ensure terminal shell integration is enabled in VS Code.
-4. Confirm `tacos.enabled=true`, `tacos.showOnFocus=true`.
+Date: `__________`  
+Tester: `__________`  
+VS Code version: `__________`  
+OS: `__________`  
+Branch/commit: `__________`
 
-## Part A - Trusted Workspace
+## 1) Preconditions
 
-### A1. Local-first summary appears immediately
+1. Install extension VSIX from the candidate branch.
+2. Open a git-backed workspace with at least one npm task/test flow.
+3. Ensure integrated terminal shell integration is enabled.
+4. Confirm:
+   - `tacos.enabled=true`
+   - `tacos.showOnFocus=true`
+   - `tacos.autoRefreshInBackground=true` (default path)
+5. Keep Output panel available (`TaCoS`) for troubleshooting.
+
+## 2) Must-Pass v0.6.0 Scenarios (Trusted Workspace)
+
+These scenarios are release-blocking for v0.6.0.
+
+### T1. Return after short idle (1-5 min)
 
 Steps:
-1. Make a small code edit.
-2. Run one task or test command from the integrated terminal.
-3. Trigger `TaCoS: Show Resume Brief Now`.
+
+1. Make a small edit and run one command/task.
+2. Leave workspace idle for 1-5 minutes, then refocus VS Code.
+3. Open or observe Resume Brief.
 
 Expected:
-- Resume panel opens quickly with local summary.
-- Status shows local summary timestamp.
 
-Result: `PASS / FAIL`
+- Companion Home answers Now/Next/Blocked/Restore quickly.
+- One clear primary next safe action is shown.
+- Last action cue is present when evidence exists.
+- No forced extra click is needed in background-refresh mode.
+
+Result: `PASS / FAIL`  
 Notes: `__________`
 
-### A2. Optional AI refinement updates in-place
+### T2. Return after long gap (30+ min)
 
 Steps:
-1. Run `TaCoS: Configure AI Provider` and choose `vscode-lm` or `openai`.
-2. Trigger `TaCoS: Show Resume Brief Now` again.
+
+1. Capture activity (edit + run/test), then leave for at least 30 minutes.
+2. Refocus VS Code and trigger `TaCoS: Show Resume Brief Now`.
 
 Expected:
-- Local summary appears first.
-- Later updates to refined summary without blocking UI.
-- Status reflects refined source/timestamp.
 
-Result: `PASS / FAIL / N/A`
+- Resume copy favors reorientation (retrieval cue + safe assistant cue).
+- Safe primary CTA remains available or clearly unavailable with reason.
+- Resume Path remains 3 steps and still actionable.
+
+Result: `PASS / FAIL`  
 Notes: `__________`
 
-### A3. Evidence link safety
+### T3. Active typing deferral
 
 Steps:
-1. Click a file evidence badge/link.
-2. Click a URL evidence badge/link.
-3. Try clicking any non-evidence anchor-like element in panel (if present).
+
+1. Trigger a focus regain opportunity.
+2. Immediately start typing in an editor for several seconds.
 
 Expected:
-- File opens only within workspace.
-- URL opens only http/https links.
-- Unexpected links are blocked with warning (no unsafe open).
 
-Result: `PASS / FAIL`
+- TaCoS does not steal focus or interrupt typing.
+- Notification/prompt is deferred/suppressed while active typing is detected.
+- Status updates remain calm and non-intrusive.
+
+Result: `PASS / FAIL`  
 Notes: `__________`
 
-### A4. Timeline behavior
+### T4. Quiet now + quiet hours suppression
 
 Steps:
-1. Confirm timeline card is present.
-2. Click `Show timeline`.
-3. Inspect group ordering and row behavior.
-4. Click a file/url timeline row and a non-clickable row type.
+
+1. Activate `Quiet now` (or temporary quiet) and create a focus-trigger chance.
+2. Configure quiet hours and test within active quiet window.
+3. Trigger `TaCoS: Show Resume Brief Now` manually.
 
 Expected:
-- Timeline starts collapsed.
-- Groups appear in order: files, terminal, debug/tasks, urls, git (when data exists).
-- Only file/url rows are clickable.
 
-Result: `PASS / FAIL`
+- Auto focus-trigger surfacing is suppressed during quiet periods.
+- Manual `Show Resume Brief Now` still works.
+- Status shows quiet/snoozed state clearly.
+
+Result: `PASS / FAIL`  
 Notes: `__________`
 
-### A5. Restore Pack behavior (trusted)
+### T5. Blocker-present workflow
 
 Steps:
-1. Use `Reopen files` and `Open changed files`.
-2. If available, test `Rerun last task`, `Rerun debug config`, `Checkout previous branch`.
+
+1. Create a blocker (failing task, diagnostics error, or failing command).
+2. Trigger summary refresh.
 
 Expected:
-- Available actions execute correctly.
-- No unsafe path/link behavior occurs.
 
-Result: `PASS / FAIL`
+- Blocked card is active and shows one primary unblock action.
+- Blocker action is safe and trust-aware (disabled when unavailable).
+- Evidence badges/cues align with blocker claim.
+
+Result: `PASS / FAIL`  
 Notes: `__________`
 
-### A6. Checkpoint capture behavior
+### T6. Empty/low-confidence workflow
 
 Steps:
-1. Run `TaCoS: Add Checkpoint Note from Clipboard` with non-empty clipboard.
-2. Enable `tacos.promptCheckpointOnBlur=true`.
-3. Perform meaningful activity, then blur VS Code window.
+
+1. Open a sparse workspace (minimal recent evidence) or clear activity context.
+2. Trigger summary generation.
 
 Expected:
-- Clipboard note persists workspace-scoped.
-- Blur prompt appears only when gating conditions are met.
-- Prompt does not spam repeatedly (cooldown enforced).
 
-Result: `PASS / FAIL`
+- Intent/next-step copy clearly indicates low confidence.
+- TaCoS suggests safe evidence-building action(s) without inventing unsafe links.
+- No noisy prompt spam while evidence is sparse.
+
+Result: `PASS / FAIL`  
 Notes: `__________`
 
-### A7. UX friction checks (notification and click budget)
+## 3) v0.6.0 UX and Safety Detail Checks (Trusted Workspace)
+
+### T7. Timeline + evidence affordance clarity
 
 Steps:
-1. Set `tacos.autoRefreshInBackground=true`.
-2. Cause at least 3 focus-triggered refresh opportunities (blur/focus cycles with meaningful activity).
-3. Count how many times you must click `Open details` to see updated state.
-4. Repeat with `tacos.autoRefreshInBackground=false`.
+
+1. Open Timeline and Evidence sections.
+2. Inspect mixed clickable (`file`/`url`) and non-clickable rows.
+3. Expand/collapse Evidence `Show more` if present.
 
 Expected:
-- With background mode enabled, updated state should require `0` forced `Open details` clicks.
-- With background mode disabled, prompt flow should still be available.
-- No repeated notification spam while idle (cooldown/debounce still honored).
-- Companion nudges should not repeatedly fire within the configured nudge cooldown window.
+
+- Clickable rows are visually distinct and labeled `Open`.
+- Informational rows are labeled `Not clickable`.
+- Show-more behavior is stable across rerenders.
+
+Result: `PASS / FAIL`  
+Notes: `__________`
+
+### T8. Evidence and link safety
+
+Steps:
+
+1. Click a file evidence action.
+2. Click a URL evidence action.
+3. Attempt unsupported/invalid action paths if available.
+
+Expected:
+
+- File opens only within workspace-safe boundaries.
+- URL opens only normalized `http/https`.
+- Unsupported/unsafe paths are blocked with warning.
+
+Result: `PASS / FAIL`  
+Notes: `__________`
+
+### T9. Prompt friction and interruption timing sanity
+
+Steps:
+
+1. Run 3+ focus cycles at likely boundary moments.
+2. Run 3+ focus cycles mid-activity (including active typing).
+3. Compare behavior with `tacos.autoRefreshInBackground=true` and `false`.
+
+Expected:
+
+- Boundary moments are more likely to surface useful prompt/updates.
+- Mid-activity surfacing is reduced and non-intrusive.
+- Forced `Open details` clicks trend near zero in background mode.
 
 Record:
-- Background mode forced-click count: `__________`
-- Prompt mode forced-click count: `__________`
-- Interruption score (1 low friction - 5 high friction): `__________`
+
+- Background mode forced-open count: `__________`
+- Prompt mode forced-open count: `__________`
+- Interruption score (1 calm - 5 disruptive): `__________`
 - Notes: `__________`
 
-### A8. Session recap and checkpoint shortcut
+### T10. Optional AI refinement safety (N/A if local-only)
 
 Steps:
-1. Trigger `TaCoS: Show Resume Brief Now`.
-2. Confirm `Session Recap` renders `Done since last resume`, `Pending / blocked`, and `Recommended first action`.
-3. Click `Save checkpoint` from the recap card.
+
+1. Configure provider (`vscode-lm` or `openai`).
+2. Trigger summary and inspect payload preview/consent flow.
 
 Expected:
-- Recap fields update after additional edits/tasks and a new summary cycle.
-- Checkpoint input opens from recap and saves a workspace-scoped note.
-- Saved checkpoint appears in subsequent resume panel runs.
 
-Result: `PASS / FAIL`
+- Local summary appears first.
+- Optional refinement updates in place.
+- Redaction and consent boundaries remain explicit.
+
+Result: `PASS / FAIL / N/A`  
 Notes: `__________`
 
-### A9. Metrics export output
+## 4) Restricted Mode Scenarios
+
+### R1. Restricted mode baseline behavior
 
 Steps:
-1. Perform one quick action from panel or status bar.
-2. Run `TaCoS: Export Local Metrics`.
-3. Inspect `.tacos/metrics.json` and `.tacos/metrics.csv`.
 
-Expected:
-- Both files are written locally.
-- CSV includes companion columns (`companionPromptImpressions`, `companionQuickActionsTaken`, follow-through rates).
-- No network dependency is required for metrics export.
-
-Result: `PASS / FAIL`
-Notes: `__________`
-
-### A10. Focus-path performance guardrails
-
-Steps:
-1. Open `Output` panel and select `TaCoS`.
-2. Run 5-10 focus cycles (blur/focus) while mixing:
-   - no-op returns (no significant change),
-   - one triggerable return (meaningful activity + idle/cooldown satisfied),
-   - one panel-heavy return (open details panel, then perform a small action that rerenders).
-3. Run `TaCoS: Copy Diagnostics Bundle`.
-4. Inspect diagnostics text for `performanceCounters(runtime)` summary.
-
-Expected:
-- No repeated `TaCoS perf: ... slow-path` warnings under normal dogfooding use.
-- Diagnostics include non-empty runtime counters for focus handling and panel/webview render paths.
-- No UI freezes or noticeable focus-path lag when summaries are suppressed or triggered.
-
-Result: `PASS / FAIL`
-Notes: `__________`
-
-## Part B - Restricted Mode
-
-### B1. Enter restricted mode
-
-Steps:
-1. Open workspace in Restricted Mode (do not trust workspace).
+1. Open workspace in Restricted Mode (untrusted).
 2. Trigger `TaCoS: Show Resume Brief Now`.
 
 Expected:
+
 - Local summary still works.
-- No AI refinement is performed.
+- Risky collection/actions stay disabled.
+- Trust state is clearly communicated.
 
-Result: `PASS / FAIL`
+Result: `PASS / FAIL`  
 Notes: `__________`
 
-### B2. Verify collection restrictions
+### R2. Collection restrictions
 
 Steps:
-1. Trigger summaries and inspect behavior.
-2. Observe extension output channel if needed.
+
+1. Trigger summaries while untrusted.
+2. Observe output channel and panel behavior.
 
 Expected:
-- No git execution-dependent context collection.
-- No terminal command scraping/collection.
 
-Result: `PASS / FAIL`
+- No execution-dependent git collection.
+- No raw terminal command persistence/scraping regressions.
+
+Result: `PASS / FAIL`  
 Notes: `__________`
 
-### B3. Verify risky action restrictions
+### R3. Restore action restrictions
 
 Steps:
-1. Open details panel Restore Pack.
-2. Inspect rerun/checkout actions.
+
+1. Open Restore sections.
+2. Inspect task/debug/branch-sensitive actions.
 
 Expected:
-- Risky task/debug/checkout actions are disabled.
-- Informational restricted-mode message is shown.
 
-Result: `PASS / FAIL`
+- Risky actions remain disabled in Restricted Mode.
+- Safe local navigation remains available.
+
+Result: `PASS / FAIL`  
 Notes: `__________`
 
-## Sign-off
+## 5) Local Metrics Capture (Required for v0.6.0 Sign-off)
 
-- Trusted workspace overall: `PASS / FAIL`
-- Restricted mode overall: `PASS / FAIL`
-- Ready to close #35 and #27: `YES / NO`
+After running scenarios above:
+
+1. Run `TaCoS: Copy Metrics Baseline Snapshot` and paste into `docs/metrics-baseline.md`.
+2. Run `TaCoS: Export Local Metrics` and inspect `.tacos/metrics.csv`.
+3. Record key v0.6.0 metrics:
+   - `firstActionLagMs` (p50/p95)
+   - `companionForcedOpenRate`
+   - `companionActionFollowThroughRate`
+   - `companionPrimaryCtaClickThroughRate`
+   - `companionPrimaryCtaCompletionRate`
+   - `interruptionTimingClass` distribution (`boundary` vs `mid-activity`)
+
+Snapshot/date reference: `__________`  
+Metric notes: `__________`
+
+## 6) Final Sign-off
+
+Must-pass scenario status:
+
+- T1 short-idle return: `PASS / FAIL`
+- T2 long-gap return: `PASS / FAIL`
+- T3 active typing deferral: `PASS / FAIL`
+- T4 quiet suppression behavior: `PASS / FAIL`
+- T5 blocker-present flow: `PASS / FAIL`
+- T6 low-confidence flow: `PASS / FAIL`
+- R1 restricted baseline: `PASS / FAIL`
+- R2 restricted collection limits: `PASS / FAIL`
+- R3 restricted action limits: `PASS / FAIL`
+
+Overall trusted workspace sign-off: `PASS / FAIL`  
+Overall restricted workspace sign-off: `PASS / FAIL`  
+Ready for release checklist gate (#161): `YES / NO`
 
 Final notes: `__________`
