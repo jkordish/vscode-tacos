@@ -690,6 +690,12 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasDisabledRestoreRerunDebug = /data-action="restoreRerunDebug"[^>]*disabled/u.test(
         panelHtml,
       );
+      const hasDisabledAddNoteAction = /data-action="sessionAddCheckpoint"[^>]*disabled/u.test(
+        panelHtml,
+      );
+      const hasDisabledListNotesAction = /data-action="checkpointOpenList"[^>]*disabled/u.test(
+        panelHtml,
+      );
       const disabledResumePathToggleCount = (
         panelHtml.match(/<input[^>]*data-resume-path-toggle="true"[^>]*disabled/gu) ?? []
       ).length;
@@ -758,6 +764,8 @@ export function activate(context: vscode.ExtensionContext): void {
         hasDisabledRestoreWorkingSet,
         hasDisabledRestoreRerunTask,
         hasDisabledRestoreRerunDebug,
+        hasDisabledAddNoteAction,
+        hasDisabledListNotesAction,
       };
     }),
     vscode.commands.registerCommand('tacos.__test.getResumePathSnapshot', async () => {
@@ -4247,8 +4255,8 @@ function renderWebview(
       {
         label: 'Notes & Feedback',
         buttonsTrustedHtml: [
-          '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>',
-          '<button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>',
+          `<button type="button" class="secondary" data-action="sessionAddCheckpoint" ${demoDisabledAttr}>Add note</button>`,
+          `<button type="button" class="secondary" data-action="checkpointOpenList" ${demoDisabledAttr}>List notes</button>`,
           '<button type="button" data-action="rateHelpfulness">Rate helpfulness</button>',
           '<button type="button" class="secondary" data-action="fixSummary">Fix summary</button>',
         ],

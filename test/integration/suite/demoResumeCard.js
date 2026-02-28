@@ -65,6 +65,16 @@ async function run() {
     true,
     'Expected rerun debug action to be disabled in demo mode.',
   );
+  assert.equal(
+    resumeFlow?.hasDisabledAddNoteAction,
+    true,
+    'Expected Add note quick action to be disabled in demo mode.',
+  );
+  assert.equal(
+    resumeFlow?.hasDisabledListNotesAction,
+    true,
+    'Expected List notes quick action to be disabled in demo mode.',
+  );
 }
 
 module.exports = {
