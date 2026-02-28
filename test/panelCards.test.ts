@@ -54,7 +54,7 @@ describe('panelCards', () => {
     });
     const evidence = renderEvidenceCard({
       evidenceItemsTrustedHtml: '',
-      hasExtraEvidence: true,
+      hiddenEvidenceCount: 3,
       expanded: false,
     });
     const details = renderDetailsCard('<p>Summary</p>', false);
@@ -64,6 +64,9 @@ describe('panelCards', () => {
     expect(list).toContain('<h3>Top Files</h3>');
     expect(list).toContain('<li>None captured</li>');
     expect(evidence).toContain('data-action="toggleEvidenceMore"');
+    expect(evidence).toContain('data-hidden-count="3"');
+    expect(evidence).toContain('aria-controls="evidence-list"');
+    expect(evidence).toContain('Show 3 more');
     expect(evidence).toContain('data-panel-section="evidence"');
     expect(details).toContain('data-panel-section="details"');
     expect(details).toContain('<div class="details-markdown"><p>Summary</p></div>');
@@ -86,5 +89,26 @@ describe('panelCards', () => {
     expect(quickActions).toContain('<h3>Quick Actions</h3>');
     expect(restore).toContain('Restricted Mode: task/debug/branch execution actions are disabled.');
     expect(changes).toContain('<h3>Changes Since Last Time</h3>');
+  });
+
+  it('renders evidence card show-more control with stable hidden-count metadata', () => {
+    const evidence = renderEvidenceCard({
+      evidenceItemsTrustedHtml:
+        '<li class="evidence-item"><div class="evidence-row"><button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="file:src/extension.ts">src/extension.ts</button><span class="evidence-affordance evidence-affordance-clickable" data-evidence-affordance="open">Open</span></div><div class="evidence-meta"><span class="evidence-kind">[file]</span> <code>file:src/extension.ts</code></div></li>',
+      hiddenEvidenceCount: 2,
+      expanded: false,
+    });
+
+    expect(evidence).toMatchInlineSnapshot(`
+      "<div class="card">
+            <details data-panel-section="evidence" >
+              <summary><h3>Evidence</h3></summary>
+              <div class="panel-section-body">
+                <ul class="evidence-list" id="evidence-list"><li class="evidence-item"><div class="evidence-row"><button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="file:src/extension.ts">src/extension.ts</button><span class="evidence-affordance evidence-affordance-clickable" data-evidence-affordance="open">Open</span></div><div class="evidence-meta"><span class="evidence-kind">[file]</span> <code>file:src/extension.ts</code></div></li></ul>
+                <button type="button" class="show-more-btn" data-action="toggleEvidenceMore" data-hidden-count="2" aria-controls="evidence-list" aria-expanded="false">Show 2 more</button>
+              </div>
+            </details>
+          </div>"
+    `);
   });
 });

@@ -12,5 +12,8 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain('const panelSectionScope = "scope-token";');
     expect(script).toContain('const maxIntentOverrideChars = 280;');
     expect(script).toContain("type: 'blockedLink'");
+    expect(script).toContain('toggle.dataset.hiddenCount');
+    expect(script).toContain("toggle.textContent = expanded ? 'Show less' : collapsedLabel;");
+    expect(script).toContain("toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');");
   });
 });

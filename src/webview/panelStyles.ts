@@ -147,17 +147,71 @@ export const PANEL_WEBVIEW_STYLE = `
       .timeline-link-button {
         align-self: flex-start;
       }
+      .timeline-row-heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+      }
+      .timeline-label {
+        font-weight: 600;
+      }
+      .evidence-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+      .evidence-item {
+        border: 1px solid var(--vscode-widget-border);
+        border-radius: 8px;
+        padding: 8px;
+        margin-bottom: 8px;
+        background: var(--vscode-editor-background);
+      }
+      .evidence-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .evidence-link-button,
+      .evidence-label {
+        font-weight: 600;
+      }
+      .evidence-meta {
+        margin-top: 4px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        font-size: 12px;
+      }
+      .evidence-affordance {
+        border: 1px solid var(--vscode-widget-border);
+        border-radius: 999px;
+        padding: 1px 8px;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .evidence-affordance-clickable {
+        border-color: var(--vscode-textLink-foreground);
+        color: var(--vscode-textLink-foreground);
+      }
+      .evidence-affordance-static {
+        color: var(--surface-muted);
+      }
       .evidence-kind {
         color: var(--vscode-descriptionForeground);
       }
       .evidence-target {
         color: var(--vscode-descriptionForeground);
+        overflow-wrap: anywhere;
       }
       .extra-evidence {
         display: none;
       }
       .evidence-list.show-more .extra-evidence {
-        display: list-item;
+        display: block;
       }
       details summary {
         cursor: pointer;
@@ -389,6 +443,8 @@ export const PANEL_WEBVIEW_STYLE = `
         .badge.kind-file,
         button.badge.clickable.kind-url,
         button.badge.clickable.kind-file,
+        .evidence-affordance,
+        .evidence-item,
         .text-link-button {
           forced-color-adjust: auto;
           border-color: ButtonText;

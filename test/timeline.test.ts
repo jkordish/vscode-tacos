@@ -63,4 +63,17 @@ describe('buildTimelineGroups', () => {
     expect(clickableKinds).toEqual(['file', 'url']);
     expect(nonClickableKinds).toEqual(['branch', 'debug', 'task', 'terminal']);
   });
+
+  it('adds explicit interaction hints for each row', () => {
+    const groups = buildTimelineGroups(evidence, now);
+    const rows = groups.flatMap((group) => group.rows);
+
+    const hintsByKind = new Map(rows.map((row) => [row.kind, row.interactionHint]));
+    expect(hintsByKind.get('file')).toBe('Open');
+    expect(hintsByKind.get('url')).toBe('Open');
+    expect(hintsByKind.get('terminal')).toBe('Not clickable');
+    expect(hintsByKind.get('debug')).toBe('Not clickable');
+    expect(hintsByKind.get('task')).toBe('Not clickable');
+    expect(hintsByKind.get('branch')).toBe('Not clickable');
+  });
 });
