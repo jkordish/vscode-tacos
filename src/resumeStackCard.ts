@@ -10,6 +10,9 @@ export interface RenderResumeStackCardInput {
   intent: string;
   mode: string;
   nowCheckpointLineTrustedHtml?: TrustedHtml;
+  lastActionLabel: string;
+  lastActionContext?: string;
+  lastActionActionTrustedHtml?: TrustedHtml;
   nextSafeActionSummary: string;
   primaryNextActionTrustedHtml?: TrustedHtml;
   nextStepsListTrustedHtml: TrustedHtml;
@@ -29,6 +32,18 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <p class="companion-primary">${escapeHtml(input.intent)}</p>
           <p class="companion-meta">Mode: ${escapeHtml(input.mode)}</p>
           ${input.nowCheckpointLineTrustedHtml ?? ''}
+          <p class="companion-kicker">Last action</p>
+          <p class="companion-primary" data-last-action-cue="true">${escapeHtml(input.lastActionLabel)}</p>
+          ${
+            input.lastActionContext
+              ? `<p class="companion-meta">${escapeHtml(input.lastActionContext)}</p>`
+              : ''
+          }
+          ${
+            input.lastActionActionTrustedHtml
+              ? `<div class="status-actions">${input.lastActionActionTrustedHtml}</div>`
+              : ''
+          }
         </section>
         <section class="companion-block">
           <h4>Next</h4>

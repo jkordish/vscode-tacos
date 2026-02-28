@@ -520,6 +520,7 @@ export function activate(context: vscode.ExtensionContext): void {
         hasRecapPrimaryNextAction: panelHtml.includes('data-primary-next-safe-action="recap"'),
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
         hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
+        hasLastActionCue: panelHtml.includes('data-last-action-cue="true"'),
         hasRestoreWorkingSetAction: panelHtml.includes('data-action="restoreWorkingSet"'),
         hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
       };
@@ -3646,6 +3647,17 @@ function renderWebview(
   const nowCheckpointLine = currentCheckpointNote
     ? `<p class="companion-meta"><strong>Checkpoint:</strong> ${escapeHtml(currentCheckpointNote.text)}</p>`
     : '';
+  const lastActionLabel = summary.lastActionLabel?.trim() || 'No last action captured yet.';
+  const lastActionContext = summary.lastActionContext?.trim();
+  const lastActionEvidence = summary.lastActionEvidenceId
+    ? evidenceById.get(summary.lastActionEvidenceId)
+    : undefined;
+  const canOpenLastActionEvidence =
+    Boolean(lastActionEvidence) &&
+    (lastActionEvidence?.kind === 'file' || lastActionEvidence?.kind === 'url');
+  const lastActionActionHtml = canOpenLastActionEvidence
+    ? `<button type="button" class="secondary" data-action="openEvidence" data-evidence-id="${escapeHtml(summary.lastActionEvidenceId ?? '')}">Open last action</button>`
+    : '';
   const activeNudgeDecision =
     state.activeNudges?.contextHash === summary.contextHash
       ? state.activeNudges.decision
@@ -4330,6 +4342,9 @@ function renderWebview(
       intent: summary.intent,
       mode,
       nowCheckpointLineTrustedHtml: nowCheckpointLine,
+      lastActionLabel,
+      lastActionContext,
+      lastActionActionTrustedHtml: lastActionActionHtml,
       nextSafeActionSummary:
         primaryNextActionSummary || 'Refresh summary to regenerate first-action guidance.',
       primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
@@ -7366,6 +7381,10 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
   const recentDebug = config.includeDebugHistory ? state.recentDebug.values() : [];
   const failingCommand =
     isTrusted && config.includeTerminalHistory ? state.lastFailingCommand?.trim() : undefined;
+  const lastEditLocation = state.recentEditLocations[0];
+  const lastEditPath = lastEditLocation?.path
+    ? redactText(lastEditLocation.path, root, customPatterns)
+    : undefined;
 
   return {
     workspaceRoot: root,
@@ -7381,6 +7400,11 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
     recentTerminal: redactList(recentTerminal, root, customPatterns),
     recentDebug: redactList(recentDebug, root, customPatterns),
     recentUrls: redactList(state.recentUrls.values(), root, customPatterns),
+    lastEditPath: lastEditPath?.trim() ? lastEditPath : undefined,
+    lastEditLine: Number.isInteger(lastEditLocation?.line) ? lastEditLocation?.line : undefined,
+    lastEditCharacter: Number.isInteger(lastEditLocation?.character)
+      ? lastEditLocation?.character
+      : undefined,
     failingCommand,
     doneItems: redactList(state.doneItems.values(), root, customPatterns),
   };

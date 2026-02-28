@@ -34,6 +34,11 @@ async function run() {
     'Expected Companion Home card marker in panel render output.',
   );
   assert.equal(
+    resumeFlow?.hasLastActionCue,
+    true,
+    'Expected Last action retrieval cue marker in Companion Home.',
+  );
+  assert.equal(
     resumeFlow?.hasRestoreWorkingSetAction,
     true,
     'Expected Restore working set action marker in panel render output.',

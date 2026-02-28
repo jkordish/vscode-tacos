@@ -463,6 +463,94 @@ function buildLowConfidenceNextSteps(topFiles: string[]): string[] {
   ];
 }
 
+interface LastActionCue {
+  label: string;
+  context: string;
+  evidenceId?: string;
+}
+
+function findFileEvidenceId(
+  evidenceCatalog: SummaryEvidenceItem[],
+  relativePath: string,
+): string | undefined {
+  if (!relativePath.trim()) {
+    return undefined;
+  }
+
+  const directId = `file:${relativePath}`;
+  if (evidenceCatalog.some((item) => item.id === directId)) {
+    return directId;
+  }
+
+  const looseMatch = evidenceCatalog.find(
+    (item) =>
+      item.kind === 'file' &&
+      ((typeof item.meta?.relativePath === 'string' && item.meta.relativePath === relativePath) ||
+        item.label === relativePath),
+  );
+  return looseMatch?.id;
+}
+
+function buildLastActionCue(
+  signals: ResumeSignals,
+  topFiles: string[],
+  evidenceCatalog: SummaryEvidenceItem[],
+): LastActionCue {
+  const lastEditPath = signals.lastEditPath?.trim() ?? '';
+  const lastEditLine =
+    typeof signals.lastEditLine === 'number' && Number.isInteger(signals.lastEditLine)
+      ? signals.lastEditLine
+      : undefined;
+  if (lastEditPath) {
+    const lineLabel =
+      typeof lastEditLine === 'number' && lastEditLine >= 0 ? `:${lastEditLine + 1}` : '';
+    return {
+      label: `Edited ${lastEditPath}${lineLabel}`,
+      context: 'retrieval cue: last edit',
+      evidenceId: findFileEvidenceId(evidenceCatalog, lastEditPath),
+    };
+  }
+
+  const failingCommand = signals.failingCommand?.trim();
+  if (failingCommand) {
+    return {
+      label: `Ran failing command: ${failingCommand}`,
+      context: 'retrieval cue: terminal',
+    };
+  }
+
+  const latestDebug = signals.recentDebug[0]?.trim();
+  if (latestDebug) {
+    return {
+      label: `Ran debug session: ${latestDebug}`,
+      context: 'retrieval cue: debug',
+    };
+  }
+
+  const latestTask = signals.doneItems[0]?.trim();
+  if (latestTask) {
+    return {
+      label: `Completed task: ${latestTask}`,
+      context: 'retrieval cue: task',
+    };
+  }
+
+  const latestFile =
+    signals.openFiles[0]?.trim() || signals.recentFiles[0]?.trim() || topFiles[0]?.trim();
+  if (latestFile) {
+    return {
+      label: `Opened ${latestFile}`,
+      context: 'retrieval cue: file',
+      evidenceId: findFileEvidenceId(evidenceCatalog, latestFile),
+    };
+  }
+
+  return {
+    label: 'No last action captured yet.',
+    context: 'retrieval cue unavailable',
+  };
+}
+
 export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
   const topFiles = dedupe(
     [...signals.changedFiles, ...signals.openFiles, ...signals.recentFiles],
@@ -480,6 +568,7 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
   const recommendedFirstAction = nextSteps[0] ?? pendingBlocked[0];
   const mode = detectResumeMode(signals);
   const evidenceCatalog = buildEvidenceCatalog(signals, topFiles);
+  const lastAction = buildLastActionCue(signals, topFiles, evidenceCatalog);
   const links = buildLinksFromEvidence(evidenceCatalog);
   const nextStepEvidenceIds = buildStepEvidenceIds(nextSteps, evidenceCatalog);
 
@@ -505,6 +594,9 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
           '- Suggested action: add a one-line checkpoint note.',
         ]
       : []),
+    '',
+    '## Last action',
+    `- ${lastAction.label}`,
     '',
     '## Next steps',
     ...nextSteps.map((step) => `- ${step}`),
@@ -573,6 +665,9 @@ export function buildResumeSummary(signals: ResumeSignals): ResumeSummary {
     intent,
     nextSteps,
     nextStepEvidenceIds,
+    lastActionLabel: lastAction.label,
+    lastActionContext: lastAction.context,
+    lastActionEvidenceId: lastAction.evidenceId,
     doneSinceLastResume,
     changesSinceLastResume,
     pendingBlocked,

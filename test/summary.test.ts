@@ -16,6 +16,9 @@ function sampleSignals(): ResumeSignals {
     recentTerminal: ['npm test'],
     recentDebug: ['node: Launch Extension'],
     recentUrls: ['https://github.com/org/repo/pull/1'],
+    lastEditPath: 'src/extension.ts',
+    lastEditLine: 41,
+    lastEditCharacter: 3,
     failingCommand: 'npm test',
     doneItems: ['npm run build'],
   };
@@ -39,6 +42,9 @@ describe('buildResumeSummary', () => {
     expect(summary.nextStepEvidenceIds?.length).toBe(summary.nextSteps.length);
     expect(summary.recommendedFirstAction).toBe(summary.nextSteps[0]);
     expect(summary.pendingBlocked?.length ?? 0).toBeGreaterThan(0);
+    expect(summary.lastActionLabel).toContain('src/extension.ts:42');
+    expect(summary.lastActionContext).toBe('retrieval cue: last edit');
+    expect(summary.lastActionEvidenceId).toBe('file:src/extension.ts');
     expect(summary.mode).toBe('debugging');
     expect(summary.intent.length).toBeGreaterThan(0);
   });
@@ -114,6 +120,9 @@ describe('buildResumeSummary', () => {
     signals.doneItems = [];
     signals.failingCommand = undefined;
     signals.recentUrls = [];
+    signals.lastEditPath = undefined;
+    signals.lastEditLine = undefined;
+    signals.lastEditCharacter = undefined;
 
     const summary = buildResumeSummary(signals);
     expect(summary.lowConfidence).toBe(true);
@@ -121,5 +130,29 @@ describe('buildResumeSummary', () => {
     expect(summary.candidateIntents?.length ?? 0).toBeGreaterThan(0);
     expect(summary.nextSteps[0]).toContain('Unclear intent');
     expect(summary.links.length).toBe(0);
+  });
+
+  it('falls back to explicit retrieval-cue fallback when no last action is available', () => {
+    const signals = sampleSignals();
+    signals.lastEditPath = undefined;
+    signals.lastEditLine = undefined;
+    signals.lastEditCharacter = undefined;
+    signals.failingCommand = undefined;
+    signals.recentDebug = [];
+    signals.doneItems = [];
+    signals.openFiles = [];
+    signals.recentFiles = [];
+    signals.changedFiles = [];
+
+    const summary = buildResumeSummary(signals);
+    expect(summary.lastActionLabel).toBe('No last action captured yet.');
+    expect(summary.lastActionContext).toBe('retrieval cue unavailable');
+    expect(summary.lastActionEvidenceId).toBeUndefined();
+  });
+
+  it('prefers last edit retrieval cue over failing terminal/debug signals', () => {
+    const summary = buildResumeSummary(sampleSignals());
+    expect(summary.lastActionLabel).toContain('Edited src/extension.ts:42');
+    expect(summary.lastActionLabel).not.toContain('Ran failing command');
   });
 });

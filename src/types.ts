@@ -64,6 +64,9 @@ export interface ResumeSignals {
   recentTerminal: string[];
   recentDebug: string[];
   recentUrls: string[];
+  lastEditPath?: string;
+  lastEditLine?: number;
+  lastEditCharacter?: number;
   failingCommand?: string;
   doneItems: string[];
 }
@@ -99,6 +102,9 @@ export interface ResumeSummary {
   intent: string;
   nextSteps: string[];
   nextStepEvidenceIds?: string[][];
+  lastActionLabel?: string;
+  lastActionContext?: string;
+  lastActionEvidenceId?: string;
   doneSinceLastResume?: string[];
   changesSinceLastResume?: string[];
   pendingBlocked?: string[];
