@@ -2179,17 +2179,17 @@ function classifyInterruptionTiming(
     typeof referenceAt === 'number' && Number.isFinite(referenceAt) && referenceAt > 0
       ? referenceAt
       : Date.now();
-  if (
-    state.lastBoundarySignalAt > 0 &&
-    now - state.lastBoundarySignalAt <= INTERRUPTION_TIMING_BOUNDARY_WINDOW_MS
-  ) {
+  const boundaryDelta =
+    state.lastBoundarySignalAt > 0 ? now - state.lastBoundarySignalAt : Number.POSITIVE_INFINITY;
+  if (boundaryDelta >= 0 && boundaryDelta <= INTERRUPTION_TIMING_BOUNDARY_WINDOW_MS) {
     return 'boundary';
   }
 
-  if (
-    state.lastMeaningfulActivityAt > 0 &&
-    now - state.lastMeaningfulActivityAt <= INTERRUPTION_TIMING_MID_ACTIVITY_WINDOW_MS
-  ) {
+  const activityDelta =
+    state.lastMeaningfulActivityAt > 0
+      ? now - state.lastMeaningfulActivityAt
+      : Number.POSITIVE_INFINITY;
+  if (activityDelta >= 0 && activityDelta <= INTERRUPTION_TIMING_MID_ACTIVITY_WINDOW_MS) {
     return 'mid-activity';
   }
 

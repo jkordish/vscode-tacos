@@ -63,12 +63,12 @@ describe('hasAnyRecordedMetric', () => {
   });
 
   it('treats interruption timing class annotations as recorded metric activity', () => {
-    const metric: MetricRecord = {
+    const metric = {
       startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
       workspaceRoot: '/workspace/repo',
-      trigger: 'focus',
+      trigger: 'other',
       interruptionTimingClass: 'boundary',
-    };
+    } as unknown as MetricRecord;
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
