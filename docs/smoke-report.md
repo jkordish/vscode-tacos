@@ -1,44 +1,59 @@
-# Smoke Report - 2026-02-26
+# Smoke Report (v0.6.0 Template)
 
-## Automated Gates (Local)
+Use this template to record final manual/automated smoke outcomes for v0.6.0 release prep.
 
-All of the following passed on branch `feature/epic-must-have-tracking`:
+Date: `__________`  
+Tester: `__________`  
+Branch/commit: `__________`
 
-- `npm run compile`
-- `npm run lint`
-- `npm run format:check`
-- `npm test`
-- `npm run test:integration`
-- `npx @vscode/vsce package --no-dependencies`
+## 1) Automated Gates (Local)
 
-Integration note:
+- [ ] `npm run verify`
+- [ ] CI checks green on release PR
+- [ ] `vscode-tacos-verify.vsix` generated successfully
 
-- `npm run test:integration` now executes trusted and isolated-profile local suites.
-- The isolated-profile suite runs under a fresh test profile with workspace-trust settings, but local-folder trust may still evaluate as trusted on some host builds.
+Notes: `__________`
 
-## Trusted / Restricted Manual Smoke
+## 2) Manual Runbook Execution
 
-Manual Extension Host verification requires interactive VS Code UI and is not executed in this terminal-only run.
-
-Detailed step-by-step runbook:
+Detailed runbook:
 
 - `docs/manual-smoke-runbook.md`
 
-### Trusted Workspace Checklist
+v0.6.0 must-pass scenarios:
 
-- [ ] Edit files, run task/test, trigger resume.
-- [ ] Confirm instant local summary.
-- [ ] Confirm optional AI refinement updates in-place.
-- [ ] Confirm evidence links open safely.
-- [ ] Confirm Restore Pack actions work.
+- [ ] T1 short-idle return (1-5 min)
+- [ ] T2 long-gap return (30+ min)
+- [ ] T3 active typing deferral
+- [ ] T4 quiet now/quiet hours suppression
+- [ ] T5 blocker-present flow
+- [ ] T6 empty/low-confidence flow
+- [ ] R1 restricted baseline
+- [ ] R2 restricted collection limits
+- [ ] R3 restricted action limits
 
-### Restricted Mode Checklist
+Result summary:
 
-- [ ] Confirm no git execution.
-- [ ] Confirm no terminal scraping.
-- [ ] Confirm risky restore actions are disabled.
-- [ ] Confirm local summary still works.
+- Trusted workspace sign-off: `PASS / FAIL`
+- Restricted workspace sign-off: `PASS / FAIL`
 
-## Notes
+## 3) Metrics Snapshot Capture
 
-Code-level guardrails for trusted/restricted behavior, CSP, link safety, path safety, redaction, and provider validation are covered by unit tests in `test/`.
+- [ ] `TaCoS: Copy Metrics Baseline Snapshot` captured and pasted into `docs/metrics-baseline.md`
+- [ ] `TaCoS: Export Local Metrics` reviewed locally (`.tacos/metrics.csv` required for gate; `.tacos/metrics.json` optional for deeper inspection/debugging)
+- [ ] Key fields reviewed:
+  - `firstActionLagMs` p50/p95
+  - `companionForcedOpenRate`
+  - `companionActionFollowThroughRate`
+  - `companionPrimaryCtaClickThroughRate`
+  - `companionPrimaryCtaCompletionRate`
+  - `interruptionTimingClass` (`boundary` vs `mid-activity` vs `unknown` - `unknown` is valid; investigate if rate is high)
+
+Snapshot date/identifier: `__________`  
+Metrics notes: `__________`
+
+## 4) Final Recommendation
+
+- Ready for release checklist gate (#161): `YES / NO`
+- Follow-up issues required before ship: `__________`
+- Final notes: `__________`
