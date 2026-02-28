@@ -1,14 +1,20 @@
 import { escapeHtml } from './webviewSecurity';
 
+/**
+ * Trusted HTML fragments are pre-rendered by extension-owned helpers.
+ * Callers must escape or sanitize any dynamic values before passing them here.
+ */
+export type TrustedHtml = string;
+
 export interface RenderResumeStackCardInput {
   intent: string;
   mode: string;
-  nowCheckpointLineHtml?: string;
-  nextStepsListHtml: string;
+  nowCheckpointLineTrustedHtml?: TrustedHtml;
+  nextStepsListTrustedHtml: TrustedHtml;
   blockerTitle: string;
   blockerDetail: string;
-  blockerActionHtml?: string;
-  restoreSectionsHtml: string;
+  blockerActionTrustedHtml?: TrustedHtml;
+  restoreSectionsTrustedHtml: TrustedHtml;
 }
 
 export function renderResumeStackCard(input: RenderResumeStackCardInput): string {
@@ -20,12 +26,12 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <p class="companion-kicker">Current focus</p>
           <p class="companion-primary">${escapeHtml(input.intent)}</p>
           <p class="companion-meta">Mode: ${escapeHtml(input.mode)}</p>
-          ${input.nowCheckpointLineHtml ?? ''}
+          ${input.nowCheckpointLineTrustedHtml ?? ''}
         </section>
         <section class="companion-block">
           <h4>Next</h4>
           <ul class="compact-list">${
-            input.nextStepsListHtml || '<li>No next steps captured yet.</li>'
+            input.nextStepsListTrustedHtml || '<li>No next steps captured yet.</li>'
           }</ul>
           <div class="status-actions">
             <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
@@ -36,11 +42,11 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <h4>Blocked</h4>
           <p class="companion-primary">${escapeHtml(input.blockerTitle)}</p>
           <p class="muted">${escapeHtml(input.blockerDetail)}</p>
-          ${input.blockerActionHtml ?? ''}
+          ${input.blockerActionTrustedHtml ?? ''}
         </section>
         <section class="companion-block">
           <h4>Restore</h4>
-          ${input.restoreSectionsHtml}
+          ${input.restoreSectionsTrustedHtml}
         </section>
       </div>
     </div>`;

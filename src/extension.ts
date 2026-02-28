@@ -305,6 +305,7 @@ function maybeWarnRedactionPatternGuardrails(patterns: string[]): void {
 interface PresentSummaryOptions {
   autoOpenDetails?: boolean;
   preferBackgroundPresentation?: boolean;
+  focusRegainedAt?: number;
   workspaceRoot?: string;
   checkpointPrimaryNote?: CheckpointNote;
   checkpointNotes?: CheckpointNote[];
@@ -1358,7 +1359,7 @@ async function handleFocusRegainSummaryTrigger(
         });
       }
 
-      await triggerSummary(context, 'focus', undefined, deferPromptToBackground);
+      await triggerSummary(context, 'focus', undefined, deferPromptToBackground, now);
     } finally {
       state.autoSummaryInFlight = false;
       recordPerformanceGuardrail(
@@ -1537,6 +1538,7 @@ async function triggerSummary(
   reason: Exclude<TriggerReason, 'cached'>,
   preferredWorkspaceRoot?: string,
   deferPromptToBackground = false,
+  focusRegainedAt?: number,
 ): Promise<void> {
   const root = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!root) {
@@ -1554,6 +1556,7 @@ async function triggerSummary(
   await presentSummary(context, prepared.summary, prepared.triggerReason, {
     autoOpenDetails: reason === 'manual',
     preferBackgroundPresentation: reason === 'focus' && deferPromptToBackground,
+    focusRegainedAt: reason === 'focus' ? focusRegainedAt : undefined,
     workspaceRoot: root,
     checkpointPrimaryNote: prepared.checkpointPrimaryNote,
     checkpointNotes: prepared.checkpointNotes,
@@ -1904,19 +1907,11 @@ async function presentSummary(
   options: PresentSummaryOptions = {},
 ): Promise<void> {
   const config = getConfig();
-  let presentationMode = resolveSummaryPresentationMode(config, options);
+  const presentationMode = resolveSummaryPresentationMode(config, options);
   const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
 
   if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
-    const budgetDecision = await consumeNoiseBudgetSignal(
-      context,
-      workspaceRoot,
-      'summary-prompt',
-      Date.now(),
-    );
-    if (!budgetDecision.allowed) {
-      presentationMode = 'background';
-    }
+    await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
   }
 
   if (config.metricsEnabled) {
@@ -1928,12 +1923,9 @@ async function presentSummary(
       trigger: triggerReason,
       uiSurface: config.uiSurface,
       interruptionEvent: triggerReason === 'focus' && presentationMode === 'prompt' ? 1 : 0,
-      interruptionTimingClass: classifyInterruptionTiming(triggerReason),
+      interruptionTimingClass: classifyInterruptionTiming(triggerReason, options.focusRegainedAt),
       resumeWithNote: options.checkpointPrimaryNote ? 1 : 0,
     };
-    if (summary.nextSteps[0]) {
-      recordCompanionPrimaryCtaImpression();
-    }
   }
 
   await updateActiveNudges(context, summary, workspaceRoot, config);
@@ -2177,12 +2169,16 @@ function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeM
 
 function classifyInterruptionTiming(
   triggerReason: TriggerReason,
+  referenceAt?: number,
 ): 'boundary' | 'mid-activity' | 'unknown' {
   if (triggerReason !== 'focus') {
     return 'unknown';
   }
 
-  const now = Date.now();
+  const now =
+    typeof referenceAt === 'number' && Number.isFinite(referenceAt) && referenceAt > 0
+      ? referenceAt
+      : Date.now();
   if (
     state.lastBoundarySignalAt > 0 &&
     now - state.lastBoundarySignalAt <= INTERRUPTION_TIMING_BOUNDARY_WINDOW_MS
@@ -2260,8 +2256,11 @@ function recordCompanionPrimaryCtaImpression(): void {
     return;
   }
 
-  state.metricSession.companionPrimaryCtaImpressions =
-    (state.metricSession.companionPrimaryCtaImpressions ?? 0) + 1;
+  if ((state.metricSession.companionPrimaryCtaImpressions ?? 0) > 0) {
+    return;
+  }
+
+  state.metricSession.companionPrimaryCtaImpressions = 1;
 }
 
 function recordCompanionPrimaryCtaClick(): void {
@@ -2925,15 +2924,15 @@ async function showDetailsPanel(
 
         recordCompanionQuickAction();
         const isPrimaryStep = message.stepIndex === 0;
-        if (isPrimaryStep) {
-          recordCompanionPrimaryCtaClick();
-        }
-        const completed = await runNextStepAction(
+        const outcome = await runNextStepActionDetailed(
           state.panelSummary,
           message.stepIndex,
           state.panelWorkspaceRoot,
         );
-        if (isPrimaryStep && completed) {
+        if (isPrimaryStep && outcome.attempted) {
+          recordCompanionPrimaryCtaClick();
+        }
+        if (isPrimaryStep && outcome.completed) {
           recordCompanionPrimaryCtaCompletion();
         }
         return;
@@ -3355,6 +3354,9 @@ function renderWebview(
     canRerunDebug: availability.canRerunDebug,
     canCopyFailingCommand: availability.canCopyFailingCommand,
   });
+  if (nextStepActions[0]) {
+    recordCompanionPrimaryCtaImpression();
+  }
   const nextSteps = summary.nextSteps
     .map((step, index) => {
       const evidenceIds = summary.nextStepEvidenceIds?.[index] ?? [];
@@ -4065,12 +4067,12 @@ function renderWebview(
     ${renderResumeStackCard({
       intent: summary.intent,
       mode,
-      nowCheckpointLineHtml: nowCheckpointLine,
-      nextStepsListHtml: companionNextSteps,
+      nowCheckpointLineTrustedHtml: nowCheckpointLine,
+      nextStepsListTrustedHtml: companionNextSteps,
       blockerTitle,
       blockerDetail,
-      blockerActionHtml,
-      restoreSectionsHtml: companionRestoreSections,
+      blockerActionTrustedHtml: blockerActionHtml,
+      restoreSectionsTrustedHtml: companionRestoreSections,
     })}
 
     ${confidenceCard}
@@ -5095,14 +5097,19 @@ async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promi
   editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }
 
-async function runNextStepAction(
+interface NextStepActionOutcome {
+  attempted: boolean;
+  completed: boolean;
+}
+
+async function runNextStepActionDetailed(
   summary: ResumeSummary,
   stepIndex: number,
   preferredWorkspaceRoot?: string,
-): Promise<boolean> {
+): Promise<NextStepActionOutcome> {
   if (!Number.isInteger(stepIndex) || stepIndex < 0 || stepIndex >= summary.nextSteps.length) {
     void vscode.window.showWarningMessage('TaCoS blocked an invalid next-step action target.');
-    return false;
+    return { attempted: false, completed: false };
   }
 
   const availability = computeRestoreAvailability({
@@ -5125,26 +5132,26 @@ async function runNextStepAction(
     void vscode.window.showInformationMessage(
       'TaCoS: this step has no verified clickable action yet. Use evidence links to continue.',
     );
-    return false;
+    return { attempted: false, completed: false };
   }
 
   const evidence = (summary.evidenceCatalog ?? []).find((item) => item.id === action.evidenceId);
   if (!evidence) {
     void vscode.window.showWarningMessage('TaCoS blocked a stale next-step action.');
-    return false;
+    return { attempted: false, completed: false };
   }
 
   if (action.kind === 'copyFailingCommand') {
     await copyFailingCommand();
-    return true;
+    return { attempted: true, completed: true };
   }
 
   if (action.kind === 'rerunTask') {
-    return rerunLastTask();
+    return { attempted: true, completed: await rerunLastTask() };
   }
 
   if (action.kind === 'rerunDebug') {
-    return rerunLastDebugSession();
+    return { attempted: true, completed: await rerunLastDebugSession() };
   }
 
   if (action.kind === 'openFile') {
@@ -5153,31 +5160,40 @@ async function runNextStepAction(
       void vscode.window.showWarningMessage(
         'TaCoS blocked file action because no workspace root is available for validation.',
       );
-      return false;
+      return { attempted: false, completed: false };
     }
 
     const safeTarget = resolveFileTargetInWorkspace(evidence.target ?? '', workspaceRoot);
     if (!safeTarget || !isPathWithinWorkspaceRoot(workspaceRoot, safeTarget)) {
       void vscode.window.showWarningMessage('TaCoS blocked an unsafe next-step file target.');
-      return false;
+      return { attempted: false, completed: false };
     }
 
     await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(safeTarget));
-    return true;
+    return { attempted: true, completed: true };
   }
 
   if (action.kind === 'openUrl') {
     const safeUrl = normalizeHttpUrl(evidence.target ?? '');
     if (!safeUrl) {
       void vscode.window.showWarningMessage('TaCoS blocked an unsafe next-step URL.');
-      return false;
+      return { attempted: false, completed: false };
     }
 
     await vscode.env.openExternal(vscode.Uri.parse(safeUrl));
-    return true;
+    return { attempted: true, completed: true };
   }
 
-  return false;
+  return { attempted: false, completed: false };
+}
+
+async function runNextStepAction(
+  summary: ResumeSummary,
+  stepIndex: number,
+  preferredWorkspaceRoot?: string,
+): Promise<boolean> {
+  const outcome = await runNextStepActionDetailed(summary, stepIndex, preferredWorkspaceRoot);
+  return outcome.completed;
 }
 
 function recentEditLocationsStorageKey(workspaceRoot: string): string {

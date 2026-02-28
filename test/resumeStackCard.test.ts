@@ -5,12 +5,12 @@ describe('renderResumeStackCard', () => {
     const html = renderResumeStackCard({
       intent: 'Implement gating tests',
       mode: 'coding',
-      nowCheckpointLineHtml: '',
-      nextStepsListHtml: '',
+      nowCheckpointLineTrustedHtml: '',
+      nextStepsListTrustedHtml: '',
       blockerTitle: 'No active blocker',
       blockerDetail: 'Continue with the first suggested next step.',
-      blockerActionHtml: '',
-      restoreSectionsHtml:
+      blockerActionTrustedHtml: '',
+      restoreSectionsTrustedHtml:
         '<section class="action-group compact-action-group"><h5>Open</h5></section>',
     });
 
@@ -52,14 +52,14 @@ describe('renderResumeStackCard', () => {
     const html = renderResumeStackCard({
       intent: 'Ship <v0.6> safely',
       mode: 'review & tune',
-      nowCheckpointLineHtml:
+      nowCheckpointLineTrustedHtml:
         '<p class="companion-meta"><strong>Checkpoint:</strong> Verify blocker copy.</p>',
-      nextStepsListHtml: '<li>Run focused verify pass</li>',
+      nextStepsListTrustedHtml: '<li>Run focused verify pass</li>',
       blockerTitle: 'Diagnostics <error>',
       blockerDetail: 'Fix warning "line 10".',
-      blockerActionHtml:
+      blockerActionTrustedHtml:
         '<button type="button" class="secondary" data-action="restoreOpenProblems">Open Problems</button>',
-      restoreSectionsHtml:
+      restoreSectionsTrustedHtml:
         '<section class="action-group compact-action-group"><h5>Run</h5><div class="companion-restore-grid"><button type="button">Rerun task</button></div></section>',
     });
 
