@@ -16,8 +16,11 @@ describe('renderResumeStackCard', () => {
       nextStepRationaleTrustedHtml:
         '<details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">Based on file evidence: src/extension.ts.</p></details>',
       nextStepsListTrustedHtml: '',
+      hasBlocker: false,
       blockerTitle: 'No active blocker',
       blockerDetail: 'Continue with the first suggested next step.',
+      blockerMetaTrustedHtml: '',
+      blockerDisabledReasonTrustedHtml: '',
       blockerActionTrustedHtml: '',
       restoreSectionsTrustedHtml:
         '<section class="action-group compact-action-group"><h5>Open</h5></section>',
@@ -50,10 +53,12 @@ describe('renderResumeStackCard', () => {
                  <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
                </div>
              </section>
-             <section class="companion-block">
+             <section class="companion-block" data-blocked-card="none">
                <h4>Blocked</h4>
                <p class="companion-primary">No active blocker</p>
                <p class="muted">Continue with the first suggested next step.</p>
+               
+               
                
              </section>
              <section class="companion-block">
@@ -79,10 +84,14 @@ describe('renderResumeStackCard', () => {
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open Problems</button>',
       nextStepRationaleTrustedHtml: '',
       nextStepsListTrustedHtml: '<li>Run focused verify pass</li>',
+      hasBlocker: true,
       blockerTitle: 'Diagnostics <error>',
       blockerDetail: 'Fix warning "line 10".',
+      blockerMetaTrustedHtml:
+        '<div class="step-evidence"><span class="badge">Evidence: workspace diagnostics</span><span class="badge">Confidence: high</span></div>',
+      blockerDisabledReasonTrustedHtml: '',
       blockerActionTrustedHtml:
-        '<button type="button" class="secondary" data-action="restoreOpenProblems">Open Problems</button>',
+        '<button type="button" class="secondary" data-blocker-primary-action="true" data-action="restoreOpenProblems">Open Problems</button>',
       restoreSectionsTrustedHtml:
         '<section class="action-group compact-action-group"><h5>Run</h5><div class="companion-restore-grid"><button type="button">Rerun task</button></div></section>',
     });
@@ -92,7 +101,10 @@ describe('renderResumeStackCard', () => {
     expect(html).toContain('No last action captured yet.');
     expect(html).toContain('Open diagnostics and fix top error');
     expect(html).toContain('Diagnostics &lt;error&gt;');
+    expect(html).toContain('data-blocked-card="active"');
+    expect(html).toContain('Evidence: workspace diagnostics');
     expect(html).toContain('data-action="restoreOpenProblems"');
+    expect(html).toContain('data-blocker-primary-action="true"');
     expect(html).toContain('data-primary-next-safe-action="home"');
     expect(html).toContain('<li>Run focused verify pass</li>');
   });

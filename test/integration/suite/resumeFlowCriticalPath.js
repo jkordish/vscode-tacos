@@ -38,6 +38,13 @@ async function run() {
     true,
     'Expected Last action retrieval cue marker in Companion Home.',
   );
+  if (resumeFlow?.hasActiveBlockedCard) {
+    assert.equal(
+      resumeFlow?.primaryBlockerActionCount,
+      1,
+      'Expected exactly one primary unblock action marker when a blocker is active.',
+    );
+  }
   assert.equal(
     resumeFlow?.hasRestoreWorkingSetAction,
     true,
