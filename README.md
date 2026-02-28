@@ -295,6 +295,7 @@ Restricted Mode:
 Pedantic step-by-step runbook:
 
 - `docs/manual-smoke-runbook.md`
+- `docs/release-0.6.0-checklist.md`
 
 ## License
 
