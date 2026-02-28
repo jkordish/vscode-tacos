@@ -37,11 +37,20 @@ The harness launches Extension Development Host runs against `test/fixtures/work
      - Companion Home card marker
      - primary next-step action presence when next steps exist
      - restore/trust affordance markers
+5. Focus suppression paths suite:
+   - verifies focus-trigger suppression reasons for:
+     - disabled/paused mode
+     - active snooze window
+     - quiet-hours window
+6. Companion status mode checks:
+   - verifies companion status bar mode transitions for active/paused states
+   - verifies disabled state transitions where applicable
 
 ## Files
 
 - Runner: `test/integration/runTest.js`
 - Suites: `test/integration/suite/trusted.js`, `test/integration/suite/isolatedProfileLocal.js`, `test/integration/suite/focusRefreshPresentation.js`, `test/integration/suite/resumeFlowCriticalPath.js`
+- Suites: `test/integration/suite/trusted.js`, `test/integration/suite/isolatedProfileLocal.js`, `test/integration/suite/focusRefreshPresentation.js`, `test/integration/suite/resumeFlowCriticalPath.js`, `test/integration/suite/focusSuppressionPaths.js`
 - Fixture workspace: `test/fixtures/workspace/`
 
 ## Notes

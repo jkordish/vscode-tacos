@@ -93,6 +93,13 @@ async function main() {
     );
 
     await runSuite(
+      'focus-suppression-paths',
+      path.resolve(__dirname, 'suite', 'focusSuppressionPaths.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'action-safety-noop',
       path.resolve(__dirname, 'suite', 'actionSafetyNoop.js'),
       [fixtureWorkspace, '--disable-extensions'],

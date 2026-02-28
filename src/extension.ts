@@ -503,6 +503,52 @@ export function activate(context: vscode.ExtensionContext): void {
         hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
       };
     }),
+    vscode.commands.registerCommand('tacos.__test.getFocusSuppressionSnapshot', async () => {
+      const now = Date.now();
+      const config = getConfig();
+      const debounced =
+        state.autoSummaryInFlight || now - state.lastAutoFocusTriggerAt < FOCUS_TRIGGER_DEBOUNCE_MS;
+      const disabledOrPaused =
+        !config.enabled || state.pauseUntilRestart || !config.showOnFocus || config.pauseSummaries;
+      const snoozed = state.snoozeUntil > now;
+      const quietHours = isInQuietHours(now, config.summaryQuietHours);
+
+      let suppressionReason:
+        | 'none'
+        | 'debounced'
+        | 'disabled-or-paused'
+        | 'snoozed'
+        | 'quiet-hours' = 'none';
+      if (debounced) {
+        suppressionReason = 'debounced';
+      } else if (disabledOrPaused) {
+        suppressionReason = 'disabled-or-paused';
+      } else if (snoozed) {
+        suppressionReason = 'snoozed';
+      } else if (quietHours) {
+        suppressionReason = 'quiet-hours';
+      }
+
+      return {
+        now,
+        suppressionReason,
+        debounced,
+        disabledOrPaused,
+        snoozed,
+        quietHours,
+      };
+    }),
+    vscode.commands.registerCommand('tacos.__test.setSnoozeUntil', async (value?: number) => {
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        state.snoozeUntil = value;
+        await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, value);
+        return true;
+      }
+
+      state.snoozeUntil = 0;
+      await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, undefined);
+      return true;
+    }),
     vscode.commands.registerCommand('tacos.__test.switchTaskPartition', async (value?: string) => {
       const workspaceRoot = pickWorkspaceRoot();
       if (!workspaceRoot) {

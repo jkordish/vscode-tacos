@@ -70,6 +70,34 @@ describe('shouldAutoTriggerSummary', () => {
 
     expect(result).toBe(false);
   });
+
+  it('allows trigger exactly at cooldown boundary', () => {
+    const result = shouldAutoTriggerSummary({
+      now: 20 * 60_000,
+      lastBlurAt: 0,
+      lastSummaryAt: 15 * 60_000,
+      minIdleMinutes: 10,
+      cooldownMinutes: 5,
+      projectSwitched: false,
+      significantChange: false,
+    });
+
+    expect(result).toBe(true);
+  });
+
+  it('allows first trigger when no previous summary exists and a primary gate is met', () => {
+    const result = shouldAutoTriggerSummary({
+      now: 5 * 60_000,
+      lastBlurAt: 4 * 60_000,
+      lastSummaryAt: 0,
+      minIdleMinutes: 10,
+      cooldownMinutes: 5,
+      projectSwitched: true,
+      significantChange: false,
+    });
+
+    expect(result).toBe(true);
+  });
 });
 
 describe('shouldPromptCheckpointOnBlur', () => {
@@ -113,5 +141,47 @@ describe('shouldPromptCheckpointOnBlur', () => {
         meaningfulChangeSinceLastPrompt: true,
       }),
     ).toBe(true);
+  });
+
+  it('allows prompt exactly at checkpoint prompt cooldown boundary', () => {
+    expect(
+      shouldPromptCheckpointOnBlur({
+        now: 100 * 60_000,
+        lastSummaryAt: 20 * 60_000,
+        lastCheckpointPromptAt: 55 * 60_000,
+        minIdleMinutes: 10,
+        cooldownMinutes: 5,
+        promptCooldownMinutes: 45,
+        meaningfulChangeSinceLastPrompt: true,
+      }),
+    ).toBe(true);
+  });
+
+  it('blocks prompt when projected idle window still falls within summary cooldown', () => {
+    expect(
+      shouldPromptCheckpointOnBlur({
+        now: 100 * 60_000,
+        lastSummaryAt: 108 * 60_000,
+        lastCheckpointPromptAt: 0,
+        minIdleMinutes: 10,
+        cooldownMinutes: 5,
+        promptCooldownMinutes: 45,
+        meaningfulChangeSinceLastPrompt: true,
+      }),
+    ).toBe(false);
+  });
+
+  it('clamps prompt cooldown to at least one minute', () => {
+    expect(
+      shouldPromptCheckpointOnBlur({
+        now: 100 * 60_000,
+        lastSummaryAt: 0,
+        lastCheckpointPromptAt: 99 * 60_000 + 30_000,
+        minIdleMinutes: 10,
+        cooldownMinutes: 5,
+        promptCooldownMinutes: 0,
+        meaningfulChangeSinceLastPrompt: true,
+      }),
+    ).toBe(false);
   });
 });
