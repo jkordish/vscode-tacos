@@ -34,6 +34,16 @@ async function run() {
     'Expected Companion Home card marker in panel render output.',
   );
   assert.equal(
+    resumeFlow?.isCompanionHomeFirstCard,
+    true,
+    'Expected Companion Home to be the first panel card for 5-second scanning.',
+  );
+  assert.equal(
+    resumeFlow?.hasLegacyNextStepsCard,
+    false,
+    'Expected legacy Next Steps card to be removed from panel composition.',
+  );
+  assert.equal(
     resumeFlow?.hasIntentEditor,
     true,
     'Expected inline intent editor controls in Companion Home.',
@@ -59,6 +69,11 @@ async function run() {
     resumeFlow?.hasRestoreWorkingSetAction,
     true,
     'Expected Restore working set action marker in panel render output.',
+  );
+  assert.equal(
+    resumeFlow?.restoreWorkingSetActionCount,
+    1,
+    'Expected Restore working set to be presented as a single canonical action.',
   );
   assert.equal(
     resumeFlow?.hasTrustCenterCard,
@@ -95,9 +110,9 @@ async function run() {
         'Expected primary next action CTA marker in Companion Home.',
       );
       assert.equal(
-        resumeFlow?.hasRecapPrimaryNextAction,
-        true,
-        'Expected Session Recap to mirror the primary next action target.',
+        resumeFlow?.primaryNextActionCtaCount,
+        1,
+        'Expected exactly one canonical primary next action CTA in the panel.',
       );
       assert.equal(
         resumeFlow?.hasPrimaryNextActionRationale,

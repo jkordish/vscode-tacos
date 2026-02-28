@@ -37,7 +37,7 @@ const RESTORE_MESSAGE_TYPES = [
 
 type SimpleWebviewMessageType = (typeof SIMPLE_MESSAGE_TYPES)[number];
 type RestoreWebviewMessageType = (typeof RESTORE_MESSAGE_TYPES)[number];
-type PrimaryNextSafeActionSurface = 'home' | 'recap';
+type PrimaryNextSafeActionSurface = 'home';
 type ResumePathStepId = 'confirmIntent' | 'runNextSafeAction' | 'clearBlocker';
 
 export type WebviewMessage =
@@ -115,7 +115,7 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
 
     let primarySurface: PrimaryNextSafeActionSurface | undefined;
     if (typeof raw.primarySurface !== 'undefined') {
-      if (raw.primarySurface !== 'home' && raw.primarySurface !== 'recap') {
+      if (raw.primarySurface !== 'home') {
         return undefined;
       }
       primarySurface = raw.primarySurface;

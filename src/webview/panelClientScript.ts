@@ -222,7 +222,7 @@ export function renderPanelClientScript(maxIntentOverrideChars: number): string 
               return;
             }
             const primarySurface = actionElement.dataset.primaryNextSafeAction;
-            if (primarySurface === 'home' || primarySurface === 'recap') {
+            if (primarySurface === 'home') {
               vscode.postMessage({ type: 'runNextStepAction', stepIndex, primarySurface });
               return;
             }

@@ -558,6 +558,15 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasDisabledPrimaryBlockerAction =
         /data-blocker-primary-action="true"[^>]*disabled/u.test(panelHtml);
       const hasActiveBlockedCard = panelHtml.includes('data-blocked-card="active"');
+      const primaryNextActionCtaCount = (panelHtml.match(/data-primary-next-safe-action=/gu) ?? [])
+        .length;
+      const restoreWorkingSetActionCount = (
+        panelHtml.match(/data-action="restoreWorkingSet"/gu) ?? []
+      ).length;
+      const firstCardTitleMatch = panelHtml.match(
+        /<div class="card(?: [^"]*)?">\s*<h3>([^<]+)<\/h3>/u,
+      );
+      const firstCardTitle = firstCardTitleMatch?.[1] ?? '';
 
       return {
         hasPanelSummary: Boolean(state.panelSummary),
@@ -571,9 +580,11 @@ export function activate(context: vscode.ExtensionContext): void {
         primaryNextActionStepIndex: primaryNextAction?.stepIndex ?? -1,
         hasPrimaryNextActionRationale: panelHtml.includes('data-next-step-rationale="true"'),
         hasHomePrimaryNextAction: panelHtml.includes('data-primary-next-safe-action="home"'),
-        hasRecapPrimaryNextAction: panelHtml.includes('data-primary-next-safe-action="recap"'),
+        primaryNextActionCtaCount,
+        hasLegacyNextStepsCard: panelHtml.includes('<h3>Next Steps</h3>'),
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
         hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
+        isCompanionHomeFirstCard: firstCardTitle === 'Companion Home',
         hasIntentEditor: panelHtml.includes('data-action="setIntentOverride"'),
         hasIntentSourceLabel: panelHtml.includes('Intent source:'),
         hasLastActionCue: panelHtml.includes('data-last-action-cue="true"'),
@@ -581,7 +592,8 @@ export function activate(context: vscode.ExtensionContext): void {
         primaryBlockerActionCount,
         hasPrimaryBlockerAction,
         hasDisabledPrimaryBlockerAction,
-        hasRestoreWorkingSetAction: panelHtml.includes('data-action="restoreWorkingSet"'),
+        hasRestoreWorkingSetAction: restoreWorkingSetActionCount > 0,
+        restoreWorkingSetActionCount,
         hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
         hasResumePathCard: panelHtml.includes('<h3>Resume Path</h3>'),
         resumePathStepCount: (panelHtml.match(/<input[^>]*data-resume-path-toggle="true"/gu) ?? [])
@@ -3365,8 +3377,7 @@ async function showDetailsPanel(
           return;
         }
 
-        const isPrimaryStep =
-          message.primarySurface === 'home' || message.primarySurface === 'recap';
+        const isPrimaryStep = message.primarySurface === 'home';
         const outcome = await runNextStepActionDetailed(
           state.panelSummary,
           message.stepIndex,
@@ -3845,9 +3856,6 @@ function renderWebview(
   const companionPrimaryNextActionButton = primaryNextAction
     ? `<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}">${escapeHtml(primaryNextAction.label)}</button>`
     : '';
-  const recapPrimaryNextActionButton = primaryNextAction
-    ? `<button type="button" data-primary-next-safe-action="recap" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}">${escapeHtml(primaryNextAction.label)}</button>`
-    : '';
   const primaryNextActionEvidence = primaryNextAction
     ? evidenceById.get(primaryNextAction.evidenceId)
     : undefined;
@@ -3861,18 +3869,18 @@ function renderWebview(
   if (primaryNextAction) {
     recordCompanionPrimaryCtaImpression();
   }
-  const nextSteps = summary.nextSteps
+  const companionNextSteps = summary.nextSteps
+    .slice(0, 3)
     .map((step, index) => {
       const evidenceIds = summary.nextStepEvidenceIds?.[index] ?? [];
       const badges = evidenceIds
         .map((evidenceId) => renderStepEvidenceBadge(evidenceId, evidenceById.get(evidenceId)))
         .join('');
       const action = nextStepActions[index];
-      const actionButton = action
-        ? primaryNextActionStepIndex === index
-          ? ''
-          : `<button type="button" class="secondary step-action" data-action="runNextStepAction" data-step-index="${index}">${escapeHtml(action.label)}</button>`
-        : '';
+      const actionButton =
+        action && primaryNextActionStepIndex !== index
+          ? `<button type="button" class="secondary step-action" data-action="runNextStepAction" data-step-index="${index}">${escapeHtml(action.label)}</button>`
+          : '';
       const advisoryReason = !action
         ? evidenceIds.length === 0
           ? 'Advisory only: no captured evidence for this step yet.'
@@ -3904,18 +3912,8 @@ function renderWebview(
     })
     .join('');
   const hasExtraEvidence = (summary.evidenceCatalog?.length ?? 0) > 5;
-  const companionNextStepList = [
-    ...(currentCheckpointNote ? [currentCheckpointNote.text] : []),
-    ...summary.nextSteps,
-  ]
-    .filter((item, index, items) => items.indexOf(item) === index)
-    .slice(0, 3);
-  const companionNextSteps = companionNextStepList
-    .map((step) => `<li>${escapeHtml(step)}</li>`)
-    .join('');
   const recapDoneItems = summary.doneSinceLastResume?.slice(0, 3) ?? [];
   const recapPendingItems = summary.pendingBlocked?.slice(0, 3) ?? [];
-  const recapFirstAction = primaryNextActionSummary;
   const recapDoneList = recapDoneItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const recapPendingList = recapPendingItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const nowCheckpointLine = currentCheckpointNote
@@ -4087,15 +4085,13 @@ function renderWebview(
   const quickActionGroups = [
     {
       label: 'Copy',
-      buttons: [
-        '<button type="button" data-action="copyNextSteps">Copy next steps</button>',
-        '<button type="button" data-action="copySummary">Copy summary</button>',
-        '<button type="button" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>',
-      ],
+      buttons: ['<button type="button" data-action="copySummary">Copy summary</button>'],
     },
     {
-      label: 'Feedback',
+      label: 'Notes & Feedback',
       buttons: [
+        '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>',
+        '<button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>',
         '<button type="button" data-action="rateHelpfulness">Rate helpfulness</button>',
         '<button type="button" class="secondary" data-action="fixSummary">Fix summary</button>',
       ],
@@ -4109,22 +4105,8 @@ function renderWebview(
 
   const restorePackGroups = [
     {
-      label: 'Open',
-      buttons: [
-        restoreActionButtons.workingSet,
-        restoreActionButtons.jumpToLastEdit,
-        restoreActionButtons.reopenFiles,
-        restoreActionButtons.openChangedFiles,
-        restoreActionButtons.checkoutPreviousBranch,
-      ],
-    },
-    {
-      label: 'Run',
-      buttons: [restoreActionButtons.rerunTask, restoreActionButtons.rerunDebug],
-    },
-    {
-      label: 'Diagnose',
-      buttons: [restoreActionButtons.openProblems, restoreActionButtons.openDiagnosticFile],
+      label: 'Context',
+      buttons: [restoreActionButtons.checkoutPreviousBranch],
     },
     {
       label: 'Copy',
@@ -4234,12 +4216,10 @@ function renderWebview(
     timelineGroupsTrustedHtml: timelineGroupsHtml,
   });
   const recapCard =
-    recapDoneItems.length > 0 || recapPendingItems.length > 0 || Boolean(recapFirstAction)
+    recapDoneItems.length > 0 || recapPendingItems.length > 0
       ? renderRecapCard({
           recapDoneListTrustedHtml: recapDoneList,
           recapPendingListTrustedHtml: recapPendingList,
-          recapFirstAction: recapFirstAction ?? '',
-          recapPrimaryNextActionButtonTrustedHtml: recapPrimaryNextActionButton,
         })
       : '';
   const changesSinceItems = (summary.changesSinceLastResume ?? [])
@@ -4293,11 +4273,6 @@ function renderWebview(
     autoSummaryToggleDisabledAttr,
     autoSummaryToggleLabel,
   });
-  const nextStepsCard = renderTitledListCard({
-    title: 'Next Steps',
-    listItemsTrustedHtml: nextSteps,
-    emptyMessage: 'No next steps captured yet.',
-  });
   const topFilesCard = renderTitledListCard({
     title: 'Top Files',
     listItemsTrustedHtml: topFiles,
@@ -4316,13 +4291,6 @@ function renderWebview(
   });
   const detailsCard = renderDetailsCard(detailsHtml);
   const bodyCards = [
-    statusCard,
-    trustCenterCard,
-    checkpointCard,
-    scratchpadCard,
-    recapCard,
-    changesSinceCard,
-    nudgeCard,
     renderResumeStackCard({
       intent: summary.intent,
       intentOverridden: summary.intentOverridden,
@@ -4347,7 +4315,13 @@ function renderWebview(
     }),
     resumePathCard,
     confidenceCard,
-    nextStepsCard,
+    trustCenterCard,
+    statusCard,
+    checkpointCard,
+    scratchpadCard,
+    recapCard,
+    changesSinceCard,
+    nudgeCard,
     topFilesCard,
     topLinksCard,
     timelineCard,

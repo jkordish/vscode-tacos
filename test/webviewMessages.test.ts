@@ -120,11 +120,7 @@ describe('parseWebviewMessage', () => {
         stepIndex: 2,
         primarySurface: 'recap',
       }),
-    ).toEqual({
-      type: 'runNextStepAction',
-      stepIndex: 2,
-      primarySurface: 'recap',
-    });
+    ).toBeUndefined();
     expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: -1 })).toBeUndefined();
     expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: 201 })).toBeUndefined();
     expect(parseWebviewMessage({ type: 'runNextStepAction', stepIndex: 2.1 })).toBeUndefined();
