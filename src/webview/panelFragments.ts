@@ -1,0 +1,437 @@
+import type { CompanionNudge } from '../companionNudges';
+import type { CheckpointNote } from '../checkpoint';
+import type { NextStepAction } from '../nextStepActions';
+import type { TimelineGroup } from '../timeline';
+import type { SummaryEvidenceItem, SummaryLink } from '../types';
+import { escapeHtml } from '../webviewSecurity';
+
+interface CheckpointNoteView {
+  text: string;
+  file?: CheckpointNote['file'];
+  line?: CheckpointNote['line'];
+  branch?: CheckpointNote['branch'];
+  partition?: CheckpointNote['partition'];
+  pinned?: CheckpointNote['pinned'];
+}
+
+export interface CheckpointCardInput {
+  openCheckpointCount: number;
+  currentCheckpointNote?: CheckpointNoteView;
+}
+
+export function renderCheckpointCard(input: CheckpointCardInput): string {
+  if (!input.currentCheckpointNote || input.openCheckpointCount <= 0) {
+    return '';
+  }
+
+  const checkpointContextLine = [
+    input.currentCheckpointNote.file
+      ? `${input.currentCheckpointNote.file}${
+          typeof input.currentCheckpointNote.line === 'number'
+            ? `:${input.currentCheckpointNote.line}`
+            : ''
+        }`
+      : '',
+    input.currentCheckpointNote.branch ? `branch ${input.currentCheckpointNote.branch}` : '',
+    input.currentCheckpointNote.partition
+      ? `partition ${input.currentCheckpointNote.partition}`
+      : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  return `<div class="card">
+      <h3>Notes (${input.openCheckpointCount})</h3>
+      <p class="companion-primary">${escapeHtml(input.currentCheckpointNote.text)}</p>
+      ${checkpointContextLine ? `<p class="muted">${escapeHtml(checkpointContextLine)}</p>` : ''}
+      <div class="note-actions">
+        <button type="button" data-action="checkpointMarkDone">Mark done</button>
+        <button type="button" class="secondary" data-action="checkpointPinToggle">${
+          input.currentCheckpointNote.pinned ? 'Unpin' : 'Pin'
+        }</button>
+        <button type="button" class="secondary" data-action="checkpointDismiss">Dismiss</button>
+        <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>
+        <button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>
+      </div>
+    </div>`;
+}
+
+export interface ScratchpadCardInput {
+  showScratchpadCard: boolean;
+  scratchpadScopeLabel?: string;
+  scratchpadPreviewLines: string[];
+  scratchpadHasContent: boolean;
+}
+
+export function renderScratchpadCard(input: ScratchpadCardInput): string {
+  if (!input.showScratchpadCard) {
+    return '';
+  }
+
+  const scratchpadPreviewHtml =
+    input.scratchpadPreviewLines.length > 0
+      ? `<ul class="compact-list">${input.scratchpadPreviewLines
+          .map((line) => `<li>${escapeHtml(line)}</li>`)
+          .join('')}</ul>`
+      : `<p class="muted">${
+          input.scratchpadHasContent
+            ? 'Scratchpad has content, but no preview lines were detected.'
+            : 'No scratchpad content yet.'
+        }</p>`;
+
+  return `<div class="card">
+      <h3>Scratchpad</h3>
+      ${
+        input.scratchpadScopeLabel
+          ? `<p class="muted">${escapeHtml(input.scratchpadScopeLabel)}</p>`
+          : ''
+      }
+      ${scratchpadPreviewHtml}
+      <div class="status-actions">
+        <button type="button" class="secondary" data-action="openScratchpad">Open Scratchpad</button>
+        <button type="button" class="secondary" data-action="appendScratchpad">Append</button>
+        <button type="button" class="secondary" data-action="setScratchpadScope">Set Scope</button>
+      </div>
+    </div>`;
+}
+
+export interface ConfidenceCardInput {
+  longGap: boolean;
+  lowConfidence: boolean;
+  hasCurrentCheckpointNote: boolean;
+  resumeGapMinutes?: number;
+  lastActionLabel?: string;
+  recommendedFirstAction?: string;
+  firstNextStep?: string;
+  candidateIntents?: string[];
+}
+
+export function renderConfidenceCard(input: ConfidenceCardInput): string {
+  const showCard = input.longGap || (input.lowConfidence && !input.hasCurrentCheckpointNote);
+  if (!showCard) {
+    return '';
+  }
+
+  const reorientationGapLine =
+    typeof input.resumeGapMinutes === 'number'
+      ? `<li>Last captured activity was about ${input.resumeGapMinutes} minute${
+          input.resumeGapMinutes === 1 ? '' : 's'
+        } ago.</li>`
+      : '';
+  const candidateIntentItems = (input.candidateIntents ?? [])
+    .map((candidate) => `<li>${escapeHtml(candidate)}</li>`)
+    .join('');
+  const reorientationCardItems = input.longGap
+    ? [
+        reorientationGapLine,
+        `<li><strong>Retrieval cue:</strong> ${escapeHtml(
+          input.lastActionLabel?.trim() || 'No last action captured yet.',
+        )}</li>`,
+        `<li><strong>Next safe action:</strong> ${escapeHtml(
+          input.recommendedFirstAction?.trim() ||
+            input.firstNextStep ||
+            'Open a recent file and reorient context.',
+        )}</li>`,
+      ]
+        .filter(Boolean)
+        .join('')
+    : candidateIntentItems || '<li>No strong candidates captured.</li>';
+  const reorientationCardTitle = input.longGap ? 'Welcome back' : 'Low Confidence';
+  const reorientationCardDescription = input.longGap
+    ? 'Welcome back — reorient before executing risky actions.'
+    : 'Unclear intent (low evidence). Add one line of context before continuing.';
+  const reorientationCardAction = !input.hasCurrentCheckpointNote
+    ? '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add one-line checkpoint</button>'
+    : '';
+
+  return `<div class="card">
+      <h3>${reorientationCardTitle}</h3>
+      <p class="muted">${reorientationCardDescription}</p>
+      <ul class="compact-list">${reorientationCardItems}</ul>
+      ${reorientationCardAction}
+    </div>`;
+}
+
+export interface IntentEditorInput {
+  intentInputId: string;
+  intent: string;
+  intentOverridden?: boolean;
+}
+
+export function renderIntentEditor(input: IntentEditorInput): string {
+  return `<div class="intent-editor">
+      <label class="companion-kicker" for="${input.intentInputId}">Intent (editable)</label>
+      <div class="intent-editor-row">
+        <input id="${input.intentInputId}" type="text" maxlength="280" value="${escapeHtml(
+          input.intent,
+        )}" />
+      </div>
+      <div class="intent-editor-actions">
+        <button type="button" class="secondary" data-action="setIntentOverride">Save</button>
+        <button type="button" class="secondary" data-action="clearIntentOverride" ${
+          input.intentOverridden ? '' : 'disabled'
+        }>Reset to inferred</button>
+      </div>
+    </div>`;
+}
+
+export interface CompanionNextStepsInput {
+  nextSteps: string[];
+  nextStepEvidenceIds?: string[][];
+  nextStepActions: (NextStepAction | undefined)[];
+  primaryNextActionStepIndex: number;
+  lowConfidence: boolean;
+  evidenceById: Map<string, SummaryEvidenceItem>;
+}
+
+export function renderCompanionNextSteps(input: CompanionNextStepsInput): string {
+  return input.nextSteps
+    .slice(0, 3)
+    .map((step, index) => {
+      const evidenceIds = input.nextStepEvidenceIds?.[index] ?? [];
+      const badges = evidenceIds
+        .map((evidenceId) =>
+          renderStepEvidenceBadge(evidenceId, input.evidenceById.get(evidenceId)),
+        )
+        .join('');
+      const action = input.nextStepActions[index];
+      const actionButton =
+        action && input.primaryNextActionStepIndex !== index
+          ? `<button type="button" class="secondary step-action" data-action="runNextStepAction" data-step-index="${index}">${escapeHtml(action.label)}</button>`
+          : '';
+      const advisoryReason = !action
+        ? evidenceIds.length === 0
+          ? 'Advisory only: no captured evidence for this step yet.'
+          : input.lowConfidence
+            ? 'Advisory only: evidence confidence is low right now.'
+            : 'Advisory only: no safe one-click action is available for this step.'
+        : '';
+      const badgeRow = badges ? `<div class="step-evidence">${badges}</div>` : '';
+      const actionRow = actionButton ? `<div class="step-actions">${actionButton}</div>` : '';
+      const advisoryRow = advisoryReason
+        ? `<div class="step-advisory muted">${escapeHtml(advisoryReason)}</div>`
+        : '';
+      return `<li>${escapeHtml(step)}${badgeRow}${actionRow}${advisoryRow}</li>`;
+    })
+    .join('');
+}
+
+export function renderStepEvidenceBadge(
+  evidenceId: string,
+  evidence?: SummaryEvidenceItem,
+): string {
+  if (!evidence) {
+    return `<span class="badge">${escapeHtml(evidenceId)}</span>`;
+  }
+
+  const label = `[${evidence.kind}] ${evidence.label}`;
+  if (evidence.kind === 'file' || evidence.kind === 'url') {
+    return `<button type="button" class="badge clickable kind-${escapeHtml(
+      evidence.kind,
+    )}" data-action="openEvidence" data-evidence-id="${escapeHtml(evidenceId)}">${escapeHtml(
+      label,
+    )}</button>`;
+  }
+
+  return `<span class="badge">${escapeHtml(label)}</span>`;
+}
+
+export function renderTopLinksListItems(links: SummaryLink[]): string {
+  return links
+    .map(
+      (link, index) =>
+        `<li><button type="button" class="text-link-button" data-action="openLink" data-link-index="${index}">${escapeHtml(link.label)}</button> <span class="kind">(${escapeHtml(link.kind)})</span></li>`,
+    )
+    .join('');
+}
+
+export function renderTopFilesListItems(topFiles: string[]): string {
+  return topFiles
+    .map(
+      (file, index) =>
+        `<li><button type="button" class="text-link-button" data-action="openTopFile" data-top-file-index="${index}">${escapeHtml(file)}</button></li>`,
+    )
+    .join('');
+}
+
+export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]): string {
+  return evidenceCatalog
+    .map((item, index) => {
+      const clickable = item.kind === 'file' || item.kind === 'url';
+      const target = item.target
+        ? ` <span class="evidence-target">${escapeHtml(item.target)}</span>`
+        : '';
+      const hiddenClass = index >= 5 ? 'extra-evidence' : '';
+      const affordanceClass = clickable
+        ? 'evidence-affordance evidence-affordance-clickable'
+        : 'evidence-affordance evidence-affordance-static';
+      const affordance = `<span class="${affordanceClass}" data-evidence-affordance="${
+        clickable ? 'open' : 'static'
+      }">${clickable ? 'Open' : 'Not clickable'}</span>`;
+      const label = clickable
+        ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`
+        : `<span class="evidence-label">${escapeHtml(item.label)}</span>`;
+      return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> <code>${escapeHtml(item.id)}</code>${target}</div></li>`;
+    })
+    .join('');
+}
+
+interface GroupedActionSection {
+  label: string;
+  buttons: string[];
+}
+
+export interface GroupedActionSectionsInput {
+  groups: GroupedActionSection[];
+  headingTag: 'h4' | 'h5';
+  sectionClassName: string;
+  buttonContainerClassName: string;
+}
+
+export function renderGroupedActionSections(input: GroupedActionSectionsInput): string {
+  return input.groups
+    .map(
+      (group) =>
+        `<section class="${escapeHtml(input.sectionClassName)}"><${input.headingTag}>${escapeHtml(
+          group.label,
+        )}</${input.headingTag}><div class="${escapeHtml(input.buttonContainerClassName)}">${group.buttons.join('')}</div></section>`,
+    )
+    .join('');
+}
+
+export interface TimelineGroupsHtmlInput {
+  timelineGroups: TimelineGroup[];
+}
+
+export function renderTimelineGroupsHtml(input: TimelineGroupsHtmlInput): string {
+  return input.timelineGroups
+    .map((group) => {
+      const items = group.rows
+        .map((row) => {
+          const labelControl = row.clickable
+            ? `<button type="button" class="text-link-button timeline-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}">${escapeHtml(row.label)}</button>`
+            : `<span class="timeline-label">${escapeHtml(row.label)}</span>`;
+          const affordanceClass = row.clickable
+            ? 'evidence-affordance evidence-affordance-clickable'
+            : 'evidence-affordance evidence-affordance-static';
+          const heading = `<div class="timeline-row-heading">${labelControl}<span class="${affordanceClass}" data-timeline-affordance="${
+            row.clickable ? 'open' : 'static'
+          }">${escapeHtml(row.interactionHint)}</span></div>`;
+          const detail = row.detail
+            ? `<span class="timeline-detail">${escapeHtml(row.detail)}</span>`
+            : '';
+          return `<li><span class="timeline-time">${escapeHtml(
+            row.relativeTime,
+          )}</span><div class="timeline-row">${heading}${detail}</div></li>`;
+        })
+        .join('');
+      return `<section class="timeline-group"><h4>${escapeHtml(group.label)}</h4><ul>${items}</ul></section>`;
+    })
+    .join('');
+}
+
+export interface ResumePathCardInput {
+  completed: boolean;
+  collapsed: boolean;
+  steps: Array<{
+    id: string;
+    label: string;
+    detail: string;
+    checked: boolean;
+  }>;
+}
+
+export function renderResumePathCard(input: ResumePathCardInput): string {
+  const resumePathItems = input.steps
+    .map(
+      (step) => `<li class="resume-path-item">
+        <label class="resume-path-toggle">
+          <input type="checkbox" data-resume-path-toggle="true" data-resume-path-step-id="${escapeHtml(step.id)}" ${
+            step.checked ? 'checked' : ''
+          } />
+          <span>${escapeHtml(step.label)}</span>
+        </label>
+        <p class="muted resume-path-detail">${escapeHtml(step.detail)}</p>
+      </li>`,
+    )
+    .join('');
+  return `<div class="card">
+      <h3>Resume Path</h3>
+      <details data-resume-path-details="true" ${input.completed && input.collapsed ? '' : 'open'}>
+        <summary><strong>${
+          input.completed ? 'Resume Path complete' : 'Complete this 3-step re-entry path'
+        }</strong></summary>
+        <ul class="compact-list resume-path-list">${resumePathItems}</ul>
+      </details>
+    </div>`;
+}
+
+export interface CompanionNudgeCardInput {
+  primaryNudge?: CompanionNudge;
+  secondaryNudge?: CompanionNudge;
+  nudgeSuppressionLabel: string;
+  nudgeExplainabilityTrustedHtml: string;
+  actionLabelForId: (actionId: string) => string;
+}
+
+export function renderCompanionNudgeCard(input: CompanionNudgeCardInput): string {
+  if (!input.primaryNudge && !input.secondaryNudge && !input.nudgeSuppressionLabel) {
+    return '';
+  }
+
+  return `<div class="card">
+      <h3>Companion Nudge</h3>
+      ${
+        input.primaryNudge
+          ? `<p class="companion-primary">${escapeHtml(input.primaryNudge.title)}</p>
+      <p class="muted">${escapeHtml(input.primaryNudge.detail)}</p>
+      <div class="status-actions">
+        <button type="button" data-action="${escapeHtml(input.primaryNudge.action)}">${escapeHtml(
+          input.actionLabelForId(input.primaryNudge.action),
+        )}</button>
+      ${
+        input.secondaryNudge
+          ? `<button type="button" class="secondary" data-action="${escapeHtml(
+              input.secondaryNudge.action,
+            )}">${escapeHtml(input.actionLabelForId(input.secondaryNudge.action))}</button>`
+          : ''
+      }
+        <button type="button" class="secondary" data-action="acknowledgeNudge">Acknowledge</button>
+        <button type="button" class="secondary" data-action="dismissNudge">Dismiss for this context</button>
+      </div>`
+          : ''
+      }
+      ${
+        !input.primaryNudge && input.nudgeSuppressionLabel
+          ? `<p class="muted">${escapeHtml(input.nudgeSuppressionLabel)}</p>`
+          : ''
+      }
+      ${input.nudgeExplainabilityTrustedHtml}
+    </div>`;
+}
+
+export interface WebviewDocumentInput {
+  cspMetaTag: string;
+  nonce: string;
+  panelStyle: string;
+  bodyCardsTrustedHtml: string;
+  clientScript: string;
+}
+
+export function renderWebviewDocument(input: WebviewDocumentInput): string {
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    ${input.cspMetaTag}
+    <style nonce="${input.nonce}">${input.panelStyle}</style>
+  </head>
+  <body>
+    ${input.bodyCardsTrustedHtml}
+
+    <script nonce="${input.nonce}">
+${input.clientScript}
+    </script>
+  </body>
+</html>`;
+}
