@@ -115,6 +115,21 @@ import {
   renderTitledListCard,
   renderTrustCenterCard,
 } from './webview/panelCards';
+import {
+  renderCheckpointCard,
+  renderCompanionNextSteps,
+  renderCompanionNudgeCard,
+  renderConfidenceCard,
+  renderEvidenceListItems,
+  renderGroupedActionSections,
+  renderIntentEditor,
+  renderResumePathCard,
+  renderScratchpadCard,
+  renderTimelineGroupsHtml,
+  renderTopFilesListItems,
+  renderTopLinksListItems,
+  renderWebviewDocument,
+} from './webview/panelFragments';
 import { PANEL_WEBVIEW_STYLE } from './webview/panelStyles';
 import {
   buildResumePathSteps,
@@ -138,7 +153,6 @@ import type {
   MetricRecord,
   ResumeSignals,
   ResumeSummary,
-  SummaryEvidenceItem,
   SummaryProvider,
   TriggerReason,
   VscodeLmModelSelector,
@@ -3847,116 +3861,51 @@ function renderWebview(
   const primaryOpenCheckpoint =
     primaryCheckpointNote?.status === 'open' ? primaryCheckpointNote : undefined;
   const currentCheckpointNote = primaryOpenCheckpoint ?? openCheckpointNotes[0];
-  const checkpointContextLine = currentCheckpointNote
-    ? [
-        currentCheckpointNote.file
-          ? `${currentCheckpointNote.file}${typeof currentCheckpointNote.line === 'number' ? `:${currentCheckpointNote.line}` : ''}`
-          : '',
-        currentCheckpointNote.branch ? `branch ${currentCheckpointNote.branch}` : '',
-        currentCheckpointNote.partition ? `partition ${currentCheckpointNote.partition}` : '',
-      ]
-        .filter(Boolean)
-        .join(' · ')
-    : '';
-  const checkpointCard =
-    openCheckpointCount > 0 && currentCheckpointNote
-      ? `<div class="card">
-      <h3>Notes (${openCheckpointCount})</h3>
-      <p class="companion-primary">${escapeHtml(currentCheckpointNote.text)}</p>
-      ${checkpointContextLine ? `<p class="muted">${escapeHtml(checkpointContextLine)}</p>` : ''}
-      <div class="note-actions">
-        <button type="button" data-action="checkpointMarkDone">Mark done</button>
-        <button type="button" class="secondary" data-action="checkpointPinToggle">${currentCheckpointNote.pinned ? 'Unpin' : 'Pin'}</button>
-        <button type="button" class="secondary" data-action="checkpointDismiss">Dismiss</button>
-        <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>
-        <button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>
-      </div>
-    </div>`
-      : '';
+  const checkpointCard = renderCheckpointCard({
+    openCheckpointCount,
+    currentCheckpointNote: currentCheckpointNote
+      ? {
+          text: currentCheckpointNote.text,
+          file: currentCheckpointNote.file,
+          line: currentCheckpointNote.line,
+          branch: currentCheckpointNote.branch,
+          partition: currentCheckpointNote.partition,
+          pinned: currentCheckpointNote.pinned,
+        }
+      : undefined,
+  });
   const scratchpadPreviewLines = state.panelScratchpadPreviewLines.slice(
     0,
     SCRATCHPAD_PREVIEW_MAX_LINES,
   );
   const scratchpadScopeLabel = state.panelScratchpadScopeLabel?.trim() ?? '';
   const showScratchpadCard = state.panelScratchpadExists || state.panelScratchpadHasContent;
-  const scratchpadPreviewHtml =
-    scratchpadPreviewLines.length > 0
-      ? `<ul class="compact-list">${scratchpadPreviewLines
-          .map((line) => `<li>${escapeHtml(line)}</li>`)
-          .join('')}</ul>`
-      : `<p class="muted">${
-          state.panelScratchpadHasContent
-            ? 'Scratchpad has content, but no preview lines were detected.'
-            : 'No scratchpad content yet.'
-        }</p>`;
-  const scratchpadCard = showScratchpadCard
-    ? `<div class="card">
-      <h3>Scratchpad</h3>
-      ${scratchpadScopeLabel ? `<p class="muted">${escapeHtml(scratchpadScopeLabel)}</p>` : ''}
-      ${scratchpadPreviewHtml}
-      <div class="status-actions">
-        <button type="button" class="secondary" data-action="openScratchpad">Open Scratchpad</button>
-        <button type="button" class="secondary" data-action="appendScratchpad">Append</button>
-        <button type="button" class="secondary" data-action="setScratchpadScope">Set Scope</button>
-      </div>
-    </div>`
-    : '';
-  const candidateIntentItems = (summary.candidateIntents ?? [])
-    .map((candidate) => `<li>${escapeHtml(candidate)}</li>`)
-    .join('');
+  const scratchpadCard = renderScratchpadCard({
+    showScratchpadCard,
+    scratchpadScopeLabel,
+    scratchpadPreviewLines,
+    scratchpadHasContent: state.panelScratchpadHasContent,
+  });
   const hasLongGap = Boolean(summary.longGap);
-  const showReorientationCard = hasLongGap || (summary.lowConfidence && !currentCheckpointNote);
-  const reorientationGapLine =
-    typeof summary.resumeGapMinutes === 'number'
-      ? `<li>Last captured activity was about ${summary.resumeGapMinutes} minute${summary.resumeGapMinutes === 1 ? '' : 's'} ago.</li>`
-      : '';
-  const reorientationCardItems = hasLongGap
-    ? [
-        reorientationGapLine,
-        `<li><strong>Retrieval cue:</strong> ${escapeHtml(summary.lastActionLabel?.trim() || 'No last action captured yet.')}</li>`,
-        `<li><strong>Next safe action:</strong> ${escapeHtml(
-          summary.recommendedFirstAction?.trim() ||
-            summary.nextSteps[0] ||
-            'Open a recent file and reorient context.',
-        )}</li>`,
-      ]
-        .filter(Boolean)
-        .join('')
-    : candidateIntentItems || '<li>No strong candidates captured.</li>';
-  const reorientationCardTitle = hasLongGap ? 'Welcome back' : 'Low Confidence';
-  const reorientationCardDescription = hasLongGap
-    ? 'Welcome back — reorient before executing risky actions.'
-    : 'Unclear intent (low evidence). Add one line of context before continuing.';
-  const reorientationCardAction = !currentCheckpointNote
-    ? '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add one-line checkpoint</button>'
-    : '';
-  const confidenceCard = showReorientationCard
-    ? `<div class="card">
-      <h3>${reorientationCardTitle}</h3>
-      <p class="muted">${reorientationCardDescription}</p>
-      <ul class="compact-list">${reorientationCardItems}</ul>
-      ${reorientationCardAction}
-    </div>`
-    : '';
-  const linkItems = summary.links
-    .map(
-      (link, index) =>
-        `<li><button type="button" class="text-link-button" data-action="openLink" data-link-index="${index}">${escapeHtml(link.label)}</button> <span class="kind">(${escapeHtml(link.kind)})</span></li>`,
-    )
-    .join('');
+  const confidenceCard = renderConfidenceCard({
+    longGap: hasLongGap,
+    lowConfidence: Boolean(summary.lowConfidence),
+    hasCurrentCheckpointNote: Boolean(currentCheckpointNote),
+    resumeGapMinutes: summary.resumeGapMinutes,
+    lastActionLabel: summary.lastActionLabel,
+    recommendedFirstAction: summary.recommendedFirstAction,
+    firstNextStep: summary.nextSteps[0],
+    candidateIntents: summary.candidateIntents,
+  });
+  const linkItems = renderTopLinksListItems(summary.links);
 
   const mode = summary.mode ?? 'coding';
   const intentInputId = 'intent-override-input';
-  const intentEditorHtml = `<div class="intent-editor">
-      <label class="companion-kicker" for="${intentInputId}">Intent (editable)</label>
-      <div class="intent-editor-row">
-        <input id="${intentInputId}" type="text" maxlength="280" value="${escapeHtml(summary.intent)}" />
-      </div>
-      <div class="intent-editor-actions">
-        <button type="button" class="secondary" data-action="setIntentOverride">Save</button>
-        <button type="button" class="secondary" data-action="clearIntentOverride" ${summary.intentOverridden ? '' : 'disabled'}>Reset to inferred</button>
-      </div>
-    </div>`;
+  const intentEditorHtml = renderIntentEditor({
+    intentInputId,
+    intent: summary.intent,
+    intentOverridden: summary.intentOverridden,
+  });
   const trusted = vscode.workspace.isTrusted;
   const availability = computeRestoreAvailability({
     trusted,
@@ -4000,58 +3949,16 @@ function renderWebview(
   if (primaryNextAction) {
     recordCompanionPrimaryCtaImpression();
   }
-  const companionNextSteps = summary.nextSteps
-    .slice(0, 3)
-    .map((step, index) => {
-      const evidenceIds = summary.nextStepEvidenceIds?.[index] ?? [];
-      const badges = evidenceIds
-        .map((evidenceId) => renderStepEvidenceBadge(evidenceId, evidenceById.get(evidenceId)))
-        .join('');
-      const action = nextStepActions[index];
-      const actionButton =
-        action && primaryNextActionStepIndex !== index
-          ? `<button type="button" class="secondary step-action" data-action="runNextStepAction" data-step-index="${index}">${escapeHtml(action.label)}</button>`
-          : '';
-      const advisoryReason = !action
-        ? evidenceIds.length === 0
-          ? 'Advisory only: no captured evidence for this step yet.'
-          : summary.lowConfidence
-            ? 'Advisory only: evidence confidence is low right now.'
-            : 'Advisory only: no safe one-click action is available for this step.'
-        : '';
-      const badgeRow = badges ? `<div class="step-evidence">${badges}</div>` : '';
-      const actionRow = actionButton ? `<div class="step-actions">${actionButton}</div>` : '';
-      const advisoryRow = advisoryReason
-        ? `<div class="step-advisory muted">${escapeHtml(advisoryReason)}</div>`
-        : '';
-      return `<li>${escapeHtml(step)}${badgeRow}${actionRow}${advisoryRow}</li>`;
-    })
-    .join('');
-  const topFiles = summary.topFiles
-    .map(
-      (file, index) =>
-        `<li><button type="button" class="text-link-button" data-action="openTopFile" data-top-file-index="${index}">${escapeHtml(file)}</button></li>`,
-    )
-    .join('');
-  const evidenceItems = (summary.evidenceCatalog ?? [])
-    .map((item, index) => {
-      const clickable = item.kind === 'file' || item.kind === 'url';
-      const target = item.target
-        ? ` <span class="evidence-target">${escapeHtml(item.target)}</span>`
-        : '';
-      const hiddenClass = index >= 5 ? 'extra-evidence' : '';
-      const affordanceClass = clickable
-        ? 'evidence-affordance evidence-affordance-clickable'
-        : 'evidence-affordance evidence-affordance-static';
-      const affordance = `<span class="${affordanceClass}" data-evidence-affordance="${
-        clickable ? 'open' : 'static'
-      }">${clickable ? 'Open' : 'Not clickable'}</span>`;
-      const label = clickable
-        ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`
-        : `<span class="evidence-label">${escapeHtml(item.label)}</span>`;
-      return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> <code>${escapeHtml(item.id)}</code>${target}</div></li>`;
-    })
-    .join('');
+  const companionNextSteps = renderCompanionNextSteps({
+    nextSteps: summary.nextSteps,
+    nextStepEvidenceIds: summary.nextStepEvidenceIds,
+    nextStepActions,
+    primaryNextActionStepIndex,
+    lowConfidence: Boolean(summary.lowConfidence),
+    evidenceById,
+  });
+  const topFiles = renderTopFilesListItems(summary.topFiles);
+  const evidenceItems = renderEvidenceListItems(summary.evidenceCatalog ?? []);
   const hiddenEvidenceCount = Math.max(0, (summary.evidenceCatalog?.length ?? 0) - 5);
   const recapDoneItems = summary.doneSinceLastResume?.slice(0, 3) ?? [];
   const recapPendingItems = summary.pendingBlocked?.slice(0, 3) ?? [];
@@ -4166,27 +4073,16 @@ function renderWebview(
   summary.resumePathCollapsed = resumePathState.collapsed;
   const resumePathSteps = buildResumePathSteps(blockerDecision.hasBlocker).slice(0, 3);
   const resumePathCompleted = isResumePathComplete(resumePathState);
-  const resumePathItems = resumePathSteps
-    .map((step) => {
-      const checked = resumePathState.completedStepIds.includes(step.id);
-      return `<li class="resume-path-item">
-        <label class="resume-path-toggle">
-          <input type="checkbox" data-resume-path-toggle="true" data-resume-path-step-id="${escapeHtml(step.id)}" ${checked ? 'checked' : ''} />
-          <span>${escapeHtml(step.label)}</span>
-        </label>
-        <p class="muted resume-path-detail">${escapeHtml(step.detail)}</p>
-      </li>`;
-    })
-    .join('');
-  const resumePathCard = `<div class="card">
-      <h3>Resume Path</h3>
-      <details data-resume-path-details="true" ${resumePathCompleted && resumePathState.collapsed ? '' : 'open'}>
-        <summary><strong>${
-          resumePathCompleted ? 'Resume Path complete' : 'Complete this 3-step re-entry path'
-        }</strong></summary>
-        <ul class="compact-list resume-path-list">${resumePathItems}</ul>
-      </details>
-    </div>`;
+  const resumePathCard = renderResumePathCard({
+    completed: resumePathCompleted,
+    collapsed: resumePathState.collapsed,
+    steps: resumePathSteps.map((step) => ({
+      id: step.id,
+      label: step.label,
+      detail: step.detail,
+      checked: resumePathState.completedStepIds.includes(step.id),
+    })),
+  });
 
   const restoreActionButtons = {
     workingSet:
@@ -4203,67 +4099,72 @@ function renderWebview(
     copyFailingCommand: `<button type="button" data-action="restoreCopyFailingCommand" ${availability.canCopyFailingCommand ? '' : 'disabled aria-disabled="true"'}>Copy failing command</button>`,
   };
 
-  const companionRestoreSections = [
-    {
-      label: 'Open',
-      buttons: [
-        restoreActionButtons.workingSet,
-        restoreActionButtons.jumpToLastEdit,
-        restoreActionButtons.reopenFiles,
-        restoreActionButtons.openChangedFiles,
-      ],
-    },
-    {
-      label: 'Run',
-      buttons: [restoreActionButtons.rerunTask, restoreActionButtons.rerunDebug],
-    },
-    {
-      label: 'Diagnose',
-      buttons: [restoreActionButtons.openProblems, restoreActionButtons.openDiagnosticFile],
-    },
-  ]
-    .map(
-      (group) =>
-        `<section class="action-group compact-action-group"><h5>${escapeHtml(group.label)}</h5><div class="companion-restore-grid">${group.buttons.join('')}</div></section>`,
-    )
-    .join('');
+  const companionRestoreSections = renderGroupedActionSections({
+    groups: [
+      {
+        label: 'Open',
+        buttonsTrustedHtml: [
+          restoreActionButtons.workingSet,
+          restoreActionButtons.jumpToLastEdit,
+          restoreActionButtons.reopenFiles,
+          restoreActionButtons.openChangedFiles,
+        ],
+      },
+      {
+        label: 'Run',
+        buttonsTrustedHtml: [restoreActionButtons.rerunTask, restoreActionButtons.rerunDebug],
+      },
+      {
+        label: 'Diagnose',
+        buttonsTrustedHtml: [
+          restoreActionButtons.openProblems,
+          restoreActionButtons.openDiagnosticFile,
+        ],
+      },
+    ],
+    headingTag: 'h5',
+    sectionClassName: 'action-group compact-action-group',
+    buttonContainerClassName: 'companion-restore-grid',
+  });
 
-  const quickActionGroups = [
-    {
-      label: 'Copy',
-      buttons: ['<button type="button" data-action="copySummary">Copy summary</button>'],
-    },
-    {
-      label: 'Notes & Feedback',
-      buttons: [
-        '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>',
-        '<button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>',
-        '<button type="button" data-action="rateHelpfulness">Rate helpfulness</button>',
-        '<button type="button" class="secondary" data-action="fixSummary">Fix summary</button>',
-      ],
-    },
-  ]
-    .map(
-      (group) =>
-        `<section class="action-group"><h4>${escapeHtml(group.label)}</h4><div class="quick-actions">${group.buttons.join('')}</div></section>`,
-    )
-    .join('');
+  const quickActionGroups = renderGroupedActionSections({
+    groups: [
+      {
+        label: 'Copy',
+        buttonsTrustedHtml: [
+          '<button type="button" data-action="copySummary">Copy summary</button>',
+        ],
+      },
+      {
+        label: 'Notes & Feedback',
+        buttonsTrustedHtml: [
+          '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>',
+          '<button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>',
+          '<button type="button" data-action="rateHelpfulness">Rate helpfulness</button>',
+          '<button type="button" class="secondary" data-action="fixSummary">Fix summary</button>',
+        ],
+      },
+    ],
+    headingTag: 'h4',
+    sectionClassName: 'action-group',
+    buttonContainerClassName: 'quick-actions',
+  });
 
-  const restorePackGroups = [
-    {
-      label: 'Context',
-      buttons: [restoreActionButtons.checkoutPreviousBranch],
-    },
-    {
-      label: 'Copy',
-      buttons: [restoreActionButtons.copyFailingCommand],
-    },
-  ]
-    .map(
-      (group) =>
-        `<section class="action-group"><h4>${escapeHtml(group.label)}</h4><div class="restore-grid">${group.buttons.join('')}</div></section>`,
-    )
-    .join('');
+  const restorePackGroups = renderGroupedActionSections({
+    groups: [
+      {
+        label: 'Context',
+        buttonsTrustedHtml: [restoreActionButtons.checkoutPreviousBranch],
+      },
+      {
+        label: 'Copy',
+        buttonsTrustedHtml: [restoreActionButtons.copyFailingCommand],
+      },
+    ],
+    headingTag: 'h4',
+    sectionClassName: 'action-group',
+    buttonContainerClassName: 'restore-grid',
+  });
 
   const detailsHtml = renderDetailsMarkdown(summary);
   const sourceLabel =
@@ -4341,28 +4242,7 @@ function renderWebview(
   const autoSummaryToggleDisabledAttr = autoSummariesDisabled
     ? 'disabled aria-disabled="true"'
     : '';
-  const timelineGroupsHtml = timelineGroups
-    .map((group) => {
-      const items = group.rows
-        .map((row) => {
-          const labelControl = row.clickable
-            ? `<button type="button" class="text-link-button timeline-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}">${escapeHtml(row.label)}</button>`
-            : `<span class="timeline-label">${escapeHtml(row.label)}</span>`;
-          const affordanceClass = row.clickable
-            ? 'evidence-affordance evidence-affordance-clickable'
-            : 'evidence-affordance evidence-affordance-static';
-          const heading = `<div class="timeline-row-heading">${labelControl}<span class="${affordanceClass}" data-timeline-affordance="${
-            row.clickable ? 'open' : 'static'
-          }">${escapeHtml(row.interactionHint)}</span></div>`;
-          const detail = row.detail
-            ? `<span class="timeline-detail">${escapeHtml(row.detail)}</span>`
-            : '';
-          return `<li><span class="timeline-time">${escapeHtml(row.relativeTime)}</span><div class="timeline-row">${heading}${detail}</div></li>`;
-        })
-        .join('');
-      return `<section class="timeline-group"><h4>${escapeHtml(group.label)}</h4><ul>${items}</ul></section>`;
-    })
-    .join('');
+  const timelineGroupsHtml = renderTimelineGroupsHtml({ timelineGroups });
   const timelineCard = renderTimelineCard({
     showTimeline: config.showTimeline,
     timelineGroupsTrustedHtml: timelineGroupsHtml,
@@ -4379,34 +4259,13 @@ function renderWebview(
     .map((item) => `<li>${escapeHtml(item)}</li>`)
     .join('');
   const changesSinceCard = renderChangesSinceCard(changesSinceItems);
-  const nudgeCard =
-    primaryNudge || secondaryNudge || nudgeSuppressionLabel
-      ? `<div class="card">
-      <h3>Companion Nudge</h3>
-      ${
-        primaryNudge
-          ? `<p class="companion-primary">${escapeHtml(primaryNudge.title)}</p>
-      <p class="muted">${escapeHtml(primaryNudge.detail)}</p>
-      <div class="status-actions">
-        <button type="button" data-action="${escapeHtml(primaryNudge.action)}">${escapeHtml(nudgeActionLabel(primaryNudge.action))}</button>
-      ${
-        secondaryNudge
-          ? `<button type="button" class="secondary" data-action="${escapeHtml(secondaryNudge.action)}">${escapeHtml(nudgeActionLabel(secondaryNudge.action))}</button>`
-          : ''
-      }
-        <button type="button" class="secondary" data-action="acknowledgeNudge">Acknowledge</button>
-        <button type="button" class="secondary" data-action="dismissNudge">Dismiss for this context</button>
-      </div>`
-          : ''
-      }
-      ${
-        !primaryNudge && nudgeSuppressionLabel
-          ? `<p class="muted">${escapeHtml(nudgeSuppressionLabel)}</p>`
-          : ''
-      }
-      ${nudgeExplainability}
-    </div>`
-      : '';
+  const nudgeCard = renderCompanionNudgeCard({
+    primaryNudge,
+    secondaryNudge,
+    nudgeSuppressionLabel,
+    nudgeExplainabilityTrustedHtml: nudgeExplainability,
+    actionLabelForId: nudgeActionLabel,
+  });
 
   const statusCard = renderStatusCard({
     sourceLabel,
@@ -4495,21 +4354,13 @@ function renderWebview(
       : 'global';
   const clientScript = renderPanelClientScript(MAX_INTENT_OVERRIDE_CHARS, panelSectionScopeToken);
 
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    ${cspMetaTag}
-    <style nonce="${nonce}">${PANEL_WEBVIEW_STYLE}</style>
-  </head>
-  <body>
-    ${bodyCards}
-
-    <script nonce="${nonce}">
-${clientScript}
-    </script>
-  </body>
-</html>`;
+  return renderWebviewDocument({
+    cspMetaTag,
+    nonce,
+    panelStyle: PANEL_WEBVIEW_STYLE,
+    bodyCardsTrustedHtml: bodyCards,
+    clientScript,
+  });
 }
 
 function createNonce(): string {
@@ -4525,19 +4376,6 @@ function formatTimestamp(timestamp: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function renderStepEvidenceBadge(evidenceId: string, evidence?: SummaryEvidenceItem): string {
-  if (!evidence) {
-    return `<span class="badge">${escapeHtml(evidenceId)}</span>`;
-  }
-
-  const label = `[${evidence.kind}] ${evidence.label}`;
-  if (evidence.kind === 'file' || evidence.kind === 'url') {
-    return `<button type="button" class="badge clickable kind-${escapeHtml(evidence.kind)}" data-action="openEvidence" data-evidence-id="${escapeHtml(evidenceId)}">${escapeHtml(label)}</button>`;
-  }
-
-  return `<span class="badge">${escapeHtml(label)}</span>`;
 }
 
 function markBoundarySignal(): void {
