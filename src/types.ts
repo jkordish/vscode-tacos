@@ -114,6 +114,8 @@ export interface ResumeSummary {
   lowConfidence?: boolean;
   longGap?: boolean;
   resumeGapMinutes?: number;
+  resumePathCompletedStepIds?: ('confirmIntent' | 'runNextSafeAction' | 'clearBlocker')[];
+  resumePathCollapsed?: boolean;
   candidateIntents?: string[];
   mode?: ResumeMode;
   currentBranch?: string;

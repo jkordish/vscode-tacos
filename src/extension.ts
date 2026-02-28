@@ -95,6 +95,16 @@ import {
   scratchpadFileNameForScope,
   workspaceScratchpadRootSegments,
 } from './scratchpadStorage';
+import {
+  buildResumePathSteps,
+  buildResumePathStorageKey,
+  createResumePathState,
+  isResumePathComplete,
+  normalizeResumePathState,
+  toggleResumePathStep,
+  type ResumePathState,
+  type ResumePathStepId,
+} from './resumePath';
 import { renderResumeStackCard } from './resumeStackCard';
 import { resolveScopeBranch as resolveScopeBranchFromInputs } from './scopeBranch';
 import { buildResumeSummary } from './summary';
@@ -146,6 +156,7 @@ const KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX = 'tacos.lastCheckpointPromptAt';
 const KEY_LAST_NUDGE_AT_PREFIX = 'tacos.lastNudgeAt';
 const KEY_NUDGE_FEEDBACK_PREFIX = 'tacos.nudgeFeedback';
 const KEY_WORKSPACE_ACTIVITY_AT_PREFIX = 'tacos.workspaceActivityAt';
+const KEY_RESUME_PATH_PREFIX = 'tacos.resumePath';
 const KEY_AI_PAYLOAD_CONSENT_PREFIX = 'tacos.aiPayloadConsent';
 const KEY_NOISE_BUDGET_EVENTS_PREFIX = 'tacos.noiseBudgetEvents';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
@@ -239,6 +250,8 @@ interface RuntimeState {
   panelScratchpadExists: boolean;
   panelScratchpadHasContent: boolean;
   panelScratchpadScopeLabel?: string;
+  panelResumePathState?: ResumePathState;
+  panelResumePathScope?: string;
   lastTaskName?: string;
   lastTaskWorkspaceRoot?: string;
   lastTaskExitCode?: number;
@@ -278,6 +291,7 @@ interface RuntimeState {
 }
 
 let state: RuntimeState;
+let activeExtensionContext: vscode.ExtensionContext | undefined;
 
 function maybeWarnRedactionPatternGuardrails(patterns: string[]): void {
   const validation = validateCustomRedactionPatterns(patterns);
@@ -352,6 +366,7 @@ interface DiagnosticBlockerSnapshot {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  activeExtensionContext = context;
   const initialWorkspaceRoot = pickWorkspaceRoot() ?? '';
   const persistedActivity = loadPersistedActivitySnapshot(context);
   const persistedTaskMetadata = readPersistedTaskMetadata(context, initialWorkspaceRoot);
@@ -374,6 +389,8 @@ export function activate(context: vscode.ExtensionContext): void {
     panelScratchpadExists: false,
     panelScratchpadHasContent: false,
     panelScratchpadScopeLabel: undefined,
+    panelResumePathState: undefined,
+    panelResumePathScope: undefined,
     lastTaskName: persistedTaskMetadata?.taskName,
     lastTaskWorkspaceRoot: persistedTaskMetadata?.workspaceRoot,
     lastTaskExitCode: persistedTaskMetadata?.exitCode,
@@ -540,8 +557,63 @@ export function activate(context: vscode.ExtensionContext): void {
         hasDisabledPrimaryBlockerAction,
         hasRestoreWorkingSetAction: panelHtml.includes('data-action="restoreWorkingSet"'),
         hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
+        hasResumePathCard: panelHtml.includes('<h3>Resume Path</h3>'),
+        resumePathStepCount: (panelHtml.match(/<input[^>]*data-action="resumePathToggle"/gu) ?? [])
+          .length,
       };
     }),
+    vscode.commands.registerCommand('tacos.__test.getResumePathSnapshot', async () => {
+      const contextRef = activeExtensionContext;
+      const summary = state.panelSummary ?? state.scratchSummary;
+      const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+      if (!contextRef || !summary || !workspaceRoot) {
+        return undefined;
+      }
+
+      const scope = partitionScope(contextRef, workspaceRoot);
+      const storageKey = resumePathStorageKey(contextRef, workspaceRoot);
+      const snapshot = resolveResumePathStateForSummary(contextRef, workspaceRoot, summary);
+      return {
+        scope,
+        storageKey,
+        contextHash: snapshot.contextHash,
+        completedStepIds: [...snapshot.completedStepIds],
+        collapsed: snapshot.collapsed,
+      };
+    }),
+    vscode.commands.registerCommand(
+      'tacos.__test.toggleResumePathStep',
+      async (stepId: ResumePathStepId, completed = true) => {
+        const contextRef = activeExtensionContext;
+        const summary = state.panelSummary ?? state.scratchSummary;
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!contextRef || !summary || !workspaceRoot) {
+          return false;
+        }
+
+        if (
+          stepId !== 'confirmIntent' &&
+          stepId !== 'runNextSafeAction' &&
+          stepId !== 'clearBlocker'
+        ) {
+          return false;
+        }
+
+        const nextState = await setResumePathStepCompletion(
+          contextRef,
+          workspaceRoot,
+          summary,
+          stepId,
+          Boolean(completed),
+        );
+        if (state.panelSummary) {
+          state.panelSummary.resumePathCompletedStepIds = [...nextState.completedStepIds];
+          state.panelSummary.resumePathCollapsed = nextState.collapsed;
+        }
+        rerenderPanel();
+        return true;
+      },
+    ),
     vscode.commands.registerCommand('tacos.__test.getFocusSuppressionSnapshot', async () => {
       const now = Date.now();
       const config = getConfig();
@@ -1276,7 +1348,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  // No-op.
+  activeExtensionContext = undefined;
 }
 
 function monotonicNowNs(): bigint {
@@ -3164,6 +3236,30 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'resumePathToggle') {
+        if (!state.panelSummary) {
+          return;
+        }
+
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!workspaceRoot) {
+          void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+          return;
+        }
+
+        const nextState = await setResumePathStepCompletion(
+          context,
+          workspaceRoot,
+          state.panelSummary,
+          message.stepId,
+          message.completed,
+        );
+        state.panelSummary.resumePathCompletedStepIds = [...nextState.completedStepIds];
+        state.panelSummary.resumePathCollapsed = nextState.collapsed;
+        rerenderPanel();
+        return;
+      }
+
       if (message.type === 'runNextStepAction') {
         if (!state.panelSummary) {
           return;
@@ -3806,6 +3902,36 @@ function renderWebview(
     blockerDecision.hasBlocker && blockerAction?.disabled && blockerAction.disabledReason
       ? `<p class="muted blocker-disabled-reason">Unavailable: ${escapeHtml(blockerAction.disabledReason)}</p>`
       : '';
+  const panelWorkspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+  const resumePathState =
+    activeExtensionContext && panelWorkspaceRoot
+      ? resolveResumePathStateForSummary(activeExtensionContext, panelWorkspaceRoot, summary)
+      : createResumePathState(summary.contextHash);
+  summary.resumePathCompletedStepIds = [...resumePathState.completedStepIds];
+  summary.resumePathCollapsed = resumePathState.collapsed;
+  const resumePathSteps = buildResumePathSteps(blockerDecision.hasBlocker).slice(0, 3);
+  const resumePathCompleted = isResumePathComplete(resumePathState);
+  const resumePathItems = resumePathSteps
+    .map((step) => {
+      const checked = resumePathState.completedStepIds.includes(step.id);
+      return `<li class="resume-path-item">
+        <label class="resume-path-toggle">
+          <input type="checkbox" data-action="resumePathToggle" data-resume-path-step-id="${escapeHtml(step.id)}" ${checked ? 'checked' : ''} />
+          <span>${escapeHtml(step.label)}</span>
+        </label>
+        <p class="muted resume-path-detail">${escapeHtml(step.detail)}</p>
+      </li>`;
+    })
+    .join('');
+  const resumePathCard = `<div class="card">
+      <h3>Resume Path</h3>
+      <details data-resume-path-details="true" ${resumePathCompleted && resumePathState.collapsed ? '' : 'open'}>
+        <summary><strong>${
+          resumePathCompleted ? 'Resume Path complete' : 'Complete this 3-step re-entry path'
+        }</strong></summary>
+        <ul class="compact-list resume-path-list">${resumePathItems}</ul>
+      </details>
+    </div>`;
 
   const restoreActionButtons = {
     workingSet:
@@ -4213,6 +4339,27 @@ function renderWebview(
       .muted {
         color: var(--surface-muted);
       }
+      .resume-path-list {
+        margin-top: 10px;
+      }
+      .resume-path-item {
+        margin-bottom: 8px;
+      }
+      .resume-path-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .resume-path-toggle input[type='checkbox'] {
+        width: 14px;
+        height: 14px;
+      }
+      .resume-path-detail {
+        margin: 4px 0 0 22px;
+        font-size: 12px;
+      }
       .blocker-disabled-reason {
         margin-top: 8px;
       }
@@ -4423,6 +4570,7 @@ function renderWebview(
       blockerActionTrustedHtml: blockerActionHtml,
       restoreSectionsTrustedHtml: companionRestoreSections,
     })}
+    ${resumePathCard}
 
     ${confidenceCard}
 
@@ -4567,6 +4715,33 @@ function renderWebview(
         }
         return parsed;
       }
+
+      document.addEventListener('change', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+
+        const toggle = target.closest('[data-action="resumePathToggle"]');
+        if (!(toggle instanceof HTMLInputElement)) {
+          return;
+        }
+
+        const stepId = toggle.dataset.resumePathStepId;
+        if (
+          stepId !== 'confirmIntent' &&
+          stepId !== 'runNextSafeAction' &&
+          stepId !== 'clearBlocker'
+        ) {
+          return;
+        }
+
+        vscode.postMessage({
+          type: 'resumePathToggle',
+          stepId,
+          completed: toggle.checked,
+        });
+      });
 
       document.addEventListener('click', (event) => {
         const target = event.target;
@@ -7518,6 +7693,83 @@ function summaryCacheKey(context: vscode.ExtensionContext, root: string): string
   return `tacos.summary.${Buffer.from(partitionScope(context, root)).toString('base64url')}`;
 }
 
+function resumePathStorageKey(context: vscode.ExtensionContext, root: string): string {
+  return buildResumePathStorageKey(partitionScope(context, root));
+}
+
+function isPersistedResumePathStateEqual(raw: unknown, expected: ResumePathState): boolean {
+  if (!raw || typeof raw !== 'object') {
+    return false;
+  }
+
+  const record = raw as Record<string, unknown>;
+  if (record.contextHash !== expected.contextHash || record.collapsed !== expected.collapsed) {
+    return false;
+  }
+
+  if (!Array.isArray(record.completedStepIds)) {
+    return false;
+  }
+
+  const persistedCompletedStepIds = record.completedStepIds;
+  if (persistedCompletedStepIds.length !== expected.completedStepIds.length) {
+    return false;
+  }
+
+  return expected.completedStepIds.every(
+    (stepId, index) => persistedCompletedStepIds[index] === stepId,
+  );
+}
+
+function resolveResumePathStateForSummary(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  summary: ResumeSummary,
+): ResumePathState {
+  const scope = partitionScope(context, workspaceRoot);
+  const storageKey = resumePathStorageKey(context, workspaceRoot);
+  const cached = state.panelResumePathState;
+  if (
+    cached &&
+    state.panelResumePathScope === scope &&
+    cached.contextHash === summary.contextHash
+  ) {
+    return cached;
+  }
+
+  const raw = context.workspaceState.get<unknown>(storageKey);
+  const normalized = normalizeResumePathState(raw, summary.contextHash);
+  state.panelResumePathState = normalized;
+  state.panelResumePathScope = scope;
+  if (!isPersistedResumePathStateEqual(raw, normalized)) {
+    void context.workspaceState.update(storageKey, normalized);
+  }
+  return normalized;
+}
+
+async function setResumePathStepCompletion(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  summary: ResumeSummary,
+  stepId: ResumePathStepId,
+  completed: boolean,
+): Promise<ResumePathState> {
+  const current = resolveResumePathStateForSummary(context, workspaceRoot, summary);
+  const next = toggleResumePathStep(current, stepId, completed);
+  const storageKey = resumePathStorageKey(context, workspaceRoot);
+  await context.workspaceState.update(storageKey, next);
+
+  const wasComplete = isResumePathComplete(current);
+  const nowComplete = isResumePathComplete(next);
+  if (!wasComplete && nowComplete) {
+    recordMetricCounter('resumePathCompletions');
+  }
+
+  state.panelResumePathState = next;
+  state.panelResumePathScope = partitionScope(context, workspaceRoot);
+  return next;
+}
+
 function autoTriggerFingerprintKey(context: vscode.ExtensionContext, root: string): string {
   const scope = partitionScope(context, root);
   return `${KEY_LAST_AUTO_TRIGGER_FINGERPRINT}.${Buffer.from(scope).toString('base64url')}`;
@@ -7625,6 +7877,7 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_NUDGE_FEEDBACK_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_WORKSPACE_ACTIVITY_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_RESUME_PATH_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_SETUP_CHECKLIST_COMPLETED_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_AI_PAYLOAD_CONSENT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_SCRATCHPAD_SCOPE_MODE_PREFIX, workspaceRoot, false) ||
@@ -7684,6 +7937,8 @@ function resetRuntimeWorkspaceState(): void {
   state.panelScratchpadExists = false;
   state.panelScratchpadHasContent = false;
   state.panelScratchpadScopeLabel = undefined;
+  state.panelResumePathState = undefined;
+  state.panelResumePathScope = undefined;
   state.activeNudges = undefined;
   state.scratchSummary = undefined;
   state.detailsMarkdownCache = undefined;

@@ -128,6 +128,13 @@ async function main() {
     );
 
     await runSuite(
+      'resume-path-partition-isolation',
+      path.resolve(__dirname, 'suite', 'resumePathPartitionIsolation.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'multi-root-scope',
       path.resolve(__dirname, 'suite', 'multiRootScope.js'),
       [multiRootWorkspace, '--disable-extensions'],

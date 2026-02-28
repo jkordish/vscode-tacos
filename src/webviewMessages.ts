@@ -35,11 +35,13 @@ const RESTORE_MESSAGE_TYPES = [
 type SimpleWebviewMessageType = (typeof SIMPLE_MESSAGE_TYPES)[number];
 type RestoreWebviewMessageType = (typeof RESTORE_MESSAGE_TYPES)[number];
 type PrimaryNextSafeActionSurface = 'home' | 'recap';
+type ResumePathStepId = 'confirmIntent' | 'runNextSafeAction' | 'clearBlocker';
 
 export type WebviewMessage =
   | { type: SimpleWebviewMessageType }
   | { type: RestoreWebviewMessageType }
   | { type: 'runNextStepAction'; stepIndex: number; primarySurface?: PrimaryNextSafeActionSurface }
+  | { type: 'resumePathToggle'; stepId: ResumePathStepId; completed: boolean }
   | { type: 'openEvidence'; evidenceId: string }
   | { type: 'openTopFile'; index: number }
   | { type: 'openLink'; index: number };
@@ -118,6 +120,23 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
     return primarySurface
       ? { type: 'runNextStepAction', stepIndex: raw.stepIndex, primarySurface }
       : { type: 'runNextStepAction', stepIndex: raw.stepIndex };
+  }
+
+  if (raw.type === 'resumePathToggle') {
+    const stepId = raw.stepId;
+    if (stepId !== 'confirmIntent' && stepId !== 'runNextSafeAction' && stepId !== 'clearBlocker') {
+      return undefined;
+    }
+
+    if (typeof raw.completed !== 'boolean') {
+      return undefined;
+    }
+
+    return {
+      type: 'resumePathToggle',
+      stepId,
+      completed: raw.completed,
+    };
   }
 
   return undefined;
