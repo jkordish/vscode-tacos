@@ -363,7 +363,7 @@ function buildLinksFromEvidence(evidenceCatalog: SummaryEvidenceItem[]): Summary
   return links;
 }
 
-function buildStepEvidenceIds(
+export function buildStepEvidenceIds(
   nextSteps: string[],
   evidenceCatalog: SummaryEvidenceItem[],
 ): string[][] {

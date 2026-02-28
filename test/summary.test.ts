@@ -1,5 +1,5 @@
-import { buildResumeSummary } from '../src/summary';
-import type { ResumeSignals } from '../src/types';
+import { buildResumeSummary, buildStepEvidenceIds } from '../src/summary';
+import type { ResumeSignals, SummaryEvidenceItem } from '../src/types';
 
 function sampleSignals(): ResumeSignals {
   return {
@@ -80,6 +80,18 @@ describe('buildResumeSummary', () => {
 
     expect(summary.nextSteps[0].toLowerCase()).toContain('re-run');
     expect(firstEvidence?.kind).toBe('terminal');
+  });
+
+  it('maps steps to the best lexical match among same-kind evidence items', () => {
+    const nextSteps = ['Open src/parser.ts and validate parser edge cases.'];
+    const evidenceCatalog: SummaryEvidenceItem[] = [
+      { id: 'file:src/main.ts', kind: 'file', label: 'src/main.ts' },
+      { id: 'file:src/parser.ts', kind: 'file', label: 'src/parser.ts' },
+      { id: 'file:src/parserUtils.ts', kind: 'file', label: 'src/parserUtils.ts' },
+    ];
+
+    const [evidenceIds] = buildStepEvidenceIds(nextSteps, evidenceCatalog);
+    expect(evidenceIds).toEqual(['file:src/parser.ts']);
   });
 
   it('marks mode as coding when no debug/failing signals exist', () => {
