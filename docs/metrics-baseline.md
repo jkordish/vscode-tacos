@@ -22,6 +22,7 @@ Target deltas are evaluated against the most recent baseline snapshot that passe
 | Fewer harmful interruptions     | `interruptionEvent` rate           | `sum(interruptionEvent) / sessions` where `interruptionEvent=1` for sessions with a focus-triggered prompt-mode interruption and `interruptionEvent=0` otherwise. Lower is better. | `-40%` relative          |
 | Better action follow-through    | `companionActionFollowThroughRate` | `companionQuickActionsTaken / companionPromptImpressions` (when prompt impressions > 0). Higher is better.                                                                         | `+20%` relative          |
 | Higher perceived usefulness     | `helpfulnessRating` mean           | Average local helpfulness rating (`1`-`5`) for sessions with ratings. Higher is better.                                                                                            | `+0.5` absolute          |
+| Lower composite resume friction | `uxFrictionScore`                  | Weighted rollup from lag, forced-open rate, mid-activity share, and follow-through gap (see `docs/metrics.md`). Lower is better.                                                   | `-15%` relative          |
 
 Target revision policy:
 

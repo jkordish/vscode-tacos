@@ -99,6 +99,13 @@ function formatMs(value) {
   return `${Math.round(value)} (${(value / 1000).toFixed(1)}s)`;
 }
 
+function clamp01(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, value));
+}
+
 function summarizeLagRows(rows, field) {
   const values = rows
     .map((row) => toNumber(row[field]))
@@ -108,6 +115,106 @@ function summarizeLagRows(rows, field) {
     n: values.length,
     p50: quantile(values, 0.5),
     p95: quantile(values, 0.95),
+  };
+}
+
+function summarizeTimingClassCounts(rows) {
+  const counts = { boundary: 0, 'mid-activity': 0, unknown: 0 };
+  for (const row of rows) {
+    const timingClass = (row.interruptionTimingClass || '').trim();
+    if (timingClass === 'boundary' || timingClass === 'mid-activity' || timingClass === 'unknown') {
+      counts[timingClass] += 1;
+    }
+  }
+  return counts;
+}
+
+// Keep in sync with src/metrics.ts (UX_FRICTION_SCORE_CONFIG).
+const UX_FRICTION_SCORE_CONFIG = {
+  lagDenominatorMs: 5000,
+  weights: {
+    lagP50: 0.45,
+    forcedOpenRate: 0.25,
+    midActivityRate: 0.2,
+    followThroughGap: 0.1,
+  },
+  formula:
+    'weighted mean of clamp01(firstActionLagMs_p50/5000), clamp01(companionForcedOpenRate), clamp01(midActivityShare(boundary+mid-activity only)), and clamp01(1-companionActionFollowThroughRate)',
+};
+
+function deriveUxFrictionScore({
+  firstActionLagP50,
+  forcedOpenRate,
+  midActivityRate,
+  followThroughRate,
+}) {
+  const components = [
+    {
+      label: 'firstActionLagMs p50 / 5000ms',
+      weight: UX_FRICTION_SCORE_CONFIG.weights.lagP50,
+      rawValue: firstActionLagP50,
+      normalizedValue: Number.isFinite(firstActionLagP50)
+        ? clamp01(firstActionLagP50 / UX_FRICTION_SCORE_CONFIG.lagDenominatorMs)
+        : undefined,
+    },
+    {
+      label: 'companionForcedOpenRate',
+      weight: UX_FRICTION_SCORE_CONFIG.weights.forcedOpenRate,
+      rawValue: forcedOpenRate,
+      normalizedValue: Number.isFinite(forcedOpenRate) ? clamp01(forcedOpenRate) : undefined,
+    },
+    {
+      label: 'mid-activity timing share (boundary+mid-activity only)',
+      weight: UX_FRICTION_SCORE_CONFIG.weights.midActivityRate,
+      rawValue: midActivityRate,
+      normalizedValue: Number.isFinite(midActivityRate) ? clamp01(midActivityRate) : undefined,
+    },
+    {
+      label: '1 - companionActionFollowThroughRate',
+      weight: UX_FRICTION_SCORE_CONFIG.weights.followThroughGap,
+      rawValue: Number.isFinite(followThroughRate) ? 1 - clamp01(followThroughRate) : undefined,
+      normalizedValue: Number.isFinite(followThroughRate)
+        ? clamp01(1 - clamp01(followThroughRate))
+        : undefined,
+    },
+  ].map((component) => ({
+    ...component,
+    weightedContribution:
+      typeof component.normalizedValue === 'number'
+        ? component.normalizedValue * component.weight * 100
+        : undefined,
+  }));
+
+  const totalWeight = components.reduce((sum, component) => sum + component.weight, 0);
+  const availableWeight = components.reduce(
+    (sum, component) =>
+      sum + (typeof component.normalizedValue === 'number' ? component.weight : 0),
+    0,
+  );
+  const weightedSum = components.reduce(
+    (sum, component) => sum + (component.weightedContribution || 0),
+    0,
+  );
+  const score = availableWeight > 0 ? weightedSum / availableWeight : undefined;
+
+  let interpretation = 'insufficient-data';
+  if (typeof score === 'number') {
+    if (score <= 33) {
+      interpretation = 'low';
+    } else if (score <= 66) {
+      interpretation = 'medium';
+    } else {
+      interpretation = 'high';
+    }
+  }
+
+  return {
+    score,
+    interpretation,
+    availableWeight,
+    totalWeight,
+    formula: UX_FRICTION_SCORE_CONFIG.formula,
+    components,
   };
 }
 
@@ -158,6 +265,10 @@ function main() {
     (sum, row) => sum + (toNumber(row.companionForcedOpenDetailsClicks) || 0),
     0,
   );
+  const quickActionsTotal = rows.reduce(
+    (sum, row) => sum + (toNumber(row.companionQuickActionsTaken) || 0),
+    0,
+  );
   const nudgeTotal = rows.reduce(
     (sum, row) => sum + (toNumber(row.companionNudgeImpressions) || 0),
     0,
@@ -171,9 +282,28 @@ function main() {
   ).length;
 
   const forcedOpenRate = promptsTotal > 0 ? forcedOpenTotal / promptsTotal : undefined;
+  const followThroughRate = promptsTotal > 0 ? quickActionsTotal / promptsTotal : undefined;
   const promptPerSession = rows.length > 0 ? promptsTotal / rows.length : undefined;
   const nudgePerSession = rows.length > 0 ? nudgeTotal / rows.length : undefined;
   const dogfoodingGateMet = rows.length >= 30 && workspaceCount >= 3;
+  const timingClassCounts = summarizeTimingClassCounts(rows);
+  const timingClassRate = (value) => (rows.length > 0 ? value / rows.length : undefined);
+  const comparableTimingSessions = timingClassCounts.boundary + timingClassCounts['mid-activity'];
+  const comparableTimingRate = (value) =>
+    comparableTimingSessions > 0 ? value / comparableTimingSessions : undefined;
+  const firstActionLagP50 = lagMetrics.find((metric) => metric.field === 'firstActionLagMs')?.p50;
+  const uxFriction = deriveUxFrictionScore({
+    firstActionLagP50,
+    forcedOpenRate,
+    midActivityRate: comparableTimingRate(timingClassCounts['mid-activity']),
+    followThroughRate,
+  });
+  const formatUxRaw = (component) => {
+    if (component.label.startsWith('firstActionLagMs')) {
+      return formatMs(component.rawValue);
+    }
+    return formatNumber(component.rawValue, 4);
+  };
 
   const lines = [
     '# TaCoS Metrics Summary',
@@ -188,7 +318,8 @@ function main() {
     '| Metric | n | p50 (ms / s) | p95 (ms / s) |',
     '| --- | ---: | ---: | ---: |',
     ...lagMetrics.map(
-      (metric) => `| ${metric.label} | ${metric.n} | ${formatMs(metric.p50)} | ${formatMs(metric.p95)} |`,
+      (metric) =>
+        `| ${metric.label} | ${metric.n} | ${formatMs(metric.p50)} | ${formatMs(metric.p95)} |`,
     ),
     '',
     '## Companion Prompt and Nudge Rates',
@@ -200,9 +331,32 @@ function main() {
     `| Prompt impressions per session | ${formatNumber(promptPerSession)} |`,
     `| Forced-open details clicks (total) | ${forcedOpenTotal} |`,
     `| Forced-open rate (forced opens / prompts) | ${formatNumber(forcedOpenRate, 4)} |`,
+    `| Companion quick actions taken (total) | ${quickActionsTotal} |`,
+    `| Companion follow-through rate (quick actions / prompts) | ${formatNumber(followThroughRate, 4)} |`,
     `| Nudge impressions (total) | ${nudgeTotal} |`,
     `| Sessions with nudge impressions | ${nudgeSessionCount} |`,
     `| Nudge impressions per session | ${formatNumber(nudgePerSession)} |`,
+    '',
+    '## Interruption Timing Class',
+    '',
+    '| Class | Sessions | Share |',
+    '| --- | ---: | ---: |',
+    `| boundary | ${timingClassCounts.boundary} | ${formatNumber(timingClassRate(timingClassCounts.boundary), 4)} |`,
+    `| mid-activity | ${timingClassCounts['mid-activity']} | ${formatNumber(timingClassRate(timingClassCounts['mid-activity']), 4)} |`,
+    `| unknown | ${timingClassCounts.unknown} | ${formatNumber(timingClassRate(timingClassCounts.unknown), 4)} |`,
+    '',
+    '## Derived UX Friction Score',
+    '',
+    `- UX friction score (0-100, lower is better): ${formatNumber(uxFriction.score, 2)} (${uxFriction.interpretation})`,
+    `- Coverage weight: ${formatNumber(uxFriction.availableWeight, 2)} / ${formatNumber(uxFriction.totalWeight, 2)}`,
+    `- Formula: ${uxFriction.formula}`,
+    '',
+    '| Component | Raw input | Weight | Normalized (0-1) | Weighted contribution (0-100) |',
+    '| --- | ---: | ---: | ---: | ---: |',
+    ...uxFriction.components.map(
+      (component) =>
+        `| ${component.label} | ${formatUxRaw(component)} | ${formatNumber(component.weight, 2)} | ${formatNumber(component.normalizedValue, 4)} | ${formatNumber(component.weightedContribution, 2)} |`,
+    ),
   ];
 
   process.stdout.write(`${lines.join('\n')}\n`);
