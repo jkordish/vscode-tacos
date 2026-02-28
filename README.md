@@ -29,7 +29,7 @@ TaCoS is built around five non-negotiable principles:
 - Adds trust cues (`Based on: X files • Y runs • branch Z`) with a "Why am I seeing this?" drill-down.
 - Adds a session recap card (`Done`, `Pending/blocked`, `Recommended first action`) with one-click checkpoint capture.
 - Adds a compact `Changes Since Last Time` card (diffstat, runs, blockers, key files/links).
-- Shows confidence-gated companion nudges with cooldown and quiet-hours suppression.
+- Shows confidence-gated companion nudges with cooldown/quiet-hours suppression plus acknowledge/dismiss controls for the current context.
 - Optionally shows a grouped timeline of recent evidence breadcrumbs.
 - Lets you capture sticky checkpoint notes (multi-note, scoped, pinned, done/dismissed) and reuse them on resume.
 - Adds a scoped persistent scratchpad in a real editor tab so running thoughts survive reloads/restarts.

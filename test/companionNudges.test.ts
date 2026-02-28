@@ -1,5 +1,6 @@
 import {
   __test__,
+  applyCompanionNudgeFeedback,
   chooseCompanionNudges,
   describeCompanionNudgeReason,
   describeCompanionNudgeSuppression,
@@ -239,6 +240,12 @@ describe('nudge explainability helpers', () => {
         formatTimestamp: () => 'soon',
       },
     );
+    const acknowledged = describeCompanionNudgeSuppression({
+      suppressedReason: 'acknowledged',
+    });
+    const dismissed = describeCompanionNudgeSuppression({
+      suppressedReason: 'dismissed',
+    });
 
     expect(disabled).toBe('Companion nudges are disabled in settings.');
     expect(inactive).toBe('Nudges are hidden while companion mode is paused or restricted.');
@@ -246,5 +253,47 @@ describe('nudge explainability helpers', () => {
     expect(noCandidate).toBe('No high-confidence nudge is available for this context yet.');
     expect(noiseBudget).toBe('Nudges are temporarily suppressed by noise budget until later.');
     expect(cooldown).toBe('Nudges are cooling down until soon.');
+    expect(acknowledged).toBe('Nudge acknowledged for this context.');
+    expect(dismissed).toBe('Nudge dismissed for this context.');
+  });
+});
+
+describe('applyCompanionNudgeFeedback', () => {
+  it('suppresses primary nudge when feedback matches current context hash', () => {
+    const decision = chooseCompanionNudges(
+      buildInput({
+        summary: buildSummary({
+          lastFailingCommand: 'npm test',
+        }),
+      }),
+    );
+
+    const suppressed = applyCompanionNudgeFeedback(decision, 'ctx', {
+      contextHash: 'ctx',
+      status: 'acknowledged',
+      at: 1_700_000_000_000,
+    });
+
+    expect(suppressed).toEqual({
+      suppressedReason: 'acknowledged',
+    });
+  });
+
+  it('keeps decision unchanged when feedback context hash does not match', () => {
+    const decision = chooseCompanionNudges(
+      buildInput({
+        summary: buildSummary({
+          lastFailingCommand: 'npm test',
+        }),
+      }),
+    );
+
+    const unchanged = applyCompanionNudgeFeedback(decision, 'ctx', {
+      contextHash: 'other',
+      status: 'dismissed',
+      at: 1_700_000_000_000,
+    });
+
+    expect(unchanged).toEqual(decision);
   });
 });

@@ -15,7 +15,17 @@ export type CompanionNudgeSuppressedReason =
   | 'cooldown'
   | 'quiet-hours'
   | 'no-candidate'
-  | 'noise-budget';
+  | 'noise-budget'
+  | 'acknowledged'
+  | 'dismissed';
+
+export type CompanionNudgeFeedbackStatus = 'acknowledged' | 'dismissed';
+
+export interface CompanionNudgeFeedback {
+  contextHash: string;
+  status: CompanionNudgeFeedbackStatus;
+  at: number;
+}
 
 export interface CompanionNudgeDecision {
   primary?: CompanionNudge;
@@ -138,6 +148,24 @@ export function chooseCompanionNudges(input: CompanionNudgeInput): CompanionNudg
   return { primary, secondary };
 }
 
+export function applyCompanionNudgeFeedback(
+  decision: CompanionNudgeDecision,
+  summaryContextHash: string,
+  feedback?: CompanionNudgeFeedback,
+): CompanionNudgeDecision {
+  if (!decision.primary) {
+    return decision;
+  }
+
+  if (!feedback || feedback.contextHash !== summaryContextHash) {
+    return decision;
+  }
+
+  return {
+    suppressedReason: feedback.status,
+  };
+}
+
 export function describeCompanionNudgeReason(nudge: CompanionNudge): string {
   if (nudge.id === 'fix-failing-command') {
     return 'A recent failing command was detected for this context, so TaCoS prioritizes remediation.';
@@ -198,6 +226,14 @@ export function describeCompanionNudgeSuppression(
 
     const formatter = options.formatTimestamp ?? ((value: number) => new Date(value).toISOString());
     return `Nudges are temporarily suppressed by noise budget until ${formatter(decision.nextEligibleAt)}.`;
+  }
+
+  if (decision.suppressedReason === 'acknowledged') {
+    return 'Nudge acknowledged for this context.';
+  }
+
+  if (decision.suppressedReason === 'dismissed') {
+    return 'Nudge dismissed for this context.';
   }
 
   return '';

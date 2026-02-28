@@ -7,9 +7,12 @@ import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
 import { buildAiPayloadPreviewMarkdown } from './aiPayloadPreview';
 import {
+  applyCompanionNudgeFeedback,
   chooseCompanionNudges,
   describeCompanionNudgeReason,
   describeCompanionNudgeSuppression,
+  type CompanionNudgeFeedback,
+  type CompanionNudgeFeedbackStatus,
   type CompanionNudgeDecision,
 } from './companionNudges';
 import {
@@ -136,6 +139,7 @@ const KEY_ONBOARDING_NOTICE_SHOWN = 'tacos.onboardingNoticeShown';
 const KEY_SETUP_CHECKLIST_COMPLETED_PREFIX = 'tacos.setupChecklistCompleted';
 const KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX = 'tacos.lastCheckpointPromptAt';
 const KEY_LAST_NUDGE_AT_PREFIX = 'tacos.lastNudgeAt';
+const KEY_NUDGE_FEEDBACK_PREFIX = 'tacos.nudgeFeedback';
 const KEY_WORKSPACE_ACTIVITY_AT_PREFIX = 'tacos.workspaceActivityAt';
 const KEY_AI_PAYLOAD_CONSENT_PREFIX = 'tacos.aiPayloadConsent';
 const KEY_NOISE_BUDGET_EVENTS_PREFIX = 'tacos.noiseBudgetEvents';
@@ -2038,6 +2042,65 @@ function nudgeShownAtKey(workspaceRoot: string): string {
   return `${KEY_LAST_NUDGE_AT_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
 }
 
+function nudgeFeedbackKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
+  const scope = partitionScope(context, workspaceRoot);
+  return `${KEY_NUDGE_FEEDBACK_PREFIX}.${Buffer.from(scope).toString('base64url')}`;
+}
+
+function readNudgeFeedback(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): CompanionNudgeFeedback | undefined {
+  const raw = context.workspaceState.get<unknown>(nudgeFeedbackKey(context, workspaceRoot));
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  const record = raw as Record<string, unknown>;
+  const contextHash = typeof record.contextHash === 'string' ? record.contextHash.trim() : '';
+  const status = record.status;
+  const at = typeof record.at === 'number' && Number.isFinite(record.at) ? record.at : 0;
+  if (!contextHash || (status !== 'acknowledged' && status !== 'dismissed')) {
+    return undefined;
+  }
+
+  return {
+    contextHash,
+    status,
+    at,
+  };
+}
+
+async function writeNudgeFeedback(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  feedback: CompanionNudgeFeedback | undefined,
+): Promise<void> {
+  await context.workspaceState.update(nudgeFeedbackKey(context, workspaceRoot), feedback);
+}
+
+async function setNudgeFeedbackForCurrentContext(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  summary: ResumeSummary,
+  status: CompanionNudgeFeedbackStatus,
+): Promise<void> {
+  const now = Date.now();
+  const feedback: CompanionNudgeFeedback = {
+    contextHash: summary.contextHash,
+    status,
+    at: now,
+  };
+  await writeNudgeFeedback(context, workspaceRoot, feedback);
+  state.activeNudges = {
+    contextHash: summary.contextHash,
+    decision: {
+      suppressedReason: status,
+    },
+  };
+  rerenderPanel();
+}
+
 function noiseBudgetEventsKey(workspaceRoot: string): string {
   return `${KEY_NOISE_BUDGET_EVENTS_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
 }
@@ -2129,6 +2192,12 @@ async function updateActiveNudges(
     cooldownMinutes: config.companionNudgeCooldownMinutes,
     lastShownAt: context.workspaceState.get<number>(nudgeShownAtKey(workspaceRoot), 0),
   });
+
+  const feedback = readNudgeFeedback(context, workspaceRoot);
+  decision = applyCompanionNudgeFeedback(decision, summary.contextHash, feedback);
+  if (feedback && feedback.contextHash !== summary.contextHash) {
+    await writeNudgeFeedback(context, workspaceRoot, undefined);
+  }
 
   if (decision.primary) {
     const budgetDecision = await consumeNoiseBudgetSignal(context, workspaceRoot, 'nudge', now);
@@ -2979,6 +3048,29 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'acknowledgeNudge' || message.type === 'dismissNudge') {
+        if (!state.panelSummary) {
+          return;
+        }
+
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!workspaceRoot) {
+          void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+          return;
+        }
+
+        recordCompanionQuickAction();
+        const status: CompanionNudgeFeedbackStatus =
+          message.type === 'dismissNudge' ? 'dismissed' : 'acknowledged';
+        await setNudgeFeedbackForCurrentContext(context, workspaceRoot, state.panelSummary, status);
+        void vscode.window.showInformationMessage(
+          message.type === 'dismissNudge'
+            ? 'TaCoS: nudge dismissed for this context.'
+            : 'TaCoS: nudge acknowledged for this context.',
+        );
+        return;
+      }
+
       if (message.type === 'runNextStepAction') {
         if (!state.panelSummary) {
           return;
@@ -3708,15 +3800,17 @@ function renderWebview(
         : 'Auto summaries active';
   const autoSummaryStatusDetail = autoSummariesDisabled
     ? 'Enable tacos.enabled in settings to restore automatic summaries.'
-    : state.pauseUntilRestart
-      ? 'Paused until restart.'
-      : config.pauseSummaries
-        ? 'Paused in settings.'
-        : summaryQuietState.source === 'temporary'
-          ? `Temporary quiet is active until ${formatTimestamp(summaryQuietState.temporaryUntil ?? 0)}.`
-          : summaryQuietState.source === 'configured'
-            ? `Within your configured quiet window (${config.summaryQuietHours}).`
-            : 'Runs on focus after idle and cooldown checks.';
+    : state.snoozeUntil > Date.now()
+      ? `Snoozed until ${formatTimestamp(state.snoozeUntil)}.`
+      : state.pauseUntilRestart
+        ? 'Paused until restart.'
+        : config.pauseSummaries
+          ? 'Paused in settings.'
+          : summaryQuietState.source === 'temporary'
+            ? `Temporary quiet is active until ${formatTimestamp(summaryQuietState.temporaryUntil ?? 0)}.`
+            : summaryQuietState.source === 'configured'
+              ? `Within your configured quiet window (${config.summaryQuietHours}).`
+              : 'Runs on focus after idle and cooldown checks.';
   const autoSummaryToggleLabel = autoSummariesPaused
     ? 'Resume auto summaries'
     : 'Pause auto summaries';
@@ -3795,6 +3889,8 @@ function renderWebview(
           ? `<button type="button" class="secondary" data-action="${escapeHtml(secondaryNudge.action)}">${escapeHtml(nudgeActionLabel(secondaryNudge.action))}</button>`
           : ''
       }
+        <button type="button" class="secondary" data-action="acknowledgeNudge">Acknowledge</button>
+        <button type="button" class="secondary" data-action="dismissNudge">Dismiss for this context</button>
       </div>`
           : ''
       }
@@ -4219,6 +4315,8 @@ function renderWebview(
         'copyPromptAndOpenCodex',
         'refreshSummary',
         'toggleAutoSummaries',
+        'acknowledgeNudge',
+        'dismissNudge',
         'openPrivacySafety',
         'rateHelpfulness',
         'runNextStepAction',
@@ -7311,6 +7409,7 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_SUMMARY_CORRECTIONS_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_NUDGE_FEEDBACK_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_WORKSPACE_ACTIVITY_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_SETUP_CHECKLIST_COMPLETED_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_AI_PAYLOAD_CONSENT_PREFIX, workspaceRoot, false) ||
