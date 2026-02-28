@@ -592,6 +592,16 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasTimelineSection = panelHtml.includes('data-panel-section="timeline"');
       const hasEvidenceSection = panelHtml.includes('data-panel-section="evidence"');
       const hasDetailsSection = panelHtml.includes('data-panel-section="details"');
+      const hasAnchorOpenLinkAction = panelHtml.includes('<a href="#" data-action="openLink"');
+      const hasAnchorOpenTopFileAction = panelHtml.includes(
+        '<a href="#" data-action="openTopFile"',
+      );
+      const hasAnchorOpenEvidenceAction = panelHtml.includes(
+        '<a href="#" data-action="openEvidence"',
+      );
+      const hasButtonOpenLinkAction = /<button[^>]*data-action="openLink"/u.test(panelHtml);
+      const hasButtonOpenTopFileAction = /<button[^>]*data-action="openTopFile"/u.test(panelHtml);
+      const hasButtonOpenEvidenceAction = /<button[^>]*data-action="openEvidence"/u.test(panelHtml);
       const trustCenterExpanded = /data-panel-section="trustCenter"[^>]*\sopen(?:\s|>)/u.test(
         panelHtml,
       );
@@ -630,6 +640,12 @@ export function activate(context: vscode.ExtensionContext): void {
         hasTimelineSection,
         hasEvidenceSection,
         hasDetailsSection,
+        hasAnchorOpenLinkAction,
+        hasAnchorOpenTopFileAction,
+        hasAnchorOpenEvidenceAction,
+        hasButtonOpenLinkAction,
+        hasButtonOpenTopFileAction,
+        hasButtonOpenEvidenceAction,
         trustCenterExpanded,
         timelineExpanded,
         evidenceExpanded,
@@ -3891,7 +3907,7 @@ function renderWebview(
   const linkItems = summary.links
     .map(
       (link, index) =>
-        `<li><a href="#" data-action="openLink" data-link-index="${index}">${escapeHtml(link.label)}</a> <span class="kind">(${escapeHtml(link.kind)})</span></li>`,
+        `<li><button type="button" class="text-link-button" data-action="openLink" data-link-index="${index}">${escapeHtml(link.label)}</button> <span class="kind">(${escapeHtml(link.kind)})</span></li>`,
     )
     .join('');
 
@@ -3980,7 +3996,7 @@ function renderWebview(
   const topFiles = summary.topFiles
     .map(
       (file, index) =>
-        `<li><a href="#" data-action="openTopFile" data-top-file-index="${index}">${escapeHtml(file)}</a></li>`,
+        `<li><button type="button" class="text-link-button" data-action="openTopFile" data-top-file-index="${index}">${escapeHtml(file)}</button></li>`,
     )
     .join('');
   const evidenceItems = (summary.evidenceCatalog ?? [])
@@ -4286,7 +4302,7 @@ function renderWebview(
       const items = group.rows
         .map((row) => {
           const label = row.clickable
-            ? `<a href="#" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}">${escapeHtml(row.label)}</a>`
+            ? `<button type="button" class="text-link-button timeline-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}">${escapeHtml(row.label)}</button>`
             : `<span>${escapeHtml(row.label)}</span>`;
           const detail = row.detail
             ? `<span class="timeline-detail">${escapeHtml(row.detail)}</span>`
@@ -4468,7 +4484,7 @@ function renderStepEvidenceBadge(evidenceId: string, evidence?: SummaryEvidenceI
 
   const label = `[${evidence.kind}] ${evidence.label}`;
   if (evidence.kind === 'file' || evidence.kind === 'url') {
-    return `<a href="#" class="badge clickable kind-${escapeHtml(evidence.kind)}" data-action="openEvidence" data-evidence-id="${escapeHtml(evidenceId)}">${escapeHtml(label)}</a>`;
+    return `<button type="button" class="badge clickable kind-${escapeHtml(evidence.kind)}" data-action="openEvidence" data-evidence-id="${escapeHtml(evidenceId)}">${escapeHtml(label)}</button>`;
   }
 
   return `<span class="badge">${escapeHtml(label)}</span>`;

@@ -71,6 +71,36 @@ async function run() {
     'Expected Restore working set action marker in panel render output.',
   );
   assert.equal(
+    resumeFlow?.hasAnchorOpenLinkAction,
+    false,
+    'Expected link actions to avoid anchor-only controls for keyboard flow consistency.',
+  );
+  assert.equal(
+    resumeFlow?.hasAnchorOpenTopFileAction,
+    false,
+    'Expected top file actions to avoid anchor-only controls for keyboard flow consistency.',
+  );
+  assert.equal(
+    resumeFlow?.hasAnchorOpenEvidenceAction,
+    false,
+    'Expected evidence actions to avoid anchor-only controls for keyboard flow consistency.',
+  );
+  assert.equal(
+    resumeFlow?.hasButtonOpenLinkAction,
+    true,
+    'Expected link actions to be rendered as semantic buttons.',
+  );
+  assert.equal(
+    resumeFlow?.hasButtonOpenTopFileAction,
+    true,
+    'Expected top file actions to be rendered as semantic buttons.',
+  );
+  assert.equal(
+    resumeFlow?.hasButtonOpenEvidenceAction,
+    true,
+    'Expected evidence actions to be rendered as semantic buttons.',
+  );
+  assert.equal(
     resumeFlow?.restoreWorkingSetActionCount,
     1,
     'Expected Restore working set to be presented as a single canonical action.',
