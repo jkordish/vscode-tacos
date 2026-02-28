@@ -12,6 +12,8 @@ const SIMPLE_MESSAGE_TYPES = [
   'copyPromptAndOpenCodex',
   'refreshSummary',
   'toggleAutoSummaries',
+  'acknowledgeNudge',
+  'dismissNudge',
   'openPrivacySafety',
   'rateHelpfulness',
   'sessionAddCheckpoint',

@@ -37,6 +37,12 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'toggleAutoSummaries' })).toEqual({
       type: 'toggleAutoSummaries',
     });
+    expect(parseWebviewMessage({ type: 'acknowledgeNudge' })).toEqual({
+      type: 'acknowledgeNudge',
+    });
+    expect(parseWebviewMessage({ type: 'dismissNudge' })).toEqual({
+      type: 'dismissNudge',
+    });
     expect(parseWebviewMessage({ type: 'openPrivacySafety' })).toEqual({
       type: 'openPrivacySafety',
     });
