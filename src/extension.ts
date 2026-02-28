@@ -164,6 +164,7 @@ const NOISE_BUDGET_BLOCK_NUDGE_AFTER_SUMMARY_MS = 5 * 60_000;
 const NOISE_BUDGET_BLOCK_NUDGE_AFTER_CHECKPOINT_MS = 3 * 60_000;
 const NOISE_BUDGET_BLOCK_CHECKPOINT_AFTER_SUMMARY_MS = 5 * 60_000;
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
+const MAX_NUDGE_FEEDBACK_ENTRIES_PER_SCOPE = 40;
 const CHECKPOINT_WORKSPACE_GLOBAL_SCOPE = 'workspace-global';
 const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
 const SCRATCHPAD_PREVIEW_MAX_BYTES = 256 * 1024;
@@ -2047,19 +2048,24 @@ function nudgeFeedbackKey(context: vscode.ExtensionContext, workspaceRoot: strin
   return `${KEY_NUDGE_FEEDBACK_PREFIX}.${Buffer.from(scope).toString('base64url')}`;
 }
 
-function readNudgeFeedback(
-  context: vscode.ExtensionContext,
-  workspaceRoot: string,
+type NudgeFeedbackStore = Record<string, CompanionNudgeFeedback>;
+
+function parseNudgeFeedbackRecord(
+  value: unknown,
+  fallbackContextHash?: string,
 ): CompanionNudgeFeedback | undefined {
-  const raw = context.workspaceState.get<unknown>(nudgeFeedbackKey(context, workspaceRoot));
-  if (!raw || typeof raw !== 'object') {
+  if (!value || typeof value !== 'object') {
     return undefined;
   }
 
-  const record = raw as Record<string, unknown>;
-  const contextHash = typeof record.contextHash === 'string' ? record.contextHash.trim() : '';
+  const record = value as Record<string, unknown>;
+  const contextHashCandidate =
+    typeof record.contextHash === 'string' ? record.contextHash.trim() : '';
+  const contextHash = (fallbackContextHash ?? '').trim() || contextHashCandidate;
   const status = record.status;
-  const at = typeof record.at === 'number' && Number.isFinite(record.at) ? record.at : 0;
+  const at =
+    typeof record.at === 'number' && Number.isFinite(record.at) && record.at > 0 ? record.at : 0;
+
   if (!contextHash || (status !== 'acknowledged' && status !== 'dismissed')) {
     return undefined;
   }
@@ -2071,12 +2077,73 @@ function readNudgeFeedback(
   };
 }
 
+function readNudgeFeedbackStore(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): NudgeFeedbackStore {
+  const raw = context.workspaceState.get<unknown>(nudgeFeedbackKey(context, workspaceRoot));
+  if (!raw || typeof raw !== 'object') {
+    return {};
+  }
+
+  const legacyRecord = parseNudgeFeedbackRecord(raw);
+  if (legacyRecord) {
+    return {
+      [legacyRecord.contextHash]: legacyRecord,
+    };
+  }
+
+  const store: NudgeFeedbackStore = {};
+  for (const [contextHash, value] of Object.entries(raw)) {
+    const parsed = parseNudgeFeedbackRecord(value, contextHash);
+    if (!parsed) {
+      continue;
+    }
+    store[contextHash] = parsed;
+  }
+
+  return store;
+}
+
+function readNudgeFeedback(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  contextHash: string,
+): CompanionNudgeFeedback | undefined {
+  const store = readNudgeFeedbackStore(context, workspaceRoot);
+  const trimmedContextHash = contextHash.trim();
+  if (!trimmedContextHash) {
+    return undefined;
+  }
+  return store[trimmedContextHash];
+}
+
+async function writeNudgeFeedbackStore(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  store: NudgeFeedbackStore,
+): Promise<void> {
+  await context.workspaceState.update(
+    nudgeFeedbackKey(context, workspaceRoot),
+    Object.keys(store).length > 0 ? store : undefined,
+  );
+}
+
 async function writeNudgeFeedback(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
-  feedback: CompanionNudgeFeedback | undefined,
+  feedback: CompanionNudgeFeedback,
 ): Promise<void> {
-  await context.workspaceState.update(nudgeFeedbackKey(context, workspaceRoot), feedback);
+  const store = readNudgeFeedbackStore(context, workspaceRoot);
+  store[feedback.contextHash] = feedback;
+
+  const trimmed = Object.fromEntries(
+    Object.entries(store)
+      .sort(([, a], [, b]) => b.at - a.at)
+      .slice(0, MAX_NUDGE_FEEDBACK_ENTRIES_PER_SCOPE),
+  );
+
+  await writeNudgeFeedbackStore(context, workspaceRoot, trimmed);
 }
 
 async function setNudgeFeedbackForCurrentContext(
@@ -2193,11 +2260,8 @@ async function updateActiveNudges(
     lastShownAt: context.workspaceState.get<number>(nudgeShownAtKey(workspaceRoot), 0),
   });
 
-  const feedback = readNudgeFeedback(context, workspaceRoot);
+  const feedback = readNudgeFeedback(context, workspaceRoot, summary.contextHash);
   decision = applyCompanionNudgeFeedback(decision, summary.contextHash, feedback);
-  if (feedback && feedback.contextHash !== summary.contextHash) {
-    await writeNudgeFeedback(context, workspaceRoot, undefined);
-  }
 
   if (decision.primary) {
     const budgetDecision = await consumeNoiseBudgetSignal(context, workspaceRoot, 'nudge', now);
@@ -3771,8 +3835,13 @@ function renderWebview(
   const autoSummariesPaused =
     !autoSummariesDisabled && (config.pauseSummaries || state.pauseUntilRestart);
   const summaryQuietState = resolveSummaryQuietState(Date.now(), config.summaryQuietHours);
+  const autoSummariesSnoozed =
+    !autoSummariesDisabled && !autoSummariesPaused && state.snoozeUntil > Date.now();
   const autoSummariesQuieted =
-    !autoSummariesDisabled && !autoSummariesPaused && summaryQuietState.active;
+    !autoSummariesDisabled &&
+    !autoSummariesPaused &&
+    !autoSummariesSnoozed &&
+    summaryQuietState.active;
   const companionRuntimeMode = resolveCompanionRuntimeMode(config);
   const trustTrackingLabel =
     companionRuntimeMode === 'restricted'
@@ -3795,17 +3864,19 @@ function renderWebview(
     ? 'Auto summaries disabled'
     : autoSummariesPaused
       ? 'Auto summaries paused'
-      : autoSummariesQuieted
-        ? 'Auto summaries quieted'
-        : 'Auto summaries active';
+      : autoSummariesSnoozed
+        ? 'Auto summaries snoozed'
+        : autoSummariesQuieted
+          ? 'Auto summaries quieted'
+          : 'Auto summaries active';
   const autoSummaryStatusDetail = autoSummariesDisabled
     ? 'Enable tacos.enabled in settings to restore automatic summaries.'
-    : state.snoozeUntil > Date.now()
-      ? `Snoozed until ${formatTimestamp(state.snoozeUntil)}.`
-      : state.pauseUntilRestart
-        ? 'Paused until restart.'
-        : config.pauseSummaries
-          ? 'Paused in settings.'
+    : state.pauseUntilRestart
+      ? 'Paused until restart.'
+      : config.pauseSummaries
+        ? 'Paused in settings.'
+        : autoSummariesSnoozed
+          ? `Snoozed until ${formatTimestamp(state.snoozeUntil)}.`
           : summaryQuietState.source === 'temporary'
             ? `Temporary quiet is active until ${formatTimestamp(summaryQuietState.temporaryUntil ?? 0)}.`
             : summaryQuietState.source === 'configured'
