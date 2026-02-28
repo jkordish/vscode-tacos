@@ -4,6 +4,7 @@ describe('renderResumeStackCard', () => {
   it('renders fallback next-step copy and core companion sections', () => {
     const html = renderResumeStackCard({
       intent: 'Implement gating tests',
+      intentOverridden: false,
       mode: 'coding',
       nowCheckpointLineTrustedHtml: '',
       lastActionLabel: 'Edited src/extension.ts:42',
@@ -34,6 +35,7 @@ describe('renderResumeStackCard', () => {
                <h4>Now</h4>
                <p class="companion-kicker">Current focus</p>
                <p class="companion-primary">Implement gating tests</p>
+               <p class="companion-meta">Intent source: inferred</p>
                <p class="companion-meta">Mode: coding</p>
                
                <p class="companion-kicker">Last action</p>
@@ -73,6 +75,8 @@ describe('renderResumeStackCard', () => {
   it('escapes dynamic text and preserves injected section HTML', () => {
     const html = renderResumeStackCard({
       intent: 'Ship <v0.6> safely',
+      intentOverridden: true,
+      intentEditorTrustedHtml: '<div class="intent-editor">editor</div>',
       mode: 'review & tune',
       nowCheckpointLineTrustedHtml:
         '<p class="companion-meta"><strong>Checkpoint:</strong> Verify blocker copy.</p>',
@@ -97,6 +101,8 @@ describe('renderResumeStackCard', () => {
     });
 
     expect(html).toContain('Ship &lt;v0.6&gt; safely');
+    expect(html).toContain('Intent source: user-edited');
+    expect(html).toContain('<div class="intent-editor">editor</div>');
     expect(html).toContain('Mode: review &amp; tune');
     expect(html).toContain('No last action captured yet.');
     expect(html).toContain('Open diagnostics and fix top error');

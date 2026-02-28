@@ -17,6 +17,7 @@ const SIMPLE_MESSAGE_TYPES = [
   'openPrivacySafety',
   'rateHelpfulness',
   'sessionAddCheckpoint',
+  'clearIntentOverride',
   'blockedLink',
 ] as const;
 const RESTORE_MESSAGE_TYPES = [
@@ -42,6 +43,7 @@ export type WebviewMessage =
   | { type: RestoreWebviewMessageType }
   | { type: 'runNextStepAction'; stepIndex: number; primarySurface?: PrimaryNextSafeActionSurface }
   | { type: 'resumePathToggle'; stepId: ResumePathStepId; completed: boolean }
+  | { type: 'setIntentOverride'; intent: string }
   | { type: 'openEvidence'; evidenceId: string }
   | { type: 'openTopFile'; index: number }
   | { type: 'openLink'; index: number };
@@ -136,6 +138,22 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
       type: 'resumePathToggle',
       stepId,
       completed: raw.completed,
+    };
+  }
+
+  if (raw.type === 'setIntentOverride') {
+    if (typeof raw.intent !== 'string') {
+      return undefined;
+    }
+
+    const intent = raw.intent.replace(/\r?\n/gu, ' ').replace(/\s+/gu, ' ').trim().slice(0, 280);
+    if (!intent) {
+      return undefined;
+    }
+
+    return {
+      type: 'setIntentOverride',
+      intent,
     };
   }
 

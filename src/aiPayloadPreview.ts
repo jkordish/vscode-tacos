@@ -6,7 +6,10 @@ export interface AiPayloadPreviewInput {
   workspaceName: string;
   generatedAt: number;
   signals: ResumeSignals;
-  summary: Pick<ResumeSummary, 'intent' | 'nextSteps' | 'topFiles' | 'links' | 'evidenceCatalog'>;
+  summary: Pick<
+    ResumeSummary,
+    'intent' | 'intentOverridden' | 'nextSteps' | 'topFiles' | 'links' | 'evidenceCatalog'
+  >;
   checkpointNotes?: string[];
   includeCheckpointNotes?: boolean;
   includeScratchpad?: boolean;
@@ -37,6 +40,7 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
     signals: input.signals,
     summary: {
       intent: input.summary.intent,
+      intentSource: input.summary.intentOverridden ? 'user-edited' : 'inferred',
       nextSteps: input.summary.nextSteps,
       topFiles: input.summary.topFiles,
       links: input.summary.links,
@@ -69,6 +73,7 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
     `- Provider: \`${input.provider}\``,
     `- Workspace: \`${input.workspaceName}\``,
     `- Generated: ${new Date(input.generatedAt).toLocaleString()}`,
+    `- Intent source: ${input.summary.intentOverridden ? 'user-edited' : 'inferred'}`,
     `- Includes your checkpoint notes: ${includeCheckpointNotes ? 'yes' : 'no'}`,
     `- Includes scratchpad content: ${includeScratchpad ? 'yes' : 'no'}`,
     '',

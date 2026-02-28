@@ -11,7 +11,9 @@ This guide gets you from install to first useful resume summary quickly, while k
 5. Open `TaCoS: Show Last Summary` if the panel is not already visible.
 
 What to expect:
+
 - You get an instant local summary (`Now`, `Next`, `Blocked`, `Restore`).
+- `Companion Home` includes `Intent (editable)` with inline `Save` and `Reset to inferred`.
 - No AI payload is sent in local mode.
 
 ## Optional AI In 2 Minutes
@@ -24,16 +26,19 @@ Use this only if you want refinement beyond local-only summaries.
 4. Trigger a summary again with `TaCoS: Resume Summary Quick`.
 5. Review the generated `TaCoS: Review AI Payload` preview document.
 6. Choose one consent action:
+
 - `Send once`
 - `Always allow in this workspace`
 - `Do not send`
 
 Default safety posture:
+
 - `tacos.aiIncludeCheckpointNotes = false`
 - `tacos.aiIncludeScratchpad = false`
 - AI payload preview shows inclusion flags and redaction summary before send.
 
 Control later:
+
 - Run `TaCoS: Revoke AI Payload Consent` to require payload review again.
 - Run `TaCoS: Configure AI Provider` and switch back to `local` at any time.
 - Run `TaCoS: Quiet Now (1 hour)` for one-tap temporary suppression.
@@ -44,21 +49,24 @@ Control later:
 
 Use `TaCoS: Set Privacy Preset` to switch.
 
-| Preset | What TaCoS Uses | Typical Use |
-| --- | --- | --- |
-| `Minimal` | No diff, no terminal history, no debug history, local summary provider | Default safest baseline |
-| `Balanced` | Terminal + debug history, no diff, local summary provider | More context without diff capture |
-| `Max Context` | Terminal + debug history + diff, local summary provider | Richest local context for hard resumes |
+| Preset        | What TaCoS Uses                                                        | Typical Use                            |
+| ------------- | ---------------------------------------------------------------------- | -------------------------------------- |
+| `Minimal`     | No diff, no terminal history, no debug history, local summary provider | Default safest baseline                |
+| `Balanced`    | Terminal + debug history, no diff, local summary provider              | More context without diff capture      |
+| `Max Context` | Terminal + debug history + diff, local summary provider                | Richest local context for hard resumes |
 
 Notes:
+
 - Presets control local collection defaults and set provider back to `local`.
 - In Restricted Mode, risky actions and AI refinement are blocked until workspace trust is granted.
 
 ## Fast Sanity Check
 
 After setup, confirm:
+
 - `TaCoS` status bar entry appears.
 - `Companion Home` shows `Now / Next / Blocked / Restore`.
+- `Companion Home` intent editor updates the summary intent inline and stays scoped to the current partition/context.
 - `TaCoS: Export Local Metrics` writes `.tacos/metrics.csv` when you want local adoption metrics.
 
 ## Sticky Notes + Scratchpad (30 Seconds)
@@ -69,5 +77,6 @@ After setup, confirm:
 4. Trigger `TaCoS: Show Resume Brief Now` and confirm the panel shows your notes/scratchpad context.
 
 Expected:
+
 - Checkpoint notes influence resume guidance and standup `Next`.
 - Scratchpad content persists across reload/restart without creating a repo file by default.

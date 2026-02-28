@@ -52,6 +52,9 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'sessionAddCheckpoint' })).toEqual({
       type: 'sessionAddCheckpoint',
     });
+    expect(parseWebviewMessage({ type: 'clearIntentOverride' })).toEqual({
+      type: 'clearIntentOverride',
+    });
     expect(parseWebviewMessage({ type: 'blockedLink' })).toEqual({
       type: 'blockedLink',
     });
@@ -170,6 +173,39 @@ describe('parseWebviewMessage', () => {
         type: 'resumePathToggle',
         stepId: 'clearBlocker',
         completed: 'yes',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('validates setIntentOverride payload shape', () => {
+    expect(
+      parseWebviewMessage({
+        type: 'setIntentOverride',
+        intent: 'Finish parser fixes and rerun tests',
+      }),
+    ).toEqual({
+      type: 'setIntentOverride',
+      intent: 'Finish parser fixes and rerun tests',
+    });
+    expect(
+      parseWebviewMessage({
+        type: 'setIntentOverride',
+        intent: '  multi   space\nintent  ',
+      }),
+    ).toEqual({
+      type: 'setIntentOverride',
+      intent: 'multi space intent',
+    });
+    expect(
+      parseWebviewMessage({
+        type: 'setIntentOverride',
+        intent: '',
+      }),
+    ).toBeUndefined();
+    expect(
+      parseWebviewMessage({
+        type: 'setIntentOverride',
+        intent: 42,
       }),
     ).toBeUndefined();
   });

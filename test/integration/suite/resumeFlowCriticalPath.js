@@ -34,6 +34,16 @@ async function run() {
     'Expected Companion Home card marker in panel render output.',
   );
   assert.equal(
+    resumeFlow?.hasIntentEditor,
+    true,
+    'Expected inline intent editor controls in Companion Home.',
+  );
+  assert.equal(
+    resumeFlow?.hasIntentSourceLabel,
+    true,
+    'Expected intent source label in Companion Home.',
+  );
+  assert.equal(
     resumeFlow?.hasLastActionCue,
     true,
     'Expected Last action retrieval cue marker in Companion Home.',

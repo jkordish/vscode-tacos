@@ -96,6 +96,12 @@ import {
   workspaceScratchpadRootSegments,
 } from './scratchpadStorage';
 import {
+  buildIntentOverrideStorageKey,
+  createIntentOverrideState,
+  normalizeIntentOverrideState,
+  normalizeIntentOverrideText,
+} from './intentOverride';
+import {
   buildResumePathSteps,
   buildResumePathStorageKey,
   createResumePathState,
@@ -107,7 +113,7 @@ import {
 } from './resumePath';
 import { renderResumeStackCard } from './resumeStackCard';
 import { resolveScopeBranch as resolveScopeBranchFromInputs } from './scopeBranch';
-import { buildResumeSummary } from './summary';
+import { applyIntentOverrideToSummary, buildResumeSummary } from './summary';
 import { buildStandupUpdate } from './standup';
 import { buildTimelineGroups } from './timeline';
 import { buildTrustCue } from './trustCue';
@@ -157,6 +163,7 @@ const KEY_LAST_NUDGE_AT_PREFIX = 'tacos.lastNudgeAt';
 const KEY_NUDGE_FEEDBACK_PREFIX = 'tacos.nudgeFeedback';
 const KEY_WORKSPACE_ACTIVITY_AT_PREFIX = 'tacos.workspaceActivityAt';
 const KEY_RESUME_PATH_PREFIX = 'tacos.resumePath';
+const KEY_INTENT_OVERRIDE_PREFIX = 'tacos.intentOverride';
 const KEY_AI_PAYLOAD_CONSENT_PREFIX = 'tacos.aiPayloadConsent';
 const KEY_NOISE_BUDGET_EVENTS_PREFIX = 'tacos.noiseBudgetEvents';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
@@ -540,6 +547,8 @@ export function activate(context: vscode.ExtensionContext): void {
       return {
         hasPanelSummary: Boolean(state.panelSummary),
         hasScratchSummary: Boolean(state.scratchSummary),
+        summaryIntent: summary?.intent ?? '',
+        intentOverridden: Boolean(summary?.intentOverridden),
         nextStepsCount: summary?.nextSteps.length ?? 0,
         nextStepActionsCount: nextStepActions.length,
         hasPrimaryNextAction: Boolean(primaryNextAction),
@@ -550,6 +559,8 @@ export function activate(context: vscode.ExtensionContext): void {
         hasRecapPrimaryNextAction: panelHtml.includes('data-primary-next-safe-action="recap"'),
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
         hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
+        hasIntentEditor: panelHtml.includes('data-action="setIntentOverride"'),
+        hasIntentSourceLabel: panelHtml.includes('Intent source:'),
         hasLastActionCue: panelHtml.includes('data-last-action-cue="true"'),
         hasActiveBlockedCard,
         primaryBlockerActionCount,
@@ -579,6 +590,48 @@ export function activate(context: vscode.ExtensionContext): void {
         contextHash: snapshot.contextHash,
         completedStepIds: [...snapshot.completedStepIds],
         collapsed: snapshot.collapsed,
+      };
+    }),
+    vscode.commands.registerCommand(
+      'tacos.__test.setIntentOverride',
+      async (intentValue?: unknown) => {
+        const contextRef = activeExtensionContext;
+        const summary = state.panelSummary ?? state.scratchSummary;
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!contextRef || !summary || !workspaceRoot) {
+          return false;
+        }
+
+        const nextIntent = await applyIntentOverrideToActiveContext(
+          contextRef,
+          workspaceRoot,
+          summary.contextHash,
+          intentValue,
+        );
+        rerenderPanel();
+        return nextIntent ?? null;
+      },
+    ),
+    vscode.commands.registerCommand('tacos.__test.getIntentOverrideSnapshot', async () => {
+      const contextRef = activeExtensionContext;
+      const summary = state.panelSummary ?? state.scratchSummary;
+      const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+      if (!contextRef || !summary || !workspaceRoot) {
+        return undefined;
+      }
+
+      const scope = partitionScope(contextRef, workspaceRoot);
+      const storageKey = intentOverrideStorageKey(contextRef, workspaceRoot);
+      const overrideIntent = readIntentOverrideForContext(
+        contextRef,
+        workspaceRoot,
+        summary.contextHash,
+      );
+      return {
+        scope,
+        storageKey,
+        contextHash: summary.contextHash,
+        intent: overrideIntent,
       };
     }),
     vscode.commands.registerCommand(
@@ -1750,11 +1803,13 @@ async function prepareTriggerSummary(
   const resumeGapMinutes = computeResumeGapMinutes(context, root);
   const signals = await collectSignals(root, config);
   signals.resumeGapMinutes = resumeGapMinutes;
-  const baseSummary = await applyBranchHistory(
+  const inferredSummary = await applyBranchHistory(
     context,
     root,
     buildResumeSummary(signals, { longGapMinutes: config.longGapMinutes }),
   );
+  const intentOverride = readIntentOverrideForContext(context, root, inferredSummary.contextHash);
+  const baseSummary = applyIntentOverrideToSummary(inferredSummary, intentOverride);
   const checkpointContext = await resolveCheckpointContext(
     context,
     root,
@@ -1791,6 +1846,9 @@ async function prepareTriggerSummary(
     (cached?.correctionsFingerprint ?? '') === (localSummary.correctionsFingerprint ?? '');
   const checkpointUnchanged =
     (cached?.recommendedFirstAction ?? '') === (localSummary.recommendedFirstAction ?? '');
+  const intentUnchanged =
+    (cached?.intent ?? '') === localSummary.intent &&
+    Boolean(cached?.intentOverridden) === Boolean(localSummary.intentOverridden);
   const providerCompatibleWithCache =
     !cached || providerPlan.activeProvider !== 'local' || cached.source === 'local';
   const contextUnchanged =
@@ -1799,6 +1857,7 @@ async function prepareTriggerSummary(
     cached?.contextHash === localSummary.contextHash &&
     correctionsUnchanged &&
     checkpointUnchanged &&
+    intentUnchanged &&
     providerCompatibleWithCache;
 
   if (!contextUnchanged) {
@@ -1868,6 +1927,10 @@ async function refineSummaryInBackground(
     return;
   }
   refined = applyCheckpointNoteToSummary(refined, prepared.checkpointPrimaryNote);
+  refined = applyIntentOverrideToSummary(
+    refined,
+    prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
+  );
 
   if (state.activeRefinementSequence !== sequence) {
     return;
@@ -1918,10 +1981,14 @@ async function generateSummary(
     refined,
     prepared.checkpointPrimaryNote,
   );
+  const refinedWithIntentOverride = applyIntentOverrideToSummary(
+    refinedWithCheckpoint,
+    prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
+  );
 
-  await context.workspaceState.update(prepared.cacheKey, refinedWithCheckpoint);
+  await context.workspaceState.update(prepared.cacheKey, refinedWithIntentOverride);
   return {
-    summary: refinedWithCheckpoint,
+    summary: refinedWithIntentOverride,
     triggerReason: prepared.triggerReason,
   };
 }
@@ -3260,6 +3327,24 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'setIntentOverride' || message.type === 'clearIntentOverride') {
+        if (!state.panelSummary) {
+          return;
+        }
+
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!workspaceRoot) {
+          void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+          return;
+        }
+
+        const contextHash = state.panelSummary.contextHash;
+        const rawIntent = message.type === 'setIntentOverride' ? message.intent : undefined;
+        await applyIntentOverrideToActiveContext(context, workspaceRoot, contextHash, rawIntent);
+        rerenderPanel();
+        return;
+      }
+
       if (message.type === 'runNextStepAction') {
         if (!state.panelSummary) {
           return;
@@ -3704,6 +3789,17 @@ function renderWebview(
     .join('');
 
   const mode = summary.mode ?? 'coding';
+  const intentInputId = 'intent-override-input';
+  const intentEditorHtml = `<div class="intent-editor">
+      <label class="companion-kicker" for="${intentInputId}">Intent (editable)</label>
+      <div class="intent-editor-row">
+        <input id="${intentInputId}" type="text" maxlength="280" value="${escapeHtml(summary.intent)}" />
+      </div>
+      <div class="intent-editor-actions">
+        <button type="button" class="secondary" data-action="setIntentOverride">Save</button>
+        <button type="button" class="secondary" data-action="clearIntentOverride" ${summary.intentOverridden ? '' : 'disabled'}>Reset to inferred</button>
+      </div>
+    </div>`;
   const trusted = vscode.workspace.isTrusted;
   const availability = computeRestoreAvailability({
     trusted,
@@ -4488,6 +4584,29 @@ function renderWebview(
         margin: 0;
         color: var(--surface-muted);
       }
+      .intent-editor {
+        border: 1px solid var(--vscode-widget-border);
+        border-radius: 8px;
+        padding: 8px;
+      }
+      .intent-editor-row {
+        margin-top: 6px;
+      }
+      .intent-editor input[type='text'] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+        background: var(--vscode-input-background);
+        color: var(--vscode-input-foreground);
+      }
+      .intent-editor-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+        flex-wrap: wrap;
+      }
       .compact-list {
         margin: 0 0 10px 0;
         padding-left: 18px;
@@ -4552,6 +4671,8 @@ function renderWebview(
     ${nudgeCard}
     ${renderResumeStackCard({
       intent: summary.intent,
+      intentOverridden: summary.intentOverridden,
+      intentEditorTrustedHtml: intentEditorHtml,
       mode,
       nowCheckpointLineTrustedHtml: nowCheckpointLine,
       lastActionLabel,
@@ -4635,6 +4756,8 @@ function renderWebview(
         'appendScratchpad',
         'setScratchpadScope',
         'sessionAddCheckpoint',
+        'setIntentOverride',
+        'clearIntentOverride',
         'copyNextSteps',
         'copySummary',
         'copyPromptAndOpenCodex',
@@ -4743,6 +4866,35 @@ function renderWebview(
         });
       });
 
+      document.addEventListener('keydown', (event) => {
+        if (!(event.target instanceof HTMLInputElement)) {
+          return;
+        }
+
+        if (event.target.id !== 'intent-override-input') {
+          return;
+        }
+
+        if (event.key !== 'Enter') {
+          return;
+        }
+
+        event.preventDefault();
+        const intent = event.target.value
+          .replace(/\\r?\\n/g, ' ')
+          .replace(/\\s+/g, ' ')
+          .trim()
+          .slice(0, 280);
+        if (!intent) {
+          return;
+        }
+
+        vscode.postMessage({
+          type: 'setIntentOverride',
+          intent,
+        });
+      });
+
       document.addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) {
@@ -4810,6 +4962,26 @@ function renderWebview(
               return;
             }
             vscode.postMessage({ type: 'runNextStepAction', stepIndex });
+            return;
+          }
+
+          if (action === 'setIntentOverride') {
+            const input = document.getElementById('intent-override-input');
+            if (!(input instanceof HTMLInputElement)) {
+              vscode.postMessage({ type: 'blockedLink' });
+              return;
+            }
+
+            const intent = input.value
+              .replace(/\\r?\\n/g, ' ')
+              .replace(/\\s+/g, ' ')
+              .trim()
+              .slice(0, 280);
+            if (!intent) {
+              input.focus();
+              return;
+            }
+            vscode.postMessage({ type: 'setIntentOverride', intent });
             return;
           }
 
@@ -7389,6 +7561,7 @@ async function ensureAiPayloadConsent(
     signals: prepared.signals,
     summary: {
       intent: prepared.aiPayloadSummary.intent,
+      intentOverridden: prepared.aiPayloadSummary.intentOverridden,
       nextSteps: prepared.aiPayloadSummary.nextSteps,
       topFiles: prepared.aiPayloadSummary.topFiles,
       links: prepared.aiPayloadSummary.links,
@@ -7693,6 +7866,75 @@ function summaryCacheKey(context: vscode.ExtensionContext, root: string): string
   return `tacos.summary.${Buffer.from(partitionScope(context, root)).toString('base64url')}`;
 }
 
+function intentOverrideStorageKey(context: vscode.ExtensionContext, root: string): string {
+  return buildIntentOverrideStorageKey(partitionScope(context, root));
+}
+
+function readIntentOverrideForContext(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  contextHash: string,
+): string | undefined {
+  const storageKey = intentOverrideStorageKey(context, workspaceRoot);
+  const raw = context.workspaceState.get<unknown>(storageKey);
+  const normalized = normalizeIntentOverrideState(raw, contextHash);
+  if (normalized) {
+    return normalized.intent;
+  }
+  return undefined;
+}
+
+async function persistIntentOverrideForContext(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  contextHash: string,
+  rawIntent: unknown,
+): Promise<string | undefined> {
+  const normalizedIntent = normalizeIntentOverrideText(rawIntent);
+  const storageKey = intentOverrideStorageKey(context, workspaceRoot);
+  if (!normalizedIntent) {
+    await context.workspaceState.update(storageKey, undefined);
+    return undefined;
+  }
+
+  const payload = createIntentOverrideState(contextHash, normalizedIntent);
+  await context.workspaceState.update(storageKey, payload);
+  return payload.intent;
+}
+
+async function applyIntentOverrideToActiveContext(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  contextHash: string,
+  rawIntent: unknown,
+): Promise<string | undefined> {
+  const persistedIntent = await persistIntentOverrideForContext(
+    context,
+    workspaceRoot,
+    contextHash,
+    rawIntent,
+  );
+
+  if (state.scratchSummary?.contextHash === contextHash) {
+    state.scratchSummary = applyIntentOverrideToSummary(state.scratchSummary, persistedIntent);
+  }
+
+  if (state.panelSummary?.contextHash === contextHash) {
+    state.panelSummary = applyIntentOverrideToSummary(state.panelSummary, persistedIntent);
+  }
+
+  const cacheKey = summaryCacheKey(context, workspaceRoot);
+  const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
+  if (cached?.contextHash === contextHash) {
+    await context.workspaceState.update(
+      cacheKey,
+      applyIntentOverrideToSummary(cached, persistedIntent),
+    );
+  }
+
+  return persistedIntent;
+}
+
 function resumePathStorageKey(context: vscode.ExtensionContext, root: string): string {
   return buildResumePathStorageKey(partitionScope(context, root));
 }
@@ -7851,6 +8093,7 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_NUDGE_FEEDBACK_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_WORKSPACE_ACTIVITY_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_RESUME_PATH_PREFIX, workspaceRoot, true) ||
+      matchesEncodedWorkspaceKey(key, KEY_INTENT_OVERRIDE_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_SETUP_CHECKLIST_COMPLETED_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_AI_PAYLOAD_CONSENT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_SCRATCHPAD_SCOPE_MODE_PREFIX, workspaceRoot, false) ||
