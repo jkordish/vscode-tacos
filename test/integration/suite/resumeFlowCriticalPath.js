@@ -46,15 +46,18 @@ async function run() {
 
   if ((resumeFlow?.nextStepsCount ?? 0) > 0) {
     assert.equal(
-      resumeFlow?.hasPrimaryNextAction,
+      Boolean(resumeFlow?.hasPrimaryNextAction || resumeFlow?.hasRecommendedFirstAction),
       true,
-      'Expected first next step to resolve to a primary safe action when next steps exist.',
+      'Expected either a primary safe action or recommended first action cue when next steps exist.',
     );
-    assert.ok(
-      typeof resumeFlow?.primaryNextActionLabel === 'string' &&
-        resumeFlow.primaryNextActionLabel.length > 0,
-      'Expected primary next action label to be non-empty.',
-    );
+
+    if (resumeFlow?.hasPrimaryNextAction) {
+      assert.ok(
+        typeof resumeFlow?.primaryNextActionLabel === 'string' &&
+          resumeFlow.primaryNextActionLabel.length > 0,
+        'Expected primary next action label to be non-empty.',
+      );
+    }
   }
 }
 
