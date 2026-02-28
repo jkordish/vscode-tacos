@@ -25,7 +25,7 @@ Branch/commit: `__________`
    - `tacos.enabled=true`
    - `tacos.showOnFocus=true`
    - `tacos.autoRefreshInBackground=true` (default path; only applies when `tacos.uiSurface` is not explicitly set)
-   - `tacos.uiSurface` is left unset/default, or explicitly set to `statusbar`, when validating background vs prompt behavior
+   - `tacos.uiSurface` is left unset/default when validating background vs prompt behavior with `tacos.autoRefreshInBackground=true/false`
 5. Keep Output panel available (`TaCoS`) for troubleshooting.
 
 ## 2) Must-Pass v0.6.0 Scenarios (Trusted Workspace)
