@@ -102,6 +102,8 @@ export type ResumeMode = 'coding' | 'debugging';
 
 export interface ResumeSummary {
   intent: string;
+  inferredIntent?: string;
+  intentOverridden?: boolean;
   nextSteps: string[];
   nextStepEvidenceIds?: string[][];
   lastActionLabel?: string;

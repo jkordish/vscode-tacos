@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
+import { normalizeIntentOverrideText } from './intentOverride';
 import type {
   ResumeMode,
   ResumeSignals,
@@ -11,6 +12,7 @@ import type {
 
 export interface BuildResumeSummaryOptions {
   longGapMinutes?: number;
+  intentOverride?: unknown;
 }
 
 const DEFAULT_LONG_GAP_MINUTES = 30;
@@ -45,6 +47,66 @@ function stableStringify(value: unknown): string {
   }
 
   return JSON.stringify(value);
+}
+
+function buildCodexPromptFromDetailsMarkdown(detailsMarkdown: string): string {
+  return [
+    'You are a resume assistant for software development tasks.',
+    'Summarize only from the evidence below. Do not speculate beyond provided facts.',
+    '',
+    'Return strictly in this structure:',
+    '1) Intent: 2-3 concise sentences',
+    '2) Next steps: 2-3 bullet points',
+    '3) Top files/links: up to 3 items with one-line reason each',
+    '',
+    'Evidence:',
+    '---',
+    detailsMarkdown,
+  ].join('\n');
+}
+
+function replaceIntentDetailsLine(
+  detailsMarkdown: string,
+  intent: string,
+  intentOverridden: boolean,
+): string {
+  const intentDetailsLine = `- ${intent}${intentOverridden ? ' (user-edited)' : ''}`;
+  const lines = detailsMarkdown.split('\n');
+  const intentHeaderIndex = lines.findIndex((line) => line.trim() === '## Intent');
+  if (intentHeaderIndex >= 0) {
+    const nextLineIndex = intentHeaderIndex + 1;
+    if (nextLineIndex < lines.length && lines[nextLineIndex].startsWith('- ')) {
+      lines[nextLineIndex] = intentDetailsLine;
+    } else {
+      lines.splice(nextLineIndex, 0, intentDetailsLine);
+    }
+    return lines.join('\n');
+  }
+
+  return ['## Intent', intentDetailsLine, '', detailsMarkdown].join('\n');
+}
+
+export function applyIntentOverrideToSummary(
+  summary: ResumeSummary,
+  rawIntentOverride: unknown,
+): ResumeSummary {
+  const inferredIntent = (summary.inferredIntent ?? summary.intent).trim() || summary.intent;
+  const overrideIntent = normalizeIntentOverrideText(rawIntentOverride);
+  const intentOverridden = Boolean(overrideIntent && overrideIntent !== inferredIntent);
+  const intent = intentOverridden ? (overrideIntent ?? inferredIntent) : inferredIntent;
+  const detailsMarkdown = replaceIntentDetailsLine(
+    summary.detailsMarkdown,
+    intent,
+    intentOverridden,
+  );
+  return {
+    ...summary,
+    intent,
+    inferredIntent,
+    intentOverridden,
+    detailsMarkdown,
+    codexPrompt: buildCodexPromptFromDetailsMarkdown(detailsMarkdown),
+  };
 }
 
 function hashSignals(
@@ -747,14 +809,14 @@ export function buildResumeSummary(
       })
     : ['- None captured'];
 
-  const intent = longGap
+  const inferredIntent = longGap
     ? 'Welcome back — reorient before executing risky actions.'
     : lowConfidence
       ? 'Unclear intent (low evidence).'
       : buildIntent(signals, topFiles);
   const detailsSections = [
     '## Intent',
-    `- ${intent}`,
+    `- ${inferredIntent}`,
     ...(longGap
       ? [
           '',
@@ -830,22 +892,10 @@ export function buildResumeSummary(
 
   const detailsMarkdown = detailsSections.join('\n');
 
-  const codexPrompt = [
-    'You are a resume assistant for software development tasks.',
-    'Summarize only from the evidence below. Do not speculate beyond provided facts.',
-    '',
-    'Return strictly in this structure:',
-    '1) Intent: 2-3 concise sentences',
-    '2) Next steps: 2-3 bullet points',
-    '3) Top files/links: up to 3 items with one-line reason each',
-    '',
-    'Evidence:',
-    '---',
-    detailsMarkdown,
-  ].join('\n');
-
-  return {
-    intent,
+  const summary: ResumeSummary = {
+    intent: inferredIntent,
+    inferredIntent,
+    intentOverridden: false,
     nextSteps,
     nextStepEvidenceIds,
     lastActionLabel: lastAction.label,
@@ -867,9 +917,11 @@ export function buildResumeSummary(
     links,
     evidenceCatalog,
     detailsMarkdown,
-    codexPrompt,
+    codexPrompt: buildCodexPromptFromDetailsMarkdown(detailsMarkdown),
     contextHash: hashSignals(signals, { longGapMinutes }),
     generatedAt: Date.now(),
     source: 'local',
   };
+
+  return applyIntentOverrideToSummary(summary, options.intentOverride);
 }

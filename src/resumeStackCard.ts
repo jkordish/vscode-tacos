@@ -8,6 +8,8 @@ export type TrustedHtml = string;
 
 export interface RenderResumeStackCardInput {
   intent: string;
+  intentOverridden?: boolean;
+  intentEditorTrustedHtml?: TrustedHtml;
   mode: string;
   nowCheckpointLineTrustedHtml?: TrustedHtml;
   lastActionLabel: string;
@@ -34,6 +36,9 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <h4>Now</h4>
           <p class="companion-kicker">Current focus</p>
           <p class="companion-primary">${escapeHtml(input.intent)}</p>
+          <p class="companion-meta">Intent source: ${
+            input.intentOverridden ? 'user-edited' : 'inferred'
+          }</p>${input.intentEditorTrustedHtml ?? ''}
           <p class="companion-meta">Mode: ${escapeHtml(input.mode)}</p>
           ${input.nowCheckpointLineTrustedHtml ?? ''}
           <p class="companion-kicker">Last action</p>

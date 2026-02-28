@@ -29,6 +29,7 @@ describe('buildAiPayloadPreviewMarkdown', () => {
       signals: sampleSignals(),
       summary: {
         intent: 'Fix tests',
+        intentOverridden: false,
         nextSteps: ['Run tests'],
         topFiles: ['src/extension.ts'],
         links: [],
@@ -40,6 +41,8 @@ describe('buildAiPayloadPreviewMarkdown', () => {
     expect(markdown).toContain('```json');
     expect(markdown).toContain('"provider": "openai"');
     expect(markdown).toContain('"intent": "Fix tests"');
+    expect(markdown).toContain('"intentSource": "inferred"');
+    expect(markdown).toContain('Intent source: inferred');
     expect(markdown).toContain('Includes your checkpoint notes: no');
     expect(markdown).toContain('Includes scratchpad content: no');
     expect(markdown).toContain('## Redaction report');
@@ -57,6 +60,7 @@ describe('buildAiPayloadPreviewMarkdown', () => {
       },
       summary: {
         intent: 'Review changes',
+        intentOverridden: false,
         nextSteps: ['Inspect diff'],
         topFiles: ['src/extension.ts'],
         links: [],
@@ -77,6 +81,7 @@ describe('buildAiPayloadPreviewMarkdown', () => {
       signals: sampleSignals(),
       summary: {
         intent: 'Review redactions',
+        intentOverridden: true,
         nextSteps: ['Inspect payload'],
         topFiles: ['src/extension.ts'],
         links: [],
@@ -105,6 +110,7 @@ describe('buildAiPayloadPreviewMarkdown', () => {
 
     expect(markdown).toContain('Includes your checkpoint notes: yes');
     expect(markdown).toContain('Includes scratchpad content: no');
+    expect(markdown).toContain('Intent source: user-edited');
     expect(markdown).toContain('Total replacements: 3');
     expect(markdown).toContain('High-risk detected: yes');
     expect(markdown).toContain('bearer_header: 2');

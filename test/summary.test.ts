@@ -1,4 +1,8 @@
-import { buildResumeSummary, buildStepEvidenceIds } from '../src/summary';
+import {
+  applyIntentOverrideToSummary,
+  buildResumeSummary,
+  buildStepEvidenceIds,
+} from '../src/summary';
 import type { ResumeSignals, SummaryEvidenceItem } from '../src/types';
 
 function sampleSignals(): ResumeSignals {
@@ -249,5 +253,38 @@ describe('buildResumeSummary', () => {
     const summary = buildResumeSummary(sampleSignals());
     expect(summary.lastActionLabel).toContain('Edited src/extension.ts:42');
     expect(summary.lastActionLabel).not.toContain('Ran failing command');
+  });
+
+  it('applies user intent override with precedence while retaining inferred intent for reset', () => {
+    const summary = buildResumeSummary(sampleSignals());
+    const overridden = applyIntentOverrideToSummary(summary, 'Ship safer resume-path flow');
+
+    expect(overridden.intent).toBe('Ship safer resume-path flow');
+    expect(overridden.intentOverridden).toBe(true);
+    expect(overridden.inferredIntent).toBe(summary.inferredIntent);
+    expect(overridden.detailsMarkdown).toContain('- Ship safer resume-path flow (user-edited)');
+    expect(overridden.codexPrompt).toContain('Ship safer resume-path flow');
+  });
+
+  it('resets back to inferred intent when override is cleared', () => {
+    const summary = buildResumeSummary(sampleSignals());
+    const overridden = applyIntentOverrideToSummary(summary, 'Ship safer resume-path flow');
+    const reset = applyIntentOverrideToSummary(overridden, undefined);
+
+    expect(reset.intent).toBe(summary.inferredIntent);
+    expect(reset.intentOverridden).toBe(false);
+    expect(reset.detailsMarkdown).toContain(`- ${summary.inferredIntent}`);
+  });
+
+  it('applies intent override during summary construction when provided in options', () => {
+    const summary = buildResumeSummary(sampleSignals(), {
+      intentOverride: 'Validate type narrowing around intent overrides',
+    });
+
+    expect(summary.intent).toBe('Validate type narrowing around intent overrides');
+    expect(summary.intentOverridden).toBe(true);
+    expect(summary.detailsMarkdown).toContain(
+      '- Validate type narrowing around intent overrides (user-edited)',
+    );
   });
 });
