@@ -1351,6 +1351,10 @@ async function handleFocusRegainSummaryTrigger(
       let deferPromptToBackground = false;
       if (config.uiSurface === 'notification') {
         await delay(FOCUS_TYPING_DEFERRAL_GRACE_MS);
+        if (!vscode.window.state.focused) {
+          outcome = 'blurred-during-deferral';
+          return;
+        }
         deferPromptToBackground = shouldDeferPromptAfterFocusRegain({
           focusGainedAt: now,
           observedAt: Date.now(),
@@ -8343,7 +8347,8 @@ async function maybePromptCheckpointOnBlur(
 
   const budgetDecision = await consumeNoiseBudgetSignal(context, root, 'checkpoint-prompt', now);
   if (!budgetDecision.allowed) {
-    state.meaningfulActivitySinceCheckpointPrompt = false;
+    // Preserve pending activity signal when the prompt is suppressed by budget.
+    // This defers the prompt instead of dropping it permanently.
     return;
   }
 
