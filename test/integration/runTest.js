@@ -93,6 +93,13 @@ async function main() {
     );
 
     await runSuite(
+      'demo-resume-card',
+      path.resolve(__dirname, 'suite', 'demoResumeCard.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'panel-section-persistence',
       path.resolve(__dirname, 'suite', 'panelSectionPersistence.js'),
       [fixtureWorkspace, '--disable-extensions'],

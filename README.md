@@ -37,6 +37,29 @@ TaCoS is built around five non-negotiable principles:
 - Supports local-only summaries and optional AI refinement (`vscode-lm` / `openai`).
 - Marks low-confidence context explicitly and suggests safe clarification steps.
 
+## Why It Works (Research-Backed)
+
+- Explicit `last action` + `next safe action` cues reduce interruption recovery cost.
+- Boundary-aware timing and quiet controls reduce harmful mid-flow interruptions.
+- Clear resume closure/checkpoints reduce attention residue when switching tasks.
+
+References:
+
+- Chen et al. (2025), Scientific Reports: https://doi.org/10.1038/s41598-025-09358-4
+- Hirsch et al. (2025), Frontiers in Psychology: https://doi.org/10.3389/fpsyg.2024.1465323
+- Leroy & Schmidt (2016), OBHDP: https://doi.org/10.1016/j.obhdp.2016.07.006
+
+### Demo Preview
+
+Use `TaCoS: Show Demo Resume Card` for a clearly-labeled sample card that does not mix with workspace evidence.
+
+Sample copy shown in the demo banner:
+
+```text
+Sample Resume Card
+This is sample onboarding data only. It is separate from your workspace evidence.
+```
+
 ## Commands
 
 - `TaCoS: Resume Summary Quick`
@@ -51,6 +74,7 @@ TaCoS is built around five non-negotiable principles:
 - `TaCoS: Set Privacy Preset`
 - `TaCoS: Set Retention Policy`
 - `TaCoS: Run Setup Checklist`
+- `TaCoS: Show Demo Resume Card`
 - `TaCoS: Reset Setup Checklist`
 - `TaCoS: Forget This Workspace Now`
 - `TaCoS: Revoke AI Payload Consent`

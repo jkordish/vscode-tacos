@@ -27,6 +27,7 @@ export function renderPanelClientScript(
         'dismissNudge',
         'openPrivacySafety',
         'rateHelpfulness',
+        'dismissDemoResume',
         'runNextStepAction',
         'restoreWorkingSet',
         'restoreJumpToLastEdit',

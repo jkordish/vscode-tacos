@@ -16,6 +16,19 @@ What to expect:
 - `Companion Home` includes `Intent (editable)` with inline `Save` and `Reset to inferred`.
 - No AI payload is sent in local mode.
 
+## Demo Resume Card (Optional, 20 Seconds)
+
+If you want to preview the layout before collecting live context:
+
+1. Run `TaCoS: Show Demo Resume Card`.
+2. Confirm the top card is clearly labeled as sample onboarding data.
+3. Select `Show real resume now` when you are ready to switch to live local context.
+
+Notes:
+
+- Demo mode is in-memory sample data only.
+- Demo mode does not mix with workspace evidence or AI payload sends.
+
 ## Optional AI In 2 Minutes
 
 Use this only if you want refinement beyond local-only summaries.

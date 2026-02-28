@@ -58,6 +58,9 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'blockedLink' })).toEqual({
       type: 'blockedLink',
     });
+    expect(parseWebviewMessage({ type: 'dismissDemoResume' })).toEqual({
+      type: 'dismissDemoResume',
+    });
     expect(parseWebviewMessage({ type: 'restoreReopenFiles' })).toEqual({
       type: 'restoreReopenFiles',
     });

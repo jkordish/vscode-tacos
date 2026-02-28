@@ -54,6 +54,7 @@
     "onCommand:tacos.setPrivacyPreset",
     "onCommand:tacos.setRetentionPolicy",
     "onCommand:tacos.openSetupChecklist",
+    "onCommand:tacos.showDemoResumeCard",
     "onCommand:tacos.resetSetupChecklist",
     "onCommand:tacos.forgetWorkspaceNow",
     "onCommand:tacos.revokeAiPayloadConsent",
@@ -123,6 +124,10 @@
       {
         "command": "tacos.openSetupChecklist",
         "title": "TaCoS: Run Setup Checklist"
+      },
+      {
+        "command": "tacos.showDemoResumeCard",
+        "title": "TaCoS: Show Demo Resume Card"
       },
       {
         "command": "tacos.resetSetupChecklist",
