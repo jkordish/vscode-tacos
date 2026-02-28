@@ -135,6 +135,45 @@ describe('parseWebviewMessage', () => {
     ).toBeUndefined();
   });
 
+  it('validates resumePathToggle payload shape', () => {
+    expect(
+      parseWebviewMessage({
+        type: 'resumePathToggle',
+        stepId: 'confirmIntent',
+        completed: true,
+      }),
+    ).toEqual({
+      type: 'resumePathToggle',
+      stepId: 'confirmIntent',
+      completed: true,
+    });
+    expect(
+      parseWebviewMessage({
+        type: 'resumePathToggle',
+        stepId: 'runNextSafeAction',
+        completed: false,
+      }),
+    ).toEqual({
+      type: 'resumePathToggle',
+      stepId: 'runNextSafeAction',
+      completed: false,
+    });
+    expect(
+      parseWebviewMessage({
+        type: 'resumePathToggle',
+        stepId: 'invalid-step',
+        completed: true,
+      }),
+    ).toBeUndefined();
+    expect(
+      parseWebviewMessage({
+        type: 'resumePathToggle',
+        stepId: 'clearBlocker',
+        completed: 'yes',
+      }),
+    ).toBeUndefined();
+  });
+
   it('validates openEvidence payload shape', () => {
     expect(parseWebviewMessage({ type: 'openEvidence', evidenceId: 'file:src/index.ts' })).toEqual({
       type: 'openEvidence',

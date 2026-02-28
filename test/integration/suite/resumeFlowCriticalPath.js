@@ -55,6 +55,16 @@ async function run() {
     true,
     'Expected Trust Center card marker in panel render output.',
   );
+  assert.equal(
+    resumeFlow?.hasResumePathCard,
+    true,
+    'Expected Resume Path checklist card marker in panel render output.',
+  );
+  assert.equal(
+    resumeFlow?.resumePathStepCount,
+    3,
+    'Expected Resume Path checklist to render exactly three toggle steps.',
+  );
 
   if ((resumeFlow?.nextStepsCount ?? 0) > 0) {
     assert.equal(
