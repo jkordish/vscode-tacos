@@ -56,6 +56,9 @@ function hashSignals(signals: ResumeSignals): string {
     gitLog: signals.gitLog,
     gitDiff: signals.gitDiff,
     doneItems: signals.doneItems,
+    lastEditPath: signals.lastEditPath,
+    lastEditLine: signals.lastEditLine,
+    lastEditCharacter: signals.lastEditCharacter,
   };
 
   return createHash('sha256').update(stableStringify(payload)).digest('hex');

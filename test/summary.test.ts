@@ -32,6 +32,17 @@ describe('buildResumeSummary', () => {
     expect(a.contextHash).toEqual(b.contextHash);
   });
 
+  it('updates context hash when last edit location changes', () => {
+    const a = sampleSignals();
+    const b = sampleSignals();
+    b.lastEditLine = 42;
+
+    const summaryA = buildResumeSummary(a);
+    const summaryB = buildResumeSummary(b);
+
+    expect(summaryA.contextHash).not.toEqual(summaryB.contextHash);
+  });
+
   it('returns concise structure with max 3 links and 2-3 next steps', () => {
     const summary = buildResumeSummary(sampleSignals());
 
