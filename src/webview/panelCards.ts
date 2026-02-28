@@ -59,8 +59,6 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
 export interface RecapCardInput {
   recapDoneListTrustedHtml: string;
   recapPendingListTrustedHtml: string;
-  recapFirstAction: string;
-  recapPrimaryNextActionButtonTrustedHtml: string;
 }
 
 export function renderRecapCard(input: RecapCardInput): string {
@@ -74,18 +72,6 @@ export function renderRecapCard(input: RecapCardInput): string {
         <section>
           <h4>Pending / blocked</h4>
           <ul class="compact-list">${input.recapPendingListTrustedHtml || '<li>No blocker captured.</li>'}</ul>
-        </section>
-        <section>
-          <h4>Next safe action</h4>
-          <p class="companion-primary">${escapeHtml(
-            input.recapFirstAction || 'Refresh summary to regenerate first-action guidance.',
-          )}</p>
-          <div class="status-actions">
-            ${input.recapPrimaryNextActionButtonTrustedHtml}
-            <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
-            <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>
-            <button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>
-          </div>
         </section>
       </div>
     </div>`;

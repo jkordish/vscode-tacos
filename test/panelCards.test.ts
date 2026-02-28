@@ -67,9 +67,6 @@ describe('panelCards', () => {
     const recap = renderRecapCard({
       recapDoneListTrustedHtml: '<li>Ran verify</li>',
       recapPendingListTrustedHtml: '<li>Fix blocker</li>',
-      recapFirstAction: 'Open src/extension.ts',
-      recapPrimaryNextActionButtonTrustedHtml:
-        '<button type="button" data-primary-next-safe-action="recap" data-action="runNextStepAction" data-step-index="0">Open file</button>',
     });
     const quickActions = renderQuickActionsCard(
       '<div class="quick-actions"><button>Copy summary</button></div>',
@@ -78,7 +75,8 @@ describe('panelCards', () => {
     const changes = renderChangesSinceCard('<li>Diffstat: 1 file changed</li>');
 
     expect(recap).toContain('<h3>Session Recap</h3>');
-    expect(recap).toContain('data-action="copyNextSteps"');
+    expect(recap).not.toContain('data-primary-next-safe-action=');
+    expect(recap).not.toContain('data-action="copyNextSteps"');
     expect(quickActions).toContain('<h3>Quick Actions</h3>');
     expect(restore).toContain('Restricted Mode: task/debug/branch execution actions are disabled.');
     expect(changes).toContain('<h3>Changes Since Last Time</h3>');
