@@ -43,7 +43,8 @@ describe('panelClientScript state behavior', () => {
       <div id="panel-status-live"></div>
       <ul id="evidence-list"><li class="extra-evidence">more evidence</li></ul>
       <button type="button" data-action="toggleEvidenceMore" data-hidden-count="1">Show 1 more</button>
-      <button id="evidence-open" type="button" data-action="openEvidence" data-evidence-id="url:https://example.test/search?q=a=b&mode=full">Open evidence</button>
+      <button type="button" data-test-slot="primary" data-action="openEvidence" data-evidence-id="url:https://example.test/search?q=a=b&mode=full">Open evidence</button>
+      <button type="button" data-test-slot="duplicate" data-action="openEvidence" data-evidence-id="url:https://example.test/search?q=a=b&mode=full">Open evidence duplicate</button>
       <details data-panel-section="timeline"></details>
       <input id="intent-override-input" type="text" value="intent" />
     `;
@@ -126,12 +127,60 @@ describe('panelClientScript state behavior', () => {
 
   it('restores focus for openEvidence tokens that include equals characters', () => {
     const focusToken =
-      'action:openEvidence|evidence=url:https://example.test/search?q=a=b&mode=full';
+      'action:openEvidence|evidence=url:https://example.test/search?q=a=b&mode=full|ord=0';
     bootstrap({ sectionScope: 'scope-token', focusToken });
     jest.advanceTimersByTime(50);
 
-    const evidenceButton = document.getElementById('evidence-open');
+    const evidenceButton = document.querySelector('[data-test-slot="primary"]');
     expect(document.activeElement).toBe(evidenceButton);
+  });
+
+  it('restores focus to the exact duplicate action target using ordinal metadata', () => {
+    const { setState } = bootstrap();
+    const duplicateButton = document.querySelector(
+      '[data-test-slot="duplicate"]',
+    ) as HTMLButtonElement;
+
+    duplicateButton.focus();
+    duplicateButton.dispatchEvent(new Event('focusin', { bubbles: true }));
+
+    let focusToken: string | undefined;
+    for (let index = setState.mock.calls.length - 1; index >= 0; index -= 1) {
+      const [state] = setState.mock.calls[index] as [Record<string, unknown>];
+      if (typeof state?.focusToken === 'string') {
+        focusToken = state.focusToken;
+        break;
+      }
+    }
+
+    expect(focusToken).toBe(
+      'action:openEvidence|evidence=url:https://example.test/search?q=a=b&mode=full|ord=1',
+    );
+
+    bootstrap({ sectionScope: 'scope-token', focusToken: focusToken || '' });
+    jest.advanceTimersByTime(50);
+
+    const restoredButton = document.querySelector('[data-test-slot="duplicate"]');
+    expect(document.activeElement).toBe(restoredButton);
+  });
+
+  it('keeps only the latest queued status announcement text', () => {
+    bootstrap();
+    const live = document.getElementById('panel-status-live') as HTMLElement;
+
+    window.dispatchEvent(
+      new MessageEvent('message', { data: { type: 'panelStatus', message: 'First status.' } }),
+    );
+    jest.advanceTimersByTime(10);
+    window.dispatchEvent(
+      new MessageEvent('message', { data: { type: 'panelStatus', message: 'Second status.' } }),
+    );
+
+    jest.advanceTimersByTime(6);
+    expect(live.textContent).toBe('');
+
+    jest.advanceTimersByTime(10);
+    expect(live.textContent).toBe('Second status.');
   });
 
   it('clears scope-bound scroll and focus state when section scope changes', () => {

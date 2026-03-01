@@ -58,6 +58,42 @@ export function renderPanelClientScript(
         vscode.setState(viewState);
       }
 
+      function createActionFocusCriteria(actionElement) {
+        const criteria = {};
+        if (typeof actionElement.dataset.stepIndex === 'string') {
+          criteria.step = actionElement.dataset.stepIndex;
+        }
+        if (typeof actionElement.dataset.evidenceId === 'string') {
+          criteria.evidence = actionElement.dataset.evidenceId;
+        }
+        if (typeof actionElement.dataset.linkIndex === 'string') {
+          criteria.link = actionElement.dataset.linkIndex;
+        }
+        if (typeof actionElement.dataset.topFileIndex === 'string') {
+          criteria.file = actionElement.dataset.topFileIndex;
+        }
+        return criteria;
+      }
+
+      function actionElementMatchesFocusCriteria(actionElement, criteria) {
+        if (typeof criteria.step === 'string' && actionElement.dataset.stepIndex !== criteria.step) {
+          return false;
+        }
+        if (
+          typeof criteria.evidence === 'string' &&
+          actionElement.dataset.evidenceId !== criteria.evidence
+        ) {
+          return false;
+        }
+        if (typeof criteria.link === 'string' && actionElement.dataset.linkIndex !== criteria.link) {
+          return false;
+        }
+        if (typeof criteria.file === 'string' && actionElement.dataset.topFileIndex !== criteria.file) {
+          return false;
+        }
+        return true;
+      }
+
       function buildFocusToken(target) {
         if (!(target instanceof HTMLElement)) {
           return '';
@@ -82,18 +118,35 @@ export function renderPanelClientScript(
           return '';
         }
 
+        const criteria = createActionFocusCriteria(actionElement);
         const payloadParts = [action];
-        if (typeof actionElement.dataset.stepIndex === 'string') {
-          payloadParts.push('step=' + actionElement.dataset.stepIndex);
+        if (typeof criteria.step === 'string') {
+          payloadParts.push('step=' + criteria.step);
         }
-        if (typeof actionElement.dataset.evidenceId === 'string') {
-          payloadParts.push('evidence=' + actionElement.dataset.evidenceId);
+        if (typeof criteria.evidence === 'string') {
+          payloadParts.push('evidence=' + criteria.evidence);
         }
-        if (typeof actionElement.dataset.linkIndex === 'string') {
-          payloadParts.push('link=' + actionElement.dataset.linkIndex);
+        if (typeof criteria.link === 'string') {
+          payloadParts.push('link=' + criteria.link);
         }
-        if (typeof actionElement.dataset.topFileIndex === 'string') {
-          payloadParts.push('file=' + actionElement.dataset.topFileIndex);
+        if (typeof criteria.file === 'string') {
+          payloadParts.push('file=' + criteria.file);
+        }
+
+        const candidates = document.querySelectorAll('[data-action="' + action + '"]');
+        let ordinal = 0;
+        for (const candidate of candidates) {
+          if (!(candidate instanceof HTMLElement)) {
+            continue;
+          }
+          if (!actionElementMatchesFocusCriteria(candidate, criteria)) {
+            continue;
+          }
+          if (candidate === actionElement) {
+            payloadParts.push('ord=' + ordinal);
+            break;
+          }
+          ordinal += 1;
         }
 
         return 'action:' + payloadParts.join('|');
@@ -134,40 +187,48 @@ export function renderPanelClientScript(
           return first instanceof HTMLElement ? first : undefined;
         }
 
+        const criteria = {};
+        let expectedOrdinal;
+        for (const clause of rest) {
+          const delimiterIndex = clause.indexOf('=');
+          const rawKey = delimiterIndex === -1 ? clause : clause.slice(0, delimiterIndex);
+          const rawValue = delimiterIndex === -1 ? '' : clause.slice(delimiterIndex + 1);
+          const key = rawKey.trim();
+          const value = (rawValue || '').trim();
+          if (!value) {
+            continue;
+          }
+          if (key === 'ord') {
+            const parsedOrdinal = Number(value);
+            if (Number.isInteger(parsedOrdinal) && parsedOrdinal >= 0) {
+              expectedOrdinal = parsedOrdinal;
+            }
+            continue;
+          }
+          if (key === 'step' || key === 'evidence' || key === 'link' || key === 'file') {
+            criteria[key] = value;
+          }
+        }
+
+        let matchedOrdinal = 0;
+        let firstMatch;
         for (const candidate of candidates) {
           if (!(candidate instanceof HTMLElement)) {
             continue;
           }
-          let matches = true;
-          for (const clause of rest) {
-            const delimiterIndex = clause.indexOf('=');
-            const rawKey = delimiterIndex === -1 ? clause : clause.slice(0, delimiterIndex);
-            const rawValue = delimiterIndex === -1 ? '' : clause.slice(delimiterIndex + 1);
-            const key = rawKey.trim();
-            const value = (rawValue || '').trim();
-            if (key === 'step' && candidate.dataset.stepIndex !== value) {
-              matches = false;
-              break;
-            }
-            if (key === 'evidence' && candidate.dataset.evidenceId !== value) {
-              matches = false;
-              break;
-            }
-            if (key === 'link' && candidate.dataset.linkIndex !== value) {
-              matches = false;
-              break;
-            }
-            if (key === 'file' && candidate.dataset.topFileIndex !== value) {
-              matches = false;
-              break;
-            }
+          if (!actionElementMatchesFocusCriteria(candidate, criteria)) {
+            continue;
           }
-          if (matches) {
+          if (!(firstMatch instanceof HTMLElement)) {
+            firstMatch = candidate;
+          }
+          if (expectedOrdinal === undefined || expectedOrdinal === matchedOrdinal) {
             return candidate;
           }
+          matchedOrdinal += 1;
         }
 
-        return undefined;
+        return firstMatch instanceof HTMLElement ? firstMatch : undefined;
       }
 
       let scrollPersistTimeout;
@@ -196,6 +257,7 @@ export function renderPanelClientScript(
         }
       }
 
+      let announceStatusTimeout;
       function announceStatus(rawMessage) {
         if (typeof rawMessage !== 'string') {
           return;
@@ -208,9 +270,12 @@ export function renderPanelClientScript(
         if (!message) {
           return;
         }
+        if (typeof announceStatusTimeout !== 'undefined') {
+          window.clearTimeout(announceStatusTimeout);
+        }
         liveRegion.textContent = '';
         // Force a text change so repeated messages still announce.
-        window.setTimeout(() => {
+        announceStatusTimeout = window.setTimeout(() => {
           liveRegion.textContent = message;
         }, 15);
       }

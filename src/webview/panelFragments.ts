@@ -274,12 +274,15 @@ export function renderTopFilesListItems(topFiles: string[]): string {
     .join('');
 }
 
+const EVIDENCE_OPEN_HINT_TEXT = 'Opens validated file or URL evidence';
+const EVIDENCE_STATIC_HINT_TEXT = 'Informational evidence only; this item is not directly openable';
+const TIMELINE_OPEN_HINT_TEXT = 'Opens validated evidence target';
+const TIMELINE_STATIC_HINT_TEXT = 'Informational timeline event only';
+
 export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]): string {
   return evidenceCatalog
     .map((item, index) => {
       const clickable = item.kind === 'file' || item.kind === 'url';
-      const openHintText = 'Opens validated file or URL evidence';
-      const staticHintText = 'Informational evidence only; this item is not directly openable';
       const target = item.target
         ? ` <span class="evidence-target">${escapeHtml(item.target)}</span>`
         : '';
@@ -291,8 +294,8 @@ export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]):
         clickable ? 'open' : 'static'
       }" aria-hidden="true">${clickable ? 'Open' : 'Not clickable'}</span>`;
       const label = clickable
-        ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)} - ${escapeHtml(openHintText)}" title="${escapeHtml(openHintText)}">${escapeHtml(item.label)}</button>`
-        : `<span class="evidence-label" aria-label="${escapeHtml(item.label)} - ${escapeHtml(staticHintText)}">${escapeHtml(item.label)}</span>`;
+        ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}" title="${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}">${escapeHtml(item.label)}</button>`
+        : `<span class="evidence-label" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_STATIC_HINT_TEXT)}">${escapeHtml(item.label)}</span>`;
       return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> <code>${escapeHtml(item.id)}</code>${target}</div></li>`;
     })
     .join('');
@@ -330,11 +333,9 @@ export function renderTimelineGroupsHtml(input: TimelineGroupsHtmlInput): string
     .map((group) => {
       const items = group.rows
         .map((row) => {
-          const openHintText = 'Opens validated evidence target';
-          const staticHintText = 'Informational timeline event only';
           const labelControl = row.clickable
-            ? `<button type="button" class="text-link-button timeline-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}" aria-label="${escapeHtml(row.label)} - ${escapeHtml(openHintText)}" title="${escapeHtml(openHintText)}">${escapeHtml(row.label)}</button>`
-            : `<span class="timeline-label" aria-label="${escapeHtml(row.label)} - ${escapeHtml(staticHintText)}">${escapeHtml(row.label)}</span>`;
+            ? `<button type="button" class="text-link-button timeline-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}" aria-label="${escapeHtml(row.label)} - ${escapeHtml(TIMELINE_OPEN_HINT_TEXT)}" title="${escapeHtml(TIMELINE_OPEN_HINT_TEXT)}">${escapeHtml(row.label)}</button>`
+            : `<span class="timeline-label" aria-label="${escapeHtml(row.label)} - ${escapeHtml(TIMELINE_STATIC_HINT_TEXT)}">${escapeHtml(row.label)}</span>`;
           const affordanceClass = row.clickable
             ? 'evidence-affordance evidence-affordance-clickable'
             : 'evidence-affordance evidence-affordance-static';
