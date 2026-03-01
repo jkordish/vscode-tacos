@@ -58,6 +58,18 @@ export function renderPanelClientScript(
         vscode.setState(viewState);
       }
 
+      function encodeFocusTokenValue(rawValue) {
+        return encodeURIComponent(rawValue);
+      }
+
+      function decodeFocusTokenValue(rawValue) {
+        try {
+          return decodeURIComponent(rawValue);
+        } catch {
+          return rawValue;
+        }
+      }
+
       function createActionFocusCriteria(actionElement) {
         const criteria = {};
         if (typeof actionElement.dataset.stepIndex === 'string') {
@@ -121,16 +133,16 @@ export function renderPanelClientScript(
         const criteria = createActionFocusCriteria(actionElement);
         const payloadParts = [action];
         if (typeof criteria.step === 'string') {
-          payloadParts.push('step=' + criteria.step);
+          payloadParts.push('step=' + encodeFocusTokenValue(criteria.step));
         }
         if (typeof criteria.evidence === 'string') {
-          payloadParts.push('evidence=' + criteria.evidence);
+          payloadParts.push('evidence=' + encodeFocusTokenValue(criteria.evidence));
         }
         if (typeof criteria.link === 'string') {
-          payloadParts.push('link=' + criteria.link);
+          payloadParts.push('link=' + encodeFocusTokenValue(criteria.link));
         }
         if (typeof criteria.file === 'string') {
-          payloadParts.push('file=' + criteria.file);
+          payloadParts.push('file=' + encodeFocusTokenValue(criteria.file));
         }
 
         const candidates = document.querySelectorAll('[data-action="' + action + '"]');
@@ -206,7 +218,7 @@ export function renderPanelClientScript(
             continue;
           }
           if (key === 'step' || key === 'evidence' || key === 'link' || key === 'file') {
-            criteria[key] = value;
+            criteria[key] = decodeFocusTokenValue(value);
           }
         }
 

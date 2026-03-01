@@ -45,6 +45,7 @@ describe('panelClientScript state behavior', () => {
       <button type="button" data-action="toggleEvidenceMore" data-hidden-count="1">Show 1 more</button>
       <button type="button" data-test-slot="primary" data-action="openEvidence" data-evidence-id="url:https://example.test/search?q=a=b&mode=full">Open evidence</button>
       <button type="button" data-test-slot="duplicate" data-action="openEvidence" data-evidence-id="url:https://example.test/search?q=a=b&mode=full">Open evidence duplicate</button>
+      <button type="button" data-test-slot="pipe" data-action="openEvidence" data-evidence-id="file:src/foo|bar.ts">Open pipe evidence</button>
       <details data-panel-section="timeline"></details>
       <input id="intent-override-input" type="text" value="intent" />
     `;
@@ -126,8 +127,8 @@ describe('panelClientScript state behavior', () => {
   });
 
   it('restores focus for openEvidence tokens that include equals characters', () => {
-    const focusToken =
-      'action:openEvidence|evidence=url:https://example.test/search?q=a=b&mode=full|ord=0';
+    const encodedEvidence = encodeURIComponent('url:https://example.test/search?q=a=b&mode=full');
+    const focusToken = 'action:openEvidence|evidence=' + encodedEvidence + '|ord=0';
     bootstrap({ sectionScope: 'scope-token', focusToken });
     jest.advanceTimersByTime(50);
 
@@ -154,7 +155,9 @@ describe('panelClientScript state behavior', () => {
     }
 
     expect(focusToken).toBe(
-      'action:openEvidence|evidence=url:https://example.test/search?q=a=b&mode=full|ord=1',
+      'action:openEvidence|evidence=' +
+        encodeURIComponent('url:https://example.test/search?q=a=b&mode=full') +
+        '|ord=1',
     );
 
     bootstrap({ sectionScope: 'scope-token', focusToken: focusToken || '' });
@@ -162,6 +165,16 @@ describe('panelClientScript state behavior', () => {
 
     const restoredButton = document.querySelector('[data-test-slot="duplicate"]');
     expect(document.activeElement).toBe(restoredButton);
+  });
+
+  it('restores focus when evidence token values include pipe characters', () => {
+    const encodedEvidence = encodeURIComponent('file:src/foo|bar.ts');
+    const focusToken = 'action:openEvidence|evidence=' + encodedEvidence + '|ord=0';
+    bootstrap({ sectionScope: 'scope-token', focusToken });
+    jest.advanceTimersByTime(50);
+
+    const pipeButton = document.querySelector('[data-test-slot="pipe"]');
+    expect(document.activeElement).toBe(pipeButton);
   });
 
   it('keeps only the latest queued status announcement text', () => {
