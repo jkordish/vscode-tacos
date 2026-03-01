@@ -74,6 +74,17 @@ describe('hasAnyRecordedMetric', () => {
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
 
+  it('treats low-confidence clarification metric as recorded metric activity', () => {
+    const metric: MetricRecord = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      lowConfidenceClarificationRate: 1,
+    };
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
+
   it('treats interruption timing class annotations as recorded metric activity', () => {
     const metric = {
       startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
@@ -121,6 +132,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('helpfulnessRating');
     expect(lines[0]).toContain('percolationDismissActions');
     expect(lines[0]).toContain('percolationSnoozeActions');
+    expect(lines[0]).toContain('lowConfidenceClarificationRate');
     expect(lines[0]).toContain('companionActionFollowThroughRate');
     expect(lines[0]).toContain('summaryQuietActions');
     expect(lines[0]).toContain('interruptionTimingClass');

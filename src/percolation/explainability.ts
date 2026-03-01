@@ -37,6 +37,8 @@ function describeSuppressionReason(reason: PercolationSuppressionReason): string
       return 'Surfacing is suppressed because companion mode is paused.';
     case 'restricted':
       return 'Surfacing is suppressed because workspace trust is restricted.';
+    case 'low-confidence':
+      return 'Surfacing is suppressed until confidence is rebuilt.';
     case 'no-candidate':
       return 'Surfacing is suppressed because no candidate met policy requirements.';
     default: {

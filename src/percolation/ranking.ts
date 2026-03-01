@@ -70,6 +70,10 @@ function readNumericMeta(item: SurfacedItem, key: string): number | undefined {
 
 function resolveActionability(item: SurfacedItem): number {
   const explicit = readNumericMeta(item, 'actionability');
+  if (item.kind === 'clarification') {
+    return explicit !== undefined ? Math.max(explicit, 0.85) : 0.85;
+  }
+
   if (explicit !== undefined) {
     return explicit;
   }
@@ -81,6 +85,10 @@ function resolveContinuity(item: SurfacedItem): number {
   const explicit = readNumericMeta(item, 'continuity');
   if (explicit !== undefined) {
     return explicit;
+  }
+
+  if (item.kind === 'clarification') {
+    return 0.9;
   }
 
   if (item.kind === 'recommended-action' || item.kind === 'next-step') {

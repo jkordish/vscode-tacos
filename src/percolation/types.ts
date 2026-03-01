@@ -26,6 +26,7 @@ export interface NormalizedSignal {
 }
 
 export type SurfacedItemKind =
+  | 'clarification'
   | 'recommended-action'
   | 'next-step'
   | 'blocked'
@@ -52,6 +53,7 @@ export type PercolationSuppressionReason =
   | 'disabled'
   | 'paused'
   | 'restricted'
+  | 'low-confidence'
   | 'cooldown'
   | 'quiet-hours'
   | 'no-change'
@@ -306,6 +308,29 @@ function defaultSignalsFromSummary(summary: ResumeSummary, now: number): Normali
 
 function defaultCandidatesFromSummary(summary: ResumeSummary): SurfacedItem[] {
   const candidates: Array<Partial<SurfacedItem>> = [];
+
+  if (summary.lowConfidence) {
+    const firstSafeStep = summary.nextSteps[0]?.trim() ?? '';
+    const clarificationDetail = firstSafeStep
+      ? `Clarify this next safe step before acting: ${firstSafeStep}`
+      : 'Add a one-line checkpoint note with your next safe action.';
+    candidates.push({
+      id: 'candidate:clarification',
+      kind: 'clarification',
+      title: 'Clarify next safe step',
+      detail: clarificationDetail,
+      actionId: 'sessionAddCheckpoint',
+      confidence: 0.95,
+      urgency: 0.82,
+      novelty: 0.55,
+      interruptCost: 0.12,
+      evidenceIds: summary.nextStepEvidenceIds?.[0] ?? [],
+      meta: {
+        lowConfidence: true,
+        fallback: 'clarification-first',
+      },
+    });
+  }
 
   if (summary.recommendedFirstAction) {
     candidates.push({

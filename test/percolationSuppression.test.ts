@@ -91,6 +91,21 @@ describe('evaluatePercolationSuppression', () => {
     });
   });
 
+  it('suppresses low-confidence notifications when fallback mode is enabled', () => {
+    const decision = evaluatePercolationSuppression({
+      enabled: true,
+      mode: 'active',
+      now: 1_700_000_000_000,
+      lowConfidence: true,
+      suppressLowConfidence: true,
+    });
+
+    expect(decision).toEqual({
+      suppressed: true,
+      reason: 'low-confidence',
+    });
+  });
+
   it('returns unsuppressed when no gate blocks surfacing', () => {
     // Use local-noon timestamp so this remains outside 22:00-07:00 quiet hours in any timezone.
     const decision = evaluatePercolationSuppression({

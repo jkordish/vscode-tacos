@@ -5,6 +5,8 @@ export interface PercolationSuppressionInput {
   enabled: boolean;
   mode: PercolationPolicyMode;
   now: number;
+  lowConfidence?: boolean;
+  suppressLowConfidence?: boolean;
   quietHours?: string;
   cooldownMinutes?: number;
   lastShownAt?: number;
@@ -77,6 +79,13 @@ export function evaluatePercolationSuppression(
         input.noiseBudgetNextEligibleAt > 0
           ? input.noiseBudgetNextEligibleAt
           : undefined,
+    };
+  }
+
+  if (input.suppressLowConfidence && input.lowConfidence) {
+    return {
+      suppressed: true,
+      reason: 'low-confidence',
     };
   }
 

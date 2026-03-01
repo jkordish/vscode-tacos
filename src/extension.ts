@@ -2424,11 +2424,18 @@ async function presentSummary(
   }
 
   const percolationMode = resolveCompanionRuntimeMode(config);
+  const notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
+    context,
+    workspaceRoot,
+  }).primary;
+  recordLowConfidenceClarificationRate(summary, notificationPrimary);
   if (triggerReason !== 'manual') {
     const notificationSuppression = evaluatePercolationSuppression({
       enabled: config.enabled,
       mode: percolationMode,
       now: Date.now(),
+      lowConfidence: Boolean(summary.lowConfidence),
+      suppressLowConfidence: true,
       quietHours: config.summaryQuietHours,
       contextUnchanged: triggerReason === 'cached',
     });
@@ -2440,10 +2447,6 @@ async function presentSummary(
   if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
     await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
   }
-  const notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
-    context,
-    workspaceRoot,
-  }).primary;
   const notificationHeadline = selectNotificationHeadline(summary, notificationPrimary);
   const actionPauseLabel = config.pauseSummaries ? 'Resume auto summaries' : 'Pause auto summaries';
   recordCompanionPromptImpression();
@@ -3007,6 +3010,17 @@ function recordCompanionPrimaryCtaCompletion(): void {
     (state.metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
 }
 
+function recordLowConfidenceClarificationRate(
+  summary: ResumeSummary,
+  primary: RankedSurfacedItem | undefined,
+): void {
+  if (!state.metricSession || !summary.lowConfidence) {
+    return;
+  }
+
+  state.metricSession.lowConfidenceClarificationRate = primary?.kind === 'clarification' ? 1 : 0;
+}
+
 function recordMetricCounter(
   field:
     | 'pauseActions'
@@ -3020,6 +3034,7 @@ function recordMetricCounter(
     | 'percolationSuppressedNoiseBudget'
     | 'percolationDismissActions'
     | 'percolationSnoozeActions'
+    | 'lowConfidenceClarificationRate'
     | 'noteCreated'
     | 'noteMarkedDone'
     | 'notePinned'

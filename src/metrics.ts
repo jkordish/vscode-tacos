@@ -27,6 +27,7 @@ const CSV_HEADERS = [
   'percolationSuppressedNoiseBudget',
   'percolationDismissActions',
   'percolationSnoozeActions',
+  'lowConfidenceClarificationRate',
   'helpfulnessRating',
   'pauseActions',
   'snoozeActions',
@@ -479,6 +480,7 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.percolationSuppressedNoiseBudget ?? 0) > 0 ||
     (metric.percolationDismissActions ?? 0) > 0 ||
     (metric.percolationSnoozeActions ?? 0) > 0 ||
+    (metric.lowConfidenceClarificationRate ?? 0) > 0 ||
     typeof metric.helpfulnessRating === 'number' ||
     (metric.pauseActions ?? 0) > 0 ||
     (metric.snoozeActions ?? 0) > 0 ||
@@ -536,6 +538,7 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.percolationSuppressedNoiseBudget),
       toOptionalNumber(metric.percolationDismissActions),
       toOptionalNumber(metric.percolationSnoozeActions),
+      toOptionalNumber(metric.lowConfidenceClarificationRate),
       toOptionalNumber(metric.helpfulnessRating),
       toOptionalNumber(metric.pauseActions),
       toOptionalNumber(metric.snoozeActions),

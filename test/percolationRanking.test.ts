@@ -153,4 +153,25 @@ describe('rankCandidates', () => {
 ]
 `);
   });
+
+  it('prioritizes clarification fallback when summary confidence is low', () => {
+    const summary = buildSummary({
+      lowConfidence: true,
+      lastFailingCommand: 'npm test -- checkout',
+      nextStepEvidenceIds: [['ev-1']],
+      evidenceCatalog: [
+        {
+          id: 'ev-1',
+          kind: 'file',
+          label: 'src/checkout.ts',
+        },
+      ],
+    });
+    const input = createPercolationPolicyInput(summary, { now: summary.generatedAt });
+
+    const ranked = rankCandidates(input);
+
+    expect(ranked.primary?.id).toBe('candidate:clarification');
+    expect(ranked.primary?.kind).toBe('clarification');
+  });
 });

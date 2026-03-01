@@ -19,6 +19,7 @@ export interface PercolationMemoryDecision {
 }
 
 const VALID_SURFACED_ITEM_KINDS = new Set<SurfacedItemKind>([
+  'clarification',
   'recommended-action',
   'next-step',
   'blocked',
