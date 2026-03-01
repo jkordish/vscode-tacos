@@ -40,7 +40,9 @@ describe('panelClientScript state behavior', () => {
       api;
 
     document.body.innerHTML = `
+      <a class="skip-link" href="#main">Skip to main content</a>
       <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
       <ul id="evidence-list"><li class="extra-evidence">more evidence</li></ul>
       <button type="button" data-action="toggleEvidenceMore" data-hidden-count="1">Show 1 more</button>
       <button type="button" data-test-slot="primary" data-action="openEvidence" data-evidence-id="url:https://example.test/search?q=a=b&mode=full">Open evidence</button>
@@ -194,6 +196,17 @@ describe('panelClientScript state behavior', () => {
 
     jest.advanceTimersByTime(10);
     expect(live.textContent).toBe('Second status.');
+  });
+
+  it('allows skip-link hash navigation to main content without blocked-link warning', () => {
+    const { postMessage } = bootstrap();
+    const skipLink = document.querySelector('.skip-link') as HTMLAnchorElement;
+    const main = document.getElementById('main') as HTMLElement;
+
+    skipLink.click();
+
+    expect(document.activeElement).toBe(main);
+    expect(postMessage).not.toHaveBeenCalledWith({ type: 'blockedLink' });
   });
 
   it('clears scope-bound scroll and focus state when section scope changes', () => {

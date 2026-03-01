@@ -26,6 +26,8 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain('focusToken:');
     expect(script).toContain("window.addEventListener(\n        'scroll'");
     expect(script).toContain('restoreViewPosition();');
+    expect(script).toContain("if (typeof href === 'string' && href.startsWith('#'))");
+    expect(script).toContain('hashTarget.focus();');
     expect(script).toContain(
       'if (!event.altKey || !event.shiftKey || event.metaKey || event.ctrlKey)',
     );

@@ -597,6 +597,21 @@ export function renderPanelClientScript(
 
         const anchor = target.closest('a');
         if (anchor) {
+          const href = anchor.getAttribute('href');
+          if (typeof href === 'string' && href.startsWith('#')) {
+            const targetId = href.slice(1);
+            if (targetId) {
+              const hashTarget = document.getElementById(targetId);
+              if (hashTarget instanceof HTMLElement) {
+                event.preventDefault();
+                hashTarget.focus();
+                if (typeof hashTarget.scrollIntoView === 'function') {
+                  hashTarget.scrollIntoView({ block: 'start' });
+                }
+                return;
+              }
+            }
+          }
           event.preventDefault();
           vscode.postMessage({ type: 'blockedLink' });
         }
