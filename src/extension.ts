@@ -747,8 +747,7 @@ export function activate(context: vscode.ExtensionContext): void {
         hasDisabledPrimaryBlockerAction,
         hasRestoreWorkingSetAction: restoreWorkingSetActionCount > 0,
         restoreWorkingSetActionCount,
-        hasTrustCenterCard:
-          hasTrustCenterSection || panelHtml.includes('<h3>Trust Center</h3>'),
+        hasTrustCenterCard: hasTrustCenterSection || panelHtml.includes('<h3>Trust Center</h3>'),
         hasTrustCenterSection,
         hasTimelineSection,
         hasEvidenceSection,
@@ -3666,7 +3665,9 @@ async function showDetailsPanel(
         void vscode.window.showWarningMessage(
           'TaCoS blocked a link that was not part of the validated summary link list.',
         );
-        postPanelStatus('TaCoS blocked a link that was not part of the validated summary link list.');
+        postPanelStatus(
+          'TaCoS blocked a link that was not part of the validated summary link list.',
+        );
         return;
       }
 
@@ -4274,16 +4275,22 @@ function renderWebview(
   });
   const restoreUnavailableReasons: string[] = [];
   if (!demoMode && !availability.canJumpToLastEdit) {
-    restoreUnavailableReasons.push('Jump to last edit is unavailable: no recent edit was captured.');
+    restoreUnavailableReasons.push(
+      'Jump to last edit is unavailable: no recent edit was captured.',
+    );
   }
   if (!demoMode && !availability.canRerunTask) {
     restoreUnavailableReasons.push('Rerun task is unavailable: no previous task run is known.');
   }
   if (!demoMode && !availability.canRerunDebug) {
-    restoreUnavailableReasons.push('Rerun debug is unavailable: no previous debug session is known.');
+    restoreUnavailableReasons.push(
+      'Rerun debug is unavailable: no previous debug session is known.',
+    );
   }
   if (!demoMode && !canOpenProblems) {
-    restoreUnavailableReasons.push('Open Problems is unavailable: no workspace diagnostics are active.');
+    restoreUnavailableReasons.push(
+      'Open Problems is unavailable: no workspace diagnostics are active.',
+    );
   }
   if (!demoMode && !canOpenDiagnosticFile) {
     restoreUnavailableReasons.push(

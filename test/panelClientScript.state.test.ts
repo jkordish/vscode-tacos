@@ -21,7 +21,10 @@ describe('panelClientScript state behavior', () => {
     delete (globalThis as unknown as { acquireVsCodeApi?: unknown }).acquireVsCodeApi;
   });
 
-  function bootstrap(initialState: Record<string, unknown> = {}, sectionScope = 'scope-token'): {
+  function bootstrap(
+    initialState: Record<string, unknown> = {},
+    sectionScope = 'scope-token',
+  ): {
     postMessage: jest.Mock;
     setState: jest.Mock;
   } {
@@ -33,7 +36,8 @@ describe('panelClientScript state behavior', () => {
       setState,
     };
 
-    (globalThis as unknown as { acquireVsCodeApi: () => VsCodeApiMock }).acquireVsCodeApi = () => api;
+    (globalThis as unknown as { acquireVsCodeApi: () => VsCodeApiMock }).acquireVsCodeApi = () =>
+      api;
 
     document.body.innerHTML = `
       <div id="panel-status-live"></div>
@@ -65,7 +69,9 @@ describe('panelClientScript state behavior', () => {
 
   it('persists evidence expansion state and announces expansion changes', () => {
     const { setState } = bootstrap();
-    const toggle = document.querySelector('[data-action="toggleEvidenceMore"]') as HTMLButtonElement;
+    const toggle = document.querySelector(
+      '[data-action="toggleEvidenceMore"]',
+    ) as HTMLButtonElement;
     const list = document.getElementById('evidence-list') as HTMLElement;
     const live = document.getElementById('panel-status-live') as HTMLElement;
 
@@ -80,7 +86,9 @@ describe('panelClientScript state behavior', () => {
 
   it('posts panel section expansion messages and stores section state', () => {
     const { postMessage, setState } = bootstrap();
-    const details = document.querySelector('details[data-panel-section="timeline"]') as HTMLDetailsElement;
+    const details = document.querySelector(
+      'details[data-panel-section="timeline"]',
+    ) as HTMLDetailsElement;
 
     details.open = true;
     details.dispatchEvent(new Event('toggle', { bubbles: true }));
@@ -117,7 +125,8 @@ describe('panelClientScript state behavior', () => {
   });
 
   it('restores focus for openEvidence tokens that include equals characters', () => {
-    const focusToken = 'action:openEvidence|evidence=url:https://example.test/search?q=a=b&mode=full';
+    const focusToken =
+      'action:openEvidence|evidence=url:https://example.test/search?q=a=b&mode=full';
     bootstrap({ sectionScope: 'scope-token', focusToken });
     jest.advanceTimersByTime(50);
 

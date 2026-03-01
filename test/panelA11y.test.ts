@@ -3,10 +3,7 @@
  */
 
 import axe from 'axe-core';
-import {
-  renderCompanionNextSteps,
-  renderWebviewDocument,
-} from '../src/webview/panelFragments';
+import { renderCompanionNextSteps, renderWebviewDocument } from '../src/webview/panelFragments';
 import { renderQuickActionsCard, renderStatusCard } from '../src/webview/panelCards';
 import { PANEL_WEBVIEW_STYLE } from '../src/webview/panelStyles';
 import { renderResumeStackCard } from '../src/resumeStackCard';
@@ -63,7 +60,7 @@ function renderPanelHtml(): string {
 
   return renderWebviewDocument({
     cspMetaTag:
-      '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'nonce-123\'; script-src \'nonce-123\'" />',
+      "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'nonce-123'; script-src 'nonce-123'\" />",
     nonce: 'nonce-123',
     panelStyle: PANEL_WEBVIEW_STYLE,
     bodyCardsTrustedHtml: [resumeCard, statusCard, quickActionsCard].join('\n'),

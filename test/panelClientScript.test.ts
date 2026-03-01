@@ -19,12 +19,16 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain("toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');");
     expect(script).toContain("document.getElementById('panel-status-live')");
     expect(script).toContain("payload.type !== 'panelStatus'");
-    expect(script).toContain("announceStatus(expanded ? 'Evidence list expanded.' : 'Evidence list collapsed.')");
+    expect(script).toContain(
+      "announceStatus(expanded ? 'Evidence list expanded.' : 'Evidence list collapsed.')",
+    );
     expect(script).toContain('scrollY: 0');
     expect(script).toContain('focusToken:');
     expect(script).toContain("window.addEventListener(\n        'scroll'");
     expect(script).toContain('restoreViewPosition();');
-    expect(script).toContain("if (!event.altKey || !event.shiftKey || event.metaKey || event.ctrlKey)");
+    expect(script).toContain(
+      'if (!event.altKey || !event.shiftKey || event.metaKey || event.ctrlKey)',
+    );
     expect(script).toContain("if (!['r', 'n', 'i'].includes(key))");
     expect(script).toContain("vscode.postMessage({ type: 'refreshSummary' });");
     expect(script).toContain("vscode.postMessage({ type: 'copyNextSteps' });");

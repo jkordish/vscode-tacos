@@ -35,7 +35,9 @@ describe('panelCards', () => {
 
     expect(status).toContain('<h3>Status</h3>');
     expect(status).toContain('data-action="refreshSummary"');
-    expect(trust).toContain('class="section-heading" role="heading" aria-level="3">Trust Center</span>');
+    expect(trust).toContain(
+      'class="section-heading" role="heading" aria-level="3">Trust Center</span>',
+    );
     expect(trust).toContain('data-panel-section="trustCenter"');
     expect(trust).toContain('data-action="openPrivacySafety"');
     expect(trust).toContain('<li>Recent files: 2</li>');
