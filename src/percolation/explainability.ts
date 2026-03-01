@@ -1,15 +1,16 @@
 import type { ResumeSummary } from '../types';
 import type { RankedSurfacedItem } from './ranking';
+import type { PercolationSuppressionReason, SurfacedItemKind } from './types';
 
 export interface PercolationExplainabilityPayload {
   surfacedItemId?: string;
-  surfacedItemKind?: string;
+  surfacedItemKind?: SurfacedItemKind;
   surfacedTitle?: string;
   surfacedDetail?: string;
   score?: number;
   confidence?: number;
   evidenceIds: string[];
-  suppressionReason?: string;
+  suppressionReason?: PercolationSuppressionReason;
   reasons: string[];
   missingSignals: string[];
 }
@@ -17,33 +18,32 @@ export interface PercolationExplainabilityPayload {
 export interface BuildPercolationExplainabilityInput {
   summary: ResumeSummary;
   primary?: RankedSurfacedItem;
-  suppressionReason?: string;
+  suppressionReason?: PercolationSuppressionReason;
 }
 
-function describeSuppressionReason(reason: string): string {
-  if (reason === 'quiet-hours') {
-    return 'Surfacing is currently suppressed by quiet hours.';
+function describeSuppressionReason(reason: PercolationSuppressionReason): string {
+  switch (reason) {
+    case 'quiet-hours':
+      return 'Surfacing is currently suppressed by quiet hours.';
+    case 'cooldown':
+      return 'Surfacing is currently suppressed by cooldown.';
+    case 'no-change':
+      return 'Surfacing is suppressed because context has not changed.';
+    case 'noise-budget':
+      return 'Surfacing is suppressed by the interruption noise budget.';
+    case 'disabled':
+      return 'Surfacing is suppressed because the feature is disabled.';
+    case 'paused':
+      return 'Surfacing is suppressed because companion mode is paused.';
+    case 'restricted':
+      return 'Surfacing is suppressed because workspace trust is restricted.';
+    case 'no-candidate':
+      return 'Surfacing is suppressed because no candidate met policy requirements.';
+    default: {
+      const exhaustive: never = reason;
+      return `Surfacing is suppressed (${String(exhaustive)}).`;
+    }
   }
-  if (reason === 'cooldown') {
-    return 'Surfacing is currently suppressed by cooldown.';
-  }
-  if (reason === 'no-change') {
-    return 'Surfacing is suppressed because context has not changed.';
-  }
-  if (reason === 'noise-budget') {
-    return 'Surfacing is suppressed by the interruption noise budget.';
-  }
-  if (reason === 'disabled') {
-    return 'Surfacing is suppressed because the feature is disabled.';
-  }
-  if (reason === 'paused') {
-    return 'Surfacing is suppressed because companion mode is paused.';
-  }
-  if (reason === 'restricted') {
-    return 'Surfacing is suppressed because workspace trust is restricted.';
-  }
-
-  return `Surfacing is suppressed (${reason}).`;
 }
 
 function summarizeTopFactors(primary: RankedSurfacedItem): string | undefined {
@@ -52,11 +52,12 @@ function summarizeTopFactors(primary: RankedSurfacedItem): string | undefined {
     ['actionability', primary.scoreBreakdown.actionability],
     ['continuity', primary.scoreBreakdown.continuity],
     ['novelty', primary.scoreBreakdown.novelty],
+    ['interruptCost', -primary.scoreBreakdown.interruptCost],
     ['confidence', primary.scoreBreakdown.confidence],
   ] as const;
 
   const top = [...contributions]
-    .sort((left, right) => right[1] - left[1])
+    .sort((left, right) => Math.abs(right[1]) - Math.abs(left[1]))
     .slice(0, 3)
     .map(([label, value]) => `${label}=${value.toFixed(3)}`);
 
