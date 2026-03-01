@@ -1,4 +1,8 @@
-import { computeRestoreAvailability } from '../src/restoreSafety';
+import {
+  computeRestoreAvailability,
+  describeRerunDebugUnavailableReason,
+  describeRerunTaskUnavailableReason,
+} from '../src/restoreSafety';
 
 describe('computeRestoreAvailability', () => {
   it('disables risky actions in restricted mode', () => {
@@ -54,5 +58,53 @@ describe('computeRestoreAvailability', () => {
 
     expect(result.canCheckoutPreviousBranch).toBe(false);
     expect(result.canJumpToLastEdit).toBe(false);
+  });
+});
+
+describe('restore unavailable reasons', () => {
+  it('reports restricted-mode reason for rerun task/debug actions', () => {
+    expect(
+      describeRerunTaskUnavailableReason({
+        trusted: false,
+        hasLastTask: true,
+      }),
+    ).toContain('Restricted Mode');
+
+    expect(
+      describeRerunDebugUnavailableReason({
+        trusted: false,
+        hasLastDebug: true,
+      }),
+    ).toContain('Restricted Mode');
+  });
+
+  it('reports missing-history reason only in trusted mode', () => {
+    expect(
+      describeRerunTaskUnavailableReason({
+        trusted: true,
+        hasLastTask: false,
+      }),
+    ).toContain('no previous task run is known');
+    expect(
+      describeRerunDebugUnavailableReason({
+        trusted: true,
+        hasLastDebug: false,
+      }),
+    ).toContain('no previous debug session is known');
+  });
+
+  it('returns undefined when action should be available', () => {
+    expect(
+      describeRerunTaskUnavailableReason({
+        trusted: true,
+        hasLastTask: true,
+      }),
+    ).toBeUndefined();
+    expect(
+      describeRerunDebugUnavailableReason({
+        trusted: true,
+        hasLastDebug: true,
+      }),
+    ).toBeUndefined();
   });
 });

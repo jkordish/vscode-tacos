@@ -89,7 +89,12 @@ import {
   validateCustomRedactionPatterns,
 } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
-import { computeRestoreAvailability, type RestoreAvailability } from './restoreSafety';
+import {
+  computeRestoreAvailability,
+  describeRerunDebugUnavailableReason,
+  describeRerunTaskUnavailableReason,
+  type RestoreAvailability,
+} from './restoreSafety';
 import {
   SCRATCHPAD_FILES_SEGMENT,
   scratchpadFileNameForScope,
@@ -4049,10 +4054,12 @@ function renderWebview(
     readOnly: demoMode,
   });
   const trusted = vscode.workspace.isTrusted;
+  const hasLastTask = !demoMode && Boolean(state.lastTaskName);
+  const hasLastDebug = !demoMode && Boolean(state.lastDebugConfigName);
   const availability = computeRestoreAvailability({
     trusted,
-    hasLastTask: !demoMode && Boolean(state.lastTaskName),
-    hasLastDebug: !demoMode && Boolean(state.lastDebugConfigName),
+    hasLastTask,
+    hasLastDebug,
     hasFailingCommand: !demoMode && Boolean(getCopyableFailingCommand()),
     hasRecentEditLocation: !demoMode && state.recentEditLocations.length > 0,
     currentBranch: demoMode ? undefined : summary.currentBranch,
@@ -4280,12 +4287,16 @@ function renderWebview(
     );
   }
   if (!demoMode && !availability.canRerunTask) {
-    restoreUnavailableReasons.push('Rerun task is unavailable: no previous task run is known.');
+    const reason = describeRerunTaskUnavailableReason({ trusted, hasLastTask });
+    if (reason) {
+      restoreUnavailableReasons.push(reason);
+    }
   }
   if (!demoMode && !availability.canRerunDebug) {
-    restoreUnavailableReasons.push(
-      'Rerun debug is unavailable: no previous debug session is known.',
-    );
+    const reason = describeRerunDebugUnavailableReason({ trusted, hasLastDebug });
+    if (reason) {
+      restoreUnavailableReasons.push(reason);
+    }
   }
   if (!demoMode && !canOpenProblems) {
     restoreUnavailableReasons.push(
