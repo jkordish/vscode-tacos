@@ -40,7 +40,7 @@ export interface TrustCenterCardInput {
 export function renderTrustCenterCard(input: TrustCenterCardInput): string {
   return `<div class="card">
       <details data-panel-section="trustCenter" ${input.expanded ? 'open' : ''}>
-        <summary><h3>Trust Center</h3></summary>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Trust Center</span></summary>
         <div class="panel-section-body">
           <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(input.trustTrackingLabel)}</div>
           <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
@@ -102,7 +102,7 @@ export function renderTimelineCard(input: TimelineCardInput): string {
 
   return `<div class="card">
       <details data-panel-section="timeline" ${input.expanded ? 'open' : ''}>
-        <summary><h3>Timeline</h3></summary>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Timeline</span></summary>
         <div class="panel-section-body">
           ${input.timelineGroupsTrustedHtml || '<p class="muted">No timeline entries captured yet.</p>'}
         </div>
@@ -129,6 +129,14 @@ export function renderQuickActionsCard(quickActionGroupsTrustedHtml: string): st
   return `<div class="card">
       <h3>Quick Actions</h3>
       ${quickActionGroupsTrustedHtml}
+      <details class="shortcut-help">
+        <summary><strong>Keyboard shortcuts</strong></summary>
+        <ul class="compact-list">
+          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>: Refresh summary</li>
+          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd>: Copy next steps</li>
+          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd>: Focus intent editor</li>
+        </ul>
+      </details>
     </div>`;
 }
 
@@ -158,7 +166,7 @@ export function renderEvidenceCard(input: EvidenceCardInput): string {
   const showMoreLabel = hasExtraEvidence ? `Show ${input.hiddenEvidenceCount} more` : 'Show more';
   return `<div class="card">
       <details data-panel-section="evidence" ${input.expanded ? 'open' : ''}>
-        <summary><h3>Evidence</h3></summary>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Evidence</span></summary>
         <div class="panel-section-body">
           <ul class="evidence-list" id="evidence-list">${
             input.evidenceItemsTrustedHtml || '<li>None captured</li>'
@@ -176,7 +184,7 @@ export function renderEvidenceCard(input: EvidenceCardInput): string {
 export function renderDetailsCard(detailsTrustedHtml: string, expanded: boolean): string {
   return `<div class="card">
       <details data-panel-section="details" ${expanded ? 'open' : ''}>
-        <summary><h3>Details</h3></summary>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Details</span></summary>
         <div class="panel-section-body">
           <div class="details-markdown">${detailsTrustedHtml}</div>
         </div>

@@ -146,3 +146,48 @@ Status: Pending manual sign-off
   - `docs/manual-smoke-runbook.md`
 - Tracking issue kept open until manual run is completed:
   - [#35](https://github.com/jkordish/vscode-tacos/issues/35)
+
+## v0.7.0 UI/A11y/Reflow Acceptance Addendum
+
+Status: In progress (manual v0.7.0 QA sign-off pending)
+
+Tracking epics:
+
+- [#190](https://github.com/jkordish/vscode-tacos/issues/190) Webview Foundation & Accessibility Baseline
+- [#191](https://github.com/jkordish/vscode-tacos/issues/191) Responsive Layout & Visual Hierarchy
+- [#192](https://github.com/jkordish/vscode-tacos/issues/192) Interaction Patterns, Discoverability & Input Ergonomics
+- [#193](https://github.com/jkordish/vscode-tacos/issues/193) UI Performance, State Resilience & Regression Testing
+
+### Implemented baseline in this stream
+
+- Semantic webview shell and landmarks:
+  - `src/webview/panelFragments.ts`
+  - `test/panelFragments.test.ts`
+- Disclosure affordance and summary semantics:
+  - `src/webview/panelCards.ts`
+  - `src/webview/panelStyles.ts`
+  - `test/panelCards.test.ts`
+- Keyboard/focus/live status and section persistence:
+  - `src/webview/panelClientScript.ts`
+  - `src/webviewMessages.ts`
+  - `test/panelClientScript.test.ts`
+  - `test/webviewMessages.test.ts`
+- Companion Home responsive hierarchy + progressive “More Context” disclosure:
+  - `src/resumeStackCard.ts`
+  - `src/extension.ts`
+
+### v0.7.0 acceptance criteria
+
+- [ ] No horizontal scroll at narrow pane widths unless content is inherently 2D.
+- [ ] Keyboard-only workflow pass.
+- [ ] Forced-colors/high-contrast pass for disclosure/focus/border affordances.
+- [ ] WCAG 2.2 target-size pass for primary/frequent controls (or documented exception).
+- [x] Automated accessibility checks pass for generated webview HTML.
+- [ ] Manual QA matrix (narrow/split/wide, forced-colors, keyboard-only, 400% zoom) executed and recorded.
+
+### Open gaps / TODOs (v0.7.0)
+
+- Completed: dedicated axe-core test coverage for generated panel HTML in CI gate (#218).
+- Completed: persistence regression coverage including scroll/focus restoration behavior (#219).
+- Completed: smoke report template now references the v0.7.0 matrix in `docs/smoke-report.md` (#221).
+- Remaining: execute and record the v0.7.0 manual matrix run in `docs/manual-smoke-runbook.md` (#221).

@@ -16,6 +16,32 @@ export interface RestoreAvailability {
   canJumpToLastEdit: boolean;
 }
 
+export function describeRerunTaskUnavailableReason(input: {
+  trusted: boolean;
+  hasLastTask: boolean;
+}): string | undefined {
+  if (!input.trusted) {
+    return 'Rerun task is unavailable in Restricted Mode: trust this workspace to enable task execution.';
+  }
+  if (!input.hasLastTask) {
+    return 'Rerun task is unavailable: no previous task run is known.';
+  }
+  return undefined;
+}
+
+export function describeRerunDebugUnavailableReason(input: {
+  trusted: boolean;
+  hasLastDebug: boolean;
+}): string | undefined {
+  if (!input.trusted) {
+    return 'Rerun debug is unavailable in Restricted Mode: trust this workspace to enable debug execution.';
+  }
+  if (!input.hasLastDebug) {
+    return 'Rerun debug is unavailable: no previous debug session is known.';
+  }
+  return undefined;
+}
+
 export function computeRestoreAvailability(input: RestoreAvailabilityInput): RestoreAvailability {
   if (!input.trusted) {
     return {

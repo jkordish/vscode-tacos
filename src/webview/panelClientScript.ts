@@ -4,7 +4,7 @@ export function renderPanelClientScript(
 ): string {
   return `
       const vscode = acquireVsCodeApi();
-      const panelSectionIds = new Set(['trustCenter', 'timeline', 'evidence', 'details']);
+      const panelSectionIds = new Set(['trustCenter', 'timeline', 'evidence', 'details', 'moreContext']);
       const panelSectionScope = ${JSON.stringify(panelSectionScopeToken)};
       const hostActions = new Set([
         'fixSummary',
@@ -41,12 +41,15 @@ export function renderPanelClientScript(
         'restoreCopyFailingCommand'
       ]);
       const viewState = Object.assign(
-        { evidenceListExpanded: false, sectionExpanded: {}, sectionScope: '' },
+        { evidenceListExpanded: false, sectionExpanded: {}, sectionScope: '', scrollY: 0, focusToken: '' },
         vscode.getState() || {},
       );
 
       if (viewState.sectionScope !== panelSectionScope) {
         viewState.sectionExpanded = {};
+        viewState.evidenceListExpanded = false;
+        viewState.scrollY = 0;
+        viewState.focusToken = '';
         viewState.sectionScope = panelSectionScope;
         vscode.setState(viewState);
       }
@@ -55,7 +58,250 @@ export function renderPanelClientScript(
         vscode.setState(viewState);
       }
 
-      function setEvidenceListExpanded(expanded) {
+      function encodeFocusTokenValue(rawValue) {
+        return encodeURIComponent(rawValue);
+      }
+
+      function decodeFocusTokenValue(rawValue) {
+        try {
+          return decodeURIComponent(rawValue);
+        } catch {
+          return rawValue;
+        }
+      }
+
+      function createActionFocusCriteria(actionElement) {
+        const criteria = {};
+        if (typeof actionElement.dataset.stepIndex === 'string') {
+          criteria.step = actionElement.dataset.stepIndex;
+        }
+        if (typeof actionElement.dataset.evidenceId === 'string') {
+          criteria.evidence = actionElement.dataset.evidenceId;
+        }
+        if (typeof actionElement.dataset.linkIndex === 'string') {
+          criteria.link = actionElement.dataset.linkIndex;
+        }
+        if (typeof actionElement.dataset.topFileIndex === 'string') {
+          criteria.file = actionElement.dataset.topFileIndex;
+        }
+        return criteria;
+      }
+
+      function actionElementMatchesFocusCriteria(actionElement, criteria) {
+        if (typeof criteria.step === 'string' && actionElement.dataset.stepIndex !== criteria.step) {
+          return false;
+        }
+        if (
+          typeof criteria.evidence === 'string' &&
+          actionElement.dataset.evidenceId !== criteria.evidence
+        ) {
+          return false;
+        }
+        if (typeof criteria.link === 'string' && actionElement.dataset.linkIndex !== criteria.link) {
+          return false;
+        }
+        if (typeof criteria.file === 'string' && actionElement.dataset.topFileIndex !== criteria.file) {
+          return false;
+        }
+        return true;
+      }
+
+      function buildFocusToken(target) {
+        if (!(target instanceof HTMLElement)) {
+          return '';
+        }
+
+        if (target.id) {
+          return 'id:' + target.id;
+        }
+
+        const resumePathStepId = target.getAttribute('data-resume-path-step-id');
+        if (resumePathStepId) {
+          return 'resumePath:' + resumePathStepId;
+        }
+
+        const actionElement = target.closest('[data-action]');
+        if (!(actionElement instanceof HTMLElement)) {
+          return '';
+        }
+
+        const action = actionElement.dataset.action;
+        if (!action) {
+          return '';
+        }
+
+        const criteria = createActionFocusCriteria(actionElement);
+        const payloadParts = [action];
+        if (typeof criteria.step === 'string') {
+          payloadParts.push('step=' + encodeFocusTokenValue(criteria.step));
+        }
+        if (typeof criteria.evidence === 'string') {
+          payloadParts.push('evidence=' + encodeFocusTokenValue(criteria.evidence));
+        }
+        if (typeof criteria.link === 'string') {
+          payloadParts.push('link=' + encodeFocusTokenValue(criteria.link));
+        }
+        if (typeof criteria.file === 'string') {
+          payloadParts.push('file=' + encodeFocusTokenValue(criteria.file));
+        }
+
+        const candidates = document.querySelectorAll('[data-action="' + action + '"]');
+        let ordinal = 0;
+        for (const candidate of candidates) {
+          if (!(candidate instanceof HTMLElement)) {
+            continue;
+          }
+          if (!actionElementMatchesFocusCriteria(candidate, criteria)) {
+            continue;
+          }
+          if (candidate === actionElement) {
+            payloadParts.push('ord=' + ordinal);
+            break;
+          }
+          ordinal += 1;
+        }
+
+        return 'action:' + payloadParts.join('|');
+      }
+
+      function resolveFocusToken(token) {
+        if (typeof token !== 'string' || !token) {
+          return undefined;
+        }
+
+        if (token.startsWith('id:')) {
+          const id = token.slice(3);
+          const candidate = document.getElementById(id);
+          return candidate instanceof HTMLElement ? candidate : undefined;
+        }
+
+        if (token.startsWith('resumePath:')) {
+          const stepId = token.slice('resumePath:'.length);
+          const candidate = document.querySelector(
+            '[data-resume-path-step-id="' + stepId + '"]',
+          );
+          return candidate instanceof HTMLElement ? candidate : undefined;
+        }
+
+        if (!token.startsWith('action:')) {
+          return undefined;
+        }
+
+        const payload = token.slice('action:'.length);
+        const [actionPart, ...rest] = payload.split('|');
+        const candidates = document.querySelectorAll('[data-action="' + actionPart + '"]');
+        if (candidates.length === 0) {
+          return undefined;
+        }
+
+        if (rest.length === 0) {
+          const first = candidates[0];
+          return first instanceof HTMLElement ? first : undefined;
+        }
+
+        const criteria = {};
+        let expectedOrdinal;
+        for (const clause of rest) {
+          const delimiterIndex = clause.indexOf('=');
+          const rawKey = delimiterIndex === -1 ? clause : clause.slice(0, delimiterIndex);
+          const rawValue = delimiterIndex === -1 ? '' : clause.slice(delimiterIndex + 1);
+          const key = rawKey.trim();
+          const value = (rawValue || '').trim();
+          if (!value) {
+            continue;
+          }
+          if (key === 'ord') {
+            const parsedOrdinal = Number(value);
+            if (Number.isInteger(parsedOrdinal) && parsedOrdinal >= 0) {
+              expectedOrdinal = parsedOrdinal;
+            }
+            continue;
+          }
+          if (key === 'step' || key === 'evidence' || key === 'link' || key === 'file') {
+            criteria[key] = decodeFocusTokenValue(value);
+          }
+        }
+
+        let matchedOrdinal = 0;
+        let firstMatch;
+        for (const candidate of candidates) {
+          if (!(candidate instanceof HTMLElement)) {
+            continue;
+          }
+          if (!actionElementMatchesFocusCriteria(candidate, criteria)) {
+            continue;
+          }
+          if (!(firstMatch instanceof HTMLElement)) {
+            firstMatch = candidate;
+          }
+          if (expectedOrdinal === undefined || expectedOrdinal === matchedOrdinal) {
+            return candidate;
+          }
+          matchedOrdinal += 1;
+        }
+
+        return firstMatch instanceof HTMLElement ? firstMatch : undefined;
+      }
+
+      let scrollPersistTimeout;
+      function persistScrollPositionSoon() {
+        if (typeof scrollPersistTimeout !== 'undefined') {
+          window.clearTimeout(scrollPersistTimeout);
+        }
+        scrollPersistTimeout = window.setTimeout(() => {
+          viewState.scrollY = Math.max(0, Math.round(window.scrollY || 0));
+          persistViewState();
+        }, 80);
+      }
+
+      function restoreViewPosition() {
+        const hasSavedScroll = Number.isFinite(viewState.scrollY) && viewState.scrollY > 0;
+        const savedScrollY = hasSavedScroll ? viewState.scrollY : 0;
+        if (hasSavedScroll) {
+          window.scrollTo(0, savedScrollY);
+        }
+
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && active !== document.body) {
+          return;
+        }
+        const restored = resolveFocusToken(viewState.focusToken);
+        if (restored instanceof HTMLElement) {
+          try {
+            restored.focus({ preventScroll: true });
+          } catch {
+            restored.focus();
+            if (hasSavedScroll) {
+              window.scrollTo(0, savedScrollY);
+            }
+          }
+        }
+      }
+
+      let announceStatusTimeout;
+      function announceStatus(rawMessage) {
+        if (typeof rawMessage !== 'string') {
+          return;
+        }
+        const liveRegion = document.getElementById('panel-status-live');
+        if (!(liveRegion instanceof HTMLElement)) {
+          return;
+        }
+        const message = rawMessage.trim();
+        if (!message) {
+          return;
+        }
+        if (typeof announceStatusTimeout !== 'undefined') {
+          window.clearTimeout(announceStatusTimeout);
+        }
+        liveRegion.textContent = '';
+        // Force a text change so repeated messages still announce.
+        announceStatusTimeout = window.setTimeout(() => {
+          liveRegion.textContent = message;
+        }, 15);
+      }
+
+      function setEvidenceListExpanded(expanded, announceChange = false) {
         const list = document.getElementById('evidence-list');
         const toggle = document.querySelector('[data-action="toggleEvidenceMore"]');
         if (!(list instanceof HTMLElement) || !(toggle instanceof HTMLElement)) {
@@ -76,6 +322,9 @@ export function renderPanelClientScript(
         toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         viewState.evidenceListExpanded = expanded;
         persistViewState();
+        if (announceChange) {
+          announceStatus(expanded ? 'Evidence list expanded.' : 'Evidence list collapsed.');
+        }
       }
 
       function persistPanelSectionExpanded(sectionId, expanded) {
@@ -103,8 +352,40 @@ export function renderPanelClientScript(
         }
       }
 
-      setEvidenceListExpanded(Boolean(viewState.evidenceListExpanded));
+      setEvidenceListExpanded(Boolean(viewState.evidenceListExpanded), false);
       restorePanelSectionExpansion();
+      window.addEventListener(
+        'scroll',
+        () => {
+          persistScrollPositionSoon();
+        },
+        { passive: true },
+      );
+      document.addEventListener('focusin', (event) => {
+        const target = event.target;
+        const nextToken = buildFocusToken(target);
+        if (!nextToken || viewState.focusToken === nextToken) {
+          return;
+        }
+        viewState.focusToken = nextToken;
+        persistViewState();
+      });
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          restoreViewPosition();
+        });
+      });
+
+      window.addEventListener('message', (event) => {
+        const payload = event.data;
+        if (!payload || typeof payload !== 'object') {
+          return;
+        }
+        if (payload.type !== 'panelStatus' || typeof payload.message !== 'string') {
+          return;
+        }
+        announceStatus(payload.message);
+      });
 
       function parseDatasetInteger(rawValue) {
         if (typeof rawValue !== 'string') {
@@ -173,6 +454,43 @@ export function renderPanelClientScript(
       });
 
       document.addEventListener('keydown', (event) => {
+        if (!event.altKey || !event.shiftKey || event.metaKey || event.ctrlKey) {
+          return;
+        }
+
+        const target = event.target;
+        const targetIsTextInput =
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          (target instanceof HTMLElement && target.isContentEditable);
+        const key = event.key.toLowerCase();
+        if (!['r', 'n', 'i'].includes(key)) {
+          return;
+        }
+        if (targetIsTextInput && key !== 'i') {
+          return;
+        }
+
+        event.preventDefault();
+        if (key === 'r') {
+          announceStatus('Shortcut: refreshing summary.');
+          vscode.postMessage({ type: 'refreshSummary' });
+          return;
+        }
+        if (key === 'n') {
+          announceStatus('Shortcut: copying next steps.');
+          vscode.postMessage({ type: 'copyNextSteps' });
+          return;
+        }
+        const intentInput = document.getElementById('intent-override-input');
+        if (intentInput instanceof HTMLInputElement) {
+          intentInput.focus();
+          intentInput.select();
+          announceStatus('Shortcut: focused intent editor.');
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
         if (!(event.target instanceof HTMLInputElement)) {
           return;
         }
@@ -213,7 +531,7 @@ export function renderPanelClientScript(
           }
 
           if (action === 'toggleEvidenceMore') {
-            setEvidenceListExpanded(!Boolean(viewState.evidenceListExpanded));
+            setEvidenceListExpanded(!Boolean(viewState.evidenceListExpanded), true);
             return;
           }
 
@@ -288,6 +606,21 @@ export function renderPanelClientScript(
 
         const anchor = target.closest('a');
         if (anchor) {
+          const href = anchor.getAttribute('href');
+          if (typeof href === 'string' && href.startsWith('#')) {
+            const targetId = href.slice(1);
+            if (targetId) {
+              const hashTarget = document.getElementById(targetId);
+              if (hashTarget instanceof HTMLElement) {
+                event.preventDefault();
+                hashTarget.focus();
+                if (typeof hashTarget.scrollIntoView === 'function') {
+                  hashTarget.scrollIntoView({ block: 'start' });
+                }
+                return;
+              }
+            }
+          }
           event.preventDefault();
           vscode.postMessage({ type: 'blockedLink' });
         }

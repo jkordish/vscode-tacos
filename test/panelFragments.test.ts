@@ -231,6 +231,15 @@ describe('panelFragments', () => {
     expect(timelineHtml).toContain('data-timeline-affordance="open"');
     expect(resumePath).toContain('data-resume-path-step-id="confirmIntent"');
     expect(nudge).toContain('data-action="copyNextSteps"');
+    expect(doc).toContain('<html lang="en">');
+    expect(doc).toContain('<title>TaCoS Resume Brief</title>');
+    expect(doc).toContain('<meta name="viewport" content="width=device-width, initial-scale=1" />');
+    expect(doc).toContain('<meta name="color-scheme" content="light dark" />');
+    expect(doc).toContain('<a class="skip-link" href="#main">Skip to main content</a>');
+    expect(doc).toContain(
+      '<div id="panel-status-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>',
+    );
+    expect(doc).toContain('<main id="main" tabindex="-1">');
     expect(doc).toContain('<style nonce="nonce-123">.card { color: red; }</style>');
     expect(doc).toContain('console.log("panel");');
   });

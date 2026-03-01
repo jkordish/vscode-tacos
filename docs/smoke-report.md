@@ -1,6 +1,6 @@
-# Smoke Report (v0.6.0 Template)
+# Smoke Report Template (v0.6.0 + v0.7.0)
 
-Use this template to record final manual/automated smoke outcomes for v0.6.0 release prep.
+Use this template to record final manual/automated smoke outcomes for release prep.
 
 Date: `__________`  
 Tester: `__________`  
@@ -36,6 +36,34 @@ Result summary:
 
 - Trusted workspace sign-off: `PASS / FAIL`
 - Restricted workspace sign-off: `PASS / FAIL`
+
+## 2.1) v0.7.0 UI/A11y/Reflow Matrix
+
+For v0.7.0 details panel sign-off, execute section `7) v0.7.0 UI, Accessibility, and Reflow Matrix` in:
+
+- `docs/manual-smoke-runbook.md`
+
+v0.7.0 scenarios:
+
+- [ ] U1 semantic shell + landmarks
+- [ ] U2 reflow and horizontal scroll audit
+- [ ] U3 keyboard-only flow
+- [ ] U4 disclosure consistency + progressive context
+- [ ] U5 status feedback + disabled-action explainability
+
+Required view modes:
+
+- [ ] narrow pane (`~320 CSS px`)
+- [ ] standard split pane (`~600-900 CSS px`)
+- [ ] wide pane (`~1100+ CSS px`)
+- [ ] forced-colors active
+- [ ] keyboard-only navigation
+- [ ] 400% zoom reflow check
+
+Result summary:
+
+- v0.7.0 matrix sign-off: `PASS / FAIL`
+- Outstanding failures / follow-ups: `__________`
 
 ## 3) Metrics Snapshot Capture
 

@@ -227,7 +227,9 @@ export function renderCompanionNextSteps(input: CompanionNextStepsInput): string
       const badgeRow = badges ? `<div class="step-evidence">${badges}</div>` : '';
       const actionRow = actionButton ? `<div class="step-actions">${actionButton}</div>` : '';
       const advisoryRow = advisoryReason
-        ? `<div class="step-advisory muted">${escapeHtml(advisoryReason)}</div>`
+        ? `<div class="step-advisory" role="note"><strong>Advisory:</strong> ${escapeHtml(
+            advisoryReason,
+          )}</div>`
         : '';
       return `<li>${escapeHtml(step)}${badgeRow}${actionRow}${advisoryRow}</li>`;
     })
@@ -272,6 +274,11 @@ export function renderTopFilesListItems(topFiles: string[]): string {
     .join('');
 }
 
+const EVIDENCE_OPEN_HINT_TEXT = 'Opens validated file or URL evidence';
+const EVIDENCE_STATIC_HINT_TEXT = 'Informational evidence only; this item is not directly openable';
+const TIMELINE_OPEN_HINT_TEXT = 'Opens validated evidence target';
+const TIMELINE_STATIC_HINT_TEXT = 'Informational timeline event only';
+
 export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]): string {
   return evidenceCatalog
     .map((item, index) => {
@@ -285,10 +292,10 @@ export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]):
         : 'evidence-affordance evidence-affordance-static';
       const affordance = `<span class="${affordanceClass}" data-evidence-affordance="${
         clickable ? 'open' : 'static'
-      }">${clickable ? 'Open' : 'Not clickable'}</span>`;
+      }" aria-hidden="true">${clickable ? 'Open' : 'Not clickable'}</span>`;
       const label = clickable
-        ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`
-        : `<span class="evidence-label">${escapeHtml(item.label)}</span>`;
+        ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}" title="${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}">${escapeHtml(item.label)}</button>`
+        : `<span class="evidence-label" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_STATIC_HINT_TEXT)}">${escapeHtml(item.label)}</span>`;
       return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> <code>${escapeHtml(item.id)}</code>${target}</div></li>`;
     })
     .join('');
@@ -327,14 +334,14 @@ export function renderTimelineGroupsHtml(input: TimelineGroupsHtmlInput): string
       const items = group.rows
         .map((row) => {
           const labelControl = row.clickable
-            ? `<button type="button" class="text-link-button timeline-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}">${escapeHtml(row.label)}</button>`
-            : `<span class="timeline-label">${escapeHtml(row.label)}</span>`;
+            ? `<button type="button" class="text-link-button timeline-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}" aria-label="${escapeHtml(row.label)} - ${escapeHtml(TIMELINE_OPEN_HINT_TEXT)}" title="${escapeHtml(TIMELINE_OPEN_HINT_TEXT)}">${escapeHtml(row.label)}</button>`
+            : `<span class="timeline-label" aria-label="${escapeHtml(row.label)} - ${escapeHtml(TIMELINE_STATIC_HINT_TEXT)}">${escapeHtml(row.label)}</span>`;
           const affordanceClass = row.clickable
             ? 'evidence-affordance evidence-affordance-clickable'
             : 'evidence-affordance evidence-affordance-static';
           const heading = `<div class="timeline-row-heading">${labelControl}<span class="${affordanceClass}" data-timeline-affordance="${
             row.clickable ? 'open' : 'static'
-          }">${escapeHtml(row.interactionHint)}</span></div>`;
+          }" aria-hidden="true">${escapeHtml(row.interactionHint)}</span></div>`;
           const detail = row.detail
             ? `<span class="timeline-detail">${escapeHtml(row.detail)}</span>`
             : '';
@@ -385,9 +392,9 @@ export function renderResumePathCard(input: ResumePathCardInput): string {
   return `<div class="card"${readOnlyAttr}>
       <h3>Resume Path</h3>
       <details data-resume-path-details="true" ${input.completed && input.collapsed ? '' : 'open'}>
-        <summary><strong>${
+        <summary class="panel-disclosure-summary"><span class="section-heading-inline">${
           input.completed ? 'Resume Path complete' : 'Complete this 3-step re-entry path'
-        }</strong></summary>
+        }</span></summary>
         ${readOnlyHint}
         <ul class="compact-list resume-path-list">${resumePathItems}</ul>
       </details>
@@ -449,14 +456,21 @@ export interface WebviewDocumentInput {
 export function renderWebviewDocument(input: WebviewDocumentInput): string {
   const escapedNonce = escapeHtml(input.nonce);
   return `<!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <title>TaCoS Resume Brief</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     ${input.cspMetaTag}
     <style nonce="${escapedNonce}">${input.panelStyle}</style>
   </head>
   <body>
-    ${input.bodyCardsTrustedHtml}
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <div id="panel-status-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+    <main id="main" tabindex="-1">
+      ${input.bodyCardsTrustedHtml}
+    </main>
 
     <script nonce="${escapedNonce}">
 ${input.clientScript}

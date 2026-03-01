@@ -35,7 +35,9 @@ describe('panelCards', () => {
 
     expect(status).toContain('<h3>Status</h3>');
     expect(status).toContain('data-action="refreshSummary"');
-    expect(trust).toContain('<h3>Trust Center</h3>');
+    expect(trust).toContain(
+      'class="section-heading" role="heading" aria-level="3">Trust Center</span>',
+    );
     expect(trust).toContain('data-panel-section="trustCenter"');
     expect(trust).toContain('data-action="openPrivacySafety"');
     expect(trust).toContain('<li>Recent files: 2</li>');
@@ -60,6 +62,9 @@ describe('panelCards', () => {
     const details = renderDetailsCard('<p>Summary</p>', false);
 
     expect(timeline).toContain('data-panel-section="timeline"');
+    expect(timeline).toContain(
+      'class="section-heading" role="heading" aria-level="3">Timeline</span>',
+    );
     expect(timeline).toContain('No timeline entries captured yet.');
     expect(list).toContain('<h3>Top Files</h3>');
     expect(list).toContain('<li>None captured</li>');
@@ -87,6 +92,7 @@ describe('panelCards', () => {
     expect(recap).not.toContain('data-primary-next-safe-action=');
     expect(recap).not.toContain('data-action="copyNextSteps"');
     expect(quickActions).toContain('<h3>Quick Actions</h3>');
+    expect(quickActions).toContain('Keyboard shortcuts');
     expect(restore).toContain('Restricted Mode: task/debug/branch execution actions are disabled.');
     expect(changes).toContain('<h3>Changes Since Last Time</h3>');
   });
@@ -102,7 +108,7 @@ describe('panelCards', () => {
     expect(evidence).toMatchInlineSnapshot(`
       "<div class="card">
             <details data-panel-section="evidence" >
-              <summary><h3>Evidence</h3></summary>
+              <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Evidence</span></summary>
               <div class="panel-section-body">
                 <ul class="evidence-list" id="evidence-list"><li class="evidence-item"><div class="evidence-row"><button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="file:src/extension.ts">src/extension.ts</button><span class="evidence-affordance evidence-affordance-clickable" data-evidence-affordance="open">Open</span></div><div class="evidence-meta"><span class="evidence-kind">[file]</span> <code>file:src/extension.ts</code></div></li></ul>
                 <button type="button" class="show-more-btn" data-action="toggleEvidenceMore" data-hidden-count="2" aria-controls="evidence-list" aria-expanded="false">Show 2 more</button>

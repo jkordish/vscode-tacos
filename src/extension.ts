@@ -89,7 +89,12 @@ import {
   validateCustomRedactionPatterns,
 } from './redaction';
 import { isRefinementActiveForSummary } from './refinement';
-import { computeRestoreAvailability, type RestoreAvailability } from './restoreSafety';
+import {
+  computeRestoreAvailability,
+  describeRerunDebugUnavailableReason,
+  describeRerunTaskUnavailableReason,
+  type RestoreAvailability,
+} from './restoreSafety';
 import {
   SCRATCHPAD_FILES_SEGMENT,
   scratchpadFileNameForScope,
@@ -435,13 +440,19 @@ interface DiagnosticBlockerSnapshot {
   top?: DiagnosticBlockerReference;
 }
 
-type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details';
+type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details' | 'moreContext';
 
 interface PanelSectionState {
   expandedSectionIds: PanelSectionId[];
 }
 
-const PANEL_SECTION_IDS: PanelSectionId[] = ['trustCenter', 'timeline', 'evidence', 'details'];
+const PANEL_SECTION_IDS: PanelSectionId[] = [
+  'trustCenter',
+  'timeline',
+  'evidence',
+  'details',
+  'moreContext',
+];
 
 export function activate(context: vscode.ExtensionContext): void {
   activeExtensionContext = context;
@@ -741,7 +752,7 @@ export function activate(context: vscode.ExtensionContext): void {
         hasDisabledPrimaryBlockerAction,
         hasRestoreWorkingSetAction: restoreWorkingSetActionCount > 0,
         restoreWorkingSetActionCount,
-        hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
+        hasTrustCenterCard: hasTrustCenterSection || panelHtml.includes('<h3>Trust Center</h3>'),
         hasTrustCenterSection,
         hasTimelineSection,
         hasEvidenceSection,
@@ -3483,6 +3494,7 @@ async function showDetailsPanel(
           state.panelSummary.nextSteps.map((step, index) => `${index + 1}. ${step}`).join('\n'),
         );
         void vscode.window.showInformationMessage('TaCoS: next steps copied to clipboard.');
+        postPanelStatus('TaCoS: next steps copied to clipboard.');
         return;
       }
 
@@ -3494,6 +3506,7 @@ async function showDetailsPanel(
         recordCompanionQuickAction();
         await vscode.env.clipboard.writeText(formatPlainSummary(state.panelSummary));
         void vscode.window.showInformationMessage('TaCoS: summary copied to clipboard.');
+        postPanelStatus('TaCoS: summary copied to clipboard.');
         return;
       }
 
@@ -3655,6 +3668,9 @@ async function showDetailsPanel(
 
       if (message.type === 'blockedLink') {
         void vscode.window.showWarningMessage(
+          'TaCoS blocked a link that was not part of the validated summary link list.',
+        );
+        postPanelStatus(
           'TaCoS blocked a link that was not part of the validated summary link list.',
         );
         return;
@@ -3937,6 +3953,13 @@ function rerenderPanel(): void {
   );
 }
 
+function postPanelStatus(message: string): void {
+  if (!state.panel || !message.trim()) {
+    return;
+  }
+  void state.panel.webview.postMessage({ type: 'panelStatus', message });
+}
+
 function renderDetailsMarkdown(summary: ResumeSummary): string {
   const detailsMarkdown = summary.detailsMarkdown ?? '';
   const cached = state.detailsMarkdownCache;
@@ -4031,10 +4054,12 @@ function renderWebview(
     readOnly: demoMode,
   });
   const trusted = vscode.workspace.isTrusted;
+  const hasLastTask = !demoMode && Boolean(state.lastTaskName);
+  const hasLastDebug = !demoMode && Boolean(state.lastDebugConfigName);
   const availability = computeRestoreAvailability({
     trusted,
-    hasLastTask: !demoMode && Boolean(state.lastTaskName),
-    hasLastDebug: !demoMode && Boolean(state.lastDebugConfigName),
+    hasLastTask,
+    hasLastDebug,
     hasFailingCommand: !demoMode && Boolean(getCopyableFailingCommand()),
     hasRecentEditLocation: !demoMode && state.recentEditLocations.length > 0,
     currentBranch: demoMode ? undefined : summary.currentBranch,
@@ -4255,6 +4280,40 @@ function renderWebview(
     sectionClassName: 'action-group compact-action-group',
     buttonContainerClassName: 'companion-restore-grid',
   });
+  const restoreUnavailableReasons: string[] = [];
+  if (!demoMode && !availability.canJumpToLastEdit) {
+    restoreUnavailableReasons.push(
+      'Jump to last edit is unavailable: no recent edit was captured.',
+    );
+  }
+  if (!demoMode && !availability.canRerunTask) {
+    const reason = describeRerunTaskUnavailableReason({ trusted, hasLastTask });
+    if (reason) {
+      restoreUnavailableReasons.push(reason);
+    }
+  }
+  if (!demoMode && !availability.canRerunDebug) {
+    const reason = describeRerunDebugUnavailableReason({ trusted, hasLastDebug });
+    if (reason) {
+      restoreUnavailableReasons.push(reason);
+    }
+  }
+  if (!demoMode && !canOpenProblems) {
+    restoreUnavailableReasons.push(
+      'Open Problems is unavailable: no workspace diagnostics are active.',
+    );
+  }
+  if (!demoMode && !canOpenDiagnosticFile) {
+    restoreUnavailableReasons.push(
+      'Open diagnostic file is unavailable: no primary diagnostic file was detected.',
+    );
+  }
+  const restoreUnavailableHints =
+    !demoMode && restoreUnavailableReasons.length > 0
+      ? `<details><summary><strong>Why are some actions unavailable?</strong></summary><ul class="compact-list">${restoreUnavailableReasons
+          .map((reason) => `<li>${escapeHtml(reason)}</li>`)
+          .join('')}</ul></details>`
+      : '';
 
   const quickActionGroups = renderGroupedActionSections({
     groups: [
@@ -4439,6 +4498,29 @@ function renderWebview(
     expanded: expandedSections.has('evidence'),
   });
   const detailsCard = renderDetailsCard(detailsHtml, expandedSections.has('details'));
+  const moreContextCards = [
+    trustCenterCard,
+    recapCard,
+    changesSinceCard,
+    nudgeCard,
+    topFilesCard,
+    topLinksCard,
+    timelineCard,
+    evidenceCard,
+    detailsCard,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  const moreContextCard = moreContextCards
+    ? `<div class="card">
+      <details data-panel-section="moreContext" ${expandedSections.has('moreContext') ? 'open' : ''}>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">More Context</span></summary>
+        <div class="panel-section-body more-context-stack">
+          ${moreContextCards}
+        </div>
+      </details>
+    </div>`
+    : '';
   const demoCard = demoMode
     ? `<div class="card" data-demo-resume-card="true">
       <h3>Sample Resume Card</h3>
@@ -4464,6 +4546,7 @@ function renderWebview(
       lastActionActionTrustedHtml: lastActionActionHtml,
       nextSafeActionSummary:
         primaryNextActionSummary || 'Refresh summary to regenerate first-action guidance.',
+      hasPrimaryNextAction: Boolean(primaryNextAction),
       primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
       nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
       nextStepsListTrustedHtml: companionNextSteps,
@@ -4474,23 +4557,16 @@ function renderWebview(
       blockerDisabledReasonTrustedHtml: blockerDisabledReasonHtml,
       blockerActionTrustedHtml: blockerActionHtml,
       restoreSectionsTrustedHtml: companionRestoreSections,
+      restoreUnavailableHintsTrustedHtml: restoreUnavailableHints,
     }),
     resumePathCard,
     confidenceCard,
-    trustCenterCard,
     statusCard,
     checkpointCard,
     scratchpadCard,
-    recapCard,
-    changesSinceCard,
-    nudgeCard,
-    topFilesCard,
-    topLinksCard,
-    timelineCard,
     quickActionsCard,
     restorePackCard,
-    evidenceCard,
-    detailsCard,
+    moreContextCard,
   ]
     .filter(Boolean)
     .join('\n\n');
