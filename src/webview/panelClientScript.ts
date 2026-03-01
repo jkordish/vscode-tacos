@@ -255,8 +255,10 @@ export function renderPanelClientScript(
       }
 
       function restoreViewPosition() {
-        if (Number.isFinite(viewState.scrollY) && viewState.scrollY > 0) {
-          window.scrollTo(0, viewState.scrollY);
+        const hasSavedScroll = Number.isFinite(viewState.scrollY) && viewState.scrollY > 0;
+        const savedScrollY = hasSavedScroll ? viewState.scrollY : 0;
+        if (hasSavedScroll) {
+          window.scrollTo(0, savedScrollY);
         }
 
         const active = document.activeElement;
@@ -265,7 +267,14 @@ export function renderPanelClientScript(
         }
         const restored = resolveFocusToken(viewState.focusToken);
         if (restored instanceof HTMLElement) {
-          restored.focus();
+          try {
+            restored.focus({ preventScroll: true });
+          } catch {
+            restored.focus();
+            if (hasSavedScroll) {
+              window.scrollTo(0, savedScrollY);
+            }
+          }
         }
       }
 

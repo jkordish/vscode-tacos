@@ -179,6 +179,30 @@ describe('panelClientScript state behavior', () => {
     expect(document.activeElement).toBe(pipeButton);
   });
 
+  it('keeps saved scroll position when focus restore falls back without preventScroll support', () => {
+    const encodedEvidence = encodeURIComponent('url:https://example.test/search?q=a=b&mode=full');
+    const focusToken = 'action:openEvidence|evidence=' + encodedEvidence + '|ord=0';
+
+    bootstrap({ sectionScope: 'scope-token', focusToken, scrollY: 160 });
+    const primaryButton = document.querySelector('[data-test-slot="primary"]') as HTMLElement;
+    const focusMock = jest.fn((options?: FocusOptions) => {
+      if (options && options.preventScroll) {
+        throw new TypeError('focus options are unsupported');
+      }
+    });
+    Object.defineProperty(primaryButton, 'focus', {
+      configurable: true,
+      value: focusMock,
+    });
+
+    jest.advanceTimersByTime(50);
+
+    expect(focusMock).toHaveBeenNthCalledWith(1, { preventScroll: true });
+    expect(focusMock).toHaveBeenNthCalledWith(2);
+    expect(window.scrollTo).toHaveBeenLastCalledWith(0, 160);
+    expect((window.scrollTo as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('keeps only the latest queued status announcement text', () => {
     bootstrap();
     const live = document.getElementById('panel-status-live') as HTMLElement;
