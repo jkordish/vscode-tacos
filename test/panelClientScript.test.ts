@@ -16,5 +16,8 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain('toggle.dataset.hiddenCount');
     expect(script).toContain("toggle.textContent = expanded ? 'Show less' : collapsedLabel;");
     expect(script).toContain("toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');");
+    expect(script).toContain("document.getElementById('panel-status-live')");
+    expect(script).toContain("payload.type !== 'panelStatus'");
+    expect(script).toContain("announceStatus(expanded ? 'Evidence list expanded.' : 'Evidence list collapsed.')");
   });
 });

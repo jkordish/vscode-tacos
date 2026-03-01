@@ -55,7 +55,26 @@ export function renderPanelClientScript(
         vscode.setState(viewState);
       }
 
-      function setEvidenceListExpanded(expanded) {
+      function announceStatus(rawMessage) {
+        if (typeof rawMessage !== 'string') {
+          return;
+        }
+        const liveRegion = document.getElementById('panel-status-live');
+        if (!(liveRegion instanceof HTMLElement)) {
+          return;
+        }
+        const message = rawMessage.trim();
+        if (!message) {
+          return;
+        }
+        liveRegion.textContent = '';
+        // Force a text change so repeated messages still announce.
+        window.setTimeout(() => {
+          liveRegion.textContent = message;
+        }, 15);
+      }
+
+      function setEvidenceListExpanded(expanded, announceChange = false) {
         const list = document.getElementById('evidence-list');
         const toggle = document.querySelector('[data-action="toggleEvidenceMore"]');
         if (!(list instanceof HTMLElement) || !(toggle instanceof HTMLElement)) {
@@ -76,6 +95,9 @@ export function renderPanelClientScript(
         toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         viewState.evidenceListExpanded = expanded;
         persistViewState();
+        if (announceChange) {
+          announceStatus(expanded ? 'Evidence list expanded.' : 'Evidence list collapsed.');
+        }
       }
 
       function persistPanelSectionExpanded(sectionId, expanded) {
@@ -103,8 +125,19 @@ export function renderPanelClientScript(
         }
       }
 
-      setEvidenceListExpanded(Boolean(viewState.evidenceListExpanded));
+      setEvidenceListExpanded(Boolean(viewState.evidenceListExpanded), false);
       restorePanelSectionExpansion();
+
+      window.addEventListener('message', (event) => {
+        const payload = event.data;
+        if (!payload || typeof payload !== 'object') {
+          return;
+        }
+        if (payload.type !== 'panelStatus' || typeof payload.message !== 'string') {
+          return;
+        }
+        announceStatus(payload.message);
+      });
 
       function parseDatasetInteger(rawValue) {
         if (typeof rawValue !== 'string') {
@@ -213,7 +246,7 @@ export function renderPanelClientScript(
           }
 
           if (action === 'toggleEvidenceMore') {
-            setEvidenceListExpanded(!Boolean(viewState.evidenceListExpanded));
+            setEvidenceListExpanded(!Boolean(viewState.evidenceListExpanded), true);
             return;
           }
 

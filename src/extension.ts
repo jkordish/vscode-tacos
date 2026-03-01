@@ -3483,6 +3483,7 @@ async function showDetailsPanel(
           state.panelSummary.nextSteps.map((step, index) => `${index + 1}. ${step}`).join('\n'),
         );
         void vscode.window.showInformationMessage('TaCoS: next steps copied to clipboard.');
+        postPanelStatus('TaCoS: next steps copied to clipboard.');
         return;
       }
 
@@ -3494,6 +3495,7 @@ async function showDetailsPanel(
         recordCompanionQuickAction();
         await vscode.env.clipboard.writeText(formatPlainSummary(state.panelSummary));
         void vscode.window.showInformationMessage('TaCoS: summary copied to clipboard.');
+        postPanelStatus('TaCoS: summary copied to clipboard.');
         return;
       }
 
@@ -3657,6 +3659,7 @@ async function showDetailsPanel(
         void vscode.window.showWarningMessage(
           'TaCoS blocked a link that was not part of the validated summary link list.',
         );
+        postPanelStatus('TaCoS blocked a link that was not part of the validated summary link list.');
         return;
       }
 
@@ -3935,6 +3938,13 @@ function rerenderPanel(): void {
     PERF_PANEL_RERENDER_SLOW_MS,
     `evidence=${state.panelSummary.evidenceCatalog?.length ?? 0}`,
   );
+}
+
+function postPanelStatus(message: string): void {
+  if (!state.panel || !message.trim()) {
+    return;
+  }
+  void state.panel.webview.postMessage({ type: 'panelStatus', message });
 }
 
 function renderDetailsMarkdown(summary: ResumeSummary): string {
@@ -4464,6 +4474,7 @@ function renderWebview(
       lastActionActionTrustedHtml: lastActionActionHtml,
       nextSafeActionSummary:
         primaryNextActionSummary || 'Refresh summary to regenerate first-action guidance.',
+      hasPrimaryNextAction: Boolean(primaryNextAction),
       primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
       nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
       nextStepsListTrustedHtml: companionNextSteps,

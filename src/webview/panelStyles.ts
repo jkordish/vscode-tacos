@@ -12,7 +12,40 @@ export const PANEL_WEBVIEW_STYLE = `
         font-family: var(--vscode-font-family);
         font-size: var(--vscode-font-size);
         line-height: 1.5;
+        margin: 0;
         padding: 16px;
+      }
+      main {
+        display: block;
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .skip-link {
+        position: absolute;
+        left: 12px;
+        top: 8px;
+        z-index: 999;
+        border: 1px solid var(--vscode-button-border, transparent);
+        border-radius: 6px;
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        padding: 6px 10px;
+        text-decoration: none;
+        transform: translateY(-140%);
+      }
+      .skip-link:focus-visible {
+        transform: translateY(0);
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
       }
       .card {
         border: 1px solid var(--surface-border);
@@ -97,7 +130,8 @@ export const PANEL_WEBVIEW_STYLE = `
         margin-top: 8px;
       }
       .step-action {
-        padding: 4px 10px;
+        min-height: 24px;
+        padding: 6px 10px;
         font-size: 12px;
       }
       .step-advisory {
@@ -121,7 +155,9 @@ export const PANEL_WEBVIEW_STYLE = `
         color: inherit;
         border-width: 1px;
         border-style: solid;
-        padding: 2px 8px;
+        min-height: 24px;
+        min-width: 24px;
+        padding: 4px 10px;
         font-size: 12px;
       }
       .badge.kind-url {
@@ -134,7 +170,8 @@ export const PANEL_WEBVIEW_STYLE = `
         border: none;
         background: transparent;
         color: var(--vscode-textLink-foreground);
-        padding: 0;
+        min-height: 24px;
+        padding: 2px 4px;
         border-radius: 4px;
         text-align: left;
         text-decoration: underline;
@@ -143,6 +180,11 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .text-link-button:hover {
         color: var(--vscode-textLink-activeForeground);
+      }
+      .text-link-button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
       }
       .timeline-link-button {
         align-self: flex-start;
@@ -218,12 +260,37 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .card > details[data-panel-section] > summary {
         list-style: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 24px;
+      }
+      .card > details[data-panel-section] > summary::before {
+        content: '▸';
+        color: var(--surface-muted);
+        flex: 0 0 auto;
+        font-size: 12px;
+        line-height: 1;
+        transition: transform 120ms ease;
       }
       .card > details[data-panel-section] > summary::-webkit-details-marker {
         display: none;
       }
-      .card > details[data-panel-section] > summary h3 {
-        margin-bottom: 0;
+      .card > details[data-panel-section][open] > summary::before {
+        transform: rotate(90deg);
+      }
+      .panel-disclosure-summary {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .section-heading {
+        font-weight: 700;
+        font-size: 1.1em;
+        line-height: 1.3;
+      }
+      .section-heading-inline {
+        font-weight: 700;
       }
       .panel-section-body {
         margin-top: 10px;
@@ -268,6 +335,7 @@ export const PANEL_WEBVIEW_STYLE = `
         background: var(--vscode-button-background);
         color: var(--vscode-button-foreground);
         border-radius: 8px;
+        min-height: 24px;
         padding: 8px 10px;
       }
       button:focus-visible {
@@ -376,6 +444,21 @@ export const PANEL_WEBVIEW_STYLE = `
         font-weight: 700;
         line-height: 1.4;
       }
+      .state-caption {
+        margin: 0 0 6px 0;
+        font-size: 12px;
+        font-weight: 600;
+      }
+      .state-safe,
+      .state-clear {
+        color: var(--vscode-testing-iconPassed);
+      }
+      .state-advisory {
+        color: var(--vscode-testing-iconQueued);
+      }
+      .state-blocked {
+        color: var(--vscode-testing-iconFailed);
+      }
       .companion-kicker {
         margin: 0;
         font-size: 12px;
@@ -448,6 +531,15 @@ export const PANEL_WEBVIEW_STYLE = `
         .text-link-button {
           forced-color-adjust: auto;
           border-color: ButtonText;
+        }
+        .card > details[data-panel-section] > summary::before {
+          color: ButtonText;
+        }
+        .state-safe,
+        .state-clear,
+        .state-advisory,
+        .state-blocked {
+          color: ButtonText;
         }
         button:focus-visible,
         summary:focus-visible,

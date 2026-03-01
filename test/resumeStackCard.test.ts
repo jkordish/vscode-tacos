@@ -12,6 +12,7 @@ describe('renderResumeStackCard', () => {
       lastActionActionTrustedHtml:
         '<button type="button" class="secondary" data-action="openEvidence" data-evidence-id="file:src/extension.ts">Open last action</button>',
       nextSafeActionSummary: 'Open src/extension.ts and run verify',
+      hasPrimaryNextAction: true,
       primaryNextActionTrustedHtml:
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open file</button>',
       nextStepRationaleTrustedHtml:
@@ -47,6 +48,7 @@ describe('renderResumeStackCard', () => {
                <h4>Next</h4>
                <p class="companion-kicker">Next safe action</p>
                <p class="companion-primary">Open src/extension.ts and run verify</p>
+               <p class="state-caption state-safe">Status: Safe action available</p>
                <details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">Based on file evidence: src/extension.ts.</p></details>
                <ul class="compact-list"><li>No next steps captured yet.</li></ul>
                <div class="status-actions">
@@ -57,6 +59,7 @@ describe('renderResumeStackCard', () => {
              </section>
              <section class="companion-block" data-blocked-card="none">
                <h4>Blocked</h4>
+               <p class="state-caption state-clear">Status: No blocker</p>
                <p class="companion-primary">No active blocker</p>
                <p class="muted">Continue with the first suggested next step.</p>
                
@@ -84,6 +87,7 @@ describe('renderResumeStackCard', () => {
       lastActionContext: 'retrieval cue unavailable',
       lastActionActionTrustedHtml: '',
       nextSafeActionSummary: 'Open diagnostics and fix top error',
+      hasPrimaryNextAction: true,
       primaryNextActionTrustedHtml:
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open Problems</button>',
       nextStepRationaleTrustedHtml: '',

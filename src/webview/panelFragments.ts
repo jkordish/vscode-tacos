@@ -227,7 +227,9 @@ export function renderCompanionNextSteps(input: CompanionNextStepsInput): string
       const badgeRow = badges ? `<div class="step-evidence">${badges}</div>` : '';
       const actionRow = actionButton ? `<div class="step-actions">${actionButton}</div>` : '';
       const advisoryRow = advisoryReason
-        ? `<div class="step-advisory muted">${escapeHtml(advisoryReason)}</div>`
+        ? `<div class="step-advisory" role="note"><strong>Advisory:</strong> ${escapeHtml(
+            advisoryReason,
+          )}</div>`
         : '';
       return `<li>${escapeHtml(step)}${badgeRow}${actionRow}${advisoryRow}</li>`;
     })
@@ -385,9 +387,9 @@ export function renderResumePathCard(input: ResumePathCardInput): string {
   return `<div class="card"${readOnlyAttr}>
       <h3>Resume Path</h3>
       <details data-resume-path-details="true" ${input.completed && input.collapsed ? '' : 'open'}>
-        <summary><strong>${
+        <summary class="panel-disclosure-summary"><span class="section-heading-inline">${
           input.completed ? 'Resume Path complete' : 'Complete this 3-step re-entry path'
-        }</strong></summary>
+        }</span></summary>
         ${readOnlyHint}
         <ul class="compact-list resume-path-list">${resumePathItems}</ul>
       </details>
@@ -449,14 +451,21 @@ export interface WebviewDocumentInput {
 export function renderWebviewDocument(input: WebviewDocumentInput): string {
   const escapedNonce = escapeHtml(input.nonce);
   return `<!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <title>TaCoS Resume Brief</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     ${input.cspMetaTag}
     <style nonce="${escapedNonce}">${input.panelStyle}</style>
   </head>
   <body>
-    ${input.bodyCardsTrustedHtml}
+    <a class="skip-link" href="#main">Skip to main content</a>
+    <div id="panel-status-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+    <main id="main">
+      ${input.bodyCardsTrustedHtml}
+    </main>
 
     <script nonce="${escapedNonce}">
 ${input.clientScript}
