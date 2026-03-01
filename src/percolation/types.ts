@@ -126,7 +126,10 @@ function normalizeMeta(
   return normalized;
 }
 
-function resolveSignalId(signal: Partial<NormalizedSignal>, fallbackKind: NormalizedSignalKind): string {
+function resolveSignalId(
+  signal: Partial<NormalizedSignal>,
+  fallbackKind: NormalizedSignalKind,
+): string {
   if (signal.id && signal.id.trim().length > 0) {
     return signal.id.trim();
   }
@@ -169,7 +172,10 @@ function normalizeEvidenceIds(ids: unknown): string[] {
   return [...unique].sort((left, right) => left.localeCompare(right));
 }
 
-export function normalizeSignal(signal: Partial<NormalizedSignal>, fallbackNow: number): NormalizedSignal {
+export function normalizeSignal(
+  signal: Partial<NormalizedSignal>,
+  fallbackNow: number,
+): NormalizedSignal {
   const kind: NormalizedSignalKind = signal.kind ?? 'unknown';
   return {
     id: resolveSignalId(signal, kind),
@@ -254,7 +260,11 @@ function defaultSignalsFromSummary(summary: ResumeSummary, now: number): Normali
     },
   ];
 
-  if (summary.currentBranch && summary.previousBranch && summary.currentBranch !== summary.previousBranch) {
+  if (
+    summary.currentBranch &&
+    summary.previousBranch &&
+    summary.currentBranch !== summary.previousBranch
+  ) {
     signals.push({
       id: 'signal:branch-switch',
       kind: 'branch-switch',

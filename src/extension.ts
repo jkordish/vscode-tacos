@@ -4244,9 +4244,7 @@ function renderWebview(
   );
   const primaryNextActionStepIndex = primaryNextAction?.stepIndex ?? -1;
   const directNextActionSummary =
-    primaryNextActionStepIndex >= 0
-      ? (summary.nextSteps[primaryNextActionStepIndex] ?? '')
-      : '';
+    primaryNextActionStepIndex >= 0 ? (summary.nextSteps[primaryNextActionStepIndex] ?? '') : '';
   const primaryNextActionSummary =
     directNextActionSummary || selectPanelPrimarySummary(summary, rankedPrimaryCandidate);
   const primaryNextActionDisabledAttr = demoMode ? 'disabled aria-disabled="true"' : '';

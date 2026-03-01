@@ -27,7 +27,9 @@ function buildSummary(overrides: Partial<ResumeSummary> = {}): ResumeSummary {
 describe('percolation explainability payload', () => {
   it('includes surfaced item score, evidence, and reasons when ranking succeeds', () => {
     const summary = buildSummary();
-    const ranking = rankCandidates(createPercolationPolicyInput(summary, { now: summary.generatedAt }));
+    const ranking = rankCandidates(
+      createPercolationPolicyInput(summary, { now: summary.generatedAt }),
+    );
     const payload = buildPercolationExplainabilityPayload({
       summary,
       primary: ranking.primary,
@@ -61,7 +63,9 @@ describe('percolation explainability payload', () => {
 
   it('formats stable human-readable explainability lines', () => {
     const summary = buildSummary();
-    const ranking = rankCandidates(createPercolationPolicyInput(summary, { now: summary.generatedAt }));
+    const ranking = rankCandidates(
+      createPercolationPolicyInput(summary, { now: summary.generatedAt }),
+    );
     const payload = buildPercolationExplainabilityPayload({
       summary,
       primary: ranking.primary,

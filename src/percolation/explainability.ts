@@ -102,7 +102,9 @@ export function buildPercolationExplainabilityPayload(
     missingSignals.push('No recent failing command signal was detected.');
   }
 
-  const evidenceIds = primary?.evidenceIds?.slice().sort((left, right) => left.localeCompare(right));
+  const evidenceIds = primary?.evidenceIds
+    ?.slice()
+    .sort((left, right) => left.localeCompare(right));
 
   return {
     surfacedItemId: primary?.id,

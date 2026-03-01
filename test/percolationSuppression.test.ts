@@ -43,18 +43,21 @@ describe('evaluatePercolationSuppression', () => {
     ['paused', 'paused'],
     ['restricted', 'restricted'],
     ['disabled', 'disabled'],
-  ] as const)('returns mode-specific suppression reason for non-active mode (%s)', (mode, reason) => {
-    const decision = evaluatePercolationSuppression({
-      enabled: true,
-      mode,
-      now: 1_700_000_000_000,
-    });
+  ] as const)(
+    'returns mode-specific suppression reason for non-active mode (%s)',
+    (mode, reason) => {
+      const decision = evaluatePercolationSuppression({
+        enabled: true,
+        mode,
+        now: 1_700_000_000_000,
+      });
 
-    expect(decision).toEqual({
-      suppressed: true,
-      reason,
-    });
-  });
+      expect(decision).toEqual({
+        suppressed: true,
+        reason,
+      });
+    },
+  );
 
   it('returns no-change when context is unchanged and no earlier gate suppresses', () => {
     const decision = evaluatePercolationSuppression({
