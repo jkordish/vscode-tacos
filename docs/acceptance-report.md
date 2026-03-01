@@ -149,7 +149,7 @@ Status: Pending manual sign-off
 
 ## v0.7.0 UI/A11y/Reflow Acceptance Addendum
 
-Status: In progress
+Status: In progress (manual v0.7.0 QA sign-off pending)
 
 Tracking epics:
 
@@ -182,11 +182,12 @@ Tracking epics:
 - [ ] Keyboard-only workflow pass.
 - [ ] Forced-colors/high-contrast pass for disclosure/focus/border affordances.
 - [ ] WCAG 2.2 target-size pass for primary/frequent controls (or documented exception).
-- [ ] Automated accessibility checks pass for generated webview HTML.
+- [x] Automated accessibility checks pass for generated webview HTML.
 - [ ] Manual QA matrix (narrow/split/wide, forced-colors, keyboard-only, 400% zoom) executed and recorded.
 
 ### Open gaps / TODOs (v0.7.0)
 
 - Completed: dedicated axe-core test coverage for generated panel HTML in CI gate (#218).
 - Completed: persistence regression coverage including scroll/focus restoration behavior (#219).
+- Completed: smoke report template now references the v0.7.0 matrix in `docs/smoke-report.md` (#221).
 - Remaining: execute and record the v0.7.0 manual matrix run in `docs/manual-smoke-runbook.md` (#221).
