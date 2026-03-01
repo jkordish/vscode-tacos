@@ -33,7 +33,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
   return `<div class="card">
       <h3>Companion Home</h3>
       <div class="companion-grid">
-        <section class="companion-block">
+        <section class="companion-block" data-companion-section="now">
           <h4>Now</h4>
           <p class="companion-kicker">Current focus</p>
           <p class="companion-primary">${escapeHtml(input.intent)}</p>
@@ -55,7 +55,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
               : ''
           }
         </section>
-        <section class="companion-block">
+        <section class="companion-block" data-companion-section="next">
           <h4>Next</h4>
           <p class="companion-kicker">Next safe action</p>
           <p class="companion-primary">${escapeHtml(input.nextSafeActionSummary)}</p>
@@ -72,7 +72,9 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
             <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
           </div>
         </section>
-        <section class="companion-block" data-blocked-card="${input.hasBlocker ? 'active' : 'none'}">
+        <section class="companion-block" data-companion-section="blocked" data-blocked-card="${
+          input.hasBlocker ? 'active' : 'none'
+        }">
           <h4>Blocked</h4>
           <p class="state-caption ${input.hasBlocker ? 'state-blocked' : 'state-clear'}">Status: ${
             input.hasBlocker ? 'Blocked' : 'No blocker'
@@ -83,7 +85,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           ${input.blockerDisabledReasonTrustedHtml ?? ''}
           ${input.blockerActionTrustedHtml ?? ''}
         </section>
-        <section class="companion-block">
+        <section class="companion-block" data-companion-section="restore">
           <h4>Restore</h4>
           ${input.restoreSectionsTrustedHtml}
         </section>

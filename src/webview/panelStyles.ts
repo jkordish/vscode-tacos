@@ -13,6 +13,7 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: var(--vscode-font-size);
         line-height: 1.5;
         margin: 0;
+        overflow-x: hidden;
         padding: 16px;
       }
       main {
@@ -195,6 +196,9 @@ export const PANEL_WEBVIEW_STYLE = `
         align-items: center;
         gap: 6px;
       }
+      .timeline-row-heading > * {
+        min-width: 0;
+      }
       .timeline-label {
         font-weight: 600;
       }
@@ -216,6 +220,9 @@ export const PANEL_WEBVIEW_STYLE = `
         align-items: center;
         justify-content: space-between;
         gap: 8px;
+      }
+      .evidence-row > * {
+        min-width: 0;
       }
       .evidence-link-button,
       .evidence-label {
@@ -327,7 +334,7 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .restore-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
         gap: 8px;
       }
       button {
@@ -399,12 +406,13 @@ export const PANEL_WEBVIEW_STYLE = `
         overflow-wrap: anywhere;
       }
       .quick-actions {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
         gap: 8px;
       }
       .quick-actions button {
-        min-width: 160px;
+        min-width: 0;
+        width: 100%;
       }
       .action-group + .action-group {
         margin-top: 10px;
@@ -419,8 +427,23 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .companion-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-areas:
+          'now next'
+          'blocked restore';
         gap: 12px;
+      }
+      .companion-block[data-companion-section='now'] {
+        grid-area: now;
+      }
+      .companion-block[data-companion-section='next'] {
+        grid-area: next;
+      }
+      .companion-block[data-companion-section='blocked'] {
+        grid-area: blocked;
+      }
+      .companion-block[data-companion-section='restore'] {
+        grid-area: restore;
       }
       .companion-block {
         border: 1px solid var(--vscode-widget-border);
@@ -443,6 +466,7 @@ export const PANEL_WEBVIEW_STYLE = `
         margin: 0 0 8px 0;
         font-weight: 700;
         line-height: 1.4;
+        max-inline-size: 72ch;
       }
       .state-caption {
         margin: 0 0 6px 0;
@@ -469,6 +493,7 @@ export const PANEL_WEBVIEW_STYLE = `
       .companion-meta {
         margin: 0;
         color: var(--surface-muted);
+        max-inline-size: 72ch;
       }
       .intent-editor {
         border: 1px solid var(--vscode-widget-border);
@@ -518,6 +543,38 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .recap-card h4 {
         margin-top: 0;
+      }
+      .details-markdown p,
+      .details-markdown li {
+        max-inline-size: 72ch;
+      }
+      @media (min-width: 1100px) {
+        .companion-grid {
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          grid-template-areas: 'now next blocked restore';
+        }
+      }
+      @media (max-width: 700px) {
+        body {
+          padding: 10px;
+        }
+        .companion-grid {
+          grid-template-columns: 1fr;
+          grid-template-areas:
+            'now'
+            'next'
+            'blocked'
+            'restore';
+        }
+        .restore-grid,
+        .companion-restore-grid,
+        .recap-card .recap-grid,
+        .quick-actions {
+          grid-template-columns: 1fr;
+        }
+        .timeline-group li {
+          grid-template-columns: 56px 1fr;
+        }
       }
       @media (forced-colors: active) {
         button,
