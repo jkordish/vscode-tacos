@@ -2374,10 +2374,6 @@ async function presentSummary(
   const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
   state.lastSummaryContextUnchanged = triggerReason === 'cached';
 
-  if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
-    await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
-  }
-
   if (config.metricsEnabled) {
     await finalizeCurrentMetric(context);
     const root = pickWorkspaceRoot() ?? '';
@@ -2421,6 +2417,9 @@ async function presentSummary(
       recordPercolationSuppressionMetric(notificationSuppression.reason);
       return;
     }
+  }
+  if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
+    await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
   }
   const notificationPrimary = rankPercolationForSummary(summary, percolationMode).primary;
   const notificationHeadline = selectNotificationHeadline(summary, notificationPrimary);
