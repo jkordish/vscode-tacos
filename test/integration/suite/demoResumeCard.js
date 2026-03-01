@@ -85,6 +85,11 @@ async function run() {
     true,
     'Expected Fix summary quick action to be disabled in demo mode.',
   );
+  assert.equal(
+    resumeFlow?.hasDisabledToggleAutoSummariesAction,
+    true,
+    'Expected auto-summary toggle controls to be disabled in demo mode.',
+  );
 }
 
 module.exports = {
