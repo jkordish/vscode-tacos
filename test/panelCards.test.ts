@@ -90,6 +90,7 @@ describe('panelCards', () => {
     expect(recap).not.toContain('data-primary-next-safe-action=');
     expect(recap).not.toContain('data-action="copyNextSteps"');
     expect(quickActions).toContain('<h3>Quick Actions</h3>');
+    expect(quickActions).toContain('Keyboard shortcuts');
     expect(restore).toContain('Restricted Mode: task/debug/branch execution actions are disabled.');
     expect(changes).toContain('<h3>Changes Since Last Time</h3>');
   });

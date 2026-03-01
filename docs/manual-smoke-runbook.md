@@ -289,3 +289,83 @@ Overall restricted workspace sign-off: `PASS / FAIL`
 Ready for release checklist gate (#161): `YES / NO`
 
 Final notes: `__________`
+
+## 7) v0.7.0 UI, Accessibility, and Reflow Matrix
+
+Use this matrix for v0.7.0 details-panel sign-off (epics: #190, #191, #192, #193).
+
+### 7.1 Required view modes
+
+Run each scenario below in:
+
+1. Narrow pane (`~320 CSS px` equivalent)
+2. Standard split pane (`~600-900 CSS px`)
+3. Wide pane (`~1100+ CSS px`)
+4. Forced-colors active
+5. Keyboard-only navigation
+6. 400% zoom reflow check
+
+### 7.2 Scenarios
+
+#### U1. Semantic shell + landmark navigation
+
+Expected:
+
+- Skip link appears on keyboard focus.
+- Main content is reachable via skip link target.
+- Section disclosure labels remain readable.
+
+Result: `PASS / FAIL`  
+Notes: `__________`
+
+#### U2. Reflow and horizontal scroll audit
+
+Expected:
+
+- No horizontal scrolling for primary details-panel content at narrow pane widths.
+- Companion Home and Quick Actions reflow to single-column ergonomically on narrow panes.
+- Long paths/IDs/code do not break layout.
+
+Result: `PASS / FAIL`  
+Notes: `__________`
+
+#### U3. Keyboard-only flow
+
+Expected:
+
+- Full resume workflow is operable without mouse.
+- Focus indicator is always visible on actionable controls.
+- Shortcuts in Quick Actions help (`Alt+Shift+R`, `Alt+Shift+N`, `Alt+Shift+I`) behave as documented.
+
+Result: `PASS / FAIL`  
+Notes: `__________`
+
+#### U4. Disclosure consistency and progressive context
+
+Expected:
+
+- Expand/collapse affordance is visible for all panel sections.
+- “More Context” disclosure persists expansion state across rerender/reopen.
+- Nested disclosure behavior remains consistent.
+
+Result: `PASS / FAIL`  
+Notes: `__________`
+
+#### U5. Status feedback and disabled-action explainability
+
+Expected:
+
+- Copy/blocked actions produce accessible status feedback.
+- Disabled restore actions expose understandable reason hints.
+- Blocked/advisory/safe states remain understandable without relying on color alone.
+
+Result: `PASS / FAIL`  
+Notes: `__________`
+
+### 7.3 v0.7.0 Sign-off checklist
+
+- [ ] `npm run compile` passes
+- [ ] `npm test` passes
+- [ ] Unit coverage includes shell semantics and interaction script updates
+- [ ] Automated a11y checks (axe) pass
+- [ ] U1-U5 pass in matrix
