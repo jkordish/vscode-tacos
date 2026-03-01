@@ -32,6 +32,7 @@ export interface TrustCenterCardInput {
   sentToAiLabel: string;
   trustBasedOn: string;
   trustCueDetailsTrustedHtml: string;
+  percolationExplainabilityTrustedHtml: string;
   autoSummaryToggleDisabledAttr: string;
   autoSummaryToggleLabel: string;
   expanded: boolean;
@@ -46,9 +47,14 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
           <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
           <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(input.sentToAiLabel)}</div>
           <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(input.trustBasedOn)}</div>
-          <details>
+          <details data-why-surfaced-details="true">
             <summary><strong>Why am I seeing this?</strong></summary>
             <ul class="compact-list">${input.trustCueDetailsTrustedHtml || '<li>No evidence counts yet.</li>'}</ul>
+            ${
+              input.percolationExplainabilityTrustedHtml
+                ? `<ul class="compact-list" data-why-surfaced-list="true">${input.percolationExplainabilityTrustedHtml}</ul>`
+                : ''
+            }
           </details>
           <div class="status-actions">
             <button type="button" class="secondary" data-action="toggleAutoSummaries" ${

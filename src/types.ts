@@ -155,6 +155,11 @@ export interface MetricRecord {
   companionPrimaryCtaImpressions?: number;
   companionPrimaryCtaClicks?: number;
   companionPrimaryCtaCompletions?: number;
+  whySurfacedOpens?: number;
+  percolationSuppressedQuietHours?: number;
+  percolationSuppressedCooldown?: number;
+  percolationSuppressedNoChange?: number;
+  percolationSuppressedNoiseBudget?: number;
   helpfulnessRating?: 1 | 2 | 3 | 4 | 5;
   pauseActions?: number;
   snoozeActions?: number;

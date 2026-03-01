@@ -76,6 +76,13 @@ import {
   normalizeHttpUrl,
   resolveFileTargetInWorkspace,
 } from './pathSafety';
+import { rankCandidates, type RankedSurfacedItem } from './percolation/ranking';
+import {
+  buildPercolationExplainabilityPayload,
+  formatPercolationExplainabilityLines,
+} from './percolation/explainability';
+import { evaluatePercolationSuppression } from './percolation/suppression';
+import { createPercolationPolicyInput, type PercolationPolicyMode } from './percolation/types';
 import {
   buildPartitionScope,
   inferTaskPartitionKey,
@@ -354,6 +361,7 @@ interface RuntimeState {
     detailsMarkdown: string;
     html: string;
   };
+  lastSummaryContextUnchanged: boolean;
   meaningfulActivitySinceCheckpointPrompt: boolean;
   pauseUntilRestart: boolean;
   snoozeUntil: number;
@@ -501,6 +509,7 @@ export function activate(context: vscode.ExtensionContext): void {
     perfPanelRerender: createPerformanceCounter(),
     perfWebviewRender: createPerformanceCounter(),
     detailsMarkdownCache: undefined,
+    lastSummaryContextUnchanged: false,
     meaningfulActivitySinceCheckpointPrompt: false,
     pauseUntilRestart: false,
     snoozeUntil: context.workspaceState.get<number>(KEY_SUMMARY_SNOOZE_UNTIL, 0),
@@ -1588,6 +1597,7 @@ export function activate(context: vscode.ExtensionContext): void {
           state.scratchSummary,
           pickWorkspaceRoot(state.panelWorkspaceRoot),
           getConfig(),
+          state.lastSummaryContextUnchanged,
         );
       }
 
@@ -2362,10 +2372,7 @@ async function presentSummary(
   const config = getConfig();
   const presentationMode = resolveSummaryPresentationMode(config, options);
   const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
-
-  if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
-    await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
-  }
+  state.lastSummaryContextUnchanged = triggerReason === 'cached';
 
   if (config.metricsEnabled) {
     await finalizeCurrentMetric(context);
@@ -2381,7 +2388,7 @@ async function presentSummary(
     };
   }
 
-  await updateActiveNudges(context, summary, workspaceRoot, config);
+  await updateActiveNudges(context, summary, workspaceRoot, config, triggerReason === 'cached');
   updateSummaryScratchpad(summary, options.workspaceRoot);
 
   if (presentationMode === 'auto-open-details') {
@@ -2397,10 +2404,29 @@ async function presentSummary(
     return;
   }
 
+  const percolationMode = resolveCompanionRuntimeMode(config);
+  if (triggerReason !== 'manual') {
+    const notificationSuppression = evaluatePercolationSuppression({
+      enabled: config.enabled,
+      mode: percolationMode,
+      now: Date.now(),
+      quietHours: config.summaryQuietHours,
+      contextUnchanged: triggerReason === 'cached',
+    });
+    if (notificationSuppression.suppressed) {
+      recordPercolationSuppressionMetric(notificationSuppression.reason);
+      return;
+    }
+  }
+  if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
+    await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
+  }
+  const notificationPrimary = rankPercolationForSummary(summary, percolationMode).primary;
+  const notificationHeadline = selectNotificationHeadline(summary, notificationPrimary);
   const actionPauseLabel = config.pauseSummaries ? 'Resume auto summaries' : 'Pause auto summaries';
   recordCompanionPromptImpression();
   const choice = await vscode.window.showInformationMessage(
-    `TaCoS (${summary.source}): ${summary.intent}`,
+    `TaCoS (${summary.source}): ${notificationHeadline}`,
     'Open details',
     'Copy prompt for Codex',
     'Copy + Open Codex',
@@ -2660,6 +2686,7 @@ async function updateActiveNudges(
   summary: ResumeSummary,
   workspaceRoot: string | undefined,
   config: ExtensionConfig,
+  contextUnchanged = false,
 ): Promise<void> {
   if (!workspaceRoot) {
     state.activeNudges = undefined;
@@ -2667,16 +2694,19 @@ async function updateActiveNudges(
   }
 
   const now = Date.now();
+  const runtimeMode = resolveCompanionRuntimeMode(config);
+  const lastShownAt = context.workspaceState.get<number>(nudgeShownAtKey(workspaceRoot), 0);
   let decision = chooseCompanionNudges({
     summary,
     provider: config.summaryProvider,
-    mode: resolveCompanionRuntimeMode(config),
+    mode: runtimeMode,
     now,
     enabled: config.companionNudgesEnabled,
     aggressiveness: config.companionNudgeAggressiveness,
     quietHours: config.companionNudgeQuietHours,
     cooldownMinutes: config.companionNudgeCooldownMinutes,
-    lastShownAt: context.workspaceState.get<number>(nudgeShownAtKey(workspaceRoot), 0),
+    lastShownAt,
+    contextUnchanged,
   });
 
   const feedback = readNudgeFeedback(context, workspaceRoot, summary.contextHash);
@@ -2685,9 +2715,20 @@ async function updateActiveNudges(
   if (decision.primary) {
     const budgetDecision = await consumeNoiseBudgetSignal(context, workspaceRoot, 'nudge', now);
     if (!budgetDecision.allowed) {
+      const suppression = evaluatePercolationSuppression({
+        enabled: config.companionNudgesEnabled,
+        mode: runtimeMode,
+        now,
+        quietHours: config.companionNudgeQuietHours,
+        cooldownMinutes: config.companionNudgeCooldownMinutes,
+        lastShownAt,
+        contextUnchanged,
+        noiseBudgetAllowed: false,
+        noiseBudgetNextEligibleAt: budgetDecision.nextEligibleAt,
+      });
       decision = {
-        suppressedReason: 'noise-budget',
-        nextEligibleAt: budgetDecision.nextEligibleAt,
+        suppressedReason: suppression.reason,
+        nextEligibleAt: suppression.nextEligibleAt,
       };
     }
   }
@@ -2698,6 +2739,7 @@ async function updateActiveNudges(
   };
 
   if (!decision.primary) {
+    recordPercolationSuppressionMetric(decision.suppressedReason);
     return;
   }
 
@@ -2869,6 +2911,11 @@ function recordMetricCounter(
     | 'snoozeActions'
     | 'summaryQuietActions'
     | 'disableActions'
+    | 'whySurfacedOpens'
+    | 'percolationSuppressedQuietHours'
+    | 'percolationSuppressedCooldown'
+    | 'percolationSuppressedNoChange'
+    | 'percolationSuppressedNoiseBudget'
     | 'noteCreated'
     | 'noteMarkedDone'
     | 'notePinned'
@@ -2944,6 +2991,86 @@ function nudgeActionLabel(action: string): string {
   return 'Take action';
 }
 
+function rankPercolationForSummary(
+  summary: ResumeSummary,
+  mode: PercolationPolicyMode,
+): ReturnType<typeof rankCandidates> {
+  const input = createPercolationPolicyInput(summary, {
+    mode,
+    now: summary.generatedAt > 0 ? summary.generatedAt : Date.now(),
+  });
+  return rankCandidates(input);
+}
+
+function summarizeRankedPrimary(primary: RankedSurfacedItem | undefined): string {
+  if (!primary) {
+    return '';
+  }
+
+  const detail = primary.detail.trim();
+  if (detail) {
+    return detail;
+  }
+
+  return primary.title.trim();
+}
+
+function selectPanelPrimarySummary(
+  summary: ResumeSummary,
+  primary: RankedSurfacedItem | undefined,
+): string {
+  if (primary) {
+    const headline = summarizeRankedPrimary(primary);
+    if (headline) {
+      if (primary.kind === 'blocked') {
+        return `Address blocker: ${headline}`;
+      }
+      return headline;
+    }
+  }
+
+  return summary.recommendedFirstAction?.trim() ?? summary.nextSteps[0] ?? '';
+}
+
+function selectNotificationHeadline(
+  summary: ResumeSummary,
+  primary: RankedSurfacedItem | undefined,
+): string {
+  if (primary) {
+    const rankedHeadline = summarizeRankedPrimary(primary);
+    if (rankedHeadline) {
+      return rankedHeadline;
+    }
+  }
+
+  return summary.intent;
+}
+
+function recordPercolationSuppressionMetric(reason: string | undefined): void {
+  if (!reason) {
+    return;
+  }
+
+  if (reason === 'quiet-hours') {
+    recordMetricCounter('percolationSuppressedQuietHours');
+    return;
+  }
+
+  if (reason === 'cooldown') {
+    recordMetricCounter('percolationSuppressedCooldown');
+    return;
+  }
+
+  if (reason === 'no-change') {
+    recordMetricCounter('percolationSuppressedNoChange');
+    return;
+  }
+
+  if (reason === 'noise-budget') {
+    recordMetricCounter('percolationSuppressedNoiseBudget');
+  }
+}
+
 function summarizeForStatusBar(raw: string, maxChars = 44): string {
   const compact = raw.replace(/\s+/g, ' ').trim();
   if (!compact) {
@@ -2967,6 +3094,17 @@ function updateCompanionStatusBar(): void {
   const now = Date.now();
   const quietState = resolveSummaryQuietState(now, config.summaryQuietHours);
   const summary = state.scratchSummary;
+  const percolationSuppression = evaluatePercolationSuppression({
+    enabled: config.enabled,
+    mode,
+    now,
+    quietHours: config.summaryQuietHours,
+    contextUnchanged: state.lastSummaryContextUnchanged,
+  });
+  const rankedPrimary =
+    mode === 'active' && summary && !percolationSuppression.suppressed
+      ? rankPercolationForSummary(summary, mode).primary
+      : undefined;
   const modeIcon =
     mode === 'restricted'
       ? '$(shield)'
@@ -2983,9 +3121,10 @@ function updateCompanionStatusBar(): void {
         : mode === 'disabled'
           ? 'disabled'
           : 'active';
+  const activeHeadline = summary ? selectNotificationHeadline(summary, rankedPrimary) : '';
   const statusHeadline =
     mode === 'active'
-      ? summarizeForStatusBar(summary?.intent ?? '')
+      ? summarizeForStatusBar(activeHeadline)
       : mode === 'restricted'
         ? 'restricted mode'
         : mode === 'paused'
@@ -3019,6 +3158,12 @@ function updateCompanionStatusBar(): void {
       : config.summaryQuietHours
         ? 'Quiet window status: inactive now'
         : 'Quiet window status: off',
+    percolationSuppression.suppressed && percolationSuppression.reason
+      ? `Percolation suppression: ${percolationSuppression.reason}`
+      : 'Percolation suppression: none',
+    rankedPrimary
+      ? `Percolation primary: ${summarizeForStatusBar(summarizeRankedPrimary(rankedPrimary), 120)}`
+      : 'Percolation primary: (none)',
     state.snoozeUntil > now
       ? `Snoozed until: ${formatTimestamp(state.snoozeUntil)}`
       : 'Snooze: off',
@@ -3569,6 +3714,11 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'whySurfacedOpened') {
+        recordMetricCounter('whySurfacedOpens');
+        return;
+      }
+
       if (message.type === 'rateHelpfulness') {
         recordCompanionQuickAction();
         await promptSummaryHelpfulnessRating();
@@ -4073,6 +4223,18 @@ function renderWebview(
     Boolean(state.lastTaskName) &&
     Number.isInteger(state.lastTaskExitCode) &&
     (state.lastTaskExitCode ?? 0) !== 0;
+  const percolationMode = resolveCompanionRuntimeMode(config);
+  const panelPercolationSuppression = evaluatePercolationSuppression({
+    enabled: config.enabled,
+    mode: percolationMode,
+    now: Date.now(),
+    quietHours: config.summaryQuietHours,
+    contextUnchanged: state.lastSummaryContextUnchanged,
+  });
+  const rankedPrimaryCandidate =
+    panelPercolationSuppression.suppressed || demoMode
+      ? undefined
+      : rankPercolationForSummary(summary, percolationMode).primary;
   const canOpenProblems = diagnostics.errorCount > 0 || diagnostics.warningCount > 0;
   const canOpenDiagnosticFile = Boolean(diagnostics.top);
   const trustCue = buildTrustCue(summary);
@@ -4081,10 +4243,10 @@ function renderWebview(
     Boolean(candidate),
   );
   const primaryNextActionStepIndex = primaryNextAction?.stepIndex ?? -1;
+  const directNextActionSummary =
+    primaryNextActionStepIndex >= 0 ? (summary.nextSteps[primaryNextActionStepIndex] ?? '') : '';
   const primaryNextActionSummary =
-    primaryNextActionStepIndex >= 0
-      ? (summary.nextSteps[primaryNextActionStepIndex] ?? '')
-      : (summary.recommendedFirstAction?.trim() ?? summary.nextSteps[0] ?? '');
+    directNextActionSummary || selectPanelPrimarySummary(summary, rankedPrimaryCandidate);
   const primaryNextActionDisabledAttr = demoMode ? 'disabled aria-disabled="true"' : '';
   const companionPrimaryNextActionButton = primaryNextAction
     ? `<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}" ${primaryNextActionDisabledAttr}>${escapeHtml(primaryNextAction.label)}</button>`
@@ -4160,6 +4322,16 @@ function renderWebview(
         }
       </details>`
       : '';
+  const explainabilityPayload = buildPercolationExplainabilityPayload({
+    summary,
+    primary: rankedPrimaryCandidate,
+    suppressionReason: panelPercolationSuppression.reason,
+  });
+  const percolationExplainabilityTrustedHtml = formatPercolationExplainabilityLines(
+    explainabilityPayload,
+  )
+    .map((line) => `<li>${escapeHtml(line)}</li>`)
+    .join('');
   const switchedBranches =
     !demoMode &&
     Boolean(summary.currentBranch) &&
@@ -4476,6 +4648,7 @@ function renderWebview(
     sentToAiLabel,
     trustBasedOn: trustCue.headline.replace('Based on: ', ''),
     trustCueDetailsTrustedHtml: trustCueDetails,
+    percolationExplainabilityTrustedHtml,
     autoSummaryToggleDisabledAttr,
     autoSummaryToggleLabel,
     expanded: expandedSections.has('trustCenter'),

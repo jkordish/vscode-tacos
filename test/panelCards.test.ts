@@ -28,6 +28,7 @@ describe('panelCards', () => {
       sentToAiLabel: 'Nothing (local-only mode).',
       trustBasedOn: 'Evidence from local signals',
       trustCueDetailsTrustedHtml: '<li>Recent files: 2</li>',
+      percolationExplainabilityTrustedHtml: '<li>Reason: deterministic ranking.</li>',
       autoSummaryToggleDisabledAttr: '',
       autoSummaryToggleLabel: 'Pause auto summaries',
       expanded: false,
@@ -41,6 +42,8 @@ describe('panelCards', () => {
     expect(trust).toContain('data-panel-section="trustCenter"');
     expect(trust).toContain('data-action="openPrivacySafety"');
     expect(trust).toContain('<li>Recent files: 2</li>');
+    expect(trust).toContain('data-why-surfaced-details="true"');
+    expect(trust).toContain('<li>Reason: deterministic ranking.</li>');
   });
 
   it('renders timeline/list/evidence/details sections with expected fallbacks', () => {
