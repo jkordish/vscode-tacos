@@ -62,6 +62,30 @@ describe('percolation type normalization', () => {
     });
   });
 
+  it('falls back safely when signal and surfaced identifiers are non-string at runtime', () => {
+    const signal = normalizeSignal(
+      {
+        id: 42 as unknown as string,
+        kind: 'context-change',
+      },
+      100,
+    );
+
+    const surfaced = normalizeSurfacedItem({
+      id: { bad: true } as unknown as string,
+      kind: 'status',
+      title: ['not-a-string'] as unknown as string,
+      detail: 7 as unknown as string,
+      actionId: false as unknown as string,
+    });
+
+    expect(signal.id).toBe('signal:context-change');
+    expect(surfaced.id).toBe('item:status:item');
+    expect(surfaced.title).toBe('Untitled surfaced item');
+    expect(surfaced.detail).toBe('');
+    expect(surfaced.actionId).toBeUndefined();
+  });
+
   it('normalizes surfaced item defaults, ids, and evidence ids', () => {
     const normalized = normalizeSurfacedItem({
       kind: 'next-step',
@@ -126,6 +150,16 @@ describe('percolation type normalization', () => {
       reasons: ['blocker detected'],
       evidenceIds: ['ev-1', 'ev-2'],
     });
+  });
+
+  it('treats non-string explain summary values as empty', () => {
+    const decision = normalizePercolationDecision({
+      explain: {
+        summary: 123 as unknown as string,
+      },
+    });
+
+    expect(decision.explain.summary).toBe('');
   });
 });
 
