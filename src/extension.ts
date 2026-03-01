@@ -2428,7 +2428,6 @@ async function presentSummary(
     context,
     workspaceRoot,
   }).primary;
-  recordLowConfidenceClarificationRate(summary, notificationPrimary);
   if (triggerReason !== 'manual') {
     const notificationSuppression = evaluatePercolationSuppression({
       enabled: config.enabled,
@@ -2444,6 +2443,7 @@ async function presentSummary(
       return;
     }
   }
+  recordLowConfidenceClarificationRate(summary, notificationPrimary);
   if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
     await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
   }

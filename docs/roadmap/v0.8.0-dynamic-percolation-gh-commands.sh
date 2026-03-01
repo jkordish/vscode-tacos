@@ -87,10 +87,15 @@ fi
 
 extract_section_body() {
   local heading="$1"
-  awk -v h="$heading" '
-    $0 == h { in_section=1; next }
-    in_section && /^### / { exit }
-    in_section { print }
+  local start_line
+  start_line="$(grep -nxF -- "$heading" "$CATALOG_PATH" | head -n1 | cut -d: -f1 || true)"
+  if [[ -z "$start_line" ]]; then
+    return
+  fi
+
+  awk -v start="$start_line" '
+    NR > start && /^### / { exit }
+    NR > start { print }
   ' "$CATALOG_PATH"
 }
 
