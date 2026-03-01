@@ -8,6 +8,30 @@ All notable changes to this project are documented in this file.
 
 - No notable changes yet.
 
+## [0.7.0] - 2026-03-01
+
+### Added
+
+- Details panel accessibility baseline upgrades:
+  - semantic webview document shell (`lang`, title, viewport, color-scheme)
+  - skip link + `main` landmark navigation and live status region announcements
+  - stronger keyboard discoverability with in-panel shortcut help and improved focus visibility
+  - automated axe-core accessibility regression coverage for generated panel HTML
+- Responsive and scan-friendly panel structure:
+  - prioritized Companion Home layout for narrow split panes
+  - persistent progressive disclosure with a `More Context` section
+  - improved evidence/timeline affordances and non-color state cues for critical states
+- State resilience and regression hardening:
+  - persisted section expansion, evidence expansion, scroll, and focused-control restoration
+  - compatibility fixes for encoded focus tokens across URL/file evidence IDs
+  - guardrails/tests for scroll+focus restoration behavior across rerenders
+
+### Changed
+
+- Details panel interaction model now emphasizes a 5-second resume path (`what was I doing` and `what should I do next`) across narrow and wide layouts.
+- Restore-action unavailable messaging now distinguishes trust restrictions from missing history to reduce misleading remediation guidance.
+- Manual QA runbook and acceptance report were expanded for v0.7.0 UI/a11y/reflow sign-off and release gating.
+
 ## [0.6.1] - 2026-02-28
 
 ### Added
