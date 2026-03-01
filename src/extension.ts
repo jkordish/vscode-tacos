@@ -2410,6 +2410,35 @@ async function presentSummary(
     manualPercolationBypass: triggerReason === 'manual',
   };
 
+  const percolationMode = resolveCompanionRuntimeMode(config);
+  const notificationNow = Date.now();
+  const notificationSuppression =
+    triggerReason !== 'manual'
+      ? evaluatePercolationSuppression({
+          enabled: config.enabled,
+          mode: percolationMode,
+          now: notificationNow,
+          lowConfidence: Boolean(summary.lowConfidence),
+          suppressLowConfidence: true,
+          quietHours: config.summaryQuietHours,
+          contextUnchanged: triggerReason === 'cached',
+        })
+      : undefined;
+  let notificationPrimary: RankedSurfacedItem | undefined;
+
+  // Keep low-confidence clarification telemetry populated even when notifications are suppressed.
+  if (summary.lowConfidence) {
+    if (notificationSuppression?.suppressed) {
+      recordLowConfidenceClarificationRate(summary, undefined);
+    } else {
+      notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
+        context,
+        workspaceRoot,
+      }).primary;
+      recordLowConfidenceClarificationRate(summary, notificationPrimary);
+    }
+  }
+
   if (presentationMode === 'auto-open-details') {
     await showDetailsPanel(context, summary, panelOptions);
     return;
@@ -2423,29 +2452,20 @@ async function presentSummary(
     return;
   }
 
-  const percolationMode = resolveCompanionRuntimeMode(config);
-  const notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
-    context,
-    workspaceRoot,
-  }).primary;
-  if (triggerReason !== 'manual') {
-    const notificationSuppression = evaluatePercolationSuppression({
-      enabled: config.enabled,
-      mode: percolationMode,
-      now: Date.now(),
-      lowConfidence: Boolean(summary.lowConfidence),
-      suppressLowConfidence: true,
-      quietHours: config.summaryQuietHours,
-      contextUnchanged: triggerReason === 'cached',
-    });
-    if (notificationSuppression.suppressed) {
-      recordPercolationSuppressionMetric(notificationSuppression.reason);
-      return;
-    }
+  if (notificationSuppression?.suppressed) {
+    recordPercolationSuppressionMetric(notificationSuppression.reason);
+    return;
   }
-  recordLowConfidenceClarificationRate(summary, notificationPrimary);
+
+  if (!notificationPrimary) {
+    notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
+      context,
+      workspaceRoot,
+    }).primary;
+  }
+
   if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
-    await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
+    await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', notificationNow);
   }
   const notificationHeadline = selectNotificationHeadline(summary, notificationPrimary);
   const actionPauseLabel = config.pauseSummaries ? 'Resume auto summaries' : 'Pause auto summaries';
