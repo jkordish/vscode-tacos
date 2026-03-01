@@ -3032,9 +3032,9 @@ function recordMetricCounter(
     | 'percolationSuppressedCooldown'
     | 'percolationSuppressedNoChange'
     | 'percolationSuppressedNoiseBudget'
+    | 'percolationSuppressedLowConfidence'
     | 'percolationDismissActions'
     | 'percolationSnoozeActions'
-    | 'lowConfidenceClarificationRate'
     | 'noteCreated'
     | 'noteMarkedDone'
     | 'notePinned'
@@ -3208,6 +3208,11 @@ function recordPercolationSuppressionMetric(reason: string | undefined): void {
 
   if (reason === 'noise-budget') {
     recordMetricCounter('percolationSuppressedNoiseBudget');
+    return;
+  }
+
+  if (reason === 'low-confidence') {
+    recordMetricCounter('percolationSuppressedLowConfidence');
   }
 }
 

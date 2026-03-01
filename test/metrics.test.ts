@@ -75,12 +75,12 @@ describe('hasAnyRecordedMetric', () => {
   });
 
   it('treats low-confidence clarification metric as recorded metric activity', () => {
-    const metric: MetricRecord = {
+    const metric = {
       startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
       workspaceRoot: '/workspace/repo',
-      trigger: 'manual',
+      trigger: 'other',
       lowConfidenceClarificationRate: 1,
-    };
+    } as unknown as MetricRecord;
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
@@ -132,6 +132,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('helpfulnessRating');
     expect(lines[0]).toContain('percolationDismissActions');
     expect(lines[0]).toContain('percolationSnoozeActions');
+    expect(lines[0]).toContain('percolationSuppressedLowConfidence');
     expect(lines[0]).toContain('lowConfidenceClarificationRate');
     expect(lines[0]).toContain('companionActionFollowThroughRate');
     expect(lines[0]).toContain('summaryQuietActions');

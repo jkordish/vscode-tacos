@@ -160,6 +160,7 @@ export interface MetricRecord {
   percolationSuppressedCooldown?: number;
   percolationSuppressedNoChange?: number;
   percolationSuppressedNoiseBudget?: number;
+  percolationSuppressedLowConfidence?: number;
   percolationDismissActions?: number;
   percolationSnoozeActions?: number;
   lowConfidenceClarificationRate?: number;
