@@ -27,6 +27,7 @@ export interface RenderResumeStackCardInput {
   blockerDisabledReasonTrustedHtml?: TrustedHtml;
   blockerActionTrustedHtml?: TrustedHtml;
   restoreSectionsTrustedHtml: TrustedHtml;
+  restoreUnavailableHintsTrustedHtml?: TrustedHtml;
 }
 
 export function renderResumeStackCard(input: RenderResumeStackCardInput): string {
@@ -88,6 +89,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
         <section class="companion-block" data-companion-section="restore">
           <h4>Restore</h4>
           ${input.restoreSectionsTrustedHtml}
+          ${input.restoreUnavailableHintsTrustedHtml ?? ''}
         </section>
       </div>
     </div>`;

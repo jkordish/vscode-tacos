@@ -287,6 +287,10 @@ export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]):
         : 'evidence-affordance evidence-affordance-static';
       const affordance = `<span class="${affordanceClass}" data-evidence-affordance="${
         clickable ? 'open' : 'static'
+      }" title="${
+        clickable
+          ? 'Opens validated file or URL evidence'
+          : 'Informational evidence only; this item is not directly openable'
       }">${clickable ? 'Open' : 'Not clickable'}</span>`;
       const label = clickable
         ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`
@@ -336,6 +340,10 @@ export function renderTimelineGroupsHtml(input: TimelineGroupsHtmlInput): string
             : 'evidence-affordance evidence-affordance-static';
           const heading = `<div class="timeline-row-heading">${labelControl}<span class="${affordanceClass}" data-timeline-affordance="${
             row.clickable ? 'open' : 'static'
+          }" title="${
+            row.clickable
+              ? 'Opens validated evidence target'
+              : 'Informational timeline event only'
           }">${escapeHtml(row.interactionHint)}</span></div>`;
           const detail = row.detail
             ? `<span class="timeline-detail">${escapeHtml(row.detail)}</span>`

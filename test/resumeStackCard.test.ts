@@ -26,6 +26,7 @@ describe('renderResumeStackCard', () => {
       blockerActionTrustedHtml: '',
       restoreSectionsTrustedHtml:
         '<section class="action-group compact-action-group"><h5>Open</h5></section>',
+      restoreUnavailableHintsTrustedHtml: '',
     });
 
     expect(html).toMatchInlineSnapshot(`
@@ -69,6 +70,7 @@ describe('renderResumeStackCard', () => {
              <section class="companion-block" data-companion-section="restore">
                <h4>Restore</h4>
                <section class="action-group compact-action-group"><h5>Open</h5></section>
+               
              </section>
            </div>
          </div>"
@@ -102,6 +104,7 @@ describe('renderResumeStackCard', () => {
         '<button type="button" class="secondary" data-blocker-primary-action="true" data-action="restoreOpenProblems">Open Problems</button>',
       restoreSectionsTrustedHtml:
         '<section class="action-group compact-action-group"><h5>Run</h5><div class="companion-restore-grid"><button type="button">Rerun task</button></div></section>',
+      restoreUnavailableHintsTrustedHtml: '',
     });
 
     expect(html).toContain('Ship &lt;v0.6&gt; safely');

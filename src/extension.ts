@@ -4271,6 +4271,30 @@ function renderWebview(
     sectionClassName: 'action-group compact-action-group',
     buttonContainerClassName: 'companion-restore-grid',
   });
+  const restoreUnavailableReasons: string[] = [];
+  if (!demoMode && !availability.canJumpToLastEdit) {
+    restoreUnavailableReasons.push('Jump to last edit is unavailable: no recent edit was captured.');
+  }
+  if (!demoMode && !availability.canRerunTask) {
+    restoreUnavailableReasons.push('Rerun task is unavailable: no previous task run is known.');
+  }
+  if (!demoMode && !availability.canRerunDebug) {
+    restoreUnavailableReasons.push('Rerun debug is unavailable: no previous debug session is known.');
+  }
+  if (!demoMode && !canOpenProblems) {
+    restoreUnavailableReasons.push('Open Problems is unavailable: no workspace diagnostics are active.');
+  }
+  if (!demoMode && !canOpenDiagnosticFile) {
+    restoreUnavailableReasons.push(
+      'Open diagnostic file is unavailable: no primary diagnostic file was detected.',
+    );
+  }
+  const restoreUnavailableHints =
+    !demoMode && restoreUnavailableReasons.length > 0
+      ? `<details><summary><strong>Why are some actions unavailable?</strong></summary><ul class="compact-list">${restoreUnavailableReasons
+          .map((reason) => `<li>${escapeHtml(reason)}</li>`)
+          .join('')}</ul></details>`
+      : '';
 
   const quickActionGroups = renderGroupedActionSections({
     groups: [
@@ -4514,6 +4538,7 @@ function renderWebview(
       blockerDisabledReasonTrustedHtml: blockerDisabledReasonHtml,
       blockerActionTrustedHtml: blockerActionHtml,
       restoreSectionsTrustedHtml: companionRestoreSections,
+      restoreUnavailableHintsTrustedHtml: restoreUnavailableHints,
     }),
     resumePathCard,
     confidenceCard,
