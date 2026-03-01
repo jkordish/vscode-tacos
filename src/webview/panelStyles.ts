@@ -428,6 +428,16 @@ export const PANEL_WEBVIEW_STYLE = `
         min-width: 0;
         width: 100%;
       }
+      .shortcut-help {
+        margin-top: var(--space-2);
+      }
+      kbd {
+        border: 1px solid var(--vscode-widget-border);
+        border-radius: var(--radius-1);
+        padding: 0 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+        font-size: 11px;
+      }
       .action-group + .action-group {
         margin-top: var(--space-2);
       }

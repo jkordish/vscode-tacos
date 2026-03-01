@@ -41,7 +41,7 @@ export function renderPanelClientScript(
         'restoreCopyFailingCommand'
       ]);
       const viewState = Object.assign(
-        { evidenceListExpanded: false, sectionExpanded: {}, sectionScope: '' },
+        { evidenceListExpanded: false, sectionExpanded: {}, sectionScope: '', scrollY: 0, focusToken: '' },
         vscode.getState() || {},
       );
 
@@ -53,6 +53,142 @@ export function renderPanelClientScript(
 
       function persistViewState() {
         vscode.setState(viewState);
+      }
+
+      function buildFocusToken(target) {
+        if (!(target instanceof HTMLElement)) {
+          return '';
+        }
+
+        if (target.id) {
+          return 'id:' + target.id;
+        }
+
+        const resumePathStepId = target.getAttribute('data-resume-path-step-id');
+        if (resumePathStepId) {
+          return 'resumePath:' + resumePathStepId;
+        }
+
+        const actionElement = target.closest('[data-action]');
+        if (!(actionElement instanceof HTMLElement)) {
+          return '';
+        }
+
+        const action = actionElement.dataset.action;
+        if (!action) {
+          return '';
+        }
+
+        const payloadParts = [action];
+        if (typeof actionElement.dataset.stepIndex === 'string') {
+          payloadParts.push('step=' + actionElement.dataset.stepIndex);
+        }
+        if (typeof actionElement.dataset.evidenceId === 'string') {
+          payloadParts.push('evidence=' + actionElement.dataset.evidenceId);
+        }
+        if (typeof actionElement.dataset.linkIndex === 'string') {
+          payloadParts.push('link=' + actionElement.dataset.linkIndex);
+        }
+        if (typeof actionElement.dataset.topFileIndex === 'string') {
+          payloadParts.push('file=' + actionElement.dataset.topFileIndex);
+        }
+
+        return 'action:' + payloadParts.join('|');
+      }
+
+      function resolveFocusToken(token) {
+        if (typeof token !== 'string' || !token) {
+          return undefined;
+        }
+
+        if (token.startsWith('id:')) {
+          const id = token.slice(3);
+          const candidate = document.getElementById(id);
+          return candidate instanceof HTMLElement ? candidate : undefined;
+        }
+
+        if (token.startsWith('resumePath:')) {
+          const stepId = token.slice('resumePath:'.length);
+          const candidate = document.querySelector(
+            '[data-resume-path-step-id="' + stepId + '"]',
+          );
+          return candidate instanceof HTMLElement ? candidate : undefined;
+        }
+
+        if (!token.startsWith('action:')) {
+          return undefined;
+        }
+
+        const payload = token.slice('action:'.length);
+        const [actionPart, ...rest] = payload.split('|');
+        const candidates = document.querySelectorAll('[data-action="' + actionPart + '"]');
+        if (candidates.length === 0) {
+          return undefined;
+        }
+
+        if (rest.length === 0) {
+          const first = candidates[0];
+          return first instanceof HTMLElement ? first : undefined;
+        }
+
+        for (const candidate of candidates) {
+          if (!(candidate instanceof HTMLElement)) {
+            continue;
+          }
+          let matches = true;
+          for (const clause of rest) {
+            const [rawKey, rawValue] = clause.split('=');
+            const key = rawKey.trim();
+            const value = (rawValue || '').trim();
+            if (key === 'step' && candidate.dataset.stepIndex !== value) {
+              matches = false;
+              break;
+            }
+            if (key === 'evidence' && candidate.dataset.evidenceId !== value) {
+              matches = false;
+              break;
+            }
+            if (key === 'link' && candidate.dataset.linkIndex !== value) {
+              matches = false;
+              break;
+            }
+            if (key === 'file' && candidate.dataset.topFileIndex !== value) {
+              matches = false;
+              break;
+            }
+          }
+          if (matches) {
+            return candidate;
+          }
+        }
+
+        return undefined;
+      }
+
+      let scrollPersistTimeout;
+      function persistScrollPositionSoon() {
+        if (typeof scrollPersistTimeout !== 'undefined') {
+          window.clearTimeout(scrollPersistTimeout);
+        }
+        scrollPersistTimeout = window.setTimeout(() => {
+          viewState.scrollY = Math.max(0, Math.round(window.scrollY || 0));
+          persistViewState();
+        }, 80);
+      }
+
+      function restoreViewPosition() {
+        if (Number.isFinite(viewState.scrollY) && viewState.scrollY > 0) {
+          window.scrollTo(0, viewState.scrollY);
+        }
+
+        const active = document.activeElement;
+        if (active instanceof HTMLElement && active !== document.body) {
+          return;
+        }
+        const restored = resolveFocusToken(viewState.focusToken);
+        if (restored instanceof HTMLElement) {
+          restored.focus();
+        }
       }
 
       function announceStatus(rawMessage) {
@@ -127,6 +263,27 @@ export function renderPanelClientScript(
 
       setEvidenceListExpanded(Boolean(viewState.evidenceListExpanded), false);
       restorePanelSectionExpansion();
+      window.addEventListener(
+        'scroll',
+        () => {
+          persistScrollPositionSoon();
+        },
+        { passive: true },
+      );
+      document.addEventListener('focusin', (event) => {
+        const target = event.target;
+        const nextToken = buildFocusToken(target);
+        if (!nextToken || viewState.focusToken === nextToken) {
+          return;
+        }
+        viewState.focusToken = nextToken;
+        persistViewState();
+      });
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          restoreViewPosition();
+        });
+      });
 
       window.addEventListener('message', (event) => {
         const payload = event.data;
@@ -203,6 +360,43 @@ export function renderPanelClientScript(
         }
 
         persistPanelSectionExpanded(sectionId, target.open);
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (!event.altKey || !event.shiftKey || event.metaKey || event.ctrlKey) {
+          return;
+        }
+
+        const target = event.target;
+        const targetIsTextInput =
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement ||
+          (target instanceof HTMLElement && target.isContentEditable);
+        const key = event.key.toLowerCase();
+        if (!['r', 'n', 'i'].includes(key)) {
+          return;
+        }
+        if (targetIsTextInput && key !== 'i') {
+          return;
+        }
+
+        event.preventDefault();
+        if (key === 'r') {
+          announceStatus('Shortcut: refreshing summary.');
+          vscode.postMessage({ type: 'refreshSummary' });
+          return;
+        }
+        if (key === 'n') {
+          announceStatus('Shortcut: copying next steps.');
+          vscode.postMessage({ type: 'copyNextSteps' });
+          return;
+        }
+        const intentInput = document.getElementById('intent-override-input');
+        if (intentInput instanceof HTMLInputElement) {
+          intentInput.focus();
+          intentInput.select();
+          announceStatus('Shortcut: focused intent editor.');
+        }
       });
 
       document.addEventListener('keydown', (event) => {

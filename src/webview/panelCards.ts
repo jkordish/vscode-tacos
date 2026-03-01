@@ -129,6 +129,14 @@ export function renderQuickActionsCard(quickActionGroupsTrustedHtml: string): st
   return `<div class="card">
       <h3>Quick Actions</h3>
       ${quickActionGroupsTrustedHtml}
+      <details class="shortcut-help">
+        <summary><strong>Keyboard shortcuts</strong></summary>
+        <ul class="compact-list">
+          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>: Refresh summary</li>
+          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd>: Copy next steps</li>
+          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd>: Focus intent editor</li>
+        </ul>
+      </details>
     </div>`;
 }
 
