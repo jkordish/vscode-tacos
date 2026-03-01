@@ -81,6 +81,14 @@ import {
   buildPercolationExplainabilityPayload,
   formatPercolationExplainabilityLines,
 } from './percolation/explainability';
+import {
+  filterSurfacedItemsByPercolationMemory,
+  parsePercolationMemoryStore,
+  trimPercolationMemoryStore,
+  upsertPercolationMemoryRecord,
+  type PercolationMemoryStatus,
+  type PercolationMemoryStore,
+} from './percolation/memory';
 import { evaluatePercolationSuppression } from './percolation/suppression';
 import { createPercolationPolicyInput, type PercolationPolicyMode } from './percolation/types';
 import {
@@ -202,6 +210,7 @@ const KEY_SETUP_CHECKLIST_COMPLETED_PREFIX = 'tacos.setupChecklistCompleted';
 const KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX = 'tacos.lastCheckpointPromptAt';
 const KEY_LAST_NUDGE_AT_PREFIX = 'tacos.lastNudgeAt';
 const KEY_NUDGE_FEEDBACK_PREFIX = 'tacos.nudgeFeedback';
+const KEY_PERCOLATION_MEMORY_PREFIX = 'tacos.percolationMemory';
 const KEY_WORKSPACE_ACTIVITY_AT_PREFIX = 'tacos.workspaceActivityAt';
 const KEY_RESUME_PATH_PREFIX = 'tacos.resumePath';
 const KEY_INTENT_OVERRIDE_PREFIX = 'tacos.intentOverride';
@@ -261,6 +270,8 @@ const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>(
 ]);
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const MAX_NUDGE_FEEDBACK_ENTRIES_PER_SCOPE = 40;
+const MAX_PERCOLATION_MEMORY_ENTRIES_PER_SCOPE = 80;
+const PERCOLATION_DISMISS_MEMORY_MS = 30 * 60_000;
 const CHECKPOINT_WORKSPACE_GLOBAL_SCOPE = 'workspace-global';
 const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
 const SCRATCHPAD_PREVIEW_MAX_BYTES = 256 * 1024;
@@ -2429,7 +2440,10 @@ async function presentSummary(
   if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
     await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
   }
-  const notificationPrimary = rankPercolationForSummary(summary, percolationMode).primary;
+  const notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
+    context,
+    workspaceRoot,
+  }).primary;
   const notificationHeadline = selectNotificationHeadline(summary, notificationPrimary);
   const actionPauseLabel = config.pauseSummaries ? 'Resume auto summaries' : 'Pause auto summaries';
   recordCompanionPromptImpression();
@@ -2619,6 +2633,86 @@ async function setNudgeFeedbackForCurrentContext(
     },
   };
   rerenderPanel();
+}
+
+function percolationMemoryKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
+  const scope = partitionScope(context, workspaceRoot);
+  return `${KEY_PERCOLATION_MEMORY_PREFIX}.${Buffer.from(scope).toString('base64url')}`;
+}
+
+function readPercolationMemoryStore(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): PercolationMemoryStore {
+  return parsePercolationMemoryStore(
+    context.workspaceState.get<unknown>(percolationMemoryKey(context, workspaceRoot)),
+  );
+}
+
+async function writePercolationMemoryStore(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  store: PercolationMemoryStore,
+): Promise<void> {
+  await context.workspaceState.update(
+    percolationMemoryKey(context, workspaceRoot),
+    Object.keys(store).length > 0 ? store : undefined,
+  );
+}
+
+async function writePercolationMemory(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  record: {
+    contextHash: string;
+    itemKind: RankedSurfacedItem['kind'];
+    status: PercolationMemoryStatus;
+    at: number;
+    until: number;
+  },
+): Promise<void> {
+  const store = readPercolationMemoryStore(context, workspaceRoot);
+  const next = upsertPercolationMemoryRecord(
+    store,
+    record,
+    MAX_PERCOLATION_MEMORY_ENTRIES_PER_SCOPE,
+  );
+  await writePercolationMemoryStore(context, workspaceRoot, next);
+}
+
+async function rememberPercolationPrimaryForSummary(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  summary: ResumeSummary,
+  status: PercolationMemoryStatus,
+  until: number,
+): Promise<boolean> {
+  const now = Date.now();
+  if (!Number.isFinite(until) || until <= now) {
+    return false;
+  }
+
+  const mode = resolveCompanionRuntimeMode(getConfig());
+  const primary = rankPercolationForSummary(summary, mode, {
+    context,
+    workspaceRoot,
+    now,
+  }).primary;
+  if (!primary) {
+    return false;
+  }
+
+  await writePercolationMemory(context, workspaceRoot, {
+    contextHash: summary.contextHash,
+    itemKind: primary.kind,
+    status,
+    at: now,
+    until,
+  });
+  recordMetricCounter(
+    status === 'dismissed' ? 'percolationDismissActions' : 'percolationSnoozeActions',
+  );
+  return true;
 }
 
 function noiseBudgetEventsKey(workspaceRoot: string): string {
@@ -2924,6 +3018,8 @@ function recordMetricCounter(
     | 'percolationSuppressedCooldown'
     | 'percolationSuppressedNoChange'
     | 'percolationSuppressedNoiseBudget'
+    | 'percolationDismissActions'
+    | 'percolationSnoozeActions'
     | 'noteCreated'
     | 'noteMarkedDone'
     | 'notePinned'
@@ -2999,14 +3095,35 @@ function nudgeActionLabel(action: string): string {
   return 'Take action';
 }
 
+interface RankPercolationOptions {
+  context?: vscode.ExtensionContext;
+  workspaceRoot?: string;
+  now?: number;
+  ignoreMemory?: boolean;
+}
+
 function rankPercolationForSummary(
   summary: ResumeSummary,
   mode: PercolationPolicyMode,
+  options: RankPercolationOptions = {},
 ): ReturnType<typeof rankCandidates> {
+  const evaluationNow = options.now ?? Date.now();
   const input = createPercolationPolicyInput(summary, {
     mode,
-    now: summary.generatedAt > 0 ? summary.generatedAt : Date.now(),
+    now: summary.generatedAt > 0 ? summary.generatedAt : evaluationNow,
   });
+  if (options.context && options.workspaceRoot && !options.ignoreMemory) {
+    const workspaceRoot = options.workspaceRoot.trim();
+    if (workspaceRoot) {
+      const store = readPercolationMemoryStore(options.context, workspaceRoot);
+      input.candidates = filterSurfacedItemsByPercolationMemory(
+        input.candidates,
+        store,
+        input.contextHash,
+        evaluationNow,
+      );
+    }
+  }
   return rankCandidates(input);
 }
 
@@ -3098,6 +3215,7 @@ function updateCompanionStatusBar(): void {
   }
 
   const config = getConfig();
+  const workspaceRoot = pickWorkspaceRoot();
   const mode = resolveCompanionRuntimeMode(config);
   const now = Date.now();
   const quietState = resolveSummaryQuietState(now, config.summaryQuietHours);
@@ -3111,7 +3229,11 @@ function updateCompanionStatusBar(): void {
   });
   const rankedPrimary =
     mode === 'active' && summary && !percolationSuppression.suppressed
-      ? rankPercolationForSummary(summary, mode).primary
+      ? rankPercolationForSummary(summary, mode, {
+          context: activeExtensionContext,
+          workspaceRoot,
+          now,
+        }).primary
       : undefined;
   const modeIcon =
     mode === 'restricted'
@@ -3755,6 +3877,15 @@ async function showDetailsPanel(
         const status: CompanionNudgeFeedbackStatus =
           message.type === 'dismissNudge' ? 'dismissed' : 'acknowledged';
         await setNudgeFeedbackForCurrentContext(context, workspaceRoot, state.panelSummary, status);
+        if (status === 'dismissed') {
+          await rememberPercolationPrimaryForSummary(
+            context,
+            workspaceRoot,
+            state.panelSummary,
+            'dismissed',
+            Date.now() + PERCOLATION_DISMISS_MEMORY_MS,
+          );
+        }
         void vscode.window.showInformationMessage(
           message.type === 'dismissNudge'
             ? 'TaCoS: nudge dismissed for this context.'
@@ -4211,6 +4342,7 @@ function renderWebview(
   const linkItems = renderTopLinksListItems(summary.links);
 
   const mode = summary.mode ?? 'coding';
+  const panelWorkspaceRoot = demoMode ? undefined : pickWorkspaceRoot(state.panelWorkspaceRoot);
   const intentInputId = 'intent-override-input';
   const intentEditorHtml = renderIntentEditor({
     intentInputId,
@@ -4232,7 +4364,7 @@ function renderWebview(
   });
   const diagnostics = demoMode
     ? { errorCount: 0, warningCount: 0, top: undefined }
-    : collectWorkspaceDiagnostics(pickWorkspaceRoot(state.panelWorkspaceRoot));
+    : collectWorkspaceDiagnostics(panelWorkspaceRoot);
   const hasFailingTask =
     !demoMode &&
     Boolean(state.lastTaskName) &&
@@ -4252,7 +4384,10 @@ function renderWebview(
   const rankedPrimaryCandidate =
     panelPercolationSuppression.suppressed || demoMode
       ? undefined
-      : rankPercolationForSummary(summary, percolationMode).primary;
+      : rankPercolationForSummary(summary, percolationMode, {
+          context: activeExtensionContext,
+          workspaceRoot: panelWorkspaceRoot,
+        }).primary;
   const canOpenProblems = diagnostics.errorCount > 0 || diagnostics.warningCount > 0;
   const canOpenDiagnosticFile = Boolean(diagnostics.top);
   const trustCue = buildTrustCue(summary);
@@ -4403,7 +4538,6 @@ function renderWebview(
     blockerDecision.hasBlocker && blockerAction?.disabled && blockerAction.disabledReason
       ? `<p class="muted blocker-disabled-reason">Unavailable: ${escapeHtml(blockerAction.disabledReason)}</p>`
       : '';
-  const panelWorkspaceRoot = demoMode ? undefined : pickWorkspaceRoot(state.panelWorkspaceRoot);
   const panelSectionState =
     activeExtensionContext && panelWorkspaceRoot
       ? resolvePanelSectionState(activeExtensionContext, panelWorkspaceRoot)
@@ -7137,6 +7271,17 @@ async function promptAndSetAutoSummarySnooze(context: vscode.ExtensionContext): 
   state.snoozeUntil = picked.id === '30m' ? now + 30 * 60_000 : nextTomorrowMorning(now);
   await context.workspaceState.update(KEY_SUMMARY_SNOOZE_UNTIL, state.snoozeUntil);
   recordMetricCounter('snoozeActions');
+  const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot) ?? pickWorkspaceRoot();
+  const summaryForMemory = state.panelSummary ?? state.scratchSummary;
+  if (workspaceRoot && summaryForMemory) {
+    await rememberPercolationPrimaryForSummary(
+      context,
+      workspaceRoot,
+      summaryForMemory,
+      'snoozed',
+      state.snoozeUntil,
+    );
+  }
   updateCompanionStatusBar();
   rerenderPanel();
   void vscode.window.showInformationMessage(
@@ -7938,6 +8083,7 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_NUDGE_FEEDBACK_PREFIX, workspaceRoot, true) ||
+      matchesEncodedWorkspaceKey(key, KEY_PERCOLATION_MEMORY_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_WORKSPACE_ACTIVITY_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_RESUME_PATH_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_INTENT_OVERRIDE_PREFIX, workspaceRoot, true) ||
@@ -8050,6 +8196,47 @@ async function pruneCheckpointNotesForWorkspace(
   }
 }
 
+async function prunePercolationMemoryForWorkspace(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  cutoffAt: number,
+): Promise<void> {
+  const memoryKeys = context.workspaceState
+    .keys()
+    .filter((key) => key.startsWith(`${KEY_PERCOLATION_MEMORY_PREFIX}.`));
+  if (memoryKeys.length === 0) {
+    return;
+  }
+
+  const pruneOps: Thenable<void>[] = [];
+  for (const key of memoryKeys) {
+    if (!matchesEncodedWorkspaceKey(key, KEY_PERCOLATION_MEMORY_PREFIX, workspaceRoot, true)) {
+      continue;
+    }
+
+    const store = parsePercolationMemoryStore(context.workspaceState.get<unknown>(key));
+    const pruned = trimPercolationMemoryStore(
+      Object.fromEntries(
+        Object.entries(store).filter(
+          ([, record]) => record.at >= cutoffAt || record.until >= cutoffAt,
+        ),
+      ),
+      MAX_PERCOLATION_MEMORY_ENTRIES_PER_SCOPE,
+    );
+    if (Object.keys(pruned).length === Object.keys(store).length) {
+      continue;
+    }
+
+    pruneOps.push(
+      context.workspaceState.update(key, Object.keys(pruned).length > 0 ? pruned : undefined),
+    );
+  }
+
+  if (pruneOps.length > 0) {
+    await Promise.all(pruneOps);
+  }
+}
+
 async function applyRetentionPolicy(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
@@ -8122,6 +8309,7 @@ async function applyRetentionPolicy(
   }
 
   await pruneCheckpointNotesForWorkspace(context, workspaceRoot, cutoffAt);
+  await prunePercolationMemoryForWorkspace(context, workspaceRoot, cutoffAt);
 
   const prunedMetrics = pruneMetricsForWorkspace(metricHistory, workspaceRoot, cutoffAt);
   if (prunedMetrics.length !== metricHistory.length) {

@@ -119,6 +119,8 @@ describe('buildMetricsCsv', () => {
     const lines = csv.trimEnd().split('\n');
     expect(lines[0]).toContain('firstActionLagMs');
     expect(lines[0]).toContain('helpfulnessRating');
+    expect(lines[0]).toContain('percolationDismissActions');
+    expect(lines[0]).toContain('percolationSnoozeActions');
     expect(lines[0]).toContain('companionActionFollowThroughRate');
     expect(lines[0]).toContain('summaryQuietActions');
     expect(lines[0]).toContain('interruptionTimingClass');
