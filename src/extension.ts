@@ -218,6 +218,7 @@ const NOISE_BUDGET_BLOCK_NUDGE_AFTER_SUMMARY_MS = 5 * 60_000;
 const NOISE_BUDGET_BLOCK_NUDGE_AFTER_CHECKPOINT_MS = 3 * 60_000;
 const NOISE_BUDGET_BLOCK_CHECKPOINT_AFTER_SUMMARY_MS = 5 * 60_000;
 const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>([
+  'fixSummary',
   'setPanelSectionExpanded',
   'sessionAddCheckpoint',
   'checkpointOpenList',
@@ -243,6 +244,7 @@ const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>(
   'restoreOpenDiagnosticFile',
   'restoreCheckoutPreviousBranch',
   'restoreCopyFailingCommand',
+  'rateHelpfulness',
 ]);
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const MAX_NUDGE_FEEDBACK_ENTRIES_PER_SCOPE = 40;
@@ -696,6 +698,10 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasDisabledListNotesAction = /data-action="checkpointOpenList"[^>]*disabled/u.test(
         panelHtml,
       );
+      const hasDisabledRateHelpfulnessAction = /data-action="rateHelpfulness"[^>]*disabled/u.test(
+        panelHtml,
+      );
+      const hasDisabledFixSummaryAction = /data-action="fixSummary"[^>]*disabled/u.test(panelHtml);
       const disabledResumePathToggleCount = (
         panelHtml.match(/<input[^>]*data-resume-path-toggle="true"[^>]*disabled/gu) ?? []
       ).length;
@@ -766,6 +772,8 @@ export function activate(context: vscode.ExtensionContext): void {
         hasDisabledRestoreRerunDebug,
         hasDisabledAddNoteAction,
         hasDisabledListNotesAction,
+        hasDisabledRateHelpfulnessAction,
+        hasDisabledFixSummaryAction,
       };
     }),
     vscode.commands.registerCommand('tacos.__test.getResumePathSnapshot', async () => {
@@ -4257,8 +4265,8 @@ function renderWebview(
         buttonsTrustedHtml: [
           `<button type="button" class="secondary" data-action="sessionAddCheckpoint" ${demoDisabledAttr}>Add note</button>`,
           `<button type="button" class="secondary" data-action="checkpointOpenList" ${demoDisabledAttr}>List notes</button>`,
-          '<button type="button" data-action="rateHelpfulness">Rate helpfulness</button>',
-          '<button type="button" class="secondary" data-action="fixSummary">Fix summary</button>',
+          `<button type="button" data-action="rateHelpfulness" ${demoDisabledAttr}>Rate helpfulness</button>`,
+          `<button type="button" class="secondary" data-action="fixSummary" ${demoDisabledAttr}>Fix summary</button>`,
         ],
       },
     ],

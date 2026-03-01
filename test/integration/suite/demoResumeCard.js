@@ -75,6 +75,16 @@ async function run() {
     true,
     'Expected List notes quick action to be disabled in demo mode.',
   );
+  assert.equal(
+    resumeFlow?.hasDisabledRateHelpfulnessAction,
+    true,
+    'Expected Rate helpfulness quick action to be disabled in demo mode.',
+  );
+  assert.equal(
+    resumeFlow?.hasDisabledFixSummaryAction,
+    true,
+    'Expected Fix summary quick action to be disabled in demo mode.',
+  );
 }
 
 module.exports = {
