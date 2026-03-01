@@ -92,10 +92,11 @@ describe('evaluatePercolationSuppression', () => {
   });
 
   it('returns unsuppressed when no gate blocks surfacing', () => {
+    // Use local-noon timestamp so this remains outside 22:00-07:00 quiet hours in any timezone.
     const decision = evaluatePercolationSuppression({
       enabled: true,
       mode: 'active',
-      now: 1_700_000_000_000,
+      now: new Date(2026, 0, 10, 12, 0, 0).getTime(),
       quietHours: '22:00-07:00',
       cooldownMinutes: 10,
       lastShownAt: 1_699_000_000_000,
