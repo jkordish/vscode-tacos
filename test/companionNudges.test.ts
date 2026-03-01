@@ -151,6 +151,20 @@ describe('chooseCompanionNudges', () => {
     expect(result.primary).toBeUndefined();
     expect(result.suppressedReason).toBe('no-change');
   });
+
+  it('suppresses nudges when summary confidence is low', () => {
+    const result = chooseCompanionNudges(
+      buildInput({
+        summary: buildSummary({
+          lowConfidence: true,
+          lastFailingCommand: 'npm test -- auth',
+        }),
+      }),
+    );
+
+    expect(result.primary).toBeUndefined();
+    expect(result.suppressedReason).toBe('low-confidence');
+  });
 });
 
 describe('quiet hour parser', () => {
@@ -233,6 +247,9 @@ describe('nudge explainability helpers', () => {
     const disabled = describeCompanionNudgeSuppression({ suppressedReason: 'disabled' });
     const paused = describeCompanionNudgeSuppression({ suppressedReason: 'paused' });
     const restricted = describeCompanionNudgeSuppression({ suppressedReason: 'restricted' });
+    const lowConfidence = describeCompanionNudgeSuppression({
+      suppressedReason: 'low-confidence',
+    });
     const quiet = describeCompanionNudgeSuppression({ suppressedReason: 'quiet-hours' });
     const noCandidate = describeCompanionNudgeSuppression({ suppressedReason: 'no-candidate' });
     const noChange = describeCompanionNudgeSuppression({ suppressedReason: 'no-change' });
@@ -264,6 +281,9 @@ describe('nudge explainability helpers', () => {
     expect(disabled).toBe('Companion nudges are disabled in settings.');
     expect(paused).toBe('Nudges are hidden while companion mode is paused.');
     expect(restricted).toBe('Nudges are hidden while workspace trust is restricted.');
+    expect(lowConfidence).toBe(
+      'Nudges are deferred while TaCoS rebuilds confidence for this context.',
+    );
     expect(quiet).toBe('Nudges are currently in your configured quiet hours window.');
     expect(noCandidate).toBe('No high-confidence nudge is available for this context yet.');
     expect(noChange).toBe(

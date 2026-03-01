@@ -127,6 +127,8 @@ export function chooseCompanionNudges(input: CompanionNudgeInput): CompanionNudg
     enabled: input.enabled,
     mode: input.mode,
     now: input.now,
+    lowConfidence: Boolean(input.summary.lowConfidence),
+    suppressLowConfidence: true,
     quietHours: input.quietHours,
     cooldownMinutes: input.cooldownMinutes,
     lastShownAt: input.lastShownAt,
