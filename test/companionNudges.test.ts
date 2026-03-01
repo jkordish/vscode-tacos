@@ -139,6 +139,17 @@ describe('chooseCompanionNudges', () => {
     expect(result.primary).toBeUndefined();
     expect(result.suppressedReason).toBe('no-candidate');
   });
+
+  it('suppresses nudges when context is unchanged', () => {
+    const result = chooseCompanionNudges(
+      buildInput({
+        contextUnchanged: true,
+      }),
+    );
+
+    expect(result.primary).toBeUndefined();
+    expect(result.suppressedReason).toBe('no-change');
+  });
 });
 
 describe('quiet hour parser', () => {
@@ -222,6 +233,7 @@ describe('nudge explainability helpers', () => {
     const inactive = describeCompanionNudgeSuppression({ suppressedReason: 'inactive-mode' });
     const quiet = describeCompanionNudgeSuppression({ suppressedReason: 'quiet-hours' });
     const noCandidate = describeCompanionNudgeSuppression({ suppressedReason: 'no-candidate' });
+    const noChange = describeCompanionNudgeSuppression({ suppressedReason: 'no-change' });
     const noiseBudget = describeCompanionNudgeSuppression(
       {
         suppressedReason: 'noise-budget',
@@ -251,6 +263,9 @@ describe('nudge explainability helpers', () => {
     expect(inactive).toBe('Nudges are hidden while companion mode is paused or restricted.');
     expect(quiet).toBe('Nudges are currently in your configured quiet hours window.');
     expect(noCandidate).toBe('No high-confidence nudge is available for this context yet.');
+    expect(noChange).toBe(
+      'Nudges are suppressed because context has not changed since the last summary.',
+    );
     expect(noiseBudget).toBe('Nudges are temporarily suppressed by noise budget until later.');
     expect(cooldown).toBe('Nudges are cooling down until soon.');
     expect(acknowledged).toBe('Nudge acknowledged for this context.');

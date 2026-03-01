@@ -1,0 +1,199 @@
+import {
+  PERCOLATION_SCHEMA_VERSION,
+  createPercolationPolicyInput,
+  normalizePercolationDecision,
+  normalizeSignal,
+  normalizeSurfacedItem,
+} from '../src/percolation/types';
+import type { ResumeSummary } from '../src/types';
+
+function buildSummary(overrides: Partial<ResumeSummary> = {}): ResumeSummary {
+  return {
+    intent: 'continue auth fix',
+    nextSteps: ['Run auth tests', 'Fix failing assertion'],
+    recommendedFirstAction: 'Run auth tests',
+    pendingBlocked: ['Failing command still unresolved: npm test -- auth'],
+    topFiles: ['src/auth.ts'],
+    links: [],
+    evidenceCatalog: [
+      {
+        id: 'ev-1',
+        kind: 'file',
+        label: 'src/auth.ts',
+      },
+    ],
+    detailsMarkdown: 'details',
+    codexPrompt: 'prompt',
+    contextHash: 'ctx-123',
+    generatedAt: 1_700_000_000_000,
+    source: 'local',
+    ...overrides,
+  };
+}
+
+describe('percolation type normalization', () => {
+  it('normalizes signal defaults and clamps scoring fields', () => {
+    const normalized = normalizeSignal(
+      {
+        kind: 'task-failure',
+        confidence: 2,
+        actionability: -2,
+        interruptCost: 0.75,
+        meta: {
+          ok: true,
+          nope: { nested: 'value' },
+          text: 'x',
+        },
+      },
+      100,
+    );
+
+    expect(normalized).toEqual({
+      id: 'signal:task-failure',
+      kind: 'task-failure',
+      observedAt: 100,
+      confidence: 1,
+      actionability: 0,
+      interruptCost: 0.75,
+      meta: {
+        ok: true,
+        text: 'x',
+      },
+    });
+  });
+
+  it('normalizes surfaced item defaults, ids, and evidence ids', () => {
+    const normalized = normalizeSurfacedItem({
+      kind: 'next-step',
+      title: '  Resume build  ',
+      detail: '  run npm test  ',
+      confidence: 0.88,
+      urgency: 5,
+      novelty: -1,
+      interruptCost: Number.NaN,
+      evidenceIds: ['ev-2', 'ev-1', 'ev-1', ' ', 10 as unknown as string],
+      meta: {
+        rank: 1,
+        ignore: { deep: true },
+      },
+    });
+
+    expect(normalized).toEqual({
+      id: 'item:next-step:resume-build',
+      kind: 'next-step',
+      title: 'Resume build',
+      detail: 'run npm test',
+      actionId: undefined,
+      confidence: 0.88,
+      urgency: 1,
+      novelty: 0,
+      interruptCost: 0.5,
+      evidenceIds: ['ev-1', 'ev-2'],
+      meta: {
+        rank: 1,
+      },
+    });
+  });
+
+  it('normalizes decision payload with explainability defaults', () => {
+    const decision = normalizePercolationDecision({
+      primary: {
+        kind: 'status',
+        title: 'Overview',
+      },
+      explain: {
+        summary: '  ranked by urgency  ',
+        reasons: ['  blocker detected  ', '', 12 as unknown as string],
+        evidenceIds: ['ev-2', 'ev-1', 'ev-1'],
+      },
+      nextEligibleAt: -10,
+    });
+
+    expect(decision.primary?.title).toBe('Overview');
+    expect(decision.nextEligibleAt).toBe(0);
+    expect(decision.explain).toEqual({
+      summary: 'ranked by urgency',
+      reasons: ['blocker detected'],
+      evidenceIds: ['ev-1', 'ev-2'],
+    });
+  });
+});
+
+describe('createPercolationPolicyInput', () => {
+  it('adapts an existing resume summary with deterministic defaults', () => {
+    const summary = buildSummary({
+      currentBranch: 'feature/auth',
+      previousBranch: 'main',
+      lastFailingCommand: 'npm test -- auth',
+    });
+    const now = 1_700_100_000_000;
+
+    const first = createPercolationPolicyInput(summary, { now });
+    const second = createPercolationPolicyInput(summary, { now });
+
+    expect(first).toEqual(second);
+    expect(first.schemaVersion).toBe(PERCOLATION_SCHEMA_VERSION);
+    expect(first.contextHash).toBe('ctx-123');
+    expect(first.mode).toBe('active');
+    expect(first.signals.map((signal) => signal.kind)).toEqual([
+      'resume',
+      'branch-switch',
+      'task-failure',
+    ]);
+    expect(first.candidates.map((candidate) => candidate.kind)).toEqual([
+      'recommended-action',
+      'blocked',
+      'next-step',
+      'evidence',
+    ]);
+  });
+
+  it('uses explicit signals and candidates when provided', () => {
+    const summary = buildSummary();
+    const input = createPercolationPolicyInput(summary, {
+      now: 42,
+      mode: 'restricted',
+      signals: [
+        {
+          id: 'custom-signal',
+          kind: 'privacy-change',
+          confidence: 0.9,
+          actionability: 0.2,
+          interruptCost: 0.1,
+          observedAt: 12,
+        },
+      ],
+      candidates: [
+        {
+          id: 'custom-item',
+          kind: 'trust-privacy',
+          title: 'Review privacy posture',
+          detail: 'restricted mode active',
+          confidence: 0.7,
+          urgency: 0.8,
+          novelty: 0.2,
+          interruptCost: 0.1,
+        },
+      ],
+    });
+
+    expect(input.now).toBe(42);
+    expect(input.mode).toBe('restricted');
+    expect(input.signals).toHaveLength(1);
+    expect(input.signals[0]).toEqual({
+      id: 'custom-signal',
+      kind: 'privacy-change',
+      observedAt: 12,
+      confidence: 0.9,
+      actionability: 0.2,
+      interruptCost: 0.1,
+      meta: {},
+    });
+    expect(input.candidates).toHaveLength(1);
+    expect(input.candidates[0]).toMatchObject({
+      id: 'custom-item',
+      kind: 'trust-privacy',
+      title: 'Review privacy posture',
+    });
+  });
+});

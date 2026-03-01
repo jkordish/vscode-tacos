@@ -1,5 +1,6 @@
 import type { CompanionNudgeAggressiveness, ResumeSummary, SummaryProvider } from './types';
 import { isInQuietHours, parseQuietHoursWindow } from './quietHours';
+import { evaluatePercolationSuppression } from './percolation/suppression';
 
 export interface CompanionNudge {
   id: 'fix-failing-command' | 'branch-switch' | 'resume-next-step' | 'refresh-guidance';
@@ -14,6 +15,7 @@ export type CompanionNudgeSuppressedReason =
   | 'inactive-mode'
   | 'cooldown'
   | 'quiet-hours'
+  | 'no-change'
   | 'no-candidate'
   | 'noise-budget'
   | 'acknowledged'
@@ -48,6 +50,7 @@ interface CompanionNudgeInput {
   quietHours: string;
   cooldownMinutes: number;
   lastShownAt: number;
+  contextUnchanged?: boolean;
 }
 
 function minScoreForAggressiveness(value: CompanionNudgeAggressiveness): number {
@@ -118,23 +121,19 @@ function buildCandidates(summary: ResumeSummary): CompanionNudge[] {
 }
 
 export function chooseCompanionNudges(input: CompanionNudgeInput): CompanionNudgeDecision {
-  if (!input.enabled) {
-    return { suppressedReason: 'disabled' };
-  }
-
-  if (input.mode !== 'active') {
-    return { suppressedReason: 'inactive-mode' };
-  }
-
-  if (isInQuietHours(input.now, input.quietHours)) {
-    return { suppressedReason: 'quiet-hours' };
-  }
-
-  const cooldownMs = Math.max(1, input.cooldownMinutes) * 60_000;
-  if (input.lastShownAt > 0 && input.now - input.lastShownAt < cooldownMs) {
+  const suppression = evaluatePercolationSuppression({
+    enabled: input.enabled,
+    mode: input.mode,
+    now: input.now,
+    quietHours: input.quietHours,
+    cooldownMinutes: input.cooldownMinutes,
+    lastShownAt: input.lastShownAt,
+    contextUnchanged: input.contextUnchanged,
+  });
+  if (suppression.suppressed) {
     return {
-      suppressedReason: 'cooldown',
-      nextEligibleAt: input.lastShownAt + cooldownMs,
+      suppressedReason: suppression.reason,
+      nextEligibleAt: suppression.nextEligibleAt,
     };
   }
 
@@ -213,6 +212,10 @@ export function describeCompanionNudgeSuppression(
 
     const formatter = options.formatTimestamp ?? ((value: number) => new Date(value).toISOString());
     return `Nudges are cooling down until ${formatter(decision.nextEligibleAt)}.`;
+  }
+
+  if (decision.suppressedReason === 'no-change') {
+    return 'Nudges are suppressed because context has not changed since the last summary.';
   }
 
   if (decision.suppressedReason === 'no-candidate') {

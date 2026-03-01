@@ -43,6 +43,9 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'dismissNudge' })).toEqual({
       type: 'dismissNudge',
     });
+    expect(parseWebviewMessage({ type: 'whySurfacedOpened' })).toEqual({
+      type: 'whySurfacedOpened',
+    });
     expect(parseWebviewMessage({ type: 'openPrivacySafety' })).toEqual({
       type: 'openPrivacySafety',
     });

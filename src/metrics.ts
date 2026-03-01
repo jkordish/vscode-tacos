@@ -20,6 +20,11 @@ const CSV_HEADERS = [
   'companionPrimaryCtaImpressions',
   'companionPrimaryCtaClicks',
   'companionPrimaryCtaCompletions',
+  'whySurfacedOpens',
+  'percolationSuppressedQuietHours',
+  'percolationSuppressedCooldown',
+  'percolationSuppressedNoChange',
+  'percolationSuppressedNoiseBudget',
   'helpfulnessRating',
   'pauseActions',
   'snoozeActions',
@@ -465,6 +470,11 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.companionPrimaryCtaImpressions ?? 0) > 0 ||
     (metric.companionPrimaryCtaClicks ?? 0) > 0 ||
     (metric.companionPrimaryCtaCompletions ?? 0) > 0 ||
+    (metric.whySurfacedOpens ?? 0) > 0 ||
+    (metric.percolationSuppressedQuietHours ?? 0) > 0 ||
+    (metric.percolationSuppressedCooldown ?? 0) > 0 ||
+    (metric.percolationSuppressedNoChange ?? 0) > 0 ||
+    (metric.percolationSuppressedNoiseBudget ?? 0) > 0 ||
     typeof metric.helpfulnessRating === 'number' ||
     (metric.pauseActions ?? 0) > 0 ||
     (metric.snoozeActions ?? 0) > 0 ||
@@ -515,6 +525,11 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.companionPrimaryCtaImpressions),
       toOptionalNumber(metric.companionPrimaryCtaClicks),
       toOptionalNumber(metric.companionPrimaryCtaCompletions),
+      toOptionalNumber(metric.whySurfacedOpens),
+      toOptionalNumber(metric.percolationSuppressedQuietHours),
+      toOptionalNumber(metric.percolationSuppressedCooldown),
+      toOptionalNumber(metric.percolationSuppressedNoChange),
+      toOptionalNumber(metric.percolationSuppressedNoiseBudget),
       toOptionalNumber(metric.helpfulnessRating),
       toOptionalNumber(metric.pauseActions),
       toOptionalNumber(metric.snoozeActions),

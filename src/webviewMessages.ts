@@ -16,6 +16,7 @@ const SIMPLE_MESSAGE_TYPES = [
   'toggleAutoSummaries',
   'acknowledgeNudge',
   'dismissNudge',
+  'whySurfacedOpened',
   'openPrivacySafety',
   'rateHelpfulness',
   'sessionAddCheckpoint',

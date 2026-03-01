@@ -445,6 +445,10 @@ export function renderPanelClientScript(
           return;
         }
 
+        if (target.dataset.whySurfacedDetails === 'true' && target.open) {
+          vscode.postMessage({ type: 'whySurfacedOpened' });
+        }
+
         const sectionId = target.dataset.panelSection;
         if (typeof sectionId !== 'string' || !panelSectionIds.has(sectionId)) {
           return;
