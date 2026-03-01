@@ -220,6 +220,7 @@ const NOISE_BUDGET_BLOCK_CHECKPOINT_AFTER_SUMMARY_MS = 5 * 60_000;
 const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>([
   'fixSummary',
   'setPanelSectionExpanded',
+  'toggleAutoSummaries',
   'sessionAddCheckpoint',
   'checkpointOpenList',
   'openScratchpad',
@@ -702,6 +703,8 @@ export function activate(context: vscode.ExtensionContext): void {
         panelHtml,
       );
       const hasDisabledFixSummaryAction = /data-action="fixSummary"[^>]*disabled/u.test(panelHtml);
+      const hasDisabledToggleAutoSummariesAction =
+        /data-action="toggleAutoSummaries"[^>]*disabled/u.test(panelHtml);
       const disabledResumePathToggleCount = (
         panelHtml.match(/<input[^>]*data-resume-path-toggle="true"[^>]*disabled/gu) ?? []
       ).length;
@@ -774,6 +777,7 @@ export function activate(context: vscode.ExtensionContext): void {
         hasDisabledListNotesAction,
         hasDisabledRateHelpfulnessAction,
         hasDisabledFixSummaryAction,
+        hasDisabledToggleAutoSummariesAction,
       };
     }),
     vscode.commands.registerCommand('tacos.__test.getResumePathSnapshot', async () => {
@@ -4371,9 +4375,8 @@ function renderWebview(
   const autoSummaryToggleLabel = autoSummariesPaused
     ? 'Resume auto summaries'
     : 'Pause auto summaries';
-  const autoSummaryToggleDisabledAttr = autoSummariesDisabled
-    ? 'disabled aria-disabled="true"'
-    : '';
+  const autoSummaryToggleDisabledAttr =
+    autoSummariesDisabled || demoMode ? 'disabled aria-disabled="true"' : '';
   const timelineGroupsHtml = renderTimelineGroupsHtml({ timelineGroups });
   const timelineCard = renderTimelineCard({
     showTimeline: config.showTimeline,
