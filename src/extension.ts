@@ -326,6 +326,7 @@ interface RuntimeState {
   panelCheckpointNotes: CheckpointNote[];
   panelPrimaryCheckpointNote?: CheckpointNote;
   panelCheckpointScope?: string;
+  panelManualPercolationBypass: boolean;
   panelScratchpadPreviewLines: string[];
   panelScratchpadExists: boolean;
   panelScratchpadHasContent: boolean;
@@ -419,6 +420,7 @@ interface PresentSummaryOptions {
   checkpointPrimaryNote?: CheckpointNote;
   checkpointNotes?: CheckpointNote[];
   checkpointScope?: string;
+  manualPercolationBypass?: boolean;
 }
 
 type ScratchpadScopeMode = 'partition' | 'workspace';
@@ -482,6 +484,7 @@ export function activate(context: vscode.ExtensionContext): void {
     panelCheckpointNotes: [],
     panelPrimaryCheckpointNote: undefined,
     panelCheckpointScope: undefined,
+    panelManualPercolationBypass: false,
     panelScratchpadPreviewLines: [],
     panelScratchpadExists: false,
     panelScratchpadHasContent: false,
@@ -2391,8 +2394,13 @@ async function presentSummary(
   await updateActiveNudges(context, summary, workspaceRoot, config, triggerReason === 'cached');
   updateSummaryScratchpad(summary, options.workspaceRoot);
 
+  const panelOptions: PresentSummaryOptions = {
+    ...options,
+    manualPercolationBypass: triggerReason === 'manual',
+  };
+
   if (presentationMode === 'auto-open-details') {
-    await showDetailsPanel(context, summary, options);
+    await showDetailsPanel(context, summary, panelOptions);
     return;
   }
 
@@ -2437,7 +2445,7 @@ async function presentSummary(
 
   if (choice === 'Open details') {
     recordCompanionForcedOpenDetailsClick();
-    await showDetailsPanel(context, summary, options);
+    await showDetailsPanel(context, summary, panelOptions);
     return;
   }
 
@@ -3458,7 +3466,11 @@ async function showDetailsPanel(
   summary: ResumeSummary,
   options: Pick<
     PresentSummaryOptions,
-    'workspaceRoot' | 'checkpointPrimaryNote' | 'checkpointNotes' | 'checkpointScope'
+    | 'workspaceRoot'
+    | 'checkpointPrimaryNote'
+    | 'checkpointNotes'
+    | 'checkpointScope'
+    | 'manualPercolationBypass'
   > = {},
 ): Promise<void> {
   const demoMode = isDemoResumeSummary(summary);
@@ -3471,10 +3483,12 @@ async function showDetailsPanel(
   state.panelCheckpointNotes = sortCheckpointNotes(options.checkpointNotes ?? []);
   state.panelPrimaryCheckpointNote = options.checkpointPrimaryNote;
   state.panelCheckpointScope = options.checkpointScope;
+  state.panelManualPercolationBypass = Boolean(options.manualPercolationBypass);
   if (demoMode) {
     state.panelCheckpointNotes = [];
     state.panelPrimaryCheckpointNote = undefined;
     state.panelCheckpointScope = undefined;
+    state.panelManualPercolationBypass = false;
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
@@ -3501,6 +3515,7 @@ async function showDetailsPanel(
       state.panelCheckpointNotes = [];
       state.panelPrimaryCheckpointNote = undefined;
       state.panelCheckpointScope = undefined;
+      state.panelManualPercolationBypass = false;
       state.panelScratchpadPreviewLines = [];
       state.panelScratchpadExists = false;
       state.panelScratchpadHasContent = false;
@@ -4224,13 +4239,16 @@ function renderWebview(
     Number.isInteger(state.lastTaskExitCode) &&
     (state.lastTaskExitCode ?? 0) !== 0;
   const percolationMode = resolveCompanionRuntimeMode(config);
-  const panelPercolationSuppression = evaluatePercolationSuppression({
-    enabled: config.enabled,
-    mode: percolationMode,
-    now: Date.now(),
-    quietHours: config.summaryQuietHours,
-    contextUnchanged: state.lastSummaryContextUnchanged,
-  });
+  const panelPercolationSuppression =
+    !demoMode && state.panelManualPercolationBypass
+      ? { suppressed: false, reason: undefined, nextEligibleAt: undefined }
+      : evaluatePercolationSuppression({
+          enabled: config.enabled,
+          mode: percolationMode,
+          now: Date.now(),
+          quietHours: config.summaryQuietHours,
+          contextUnchanged: state.lastSummaryContextUnchanged,
+        });
   const rankedPrimaryCandidate =
     panelPercolationSuppression.suppressed || demoMode
       ? undefined
