@@ -278,6 +278,8 @@ export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]):
   return evidenceCatalog
     .map((item, index) => {
       const clickable = item.kind === 'file' || item.kind === 'url';
+      const openHintText = 'Opens validated file or URL evidence';
+      const staticHintText = 'Informational evidence only; this item is not directly openable';
       const target = item.target
         ? ` <span class="evidence-target">${escapeHtml(item.target)}</span>`
         : '';
@@ -287,14 +289,10 @@ export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]):
         : 'evidence-affordance evidence-affordance-static';
       const affordance = `<span class="${affordanceClass}" data-evidence-affordance="${
         clickable ? 'open' : 'static'
-      }" title="${
-        clickable
-          ? 'Opens validated file or URL evidence'
-          : 'Informational evidence only; this item is not directly openable'
-      }">${clickable ? 'Open' : 'Not clickable'}</span>`;
+      }" aria-hidden="true">${clickable ? 'Open' : 'Not clickable'}</span>`;
       const label = clickable
-        ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}">${escapeHtml(item.label)}</button>`
-        : `<span class="evidence-label">${escapeHtml(item.label)}</span>`;
+        ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)} - ${escapeHtml(openHintText)}" title="${escapeHtml(openHintText)}">${escapeHtml(item.label)}</button>`
+        : `<span class="evidence-label" aria-label="${escapeHtml(item.label)} - ${escapeHtml(staticHintText)}">${escapeHtml(item.label)}</span>`;
       return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> <code>${escapeHtml(item.id)}</code>${target}</div></li>`;
     })
     .join('');
@@ -332,19 +330,17 @@ export function renderTimelineGroupsHtml(input: TimelineGroupsHtmlInput): string
     .map((group) => {
       const items = group.rows
         .map((row) => {
+          const openHintText = 'Opens validated evidence target';
+          const staticHintText = 'Informational timeline event only';
           const labelControl = row.clickable
-            ? `<button type="button" class="text-link-button timeline-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}">${escapeHtml(row.label)}</button>`
-            : `<span class="timeline-label">${escapeHtml(row.label)}</span>`;
+            ? `<button type="button" class="text-link-button timeline-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}" aria-label="${escapeHtml(row.label)} - ${escapeHtml(openHintText)}" title="${escapeHtml(openHintText)}">${escapeHtml(row.label)}</button>`
+            : `<span class="timeline-label" aria-label="${escapeHtml(row.label)} - ${escapeHtml(staticHintText)}">${escapeHtml(row.label)}</span>`;
           const affordanceClass = row.clickable
             ? 'evidence-affordance evidence-affordance-clickable'
             : 'evidence-affordance evidence-affordance-static';
           const heading = `<div class="timeline-row-heading">${labelControl}<span class="${affordanceClass}" data-timeline-affordance="${
             row.clickable ? 'open' : 'static'
-          }" title="${
-            row.clickable
-              ? 'Opens validated evidence target'
-              : 'Informational timeline event only'
-          }">${escapeHtml(row.interactionHint)}</span></div>`;
+          }" aria-hidden="true">${escapeHtml(row.interactionHint)}</span></div>`;
           const detail = row.detail
             ? `<span class="timeline-detail">${escapeHtml(row.detail)}</span>`
             : '';
@@ -471,7 +467,7 @@ export function renderWebviewDocument(input: WebviewDocumentInput): string {
   <body>
     <a class="skip-link" href="#main">Skip to main content</a>
     <div id="panel-status-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
-    <main id="main">
+    <main id="main" tabindex="-1">
       ${input.bodyCardsTrustedHtml}
     </main>
 

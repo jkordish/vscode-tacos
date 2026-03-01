@@ -21,7 +21,7 @@ describe('panelClientScript state behavior', () => {
     delete (globalThis as unknown as { acquireVsCodeApi?: unknown }).acquireVsCodeApi;
   });
 
-  function bootstrap(initialState: Record<string, unknown> = {}): {
+  function bootstrap(initialState: Record<string, unknown> = {}, sectionScope = 'scope-token'): {
     postMessage: jest.Mock;
     setState: jest.Mock;
   } {
@@ -39,6 +39,7 @@ describe('panelClientScript state behavior', () => {
       <div id="panel-status-live"></div>
       <ul id="evidence-list"><li class="extra-evidence">more evidence</li></ul>
       <button type="button" data-action="toggleEvidenceMore" data-hidden-count="1">Show 1 more</button>
+      <button id="evidence-open" type="button" data-action="openEvidence" data-evidence-id="url:https://example.test/search?q=a=b&mode=full">Open evidence</button>
       <details data-panel-section="timeline"></details>
       <input id="intent-override-input" type="text" value="intent" />
     `;
@@ -53,7 +54,7 @@ describe('panelClientScript state behavior', () => {
       writable: true,
     });
 
-    const script = renderPanelClientScript(280, 'scope-token');
+    const script = renderPanelClientScript(280, sectionScope);
     // Execute generated webview script in the current jsdom context.
     // eslint-disable-next-line no-new-func
     const execute = new Function(script);
@@ -113,5 +114,37 @@ describe('panelClientScript state behavior', () => {
     jest.advanceTimersByTime(120);
 
     expect(setState).toHaveBeenCalledWith(expect.objectContaining({ scrollY: 77 }));
+  });
+
+  it('restores focus for openEvidence tokens that include equals characters', () => {
+    const focusToken = 'action:openEvidence|evidence=url:https://example.test/search?q=a=b&mode=full';
+    bootstrap({ sectionScope: 'scope-token', focusToken });
+    jest.advanceTimersByTime(50);
+
+    const evidenceButton = document.getElementById('evidence-open');
+    expect(document.activeElement).toBe(evidenceButton);
+  });
+
+  it('clears scope-bound scroll and focus state when section scope changes', () => {
+    const { setState } = bootstrap(
+      {
+        sectionScope: 'old-scope',
+        sectionExpanded: { timeline: true },
+        evidenceListExpanded: true,
+        scrollY: 120,
+        focusToken: 'id:intent-override-input',
+      },
+      'scope-token',
+    );
+
+    expect(setState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sectionScope: 'scope-token',
+        sectionExpanded: {},
+        evidenceListExpanded: false,
+        scrollY: 0,
+        focusToken: '',
+      }),
+    );
   });
 });

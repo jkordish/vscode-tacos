@@ -21,7 +21,6 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: var(--vscode-font-size);
         line-height: 1.5;
         margin: 0;
-        overflow-x: hidden;
         padding: var(--space-4);
       }
       main {

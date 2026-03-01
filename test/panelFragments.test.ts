@@ -239,7 +239,7 @@ describe('panelFragments', () => {
     expect(doc).toContain(
       '<div id="panel-status-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>',
     );
-    expect(doc).toContain('<main id="main">');
+    expect(doc).toContain('<main id="main" tabindex="-1">');
     expect(doc).toContain('<style nonce="nonce-123">.card { color: red; }</style>');
     expect(doc).toContain('console.log("panel");');
   });

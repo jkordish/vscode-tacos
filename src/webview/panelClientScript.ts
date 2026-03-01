@@ -47,6 +47,9 @@ export function renderPanelClientScript(
 
       if (viewState.sectionScope !== panelSectionScope) {
         viewState.sectionExpanded = {};
+        viewState.evidenceListExpanded = false;
+        viewState.scrollY = 0;
+        viewState.focusToken = '';
         viewState.sectionScope = panelSectionScope;
         vscode.setState(viewState);
       }
@@ -137,7 +140,9 @@ export function renderPanelClientScript(
           }
           let matches = true;
           for (const clause of rest) {
-            const [rawKey, rawValue] = clause.split('=');
+            const delimiterIndex = clause.indexOf('=');
+            const rawKey = delimiterIndex === -1 ? clause : clause.slice(0, delimiterIndex);
+            const rawValue = delimiterIndex === -1 ? '' : clause.slice(delimiterIndex + 1);
             const key = rawKey.trim();
             const value = (rawValue || '').trim();
             if (key === 'step' && candidate.dataset.stepIndex !== value) {

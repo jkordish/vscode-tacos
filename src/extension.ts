@@ -747,7 +747,8 @@ export function activate(context: vscode.ExtensionContext): void {
         hasDisabledPrimaryBlockerAction,
         hasRestoreWorkingSetAction: restoreWorkingSetActionCount > 0,
         restoreWorkingSetActionCount,
-        hasTrustCenterCard: panelHtml.includes('<h3>Trust Center</h3>'),
+        hasTrustCenterCard:
+          hasTrustCenterSection || panelHtml.includes('<h3>Trust Center</h3>'),
         hasTrustCenterSection,
         hasTimelineSection,
         hasEvidenceSection,

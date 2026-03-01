@@ -187,6 +187,6 @@ Tracking epics:
 
 ### Open gaps / TODOs (v0.7.0)
 
-- Add dedicated axe-core test coverage for generated panel HTML in CI gate (#218).
-- Extend persistence regression coverage to explicitly include scroll/focus restoration behavior (#219).
-- Complete and record the v0.7.0 manual matrix run in `docs/manual-smoke-runbook.md` (#221).
+- Completed: dedicated axe-core test coverage for generated panel HTML in CI gate (#218).
+- Completed: persistence regression coverage including scroll/focus restoration behavior (#219).
+- Remaining: execute and record the v0.7.0 manual matrix run in `docs/manual-smoke-runbook.md` (#221).
