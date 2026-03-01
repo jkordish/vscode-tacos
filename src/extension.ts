@@ -435,13 +435,19 @@ interface DiagnosticBlockerSnapshot {
   top?: DiagnosticBlockerReference;
 }
 
-type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details';
+type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details' | 'moreContext';
 
 interface PanelSectionState {
   expandedSectionIds: PanelSectionId[];
 }
 
-const PANEL_SECTION_IDS: PanelSectionId[] = ['trustCenter', 'timeline', 'evidence', 'details'];
+const PANEL_SECTION_IDS: PanelSectionId[] = [
+  'trustCenter',
+  'timeline',
+  'evidence',
+  'details',
+  'moreContext',
+];
 
 export function activate(context: vscode.ExtensionContext): void {
   activeExtensionContext = context;
@@ -4449,6 +4455,29 @@ function renderWebview(
     expanded: expandedSections.has('evidence'),
   });
   const detailsCard = renderDetailsCard(detailsHtml, expandedSections.has('details'));
+  const moreContextCards = [
+    trustCenterCard,
+    recapCard,
+    changesSinceCard,
+    nudgeCard,
+    topFilesCard,
+    topLinksCard,
+    timelineCard,
+    evidenceCard,
+    detailsCard,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+  const moreContextCard = moreContextCards
+    ? `<div class="card">
+      <details data-panel-section="moreContext" ${expandedSections.has('moreContext') ? 'open' : ''}>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">More Context</span></summary>
+        <div class="panel-section-body more-context-stack">
+          ${moreContextCards}
+        </div>
+      </details>
+    </div>`
+    : '';
   const demoCard = demoMode
     ? `<div class="card" data-demo-resume-card="true">
       <h3>Sample Resume Card</h3>
@@ -4488,20 +4517,12 @@ function renderWebview(
     }),
     resumePathCard,
     confidenceCard,
-    trustCenterCard,
     statusCard,
     checkpointCard,
     scratchpadCard,
-    recapCard,
-    changesSinceCard,
-    nudgeCard,
-    topFilesCard,
-    topLinksCard,
-    timelineCard,
     quickActionsCard,
     restorePackCard,
-    evidenceCard,
-    detailsCard,
+    moreContextCard,
   ]
     .filter(Boolean)
     .join('\n\n');

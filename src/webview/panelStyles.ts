@@ -5,6 +5,14 @@ export const PANEL_WEBVIEW_STYLE = `
         --surface-muted: var(--vscode-descriptionForeground);
         --surface-strong: var(--vscode-foreground);
         --accent: var(--vscode-focusBorder);
+        --space-1: 4px;
+        --space-2: 8px;
+        --space-3: 12px;
+        --space-4: 16px;
+        --radius-1: 6px;
+        --radius-2: 8px;
+        --radius-3: 10px;
+        --radius-4: 12px;
       }
       body {
         color: var(--surface-strong);
@@ -14,7 +22,7 @@ export const PANEL_WEBVIEW_STYLE = `
         line-height: 1.5;
         margin: 0;
         overflow-x: hidden;
-        padding: 16px;
+        padding: var(--space-4);
       }
       main {
         display: block;
@@ -32,14 +40,14 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .skip-link {
         position: absolute;
-        left: 12px;
-        top: 8px;
+        left: var(--space-3);
+        top: var(--space-2);
         z-index: 999;
         border: 1px solid var(--vscode-button-border, transparent);
-        border-radius: 6px;
+        border-radius: var(--radius-1);
         background: var(--vscode-button-background);
         color: var(--vscode-button-foreground);
-        padding: 6px 10px;
+        padding: 6px var(--space-3);
         text-decoration: none;
         transform: translateY(-140%);
       }
@@ -50,9 +58,9 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .card {
         border: 1px solid var(--surface-border);
-        border-radius: 12px;
-        padding: 14px;
-        margin-bottom: 14px;
+        border-radius: var(--radius-4);
+        padding: var(--space-3);
+        margin-bottom: var(--space-3);
         background: var(--surface-bg);
       }
       ul {
@@ -60,10 +68,10 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       h3 {
         margin-top: 0;
-        margin-bottom: 10px;
+        margin-bottom: var(--space-2);
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--space-2);
       }
       h3::before {
         content: '';
@@ -113,22 +121,22 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: 13px;
       }
       .status-detail {
-        margin-top: 6px;
+        margin-top: var(--space-1);
       }
       .status-actions {
-        margin-top: 10px;
+        margin-top: var(--space-2);
         display: flex;
         flex-wrap: wrap;
-        gap: 8px;
+        gap: var(--space-2);
       }
       .step-evidence {
-        margin-top: 6px;
+        margin-top: var(--space-1);
         display: flex;
-        gap: 6px;
+        gap: var(--space-1);
         flex-wrap: wrap;
       }
       .step-actions {
-        margin-top: 8px;
+        margin-top: var(--space-2);
       }
       .step-action {
         min-height: 24px;
@@ -136,14 +144,14 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: 12px;
       }
       .step-advisory {
-        margin-top: 6px;
+        margin-top: var(--space-1);
         font-size: 12px;
       }
       .badge {
         display: inline-block;
         border: 1px solid var(--vscode-widget-border);
         border-radius: 999px;
-        padding: 2px 8px;
+        padding: 2px var(--space-2);
         font-size: 12px;
         text-decoration: none;
         color: inherit;
@@ -172,8 +180,8 @@ export const PANEL_WEBVIEW_STYLE = `
         background: transparent;
         color: var(--vscode-textLink-foreground);
         min-height: 24px;
-        padding: 2px 4px;
-        border-radius: 4px;
+        padding: 2px var(--space-1);
+        border-radius: var(--radius-1);
         text-align: left;
         text-decoration: underline;
         font: inherit;
@@ -194,7 +202,7 @@ export const PANEL_WEBVIEW_STYLE = `
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 6px;
+        gap: var(--space-1);
       }
       .timeline-row-heading > * {
         min-width: 0;
@@ -209,9 +217,9 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .evidence-item {
         border: 1px solid var(--vscode-widget-border);
-        border-radius: 8px;
-        padding: 8px;
-        margin-bottom: 8px;
+        border-radius: var(--radius-2);
+        padding: var(--space-2);
+        margin-bottom: var(--space-2);
         background: var(--vscode-editor-background);
       }
       .evidence-row {
@@ -219,7 +227,7 @@ export const PANEL_WEBVIEW_STYLE = `
         flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
+        gap: var(--space-2);
       }
       .evidence-row > * {
         min-width: 0;
@@ -229,16 +237,16 @@ export const PANEL_WEBVIEW_STYLE = `
         font-weight: 600;
       }
       .evidence-meta {
-        margin-top: 4px;
+        margin-top: var(--space-1);
         display: flex;
         flex-wrap: wrap;
-        gap: 6px;
+        gap: var(--space-1);
         font-size: 12px;
       }
       .evidence-affordance {
         border: 1px solid var(--vscode-widget-border);
         border-radius: 999px;
-        padding: 1px 8px;
+        padding: 1px var(--space-2);
         font-size: 11px;
         white-space: nowrap;
       }
@@ -269,7 +277,7 @@ export const PANEL_WEBVIEW_STYLE = `
         list-style: none;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--space-2);
         min-height: 24px;
       }
       .card > details[data-panel-section] > summary::before {
@@ -289,7 +297,7 @@ export const PANEL_WEBVIEW_STYLE = `
       .panel-disclosure-summary {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--space-2);
       }
       .section-heading {
         font-weight: 700;
@@ -300,24 +308,30 @@ export const PANEL_WEBVIEW_STYLE = `
         font-weight: 700;
       }
       .panel-section-body {
-        margin-top: 10px;
+        margin-top: var(--space-2);
+      }
+      .more-context-stack > .card {
+        margin-bottom: var(--space-2);
+      }
+      .more-context-stack > .card:last-child {
+        margin-bottom: 0;
       }
       .show-more-btn {
-        margin-top: 8px;
+        margin-top: var(--space-2);
       }
       .muted {
         color: var(--surface-muted);
       }
       .resume-path-list {
-        margin-top: 10px;
+        margin-top: var(--space-2);
       }
       .resume-path-item {
-        margin-bottom: 8px;
+        margin-bottom: var(--space-2);
       }
       .resume-path-toggle {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--space-2);
         cursor: pointer;
         font-weight: 600;
       }
@@ -330,20 +344,20 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: 12px;
       }
       .blocker-disabled-reason {
-        margin-top: 8px;
+        margin-top: var(--space-2);
       }
       .restore-grid {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-        gap: 8px;
+        gap: var(--space-2);
       }
       button {
         border: 1px solid var(--vscode-button-border, transparent);
         background: var(--vscode-button-background);
         color: var(--vscode-button-foreground);
-        border-radius: 8px;
+        border-radius: var(--radius-2);
         min-height: 24px;
-        padding: 8px 10px;
+        padding: var(--space-2) var(--space-3);
       }
       button:focus-visible {
         outline: 2px solid var(--vscode-focusBorder);
@@ -373,7 +387,7 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .note-actions {
         display: flex;
-        gap: 8px;
+        gap: var(--space-2);
         flex-wrap: wrap;
       }
       .note-actions button {
@@ -408,18 +422,18 @@ export const PANEL_WEBVIEW_STYLE = `
       .quick-actions {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 8px;
+        gap: var(--space-2);
       }
       .quick-actions button {
         min-width: 0;
         width: 100%;
       }
       .action-group + .action-group {
-        margin-top: 10px;
+        margin-top: var(--space-2);
       }
       .action-group h4,
       .action-group h5 {
-        margin: 0 0 8px 0;
+        margin: 0 0 var(--space-2) 0;
         font-size: 12px;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -431,7 +445,7 @@ export const PANEL_WEBVIEW_STYLE = `
         grid-template-areas:
           'now next'
           'blocked restore';
-        gap: 12px;
+        gap: var(--space-3);
       }
       .companion-block[data-companion-section='now'] {
         grid-area: now;
@@ -447,12 +461,12 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .companion-block {
         border: 1px solid var(--vscode-widget-border);
-        border-radius: 10px;
-        padding: 12px;
+        border-radius: var(--radius-3);
+        padding: var(--space-3);
         background: var(--vscode-editor-background);
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: var(--space-2);
       }
       .companion-block h4 {
         margin-top: 0;
@@ -469,7 +483,7 @@ export const PANEL_WEBVIEW_STYLE = `
         max-inline-size: 72ch;
       }
       .state-caption {
-        margin: 0 0 6px 0;
+        margin: 0 0 var(--space-1) 0;
         font-size: 12px;
         font-weight: 600;
       }
@@ -497,8 +511,8 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .intent-editor {
         border: 1px solid var(--vscode-widget-border);
-        border-radius: 8px;
-        padding: 8px;
+        border-radius: var(--radius-2);
+        padding: var(--space-2);
       }
       .intent-editor-row {
         margin-top: 6px;
@@ -514,8 +528,8 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .intent-editor-actions {
         display: flex;
-        gap: 8px;
-        margin-top: 8px;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
         flex-wrap: wrap;
       }
       .compact-list {
@@ -525,13 +539,13 @@ export const PANEL_WEBVIEW_STYLE = `
       .companion-restore-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 6px;
+        gap: var(--space-1);
       }
       .companion-restore-grid button {
         text-align: left;
       }
       .trust-row {
-        margin-bottom: 8px;
+        margin-bottom: var(--space-2);
       }
       .trust-key {
         font-weight: 600;

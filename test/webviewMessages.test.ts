@@ -180,12 +180,12 @@ describe('parseWebviewMessage', () => {
     expect(
       parseWebviewMessage({
         type: 'setPanelSectionExpanded',
-        sectionId: 'timeline',
+        sectionId: 'moreContext',
         expanded: true,
       }),
     ).toEqual({
       type: 'setPanelSectionExpanded',
-      sectionId: 'timeline',
+      sectionId: 'moreContext',
       expanded: true,
     });
     expect(

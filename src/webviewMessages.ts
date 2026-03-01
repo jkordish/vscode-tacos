@@ -40,7 +40,7 @@ type SimpleWebviewMessageType = (typeof SIMPLE_MESSAGE_TYPES)[number];
 type RestoreWebviewMessageType = (typeof RESTORE_MESSAGE_TYPES)[number];
 type PrimaryNextSafeActionSurface = 'home';
 type ResumePathStepId = 'confirmIntent' | 'runNextSafeAction' | 'clearBlocker';
-type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details';
+type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details' | 'moreContext';
 
 export type WebviewMessage =
   | { type: SimpleWebviewMessageType }
@@ -152,7 +152,8 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
       sectionId !== 'trustCenter' &&
       sectionId !== 'timeline' &&
       sectionId !== 'evidence' &&
-      sectionId !== 'details'
+      sectionId !== 'details' &&
+      sectionId !== 'moreContext'
     ) {
       return undefined;
     }

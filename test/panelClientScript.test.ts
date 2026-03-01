@@ -9,6 +9,7 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain("'clearIntentOverride'");
     expect(script).toContain("'dismissDemoResume'");
     expect(script).toContain("'trustCenter'");
+    expect(script).toContain("'moreContext'");
     expect(script).toContain("type: 'setPanelSectionExpanded'");
     expect(script).toContain('const panelSectionScope = "scope-token";');
     expect(script).toContain('const maxIntentOverrideChars = 280;');

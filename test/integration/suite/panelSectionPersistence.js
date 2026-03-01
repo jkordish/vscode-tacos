@@ -115,6 +115,11 @@ async function run() {
     await vscode.commands.executeCommand('tacos.__test.setPanelSectionExpanded', 'timeline', false);
     await vscode.commands.executeCommand('tacos.__test.setPanelSectionExpanded', 'evidence', false);
     await vscode.commands.executeCommand('tacos.__test.setPanelSectionExpanded', 'details', false);
+    await vscode.commands.executeCommand(
+      'tacos.__test.setPanelSectionExpanded',
+      'moreContext',
+      false,
+    );
   }
 }
 

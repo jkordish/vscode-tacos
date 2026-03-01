@@ -4,7 +4,7 @@ export function renderPanelClientScript(
 ): string {
   return `
       const vscode = acquireVsCodeApi();
-      const panelSectionIds = new Set(['trustCenter', 'timeline', 'evidence', 'details']);
+      const panelSectionIds = new Set(['trustCenter', 'timeline', 'evidence', 'details', 'moreContext']);
       const panelSectionScope = ${JSON.stringify(panelSectionScopeToken)};
       const hostActions = new Set([
         'fixSummary',
