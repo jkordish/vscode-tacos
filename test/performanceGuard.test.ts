@@ -44,6 +44,16 @@ describe('recordPerformanceSample', () => {
     expect(third.shouldWarn).toBe(true);
   });
 
+  it('treats exact threshold durations as slow-path samples', () => {
+    const counter = createPerformanceCounter();
+    const budget = { slowThresholdMs: 50, warnCooldownMs: 10_000 };
+
+    const sample = recordPerformanceSample(counter, 50, budget, 5_000);
+    expect(sample.isSlow).toBe(true);
+    expect(sample.shouldWarn).toBe(true);
+    expect(counter.slowSamples).toBe(1);
+  });
+
   it('normalizes invalid durations to zero', () => {
     const counter = createPerformanceCounter();
     const budget = { slowThresholdMs: 10, warnCooldownMs: 1_000 };
