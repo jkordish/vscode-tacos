@@ -95,6 +95,16 @@ describe('percolation type normalization', () => {
     });
   });
 
+  it('falls back to a stable item token when title is blank or punctuation-only', () => {
+    const normalized = normalizeSurfacedItem({
+      kind: 'status',
+      title: '   ---   ',
+      detail: '',
+    });
+
+    expect(normalized.id).toBe('item:status:item');
+  });
+
   it('normalizes decision payload with explainability defaults', () => {
     const decision = normalizePercolationDecision({
       primary: {

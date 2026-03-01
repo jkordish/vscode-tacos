@@ -1,13 +1,5 @@
 import { isInQuietHours } from '../quietHours';
-import type { PercolationPolicyMode } from './types';
-
-export type PercolationSuppressionReason =
-  | 'disabled'
-  | 'inactive-mode'
-  | 'quiet-hours'
-  | 'cooldown'
-  | 'no-change'
-  | 'noise-budget';
+import type { PercolationPolicyMode, PercolationSuppressionReason } from './types';
 
 export interface PercolationSuppressionInput {
   enabled: boolean;
@@ -40,7 +32,7 @@ export function evaluatePercolationSuppression(
   if (input.mode !== 'active') {
     return {
       suppressed: true,
-      reason: 'inactive-mode',
+      reason: input.mode,
     };
   }
 

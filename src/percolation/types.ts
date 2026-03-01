@@ -139,7 +139,11 @@ function resolveItemId(item: Partial<SurfacedItem>, fallbackKind: SurfacedItemKi
     return item.id.trim();
   }
 
-  const titleToken = item.title?.trim().toLowerCase().replace(/[^a-z0-9]+/gu, '-') ?? 'item';
+  const rawTitle = (item.title ?? '').trim().toLowerCase();
+  let titleToken = rawTitle.replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '');
+  if (!titleToken) {
+    titleToken = 'item';
+  }
   return `item:${fallbackKind}:${titleToken}`;
 }
 

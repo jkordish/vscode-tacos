@@ -3095,16 +3095,13 @@ function updateCompanionStatusBar(): void {
   const now = Date.now();
   const quietState = resolveSummaryQuietState(now, config.summaryQuietHours);
   const summary = state.scratchSummary;
-  const percolationSuppression =
-    mode === 'active'
-      ? evaluatePercolationSuppression({
-          enabled: config.enabled,
-          mode,
-          now,
-          quietHours: config.summaryQuietHours,
-          contextUnchanged: state.lastSummaryContextUnchanged,
-        })
-      : { suppressed: true as const };
+  const percolationSuppression = evaluatePercolationSuppression({
+    enabled: config.enabled,
+    mode,
+    now,
+    quietHours: config.summaryQuietHours,
+    contextUnchanged: state.lastSummaryContextUnchanged,
+  });
   const rankedPrimary =
     mode === 'active' && summary && !percolationSuppression.suppressed
       ? rankPercolationForSummary(summary, mode).primary
@@ -4331,7 +4328,7 @@ function renderWebview(
   const explainabilityPayload = buildPercolationExplainabilityPayload({
     summary,
     primary: rankedPrimaryCandidate,
-    suppressionReason: panelPercolationSuppression.reason ?? activeNudgeDecision?.suppressedReason,
+    suppressionReason: panelPercolationSuppression.reason,
   });
   const percolationExplainabilityTrustedHtml = formatPercolationExplainabilityLines(
     explainabilityPayload,

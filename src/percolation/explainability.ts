@@ -33,11 +33,14 @@ function describeSuppressionReason(reason: string): string {
   if (reason === 'noise-budget') {
     return 'Surfacing is suppressed by the interruption noise budget.';
   }
-  if (reason === 'inactive-mode') {
-    return 'Surfacing is suppressed because companion runtime mode is not active.';
-  }
   if (reason === 'disabled') {
     return 'Surfacing is suppressed because the feature is disabled.';
+  }
+  if (reason === 'paused') {
+    return 'Surfacing is suppressed because companion mode is paused.';
+  }
+  if (reason === 'restricted') {
+    return 'Surfacing is suppressed because workspace trust is restricted.';
   }
 
   return `Surfacing is suppressed (${reason}).`;

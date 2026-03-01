@@ -62,15 +62,16 @@ describe('chooseCompanionNudges', () => {
     expect(result.suppressedReason).toBe('disabled');
   });
 
-  it.each(['paused', 'restricted', 'disabled'] as const)(
-    'suppresses nudges outside active mode (%s)',
-    (mode) => {
-      const result = chooseCompanionNudges(buildInput({ mode }));
+  it.each([
+    ['paused', 'paused'],
+    ['restricted', 'restricted'],
+    ['disabled', 'disabled'],
+  ] as const)('suppresses nudges outside active mode (%s)', (mode, expectedReason) => {
+    const result = chooseCompanionNudges(buildInput({ mode }));
 
-      expect(result.primary).toBeUndefined();
-      expect(result.suppressedReason).toBe('inactive-mode');
-    },
-  );
+    expect(result.primary).toBeUndefined();
+    expect(result.suppressedReason).toBe(expectedReason);
+  });
 
   it('suppresses nudges when within cooldown window and reports next eligible time', () => {
     const result = chooseCompanionNudges(
@@ -230,7 +231,8 @@ describe('nudge explainability helpers', () => {
 
   it('renders suppression reasons including no-candidate and cooldown timestamp', () => {
     const disabled = describeCompanionNudgeSuppression({ suppressedReason: 'disabled' });
-    const inactive = describeCompanionNudgeSuppression({ suppressedReason: 'inactive-mode' });
+    const paused = describeCompanionNudgeSuppression({ suppressedReason: 'paused' });
+    const restricted = describeCompanionNudgeSuppression({ suppressedReason: 'restricted' });
     const quiet = describeCompanionNudgeSuppression({ suppressedReason: 'quiet-hours' });
     const noCandidate = describeCompanionNudgeSuppression({ suppressedReason: 'no-candidate' });
     const noChange = describeCompanionNudgeSuppression({ suppressedReason: 'no-change' });
@@ -260,7 +262,8 @@ describe('nudge explainability helpers', () => {
     });
 
     expect(disabled).toBe('Companion nudges are disabled in settings.');
-    expect(inactive).toBe('Nudges are hidden while companion mode is paused or restricted.');
+    expect(paused).toBe('Nudges are hidden while companion mode is paused.');
+    expect(restricted).toBe('Nudges are hidden while workspace trust is restricted.');
     expect(quiet).toBe('Nudges are currently in your configured quiet hours window.');
     expect(noCandidate).toBe('No high-confidence nudge is available for this context yet.');
     expect(noChange).toBe(

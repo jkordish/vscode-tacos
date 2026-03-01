@@ -12,7 +12,8 @@ export interface CompanionNudge {
 
 export type CompanionNudgeSuppressedReason =
   | 'disabled'
-  | 'inactive-mode'
+  | 'paused'
+  | 'restricted'
   | 'cooldown'
   | 'quiet-hours'
   | 'no-change'
@@ -197,8 +198,12 @@ export function describeCompanionNudgeSuppression(
     return 'Companion nudges are disabled in settings.';
   }
 
-  if (decision.suppressedReason === 'inactive-mode') {
-    return 'Nudges are hidden while companion mode is paused or restricted.';
+  if (decision.suppressedReason === 'paused') {
+    return 'Nudges are hidden while companion mode is paused.';
+  }
+
+  if (decision.suppressedReason === 'restricted') {
+    return 'Nudges are hidden while workspace trust is restricted.';
   }
 
   if (decision.suppressedReason === 'quiet-hours') {
