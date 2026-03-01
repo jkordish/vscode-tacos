@@ -130,19 +130,25 @@ function resolveSignalId(
   signal: Partial<NormalizedSignal>,
   fallbackKind: NormalizedSignalKind,
 ): string {
-  if (signal.id && signal.id.trim().length > 0) {
-    return signal.id.trim();
+  if (typeof signal.id === 'string') {
+    const trimmedId = signal.id.trim();
+    if (trimmedId.length > 0) {
+      return trimmedId;
+    }
   }
 
   return `signal:${fallbackKind}`;
 }
 
 function resolveItemId(item: Partial<SurfacedItem>, fallbackKind: SurfacedItemKind): string {
-  if (item.id && item.id.trim().length > 0) {
-    return item.id.trim();
+  if (typeof item.id === 'string') {
+    const trimmedId = item.id.trim();
+    if (trimmedId.length > 0) {
+      return trimmedId;
+    }
   }
 
-  const rawTitle = (item.title ?? '').trim().toLowerCase();
+  const rawTitle = typeof item.title === 'string' ? item.title.trim().toLowerCase() : '';
   let titleToken = rawTitle.replace(/[^a-z0-9]+/gu, '-').replace(/^-+|-+$/gu, '');
   if (!titleToken) {
     titleToken = 'item';
@@ -193,13 +199,15 @@ export function normalizeSignal(
 
 export function normalizeSurfacedItem(item: Partial<SurfacedItem>): SurfacedItem {
   const kind: SurfacedItemKind = item.kind ?? 'status';
-  const title = item.title?.trim() || 'Untitled surfaced item';
+  const titleValue = typeof item.title === 'string' ? item.title.trim() : '';
+  const detailValue = typeof item.detail === 'string' ? item.detail.trim() : '';
+  const actionIdValue = typeof item.actionId === 'string' ? item.actionId.trim() : '';
   return {
     id: resolveItemId(item, kind),
     kind,
-    title,
-    detail: item.detail?.trim() ?? '',
-    actionId: item.actionId?.trim() || undefined,
+    title: titleValue || 'Untitled surfaced item',
+    detail: detailValue,
+    actionId: actionIdValue || undefined,
     confidence: clamp01(item.confidence, 0.5),
     urgency: clamp01(item.urgency, 0.5),
     novelty: clamp01(item.novelty, 0.5),
@@ -237,7 +245,7 @@ export function normalizePercolationDecision(
         ? Math.max(0, Math.floor(decision.nextEligibleAt))
         : undefined,
     explain: {
-      summary: decision.explain?.summary?.trim() ?? '',
+      summary: typeof decision.explain?.summary === 'string' ? decision.explain.summary.trim() : '',
       reasons,
       evidenceIds: normalizeEvidenceIds(decision.explain?.evidenceIds),
     },
