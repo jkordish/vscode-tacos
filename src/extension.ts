@@ -2697,7 +2697,6 @@ async function rememberPercolationPrimaryForSummary(
     context,
     workspaceRoot,
     now,
-    ignoreMemory: true,
   }).primary;
   if (!primary) {
     return false;
