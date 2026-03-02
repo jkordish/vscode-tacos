@@ -140,6 +140,78 @@ async function run() {
       'Expected focus summaries to use silent flow when uiSurface=silent.',
     );
 
+    await config.update('uiSurface', 'notification', vscode.ConfigurationTarget.Global);
+    const notificationDecision = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSurfaceDecision',
+      {
+        primary: {
+          kind: 'blocked',
+          actionId: 'restoreRerunTask',
+          urgency: 0.95,
+          confidence: 0.9,
+          score: 0.88,
+        },
+      },
+    );
+    assert.equal(
+      notificationDecision?.surface,
+      'notification',
+      'Expected notification surface when candidate is high-value and actionable.',
+    );
+    assert.equal(
+      notificationDecision?.reason,
+      'notification-high-value-actionable',
+      'Expected broker reason enum for high-value notification path.',
+    );
+
+    const suppressedDecision = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSurfaceDecision',
+      {
+        suppressionReason: 'quiet-hours',
+        primary: {
+          kind: 'blocked',
+          actionId: 'restoreRerunTask',
+          urgency: 0.95,
+          confidence: 0.9,
+          score: 0.88,
+        },
+      },
+    );
+    assert.equal(
+      suppressedDecision?.surface,
+      'panel',
+      'Expected suppression to downgrade notification-capable flow to panel emphasis.',
+    );
+    assert.equal(
+      suppressedDecision?.reason,
+      'notification-suppressed',
+      'Expected explicit suppressed reason class for downgraded notification path.',
+    );
+
+    await config.update('uiSurface', 'statusbar', vscode.ConfigurationTarget.Global);
+    const cappedStatusbarDecision = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSurfaceDecision',
+      {
+        primary: {
+          kind: 'blocked',
+          actionId: 'restoreRerunTask',
+          urgency: 0.95,
+          confidence: 0.9,
+          score: 0.88,
+        },
+      },
+    );
+    assert.equal(
+      cappedStatusbarDecision?.surface,
+      'statusbar',
+      'Expected uiSurface=statusbar to cap surfaced output to statusbar background flow.',
+    );
+    assert.equal(
+      cappedStatusbarDecision?.reason,
+      'ui-surface-statusbar-cap',
+      'Expected statusbar cap reason enum when notification-capable candidate exists.',
+    );
+
     const now = Date.now();
     const boundaryDeferred = await vscode.commands.executeCommand(
       'tacos.__test.evaluateAutoTriggerDecision',

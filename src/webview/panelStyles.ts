@@ -13,6 +13,8 @@ export const PANEL_WEBVIEW_STYLE = `
         --radius-2: 8px;
         --radius-3: 10px;
         --radius-4: 12px;
+        --motion-quick: 120ms;
+        --motion-soft: 180ms;
       }
       body {
         color: var(--surface-strong);
@@ -285,7 +287,7 @@ export const PANEL_WEBVIEW_STYLE = `
         flex: 0 0 auto;
         font-size: 12px;
         line-height: 1;
-        transition: transform 120ms ease;
+        transition: transform var(--motion-quick) ease;
       }
       .card > details[data-panel-section] > summary::-webkit-details-marker {
         display: none;
@@ -515,6 +517,9 @@ export const PANEL_WEBVIEW_STYLE = `
         margin: 0 0 var(--space-1) 0;
         font-size: 12px;
         font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
       }
       .state-safe,
       .state-clear {
@@ -525,6 +530,33 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .state-blocked {
         color: var(--vscode-testing-iconFailed);
+      }
+      .slot-token {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--vscode-widget-border);
+        border-radius: 999px;
+        min-height: 18px;
+        padding: 0 var(--space-1);
+        font-size: 10px;
+        letter-spacing: 0.05em;
+        font-weight: 700;
+        text-transform: uppercase;
+        transition:
+          border-color var(--motion-soft) ease,
+          background-color var(--motion-soft) ease,
+          color var(--motion-soft) ease;
+      }
+      .slot-token-primary {
+        border-color: var(--vscode-testing-iconPassed);
+      }
+      .slot-token-advisory {
+        border-color: var(--vscode-testing-iconQueued);
+      }
+      .slot-token-suppressed {
+        border-color: var(--surface-muted);
+        color: var(--surface-muted);
       }
       .companion-kicker {
         margin: 0;
@@ -597,6 +629,12 @@ export const PANEL_WEBVIEW_STYLE = `
           grid-template-areas: 'now next blocked restore';
         }
       }
+      @media (prefers-reduced-motion: reduce) {
+        .card > details[data-panel-section] > summary::before,
+        .slot-token {
+          transition: none;
+        }
+      }
       @media (max-width: 700px) {
         body {
           padding: 10px;
@@ -629,7 +667,8 @@ export const PANEL_WEBVIEW_STYLE = `
         .panel-emphasis-badge,
         .evidence-affordance,
         .evidence-item,
-        .text-link-button {
+        .text-link-button,
+        .slot-token {
           forced-color-adjust: auto;
           border-color: ButtonText;
         }
@@ -643,7 +682,8 @@ export const PANEL_WEBVIEW_STYLE = `
         .state-safe,
         .state-clear,
         .state-advisory,
-        .state-blocked {
+        .state-blocked,
+        .slot-token {
           color: ButtonText;
         }
         button:focus-visible,

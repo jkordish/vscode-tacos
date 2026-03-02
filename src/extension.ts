@@ -70,8 +70,11 @@ import {
   buildNextStepActions,
   describeNextStepActionRationale,
   type NextStepAction,
-  type NextStepActionKind,
 } from './nextStepActions';
+import {
+  resolveCompanionPrimaryCtaDecision,
+  type CompanionPrimaryCtaDecision,
+} from './companionPrimaryCta';
 import {
   isPathWithinWorkspaceRoot,
   normalizeHttpUrl,
@@ -91,7 +94,16 @@ import {
   type PercolationMemoryStore,
 } from './percolation/memory';
 import { evaluatePercolationSuppression } from './percolation/suppression';
-import { createPercolationPolicyInput, type PercolationPolicyMode } from './percolation/types';
+import {
+  resolveSummarySurfaceDecision,
+  type SummaryPresentationMode,
+  type SummaryPresentationSurface,
+} from './percolation/surfaceBroker';
+import {
+  createPercolationPolicyInput,
+  type PercolationPolicyMode,
+  type PercolationSuppressionReason,
+} from './percolation/types';
 import {
   buildPartitionScope,
   inferTaskPartitionKey,
@@ -443,7 +455,6 @@ interface PresentSummaryOptions {
 
 type ScratchpadScopeMode = 'partition' | 'workspace';
 
-type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt' | 'silent';
 type CompanionRuntimeMode = 'active' | 'paused' | 'restricted' | 'disabled';
 type CompanionStatusBarClass =
   | 'active-idle'
@@ -583,6 +594,51 @@ export function activate(context: vscode.ExtensionContext): void {
       });
       return mode;
     }),
+    vscode.commands.registerCommand(
+      'tacos.__test.getFocusSurfaceDecision',
+      async (input?: unknown) => {
+        const payload =
+          input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+        const config = getConfig();
+        const configuredUiSurface =
+          payload.uiSurface === 'statusbar' ||
+          payload.uiSurface === 'notification' ||
+          payload.uiSurface === 'silent'
+            ? payload.uiSurface
+            : config.uiSurface;
+        const suppression =
+          typeof payload.suppressionReason === 'string' && payload.suppressionReason.trim()
+            ? {
+                suppressed: true as const,
+                reason: payload.suppressionReason.trim() as PercolationSuppressionReason,
+              }
+            : undefined;
+        const primaryInput =
+          payload.primary && typeof payload.primary === 'object'
+            ? (payload.primary as Record<string, unknown>)
+            : undefined;
+        const primary = primaryInput
+          ? {
+              kind:
+                typeof primaryInput.kind === 'string'
+                  ? (primaryInput.kind as RankedSurfacedItem['kind'])
+                  : 'status',
+              actionId:
+                typeof primaryInput.actionId === 'string' ? primaryInput.actionId : undefined,
+              urgency: typeof primaryInput.urgency === 'number' ? primaryInput.urgency : 0,
+              confidence: typeof primaryInput.confidence === 'number' ? primaryInput.confidence : 0,
+              score: typeof primaryInput.score === 'number' ? primaryInput.score : 0,
+            }
+          : undefined;
+        return resolveSummarySurfaceDecision({
+          configuredUiSurface,
+          autoOpenDetails: payload.autoOpenDetails === true,
+          preferBackgroundPresentation: payload.preferBackgroundPresentation === true,
+          suppression,
+          primary,
+        });
+      },
+    ),
     vscode.commands.registerCommand('tacos.__test.getStatusBarSnapshot', async () => {
       return {
         text: state.statusBar?.text ?? '',
@@ -693,6 +749,8 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasActiveBlockedCard = panelHtml.includes('data-blocked-card="active"');
       const primaryNextActionCtaCount = (panelHtml.match(/data-primary-next-safe-action=/gu) ?? [])
         .length;
+      const hasHomePrimaryNextAction = panelHtml.includes('data-primary-next-safe-action="home"');
+      const totalPrimaryCtaCount = primaryBlockerActionCount + primaryNextActionCtaCount;
       const companionSectionOrder = [
         ...panelHtml.matchAll(/data-companion-section="([^"]+)"/gu),
       ].map((match) => match[1]);
@@ -712,6 +770,10 @@ export function activate(context: vscode.ExtensionContext): void {
           /data-companion-section="restore"[^>]*data-companion-slot-source="([^"]+)"/u,
         )?.[1] ?? '';
       const nextSafeStatus = panelHtml.match(/data-next-safe-status="([^"]+)"/u)?.[1] ?? '';
+      const nextEmphasisToken = panelHtml.match(/data-next-emphasis-token="([^"]+)"/u)?.[1] ?? '';
+      const blockedEmphasisToken =
+        panelHtml.match(/data-blocked-emphasis-token="([^"]+)"/u)?.[1] ?? '';
+      const emphasisTokenCount = (panelHtml.match(/data-emphasis-token=/gu) ?? []).length;
       const advisoryOnlyRowCount = (panelHtml.match(/Advisory only/gu) ?? []).length;
       const restoreWorkingSetActionCount = (
         panelHtml.match(/data-action="restoreWorkingSet"/gu) ?? []
@@ -821,18 +883,23 @@ export function activate(context: vscode.ExtensionContext): void {
         intentOverridden: Boolean(summary?.intentOverridden),
         nextStepsCount: summary?.nextSteps.length ?? 0,
         nextStepActionsCount: nextStepActions.length,
-        hasPrimaryNextAction: Boolean(primaryNextAction),
+        hasPrimaryNextAction: hasHomePrimaryNextAction,
+        hasNextActionCandidate: Boolean(primaryNextAction),
         primaryNextActionLabel: primaryNextAction?.label ?? '',
         primaryNextActionStepIndex: primaryNextAction?.stepIndex ?? -1,
         hasPrimaryNextActionRationale: panelHtml.includes('data-next-step-rationale="true"'),
-        hasHomePrimaryNextAction: panelHtml.includes('data-primary-next-safe-action="home"'),
+        hasHomePrimaryNextAction,
         primaryNextActionCtaCount,
+        totalPrimaryCtaCount,
         companionSectionOrder,
         companionSlotSourceCount: companionSlotSourceMatches.length,
         nextSlotSourceClass,
         blockedSlotSourceClass,
         restoreSlotSourceClass,
         nextSafeStatus,
+        nextEmphasisToken,
+        blockedEmphasisToken,
+        emphasisTokenCount,
         advisoryOnlyRowCount,
         hasLegacyNextStepsCard: panelHtml.includes('<h3>Next Steps</h3>'),
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
@@ -2472,7 +2539,6 @@ async function presentSummary(
   options: PresentSummaryOptions = {},
 ): Promise<void> {
   const config = getConfig();
-  const presentationMode = resolveSummaryPresentationMode(config, options);
   const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot);
   state.lastSummaryContextUnchanged = triggerReason === 'cached';
 
@@ -2484,7 +2550,7 @@ async function presentSummary(
       workspaceRoot: root,
       trigger: triggerReason,
       uiSurface: config.uiSurface,
-      interruptionEvent: triggerReason === 'focus' && presentationMode === 'prompt' ? 1 : 0,
+      interruptionEvent: 0,
       interruptionTimingClass: classifyInterruptionTiming(triggerReason, options.focusRegainedAt),
       resumeWithNote: options.checkpointPrimaryNote ? 1 : 0,
     };
@@ -2513,18 +2579,48 @@ async function presentSummary(
         })
       : undefined;
   let notificationPrimary: RankedSurfacedItem | undefined;
+  const ensureNotificationPrimary = (): RankedSurfacedItem | undefined => {
+    if (!notificationPrimary) {
+      notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
+        context,
+        workspaceRoot,
+      }).primary;
+    }
+    return notificationPrimary;
+  };
 
   // Keep low-confidence clarification telemetry populated even when notifications are suppressed.
   if (summary.lowConfidence) {
     if (notificationSuppression?.suppressed) {
       recordLowConfidenceClarificationRate(summary, undefined);
     } else {
-      notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
-        context,
-        workspaceRoot,
-      }).primary;
+      notificationPrimary = ensureNotificationPrimary();
       recordLowConfidenceClarificationRate(summary, notificationPrimary);
     }
+  }
+
+  const surfaceDecision = resolveSummarySurfaceDecision({
+    configuredUiSurface: config.uiSurface,
+    autoOpenDetails: options.autoOpenDetails === true,
+    preferBackgroundPresentation: options.preferBackgroundPresentation === true,
+    suppression: notificationSuppression,
+    primary:
+      config.uiSurface === 'notification' &&
+      !notificationSuppression?.suppressed &&
+      !options.autoOpenDetails &&
+      !options.preferBackgroundPresentation
+        ? ensureNotificationPrimary()
+        : undefined,
+  });
+  const presentationMode = surfaceDecision.presentationMode;
+
+  if (notificationSuppression?.suppressed) {
+    recordPercolationSuppressionMetric(notificationSuppression.reason);
+  }
+  recordSurfaceSelectionMetric(surfaceDecision.surface);
+  if (state.metricSession) {
+    state.metricSession.interruptionEvent =
+      triggerReason === 'focus' && presentationMode === 'prompt' ? 1 : 0;
   }
 
   if (presentationMode === 'auto-open-details') {
@@ -2540,16 +2636,12 @@ async function presentSummary(
     return;
   }
 
-  if (notificationSuppression?.suppressed) {
-    recordPercolationSuppressionMetric(notificationSuppression.reason);
-    return;
+  if (!notificationPrimary) {
+    notificationPrimary = ensureNotificationPrimary();
   }
 
   if (!notificationPrimary) {
-    notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
-      context,
-      workspaceRoot,
-    }).primary;
+    return;
   }
 
   if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
@@ -3140,6 +3232,17 @@ function recordCompanionPrimaryCtaCompletion(): void {
     (state.metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
 }
 
+function recordCompanionPrimaryCtaCompletionForSession(
+  metricSession: MetricRecord | undefined,
+): void {
+  if (!metricSession) {
+    return;
+  }
+
+  metricSession.companionPrimaryCtaCompletions =
+    (metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
+}
+
 function recordLowConfidenceClarificationRate(
   summary: ResumeSummary,
   primary: RankedSurfacedItem | undefined,
@@ -3153,6 +3256,10 @@ function recordLowConfidenceClarificationRate(
 
 function recordMetricCounter(
   field:
+    | 'surfaceSelectionNone'
+    | 'surfaceSelectionStatusbar'
+    | 'surfaceSelectionPanel'
+    | 'surfaceSelectionNotification'
     | 'pauseActions'
     | 'snoozeActions'
     | 'summaryQuietActions'
@@ -3182,6 +3289,25 @@ function recordMetricCounter(
   }
 
   state.metricSession[field] = (state.metricSession[field] ?? 0) + amount;
+}
+
+function recordSurfaceSelectionMetric(surface: SummaryPresentationSurface): void {
+  if (surface === 'none') {
+    recordMetricCounter('surfaceSelectionNone');
+    return;
+  }
+
+  if (surface === 'statusbar') {
+    recordMetricCounter('surfaceSelectionStatusbar');
+    return;
+  }
+
+  if (surface === 'panel') {
+    recordMetricCounter('surfaceSelectionPanel');
+    return;
+  }
+
+  recordMetricCounter('surfaceSelectionNotification');
 }
 
 function recordRedactionMetrics(totalReplacements: number, highRiskDetected: boolean): void {
@@ -3238,6 +3364,22 @@ function nudgeActionLabel(action: string): string {
     return 'Refresh summary';
   }
   return 'Take action';
+}
+
+function isBlockedPrimaryCtaMessage(message: WebviewMessage): boolean {
+  if (
+    message.type !== 'sessionAddCheckpoint' &&
+    message.type !== 'refreshSummary' &&
+    message.type !== 'restoreRerunTask' &&
+    message.type !== 'restoreCopyFailingCommand' &&
+    message.type !== 'restoreOpenProblems' &&
+    message.type !== 'restoreOpenDiagnosticFile' &&
+    message.type !== 'restoreCheckoutPreviousBranch'
+  ) {
+    return false;
+  }
+
+  return 'primarySurface' in message && message.primarySurface === 'blocked';
 }
 
 interface RankPercolationOptions {
@@ -3306,9 +3448,14 @@ function resolveCompanionNextSlotSourceClass(
   summary: ResumeSummary,
   primaryNextAction: NextStepAction | undefined,
   rankedPrimary: RankedSurfacedItem | undefined,
+  primaryCtaDecision: CompanionPrimaryCtaDecision,
 ): string {
-  if (primaryNextAction) {
+  if (primaryNextAction && primaryCtaDecision.winner === 'next') {
     return `next-step-action:${primaryNextAction.kind}`;
+  }
+
+  if (primaryNextAction) {
+    return `policy:secondary-next-step-action:${primaryNextAction.kind}`;
   }
 
   if (rankedPrimary) {
@@ -3326,14 +3473,19 @@ function resolveCompanionNextSlotSourceClass(
   return 'summary:none';
 }
 
-function resolveCompanionPrimaryCtaSourceClass(
-  primaryNextAction: NextStepAction | undefined,
-): `next-step-action:${NextStepActionKind}` | undefined {
-  if (!primaryNextAction) {
-    return undefined;
+function resolveCompanionBlockedSlotSourceClass(
+  blockerDecision: BlockerDecision,
+  primaryCtaDecision: CompanionPrimaryCtaDecision,
+): string {
+  if (primaryCtaDecision.winner === 'blocked') {
+    return `blocker:${blockerDecision.kind}:primary`;
   }
 
-  return `next-step-action:${primaryNextAction.kind}`;
+  if (blockerDecision.hasBlocker) {
+    return `blocker:${blockerDecision.kind}:advisory`;
+  }
+
+  return `blocker:${blockerDecision.kind}`;
 }
 
 function resolveCompanionSlotSourceClasses(
@@ -3341,19 +3493,25 @@ function resolveCompanionSlotSourceClasses(
   primaryNextAction: NextStepAction | undefined,
   rankedPrimary: RankedSurfacedItem | undefined,
   blockerDecision: BlockerDecision,
+  primaryCtaDecision: CompanionPrimaryCtaDecision,
 ): {
   now: string;
   next: string;
   blocked: string;
   restore: string;
-  primaryCta?: `next-step-action:${NextStepActionKind}`;
+  primaryCta?: string;
 } {
   return {
     now: 'summary:intent-and-retrieval-cues',
-    next: resolveCompanionNextSlotSourceClass(summary, primaryNextAction, rankedPrimary),
-    blocked: `blocker:${blockerDecision.kind}`,
+    next: resolveCompanionNextSlotSourceClass(
+      summary,
+      primaryNextAction,
+      rankedPrimary,
+      primaryCtaDecision,
+    ),
+    blocked: resolveCompanionBlockedSlotSourceClass(blockerDecision, primaryCtaDecision),
     restore: 'restore:availability-and-trust',
-    primaryCta: resolveCompanionPrimaryCtaSourceClass(primaryNextAction),
+    primaryCta: primaryCtaDecision.sourceClass,
   };
 }
 
@@ -4109,6 +4267,25 @@ async function showDetailsPanel(
       if (demoMode && DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES.has(message.type)) {
         return;
       }
+      const blockedPrimaryCta = isBlockedPrimaryCtaMessage(message);
+      const blockedPrimaryMetricSession = blockedPrimaryCta ? state.metricSession : undefined;
+      const recordBlockedPrimaryClick = (): void => {
+        if (blockedPrimaryCta) {
+          recordCompanionPrimaryCtaClick();
+        }
+      };
+      const recordBlockedPrimaryCompletion = (
+        completed: boolean,
+        metricSessionOverride?: MetricRecord,
+      ): void => {
+        if (blockedPrimaryCta && completed) {
+          if (metricSessionOverride) {
+            recordCompanionPrimaryCtaCompletionForSession(metricSessionOverride);
+            return;
+          }
+          recordCompanionPrimaryCtaCompletion();
+        }
+      };
 
       if (message.type === 'setPanelSectionExpanded') {
         const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
@@ -4139,12 +4316,14 @@ async function showDetailsPanel(
 
         const firstAction = state.panelSummary?.recommendedFirstAction?.trim();
         const seededValue = firstAction ? `Next: ${firstAction}` : undefined;
-        await promptAndSaveCheckpointNote(context, workspaceRoot, {
+        recordBlockedPrimaryClick();
+        const saved = await promptAndSaveCheckpointNote(context, workspaceRoot, {
           title: 'TaCoS: Capture Session Checkpoint',
           prompt: 'Save a one-line checkpoint for your next resume.',
           placeHolder: 'Example: Continue from parser error and rerun npm test',
           initialValue: seededValue,
         });
+        recordBlockedPrimaryCompletion(saved);
         await refreshPanelCheckpointState(context, workspaceRoot);
         rerenderPanel();
         return;
@@ -4264,7 +4443,9 @@ async function showDetailsPanel(
         }
 
         recordCompanionQuickAction();
+        recordBlockedPrimaryClick();
         await triggerSummary(context, 'manual', workspaceRoot);
+        recordBlockedPrimaryCompletion(true, blockedPrimaryMetricSession);
         return;
       }
 
@@ -4440,13 +4621,17 @@ async function showDetailsPanel(
 
       if (message.type === 'restoreOpenProblems') {
         recordCompanionQuickAction();
+        recordBlockedPrimaryClick();
         await openProblemsView();
+        recordBlockedPrimaryCompletion(true);
         return;
       }
 
       if (message.type === 'restoreOpenDiagnosticFile') {
         recordCompanionQuickAction();
-        await openPrimaryDiagnosticFile(state.panelWorkspaceRoot);
+        recordBlockedPrimaryClick();
+        const completed = await openPrimaryDiagnosticFile(state.panelWorkspaceRoot);
+        recordBlockedPrimaryCompletion(completed);
         return;
       }
 
@@ -4474,7 +4659,9 @@ async function showDetailsPanel(
 
       if (message.type === 'restoreRerunTask') {
         recordCompanionQuickAction();
-        await rerunLastTask();
+        recordBlockedPrimaryClick();
+        const completed = await rerunLastTask();
+        recordBlockedPrimaryCompletion(completed);
         return;
       }
 
@@ -4486,13 +4673,20 @@ async function showDetailsPanel(
 
       if (message.type === 'restoreCheckoutPreviousBranch') {
         recordCompanionQuickAction();
-        await checkoutPreviousBranch(state.panelSummary, state.panelWorkspaceRoot);
+        recordBlockedPrimaryClick();
+        const completed = await checkoutPreviousBranch(
+          state.panelSummary,
+          state.panelWorkspaceRoot,
+        );
+        recordBlockedPrimaryCompletion(completed);
         return;
       }
 
       if (message.type === 'restoreCopyFailingCommand') {
         recordCompanionQuickAction();
-        await copyFailingCommand();
+        recordBlockedPrimaryClick();
+        const completed = await copyFailingCommand();
+        recordBlockedPrimaryCompletion(completed);
         return;
       }
 
@@ -4849,22 +5043,61 @@ function renderWebview(
   const primaryNextAction = nextStepActions.find((candidate): candidate is NextStepAction =>
     Boolean(candidate),
   );
-  const primaryCtaSourceClass = resolveCompanionPrimaryCtaSourceClass(primaryNextAction);
   const primaryNextActionStepIndex = primaryNextAction?.stepIndex ?? -1;
   const directNextActionSummary =
     primaryNextActionStepIndex >= 0 ? (summary.nextSteps[primaryNextActionStepIndex] ?? '') : '';
+  const switchedBranches =
+    !demoMode &&
+    Boolean(summary.currentBranch) &&
+    Boolean(summary.previousBranch) &&
+    summary.currentBranch !== summary.previousBranch;
+  const blockerDecision = decidePrimaryBlocker({
+    trusted,
+    longGap: Boolean(summary.longGap),
+    lowConfidence: Boolean(summary.lowConfidence),
+    hasCheckpointNote: Boolean(currentCheckpointNote),
+    hasFailingTask,
+    lastTaskName: demoMode ? undefined : state.lastTaskName,
+    lastTaskExitCode: demoMode ? undefined : state.lastTaskExitCode,
+    lastFailingCommand: demoMode ? undefined : summary.lastFailingCommand,
+    diagnosticsErrorCount: diagnostics.errorCount,
+    diagnosticsTopPath: diagnostics.top?.path,
+    diagnosticsTopLine: diagnostics.top?.line,
+    switchedBranches,
+    currentBranch: demoMode ? undefined : summary.currentBranch,
+    previousBranch: demoMode ? undefined : summary.previousBranch,
+    hasNextSteps: summary.nextSteps.length > 0,
+    canOpenProblems,
+    canOpenDiagnosticFile,
+    availability,
+  });
+  const primaryCtaDecision = resolveCompanionPrimaryCtaDecision({
+    primaryNextAction,
+    blockerDecision,
+  });
+  const hasPrimaryNextAction = primaryCtaDecision.winner === 'next' && Boolean(primaryNextAction);
+  const hasPrimaryBlockedAction =
+    primaryCtaDecision.winner === 'blocked' &&
+    Boolean(blockerDecision.action) &&
+    !blockerDecision.action?.disabled;
   const primaryNextActionSummary =
     directNextActionSummary || selectPanelPrimarySummary(summary, rankedPrimaryCandidate);
   const primaryNextActionDisabledAttr = demoMode ? 'disabled aria-disabled="true"' : '';
+  const primaryNextActionPrimaryAttr = hasPrimaryNextAction
+    ? 'data-primary-next-safe-action="home" '
+    : '';
+  const primaryNextActionClassAttr = hasPrimaryNextAction ? '' : 'class="secondary" ';
   const companionPrimaryNextActionButton = primaryNextAction
-    ? `<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}" ${primaryNextActionDisabledAttr}>${escapeHtml(primaryNextAction.label)}</button>`
+    ? `<button type="button" ${primaryNextActionClassAttr}${primaryNextActionPrimaryAttr}data-action="runNextStepAction" data-step-index="${primaryNextActionStepIndex}" ${primaryNextActionDisabledAttr}>${escapeHtml(primaryNextAction.label)}</button>`
     : '';
-  const primaryNextActionEvidence = primaryNextAction
-    ? evidenceById.get(primaryNextAction.evidenceId)
-    : undefined;
-  const primaryNextStepRationale = primaryNextAction
-    ? describeNextStepActionRationale(primaryNextAction, primaryNextActionEvidence)
-    : '';
+  const primaryNextActionEvidence =
+    hasPrimaryNextAction && primaryNextAction
+      ? evidenceById.get(primaryNextAction.evidenceId)
+      : undefined;
+  const primaryNextStepRationale =
+    hasPrimaryNextAction && primaryNextAction
+      ? describeNextStepActionRationale(primaryNextAction, primaryNextActionEvidence)
+      : '';
   const primaryNextStepRationaleHtml = primaryNextStepRationale
     ? `<details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">${escapeHtml(primaryNextStepRationale)}</p></details>`
     : '';
@@ -4936,37 +5169,19 @@ function renderWebview(
   )
     .map((line) => `<li>${escapeHtml(line)}</li>`)
     .join('');
-  const switchedBranches =
-    !demoMode &&
-    Boolean(summary.currentBranch) &&
-    Boolean(summary.previousBranch) &&
-    summary.currentBranch !== summary.previousBranch;
-  const blockerDecision = decidePrimaryBlocker({
-    trusted,
-    longGap: Boolean(summary.longGap),
-    lowConfidence: Boolean(summary.lowConfidence),
-    hasCheckpointNote: Boolean(currentCheckpointNote),
-    hasFailingTask,
-    lastTaskName: demoMode ? undefined : state.lastTaskName,
-    lastTaskExitCode: demoMode ? undefined : state.lastTaskExitCode,
-    lastFailingCommand: demoMode ? undefined : summary.lastFailingCommand,
-    diagnosticsErrorCount: diagnostics.errorCount,
-    diagnosticsTopPath: diagnostics.top?.path,
-    diagnosticsTopLine: diagnostics.top?.line,
-    switchedBranches,
-    currentBranch: demoMode ? undefined : summary.currentBranch,
-    previousBranch: demoMode ? undefined : summary.previousBranch,
-    hasNextSteps: summary.nextSteps.length > 0,
-    canOpenProblems,
-    canOpenDiagnosticFile,
-    availability,
-  });
   const blockerTitle = blockerDecision.title;
   const blockerDetail = blockerDecision.detail;
   const blockerAction = blockerDecision.action;
   const blockerActionDisabledAttr = blockerAction?.disabled ? 'disabled aria-disabled="true"' : '';
+  const blockerActionClassAttr = hasPrimaryBlockedAction ? '' : ' class="secondary"';
+  const blockerActionPrimaryAttr = hasPrimaryBlockedAction
+    ? ' data-blocker-primary-action="true"'
+    : '';
+  const blockerActionAdvisoryAttr = hasPrimaryBlockedAction
+    ? ''
+    : ' data-blocker-advisory-action="true"';
   const blockerActionHtml = blockerAction
-    ? `<button type="button" class="secondary" data-blocker-primary-action="true" data-action="${escapeHtml(
+    ? `<button type="button"${blockerActionClassAttr}${blockerActionPrimaryAttr}${blockerActionAdvisoryAttr} data-action="${escapeHtml(
         blockerAction.type,
       )}" ${blockerActionDisabledAttr}>${escapeHtml(blockerAction.label)}</button>`
     : '';
@@ -4994,8 +5209,9 @@ function renderWebview(
     primaryNextAction,
     rankedPrimaryCandidate,
     blockerDecision,
+    primaryCtaDecision,
   );
-  if (primaryNextAction && !demoMode) {
+  if (!demoMode && primaryCtaDecision.winner !== 'none') {
     recordCompanionPrimaryCtaImpression(companionSlotSources.primaryCta);
   }
   const panelSectionState =
@@ -5359,13 +5575,19 @@ function renderWebview(
       nextSlotSourceClass: companionSlotSources.next,
       nextSafeActionSummary:
         primaryNextActionSummary || 'Refresh summary to regenerate first-action guidance.',
-      hasPrimaryNextAction: Boolean(primaryNextAction),
-      primaryCtaSourceClass,
+      hasPrimaryNextAction,
+      nextPrimaryCtaSourceClass: hasPrimaryNextAction ? companionSlotSources.primaryCta : undefined,
+      nextEmphasisToken: primaryCtaDecision.nextToken,
       primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
       nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
       nextStepsListTrustedHtml: companionNextSteps,
       hasBlocker: blockerDecision.hasBlocker,
       blockedSlotSourceClass: companionSlotSources.blocked,
+      hasPrimaryBlockedAction,
+      blockedPrimaryCtaSourceClass: hasPrimaryBlockedAction
+        ? companionSlotSources.primaryCta
+        : undefined,
+      blockedEmphasisToken: primaryCtaDecision.blockedToken,
       blockerTitle,
       blockerDetail,
       blockerMetaTrustedHtml: blockerMetaHtml,
@@ -6152,11 +6374,11 @@ async function openProblemsView(): Promise<void> {
   await vscode.commands.executeCommand('workbench.actions.view.problems');
 }
 
-async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promise<void> {
+async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promise<boolean> {
   const diagnostics = collectWorkspaceDiagnostics(preferredWorkspaceRoot);
   if (!diagnostics.top) {
     void vscode.window.showInformationMessage('TaCoS: no active diagnostics are available.');
-    return;
+    return false;
   }
 
   const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
@@ -6164,12 +6386,12 @@ async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promi
     void vscode.window.showWarningMessage(
       'TaCoS blocked diagnostic navigation because no workspace root is available.',
     );
-    return;
+    return false;
   }
 
   if (!isPathWithinWorkspaceRoot(workspaceRoot, diagnostics.top.absolutePath)) {
     void vscode.window.showWarningMessage('TaCoS blocked an unsafe diagnostic file target.');
-    return;
+    return false;
   }
 
   const doc = await vscode.workspace.openTextDocument(
@@ -6183,6 +6405,7 @@ async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promi
   const range = new vscode.Range(position, position);
   editor.selection = new vscode.Selection(position, position);
   editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+  return true;
 }
 
 interface NextStepActionOutcome {
@@ -6234,8 +6457,7 @@ async function runNextStepActionDetailed(
   }
 
   if (action.kind === 'copyFailingCommand') {
-    await copyFailingCommand();
-    return { attempted: true, completed: true };
+    return { attempted: true, completed: await copyFailingCommand() };
   }
 
   if (action.kind === 'rerunTask') {
@@ -6643,17 +6865,18 @@ async function checkoutPreviousBranch(
   }
 }
 
-async function copyFailingCommand(): Promise<void> {
+async function copyFailingCommand(): Promise<boolean> {
   const command = getCopyableFailingCommand();
   if (!command) {
     void vscode.window.showInformationMessage(
       'TaCoS: no copyable failing command is available (raw commands are not persisted).',
     );
-    return;
+    return false;
   }
 
   await vscode.env.clipboard.writeText(command);
   void vscode.window.showInformationMessage('TaCoS: failing command copied to clipboard.');
+  return true;
 }
 
 function getCopyableFailingCommand(): string | undefined {

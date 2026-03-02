@@ -71,6 +71,12 @@ TaCoS is desktop-first today. It runs in the Node-hosted VS Code extension runti
 - Policy emphasis can add badge/accent cues to collapsed sections (`Trust Center`, `Timeline`, `Evidence`, `Details`, `More Context`) without auto-expanding them.
 - Emphasis targets only visible sections under current settings (for example, no timeline focus when `tacos.showTimeline` is disabled).
 
+## Companion Home Behavior
+
+- Companion Home keeps fixed `Now`, `Next`, `Blocked`, and `Restore` slot order for scan stability.
+- Exactly one primary CTA is marked per context across `Next` and `Blocked`; non-primary actions remain available as advisory/secondary controls.
+- `Next` and `Blocked` state captions render explicit emphasis tokens (`PRIMARY`, `ADVISORY`, `SUPPRESSED`) with reduced-motion-safe transitions.
+
 ## Status Bar Behavior
 
 - Status bar uses compact policy-driven semantics for ambient scanning.
@@ -138,7 +144,7 @@ TaCoS is desktop-first today. It runs in the Node-hosted VS Code extension runti
 - trigger and cadence: `showOnFocus`, `minIdleMinutes`, `longGapMinutes`, `cooldownMinutes`, `summaryQuietHours`
 - context depth: `includeDiff`, `maxDiffChars`, `includeTerminalHistory`, `includeDebugHistory`, `cacheIfContextUnchanged`
 - privacy and retention: `redactionPatterns`, `privacyPreset`, `retentionPolicy`
-- UI behavior: `uiSurface`, `pauseSummaries`, `showTimeline`
+- UI behavior: `uiSurface` (hard cap; notification only on high-value actionable decisions), `pauseSummaries`, `showTimeline`
 - nudges: `companionNudgesEnabled`, `companionNudgeAggressiveness`, `companionNudgeQuietHours`, `companionNudgeCooldownMinutes`
 - providers: `summaryProvider`, `openaiModel`, `openaiBaseUrl`, `openaiTimeoutMs`, `aiIncludeCheckpointNotes`, `aiIncludeScratchpad`
 - operational: `metricsEnabled`, `codexOpenCommand`

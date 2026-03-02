@@ -5,6 +5,21 @@ import { escapeHtml } from './webviewSecurity';
  * Callers must escape or sanitize any dynamic values before passing them here.
  */
 export type TrustedHtml = string;
+export type CompanionSlotToken = 'primary' | 'advisory' | 'suppressed';
+
+const SLOT_TOKEN_LABELS: Record<CompanionSlotToken, string> = {
+  primary: 'PRIMARY',
+  advisory: 'ADVISORY',
+  suppressed: 'SUPPRESSED',
+};
+
+function normalizeCompanionSlotToken(token: CompanionSlotToken | undefined): CompanionSlotToken {
+  if (token === 'primary' || token === 'advisory' || token === 'suppressed') {
+    return token;
+  }
+
+  return 'advisory';
+}
 
 export interface RenderResumeStackCardInput {
   intent: string;
@@ -19,12 +34,16 @@ export interface RenderResumeStackCardInput {
   nextSlotSourceClass?: string;
   nextSafeActionSummary: string;
   hasPrimaryNextAction: boolean;
-  primaryCtaSourceClass?: string;
+  nextPrimaryCtaSourceClass?: string;
+  nextEmphasisToken?: CompanionSlotToken;
   primaryNextActionTrustedHtml?: TrustedHtml;
   nextStepRationaleTrustedHtml?: TrustedHtml;
   nextStepsListTrustedHtml: TrustedHtml;
   hasBlocker: boolean;
   blockedSlotSourceClass?: string;
+  hasPrimaryBlockedAction?: boolean;
+  blockedPrimaryCtaSourceClass?: string;
+  blockedEmphasisToken?: CompanionSlotToken;
   blockerTitle: string;
   blockerDetail: string;
   blockerMetaTrustedHtml?: TrustedHtml;
@@ -40,8 +59,13 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
   const nextSlotSourceClass = input.nextSlotSourceClass ?? 'summary:none';
   const blockedSlotSourceClass = input.blockedSlotSourceClass ?? 'blocker:none';
   const restoreSlotSourceClass = input.restoreSlotSourceClass ?? 'restore:availability-and-trust';
-  const primaryCtaSourceAttr = input.primaryCtaSourceClass
-    ? ` data-primary-cta-source-class="${escapeHtml(input.primaryCtaSourceClass)}"`
+  const nextToken = normalizeCompanionSlotToken(input.nextEmphasisToken);
+  const blockedToken = normalizeCompanionSlotToken(input.blockedEmphasisToken);
+  const nextPrimaryCtaSourceAttr = input.nextPrimaryCtaSourceClass
+    ? ` data-primary-cta-source-class="${escapeHtml(input.nextPrimaryCtaSourceClass)}"`
+    : '';
+  const blockedPrimaryCtaSourceAttr = input.blockedPrimaryCtaSourceClass
+    ? ` data-primary-cta-source-class="${escapeHtml(input.blockedPrimaryCtaSourceClass)}"`
     : '';
 
   return `<div class="card">
@@ -79,7 +103,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <p class="companion-primary">${escapeHtml(input.nextSafeActionSummary)}</p>
           <p class="state-caption ${
             input.hasPrimaryNextAction ? 'state-safe' : 'state-advisory'
-          }" data-next-safe-status="${input.hasPrimaryNextAction ? 'safe' : 'advisory'}"${primaryCtaSourceAttr}>Status: ${
+          }" data-next-safe-status="${input.hasPrimaryNextAction ? 'safe' : 'advisory'}" data-next-emphasis-token="${escapeHtml(nextToken)}"${nextPrimaryCtaSourceAttr}><span class="slot-token slot-token-${escapeHtml(nextToken)}" data-emphasis-token="${escapeHtml(nextToken)}">${SLOT_TOKEN_LABELS[nextToken]}</span> Status: ${
             input.hasPrimaryNextAction ? 'Safe action available' : 'Advisory only'
           }</p>
           ${input.nextStepRationaleTrustedHtml ?? ''}
@@ -96,7 +120,15 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           blockedSlotSourceClass,
         )}" data-blocked-card="${input.hasBlocker ? 'active' : 'none'}">
           <h4>Blocked</h4>
-          <p class="state-caption ${input.hasBlocker ? 'state-blocked' : 'state-clear'}">Status: ${
+          <p class="state-caption ${
+            input.hasPrimaryBlockedAction
+              ? 'state-blocked'
+              : input.hasBlocker
+                ? 'state-advisory'
+                : 'state-clear'
+          }" data-blocked-status="${
+            input.hasPrimaryBlockedAction ? 'primary' : input.hasBlocker ? 'advisory' : 'clear'
+          }" data-blocked-emphasis-token="${escapeHtml(blockedToken)}"${blockedPrimaryCtaSourceAttr}><span class="slot-token slot-token-${escapeHtml(blockedToken)}" data-emphasis-token="${escapeHtml(blockedToken)}">${SLOT_TOKEN_LABELS[blockedToken]}</span> Status: ${
             input.hasBlocker ? 'Blocked' : 'No blocker'
           }</p>
           <p class="companion-primary">${escapeHtml(input.blockerTitle)}</p>

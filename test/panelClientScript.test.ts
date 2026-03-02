@@ -28,6 +28,8 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain('restoreViewPosition();');
     expect(script).toContain("if (typeof href === 'string' && href.startsWith('#'))");
     expect(script).toContain('hashTarget.focus();');
+    expect(script).toContain("actionElement.dataset.blockerPrimaryAction === 'true'");
+    expect(script).toContain("vscode.postMessage({ type: action, primarySurface: 'blocked' });");
     expect(script).toContain(
       'if (!event.altKey || !event.shiftKey || event.metaKey || event.ctrlKey)',
     );

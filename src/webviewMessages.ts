@@ -36,9 +36,20 @@ const RESTORE_MESSAGE_TYPES = [
   'restoreJumpToLastEdit',
   'restoreWorkingSet',
 ] as const;
+const BLOCKER_PRIMARY_MESSAGE_TYPES = [
+  'sessionAddCheckpoint',
+  'refreshSummary',
+  'restoreRerunTask',
+  'restoreCopyFailingCommand',
+  'restoreOpenProblems',
+  'restoreOpenDiagnosticFile',
+  'restoreCheckoutPreviousBranch',
+] as const;
 
 type SimpleWebviewMessageType = (typeof SIMPLE_MESSAGE_TYPES)[number];
 type RestoreWebviewMessageType = (typeof RESTORE_MESSAGE_TYPES)[number];
+type BlockerPrimaryMessageType = (typeof BLOCKER_PRIMARY_MESSAGE_TYPES)[number];
+type BlockedPrimaryActionSurface = 'blocked';
 type PrimaryNextSafeActionSurface = 'home';
 type ResumePathStepId = 'confirmIntent' | 'runNextSafeAction' | 'clearBlocker';
 type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details' | 'moreContext';
@@ -46,6 +57,7 @@ type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details' | 'mor
 export type WebviewMessage =
   | { type: SimpleWebviewMessageType }
   | { type: RestoreWebviewMessageType }
+  | { type: BlockerPrimaryMessageType; primarySurface?: BlockedPrimaryActionSurface }
   | { type: 'runNextStepAction'; stepIndex: number; primarySurface?: PrimaryNextSafeActionSurface }
   | { type: 'resumePathToggle'; stepId: ResumePathStepId; completed: boolean }
   | { type: 'setPanelSectionExpanded'; sectionId: PanelSectionId; expanded: boolean }
@@ -64,10 +76,38 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
   }
 
   if (SIMPLE_MESSAGE_TYPES.includes(raw.type as SimpleWebviewMessageType)) {
+    if (BLOCKER_PRIMARY_MESSAGE_TYPES.includes(raw.type as BlockerPrimaryMessageType)) {
+      if (typeof raw.primarySurface !== 'undefined' && raw.primarySurface !== 'blocked') {
+        return undefined;
+      }
+
+      return raw.primarySurface === 'blocked'
+        ? { type: raw.type as BlockerPrimaryMessageType, primarySurface: 'blocked' }
+        : { type: raw.type as BlockerPrimaryMessageType };
+    }
+
+    if (typeof raw.primarySurface !== 'undefined') {
+      return undefined;
+    }
+
     return { type: raw.type as SimpleWebviewMessageType };
   }
 
   if (RESTORE_MESSAGE_TYPES.includes(raw.type as RestoreWebviewMessageType)) {
+    if (BLOCKER_PRIMARY_MESSAGE_TYPES.includes(raw.type as BlockerPrimaryMessageType)) {
+      if (typeof raw.primarySurface !== 'undefined' && raw.primarySurface !== 'blocked') {
+        return undefined;
+      }
+
+      return raw.primarySurface === 'blocked'
+        ? { type: raw.type as BlockerPrimaryMessageType, primarySurface: 'blocked' }
+        : { type: raw.type as BlockerPrimaryMessageType };
+    }
+
+    if (typeof raw.primarySurface !== 'undefined') {
+      return undefined;
+    }
+
     return { type: raw.type as RestoreWebviewMessageType };
   }
 

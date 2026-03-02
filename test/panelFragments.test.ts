@@ -155,6 +155,36 @@ describe('panelFragments', () => {
     expect(evidence).toContain('data-evidence-affordance="static"');
   });
 
+  it('suppresses duplicate next-step action button when the same step is surfaced above the list', () => {
+    const action: NextStepAction = {
+      stepIndex: 0,
+      kind: 'openFile',
+      label: 'Open file',
+      evidenceId: 'file:src/extension.ts',
+    };
+    const nextSteps = renderCompanionNextSteps({
+      nextSteps: ['Open the latest extension render call'],
+      nextStepEvidenceIds: [['file:src/extension.ts']],
+      nextStepActions: [action],
+      primaryNextActionStepIndex: 0,
+      lowConfidence: false,
+      evidenceById: new Map([
+        [
+          'file:src/extension.ts',
+          {
+            id: 'file:src/extension.ts',
+            kind: 'file',
+            label: 'src/extension.ts',
+            target: 'src/extension.ts',
+          },
+        ],
+      ]),
+    });
+
+    expect(nextSteps).not.toContain('data-action="runNextStepAction"');
+    expect(nextSteps).toContain('Open the latest extension render call');
+  });
+
   it('renders grouped actions, timeline, resume path, nudge card, and document shell', () => {
     const grouped = renderGroupedActionSections({
       groups: [

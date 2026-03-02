@@ -65,6 +65,21 @@ async function run() {
     'Expected Restore slot to expose a stable restore source marker.',
   );
   assert.equal(
+    (resumeFlow?.emphasisTokenCount ?? 0) >= 2,
+    true,
+    'Expected Companion Home to render explicit emphasis tokens for Next and Blocked slots.',
+  );
+  assert.equal(
+    ['primary', 'advisory', 'suppressed'].includes(resumeFlow?.nextEmphasisToken ?? ''),
+    true,
+    'Expected Next slot emphasis token to use supported token states.',
+  );
+  assert.equal(
+    ['primary', 'advisory', 'suppressed'].includes(resumeFlow?.blockedEmphasisToken ?? ''),
+    true,
+    'Expected Blocked slot emphasis token to use supported token states.',
+  );
+  assert.equal(
     resumeFlow?.hasLegacyNextStepsCard,
     false,
     'Expected legacy Next Steps card to be removed from panel composition.',
@@ -84,11 +99,21 @@ async function run() {
     true,
     'Expected Last action retrieval cue marker in Companion Home.',
   );
-  if (resumeFlow?.hasActiveBlockedCard) {
+  assert.equal(
+    (resumeFlow?.totalPrimaryCtaCount ?? 0) <= 1,
+    true,
+    'Expected at most one primary CTA marker across Next and Blocked sections.',
+  );
+  if (resumeFlow?.hasPrimaryBlockerAction) {
     assert.equal(
       resumeFlow?.primaryBlockerActionCount,
       1,
-      'Expected exactly one primary unblock action marker when a blocker is active.',
+      'Expected blocker-primary mode to expose exactly one primary blocker action marker.',
+    );
+    assert.equal(
+      resumeFlow?.primaryNextActionCtaCount,
+      0,
+      'Expected blocker-primary mode to suppress primary next-action marker.',
     );
   }
   assert.equal(
@@ -271,6 +296,11 @@ async function run() {
         'Expected exactly one canonical primary next action CTA in the panel.',
       );
       assert.equal(
+        resumeFlow?.primaryBlockerActionCount,
+        0,
+        'Expected next-primary mode to suppress primary blocker action markers.',
+      );
+      assert.equal(
         resumeFlow?.hasPrimaryNextActionRationale,
         true,
         'Expected primary next action rationale marker in Companion Home.',
@@ -281,10 +311,12 @@ async function run() {
         'advisory',
         'Expected Next status marker to be advisory when no primary action exists.',
       );
-      assert.ok(
-        (resumeFlow?.advisoryOnlyRowCount ?? 0) > 0,
-        'Expected advisory-only copy when no safe one-click action is available.',
-      );
+      if (!resumeFlow?.hasNextActionCandidate) {
+        assert.ok(
+          (resumeFlow?.advisoryOnlyRowCount ?? 0) > 0,
+          'Expected advisory-only copy when no safe one-click action is available.',
+        );
+      }
     }
   }
 }

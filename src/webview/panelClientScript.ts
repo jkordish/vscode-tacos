@@ -600,6 +600,10 @@ export function renderPanelClientScript(
           }
 
           if (hostActions.has(action)) {
+            if (actionElement.dataset.blockerPrimaryAction === 'true') {
+              vscode.postMessage({ type: action, primarySurface: 'blocked' });
+              return;
+            }
             vscode.postMessage({ type: action });
             return;
           }

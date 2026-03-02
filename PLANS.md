@@ -93,15 +93,19 @@ Status vocabulary used in this file:
 
 - status: `doing`
 - why: deliver user-facing improvement without destabilizing trust/privacy boundaries.
-- scope: one narrow dynamic-percolation slice that improves low-confidence clarification quality and explainability.
+- scope: adaptive-surface dynamic-percolation slice for Epic `#226` (status semantics, surface broker, Companion slot policy, single-primary CTA arbitration, and emphasis tokens).
 - dependencies: P3, P4.
 - recent progress:
   - completed DP-202 panel section emphasis behavior (badge + accent only) with stable ordering and persisted disclosure state.
   - hardened DP-202 with follow-up fixes: snapshot section-order parsing now reads rendered disclosures only, and emphasis focus avoids hidden timeline sections when `tacos.showTimeline` is off.
   - completed DP-238 compact status-bar semantics with policy-driven class/reason labels, deterministic quiet-hours suppression cues, and rare active-mode elevation for high-risk blocked states.
+  - completed DP-239 notification decision broker with deterministic `none/statusbar/panel/notification` surface arbitration, explicit reason enums, high-value actionable notification gating, and per-surface metrics counters.
+  - completed DP-236 Companion Home slot policy wiring with deterministic source classes mapped into fixed `Now/Next/Blocked/Restore` slots.
+  - completed DP-240 central single-primary CTA arbitration (`Next` vs `Blocked`) with advisory demotion and single-count primary CTA impression semantics.
+  - completed DP-241 adaptive emphasis tokens (`PRIMARY`/`ADVISORY`/`SUPPRESSED`) with reduced-motion and forced-colors-safe presentation.
 - immediate next actions:
-  - land DP-239 notification decision broker with explicit reason enums.
-  - sequence DP-236 companion-slot policy wiring after notification broker reason classes stabilize.
+  - land one PR that closes remaining Epic `#226` child issues (`#236`, `#238`, `#239`, `#240`, `#241`).
+  - update Epic `#226` checklist/status after merge and move to next open epic slice.
 - risks/rollback:
   - risk: over-aggressive suppression hides useful cues.
   - rollback: revert to previous ranking/suppression default behavior.
@@ -109,7 +113,11 @@ Status vocabulary used in this file:
   - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
   - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
   - https://github.com/jkordish/vscode-tacos/issues/237
+  - https://github.com/jkordish/vscode-tacos/issues/236
   - https://github.com/jkordish/vscode-tacos/issues/238
+  - https://github.com/jkordish/vscode-tacos/issues/239
+  - https://github.com/jkordish/vscode-tacos/issues/240
+  - https://github.com/jkordish/vscode-tacos/issues/241
   - https://github.com/jkordish/vscode-tacos/pull/267
 
 ## Blockers

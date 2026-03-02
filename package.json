@@ -420,7 +420,7 @@
             "silent"
           ],
           "default": "statusbar",
-          "description": "Primary UI surface for focus-triggered summaries. `statusbar` is ambient (default), `notification` shows actionable toasts, and `silent` only updates cached/status context."
+          "description": "Primary UI surface cap for focus-triggered summaries. `statusbar` is ambient (default), `notification` allows high-value actionable toasts (otherwise panel/status updates), and `silent` suppresses prompts."
         },
         "tacos.autoRefreshInBackground": {
           "type": "boolean",

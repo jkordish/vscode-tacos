@@ -13,6 +13,15 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'refreshSummary' })).toEqual({
       type: 'refreshSummary',
     });
+    expect(
+      parseWebviewMessage({
+        type: 'refreshSummary',
+        primarySurface: 'blocked',
+      }),
+    ).toEqual({
+      type: 'refreshSummary',
+      primarySurface: 'blocked',
+    });
     expect(parseWebviewMessage({ type: 'checkpointPinToggle' })).toEqual({
       type: 'checkpointPinToggle',
     });
@@ -79,9 +88,30 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'restoreOpenProblems' })).toEqual({
       type: 'restoreOpenProblems',
     });
+    expect(
+      parseWebviewMessage({
+        type: 'restoreOpenProblems',
+        primarySurface: 'blocked',
+      }),
+    ).toEqual({
+      type: 'restoreOpenProblems',
+      primarySurface: 'blocked',
+    });
     expect(parseWebviewMessage({ type: 'restoreWorkingSet' })).toEqual({
       type: 'restoreWorkingSet',
     });
+    expect(
+      parseWebviewMessage({
+        type: 'copySummary',
+        primarySurface: 'blocked',
+      }),
+    ).toBeUndefined();
+    expect(
+      parseWebviewMessage({
+        type: 'restoreOpenChangedFiles',
+        primarySurface: 'blocked',
+      }),
+    ).toBeUndefined();
   });
 
   it('validates openLink payload shape', () => {
@@ -136,6 +166,13 @@ describe('parseWebviewMessage', () => {
         type: 'runNextStepAction',
         stepIndex: 1,
         primarySurface: 'elsewhere',
+      }),
+    ).toBeUndefined();
+    expect(
+      parseWebviewMessage({
+        type: 'runNextStepAction',
+        stepIndex: 1,
+        primarySurface: 'blocked',
       }),
     ).toBeUndefined();
   });
