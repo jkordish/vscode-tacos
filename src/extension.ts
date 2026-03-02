@@ -2905,7 +2905,7 @@ async function presentSummary(
   if (rolloutFlags.policyEngineEnabled) {
     recordPercolationDecisionMetrics(surfaceDecision, notificationPrimary);
   } else {
-    recordSurfaceSelectionMetric(surfaceDecision);
+    recordSurfaceSelectionMetric(surfaceDecision, { includePanelSegmentation: false });
   }
   if (state.metricSession) {
     state.metricSession.interruptionEvent =
@@ -3424,7 +3424,7 @@ function resolveLegacySummarySurfaceDecision(
     return {
       surface: 'notification',
       presentationMode: mode,
-      reason: 'notification-high-value-actionable',
+      reason: 'ui-surface-notification',
     };
   }
 
@@ -3839,7 +3839,11 @@ function recordPercolationDecisionMetrics(
   recordPercolationConfidenceBandMetric(primary);
 }
 
-function recordSurfaceSelectionMetric(decision: SummarySurfaceDecision): void {
+function recordSurfaceSelectionMetric(
+  decision: SummarySurfaceDecision,
+  options?: { includePanelSegmentation?: boolean },
+): void {
+  const includePanelSegmentation = options?.includePanelSegmentation !== false;
   const surface: SummaryPresentationSurface = decision.surface;
 
   if (surface === 'none') {
@@ -3854,12 +3858,14 @@ function recordSurfaceSelectionMetric(decision: SummarySurfaceDecision): void {
 
   if (surface === 'panel') {
     recordMetricCounter('surfaceSelectionPanel');
-    const isEmphasizedPanel =
-      decision.presentationMode === 'auto-open-details' ||
-      PANEL_EMPHASIS_REASONS.has(decision.reason);
-    recordMetricCounter(
-      isEmphasizedPanel ? 'surfaceSelectionPanelEmphasis' : 'surfaceSelectionPanelSilent',
-    );
+    if (includePanelSegmentation) {
+      const isEmphasizedPanel =
+        decision.presentationMode === 'auto-open-details' ||
+        PANEL_EMPHASIS_REASONS.has(decision.reason);
+      recordMetricCounter(
+        isEmphasizedPanel ? 'surfaceSelectionPanelEmphasis' : 'surfaceSelectionPanelSilent',
+      );
+    }
     return;
   }
 
@@ -4638,7 +4644,8 @@ function updateCompanionStatusBar(): void {
   const quietState = resolveSummaryQuietState(now, config.summaryQuietHours);
   const pausedReason = resolveCompanionPausedReason(config, now);
   const summary = state.scratchSummary;
-  const percolationSuppression = rolloutFlags.policyEngineEnabled
+  const suppressionEnabled = rolloutFlags.notificationBrokerEnabled;
+  const percolationSuppression = suppressionEnabled
     ? evaluatePercolationSuppression({
         enabled: config.enabled,
         mode,
@@ -4647,11 +4654,17 @@ function updateCompanionStatusBar(): void {
         contextUnchanged: state.lastSummaryContextUnchanged,
       })
     : { suppressed: false as const, reason: undefined, nextEligibleAt: undefined };
+  const effectiveQuietState = suppressionEnabled
+    ? quietState
+    : {
+        ...quietState,
+        active: false,
+      };
   const rankedPrimary =
     rolloutFlags.policyEngineEnabled &&
     mode === 'active' &&
     summary &&
-    !quietState.active &&
+    !effectiveQuietState.active &&
     !percolationSuppression.suppressed
       ? rankPercolationForSummary(summary, mode, {
           context: activeExtensionContext,
@@ -4678,7 +4691,7 @@ function updateCompanionStatusBar(): void {
   const semantic = resolveCompanionStatusBarSemantic(
     mode,
     percolationSuppression,
-    quietState,
+    effectiveQuietState,
     pausedReason,
     rankedPrimary,
     summary,

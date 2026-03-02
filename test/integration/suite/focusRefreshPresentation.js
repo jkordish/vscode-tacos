@@ -237,9 +237,43 @@ async function run() {
     );
     assert.equal(
       brokerDisabledDecision?.reason,
-      'notification-high-value-actionable',
+      'ui-surface-notification',
       'Expected broker-disabled fallback to emit legacy prompt reason.',
     );
+    await config.update(
+      'summaryQuietHours',
+      quietWindowThatIncludesNow(Date.now()),
+      vscode.ConfigurationTarget.Global,
+    );
+    const brokerDisabledQuietStatus = await vscode.commands.executeCommand(
+      'tacos.__test.getStatusBarSnapshot',
+    );
+    assert.notEqual(
+      brokerDisabledQuietStatus?.statusClass,
+      'active-suppressed',
+      'Expected broker-disabled status semantics to avoid suppressed class for quiet-hours fallback paths.',
+    );
+    assert.notEqual(
+      brokerDisabledQuietStatus?.statusReason,
+      'quiet window',
+      'Expected broker-disabled status semantics to avoid quiet-window suppression reason.',
+    );
+    await config.update('summaryQuietHours', '', vscode.ConfigurationTarget.Global);
+    await vscode.commands.executeCommand('tacos.__test.setLastSummaryContextUnchanged', true);
+    const brokerDisabledNoChangeStatus = await vscode.commands.executeCommand(
+      'tacos.__test.getStatusBarSnapshot',
+    );
+    assert.notEqual(
+      brokerDisabledNoChangeStatus?.statusClass,
+      'active-suppressed',
+      'Expected broker-disabled status semantics to avoid suppressed class for no-change fallback paths.',
+    );
+    assert.notEqual(
+      brokerDisabledNoChangeStatus?.statusReason,
+      'no change',
+      'Expected broker-disabled status semantics to avoid no-change suppression reason.',
+    );
+    await vscode.commands.executeCommand('tacos.__test.setLastSummaryContextUnchanged', false);
 
     await config.update(
       'percolationNotificationBrokerEnabled',
@@ -267,7 +301,7 @@ async function run() {
     );
     assert.equal(
       policyDisabledDecision?.reason,
-      'notification-high-value-actionable',
+      'ui-surface-notification',
       'Expected policy-disabled fallback to emit legacy prompt reason.',
     );
 

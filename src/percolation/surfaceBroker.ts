@@ -10,6 +10,7 @@ export type SummaryPresentationReason =
   | 'manual-auto-open-details'
   | 'prefer-background'
   | 'ui-surface-silent'
+  | 'ui-surface-notification'
   | 'ui-surface-statusbar-cap'
   | 'notification-suppressed'
   | 'notification-no-primary'

@@ -87,6 +87,50 @@ async function run() {
       );
     }
 
+    await config.update(
+      'percolationNotificationBrokerEnabled',
+      false,
+      vscode.ConfigurationTarget.Global,
+    );
+    const brokerDisabledSuppressedDecision = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSurfaceDecision',
+      {
+        suppressionReason: 'quiet-hours',
+        primary: HIGH_VALUE_BLOCKED_PRIMARY,
+      },
+    );
+    assert.equal(
+      brokerDisabledSuppressedDecision?.surface,
+      'notification',
+      'Expected broker-disabled mode to keep legacy notification surface even when suppression reason is present.',
+    );
+    assert.equal(
+      brokerDisabledSuppressedDecision?.reason,
+      'ui-surface-notification',
+      'Expected broker-disabled mode to report legacy ui-surface-notification reason.',
+    );
+    const brokerDisabledNoPrimaryDecision = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSurfaceDecision',
+      {
+        suppressionReason: 'quiet-hours',
+      },
+    );
+    assert.equal(
+      brokerDisabledNoPrimaryDecision?.surface,
+      'notification',
+      'Expected broker-disabled mode to keep legacy notification surface when no ranked primary is present.',
+    );
+    assert.equal(
+      brokerDisabledNoPrimaryDecision?.reason,
+      'ui-surface-notification',
+      'Expected broker-disabled no-primary path to keep legacy notification reason.',
+    );
+    await config.update(
+      'percolationNotificationBrokerEnabled',
+      true,
+      vscode.ConfigurationTarget.Global,
+    );
+
     const restrictedExecutionGuards = await vscode.commands.executeCommand(
       'tacos.__test.getExecutionActionGuardSnapshot',
     );
