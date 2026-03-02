@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { parseCommitHashToken } from './git';
 import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
 import { normalizeIntentOverrideText } from './intentOverride';
 import type {
@@ -131,6 +132,9 @@ function hashSignals(
     gitDiffStat: signals.gitDiffStat,
     gitLog: signals.gitLog,
     gitDiff: signals.gitDiff,
+    recentCommitHash: signals.recentCommitHash,
+    divergenceAhead: signals.divergenceAhead,
+    divergenceBehind: signals.divergenceBehind,
     doneItems: signals.doneItems,
     lastEditPath: signals.lastEditPath,
     lastEditLine: signals.lastEditLine,
@@ -365,14 +369,30 @@ function buildEvidenceCatalog(signals: ResumeSignals, topFiles: string[]): Summa
     });
   }
 
-  const firstCommitLine = signals.gitLog.split(/\r?\n/).find((line) => line.trim());
-  if (firstCommitLine) {
+  const firstCommitLine = signals.gitLog
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+  const recentCommitHash = parseCommitHashToken(signals.recentCommitHash);
+  const commitMessage = firstCommitLine?.split(/\s+/u).slice(1).join(' ').trim() ?? '';
+  const commitLabel =
+    recentCommitHash && commitMessage
+      ? `${recentCommitHash} ${commitMessage}`
+      : (recentCommitHash ?? firstCommitLine);
+  if (commitLabel) {
     addEvidenceItem(catalog, {
-      id: `commit:${hashIdFragment(firstCommitLine)}`,
+      id: `commit:${hashIdFragment(commitLabel)}`,
       kind: 'commit',
-      label: firstCommitLine.trim(),
-      capturedAt: now - 15_000,
-      meta: { preview: true },
+      label: commitLabel,
+      capturedAt:
+        typeof signals.recentCommitAt === 'number' &&
+        Number.isFinite(signals.recentCommitAt) &&
+        signals.recentCommitAt > 0
+          ? Math.floor(signals.recentCommitAt)
+          : now - 15_000,
+      meta: {
+        preview: Boolean(firstCommitLine),
+      },
     });
   }
 

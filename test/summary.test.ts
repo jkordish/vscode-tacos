@@ -74,6 +74,33 @@ describe('buildResumeSummary', () => {
     );
   });
 
+  it('prefers recentCommitHash as commit evidence while preserving git log message context', () => {
+    const signals = sampleSignals();
+    const fullHash = '0123456789abcdef'.repeat(4);
+    signals.gitLog = '0869 feat: tighten commit fallback';
+    signals.recentCommitHash = fullHash;
+
+    const summary = buildResumeSummary(signals);
+    const commitEvidence = summary.evidenceCatalog?.find((item) => item.kind === 'commit');
+    expect(commitEvidence?.label).toBe(`${fullHash} feat: tighten commit fallback`);
+  });
+
+  it('falls back commit evidence capturedAt when recentCommitAt is non-positive', () => {
+    const now = 1_700_000_500_000;
+    const dateNowSpy = jest.spyOn(Date, 'now').mockReturnValue(now);
+    const signals = sampleSignals();
+    signals.recentCommitHash = '0123456789abcdef'.repeat(4);
+    signals.recentCommitAt = 0;
+
+    try {
+      const summary = buildResumeSummary(signals);
+      const commitEvidence = summary.evidenceCatalog?.find((item) => item.kind === 'commit');
+      expect(commitEvidence?.capturedAt).toBe(now - 15_000);
+    } finally {
+      dateNowSpy.mockRestore();
+    }
+  });
+
   it('maps rerun-style steps to terminal/task evidence before positional file evidence', () => {
     const summary = buildResumeSummary(sampleSignals());
     const firstStepEvidenceIds = summary.nextStepEvidenceIds?.[0] ?? [];

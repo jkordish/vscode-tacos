@@ -993,6 +993,7 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 - Percolation ranking decisions are driven by a deterministic signal bundle on each summary trigger.
 - Restricted Mode does not promote trust-sensitive branch/task failure adapters as runtime signals.
 - Trust/privacy mode transitions surface through explicit normalized trust/privacy signals.
+- Git semantic adapters explicitly capture branch switch, recent commit checkpoint, and upstream divergence signals when trusted git context is available.
 
 ### Technical shape / architecture notes
 
@@ -1009,6 +1010,7 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 
 - Every trigger path has a normalized signal bundle available for ranking.
 - Adapter outputs are deterministic and covered by trusted/restricted unit tests.
+- Policy input receives explicit git semantic signal records (`branch-switch`, `git-commit`, `git-divergence`) when those semantics are present.
 
 ### Risks / failure modes
 
@@ -1022,3 +1024,4 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 
 - Plan: `PLANS.md` item `P8`.
 - Issue: https://github.com/jkordish/vscode-tacos/issues/248
+- Issue: https://github.com/jkordish/vscode-tacos/issues/249

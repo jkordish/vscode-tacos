@@ -46,6 +46,11 @@ export interface GitSnapshot {
   diffStat: string;
   diff: string;
   log: string;
+  headCommit?: string;
+  /** Most recent HEAD commit committer timestamp in epoch milliseconds. */
+  headCommitAt?: number;
+  upstreamAhead?: number;
+  upstreamBehind?: number;
   changedFiles: string[];
   hasUncommitted: boolean;
   hasConflicts: boolean;
@@ -59,6 +64,11 @@ export interface ResumeSignals {
   gitDiffStat: string;
   gitDiff: string;
   gitLog: string;
+  recentCommitHash?: string;
+  /** Most recent commit committer timestamp in epoch milliseconds. */
+  recentCommitAt?: number;
+  divergenceAhead?: number;
+  divergenceBehind?: number;
   changedFiles: string[];
   openFiles: string[];
   recentFiles: string[];

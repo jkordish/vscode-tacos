@@ -5,6 +5,7 @@ import type { ExtensionConfig, GitSnapshot } from './types';
 const execFileAsync = promisify(execFile);
 const GIT_CACHE_TTL_MS = 20_000;
 const GIT_COMMAND_TIMEOUT_MS = 2_000;
+const COMMIT_HASH_PATTERN = /^[0-9a-f]{4,}$/iu;
 
 interface GitCacheEntry {
   snapshot: GitSnapshot;
@@ -61,6 +62,75 @@ export function parsePorcelainPaths(statusOutput: string): string[] {
       const renamedSegments = pathValue.split(renameSeparator);
       return renamedSegments[renamedSegments.length - 1]?.trim() ?? pathValue;
     });
+}
+
+export function parseCommitHashToken(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const firstToken = value.trim().split(/\s+/u)[0];
+  if (!firstToken || !COMMIT_HASH_PATTERN.test(firstToken)) {
+    return undefined;
+  }
+
+  return firstToken.toLowerCase();
+}
+
+export function parseLatestCommitOutput(
+  output: string,
+): { hash: string; committedAt?: number } | undefined {
+  const firstLine = output
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (!firstLine) {
+    return undefined;
+  }
+
+  const [hashCandidate = '', committedAtCandidate = ''] = firstLine.split(/\s+/u);
+  const hash = parseCommitHashToken(hashCandidate);
+  if (!hash) {
+    return undefined;
+  }
+
+  const committedAtSeconds = Number(committedAtCandidate);
+  const committedAt =
+    Number.isFinite(committedAtSeconds) && committedAtSeconds > 0
+      ? Math.floor(committedAtSeconds * 1000)
+      : undefined;
+  return {
+    hash,
+    committedAt,
+  };
+}
+
+export function parseTrackingDivergence(
+  output: string,
+): { ahead: number; behind: number } | undefined {
+  const firstLine = output
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (!firstLine) {
+    return undefined;
+  }
+
+  const match = firstLine.match(/^(\d+)\s+(\d+)$/u);
+  if (!match) {
+    return undefined;
+  }
+
+  const behind = Number(match[1]);
+  const ahead = Number(match[2]);
+  if (!Number.isFinite(behind) || !Number.isFinite(ahead)) {
+    return undefined;
+  }
+
+  return {
+    ahead: Math.max(0, Math.floor(ahead)),
+    behind: Math.max(0, Math.floor(behind)),
+  };
 }
 
 function detectConflicts(statusOutput: string): boolean {
@@ -127,13 +197,15 @@ async function collectGitUncached(root: string, config: ExtensionConfig): Promis
     return snapshot;
   }
 
-  const [status, diffStat, log, diff] = await Promise.all([
+  const [status, diffStat, log, diff, latestCommitOutput, divergenceOutput] = await Promise.all([
     runGit(root, ['status', '--porcelain=v1', '-uall']).catch(() => ''),
     runGit(root, ['diff', '--stat']).catch(() => ''),
     runGit(root, ['log', '-n', '6', '--oneline', '--decorate']).catch(() => ''),
     config.includeDiff && config.maxDiffChars > 0
       ? runGit(root, ['diff', '--unified=0', '--no-color']).catch(() => '')
       : Promise.resolve(''),
+    runGit(root, ['log', '-n', '1', '--format=%H%x09%ct']).catch(() => ''),
+    runGit(root, ['rev-list', '--left-right', '--count', '@{upstream}...HEAD']).catch(() => ''),
   ]);
 
   snapshot.status = status;
@@ -142,6 +214,27 @@ async function collectGitUncached(root: string, config: ExtensionConfig): Promis
   snapshot.diffStat = diffStat;
   snapshot.changedFiles = parseDiffStatFiles(snapshot.diffStat);
   snapshot.log = log;
+  const latestCommit = parseLatestCommitOutput(latestCommitOutput);
+  if (latestCommit?.hash) {
+    snapshot.headCommit = latestCommit.hash;
+    snapshot.headCommitAt = latestCommit.committedAt;
+  } else {
+    const firstCommitLine = log
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find(Boolean);
+    const fallbackHash = parseCommitHashToken(firstCommitLine);
+    if (fallbackHash) {
+      snapshot.headCommit = fallbackHash;
+    }
+  }
+
+  const divergence = parseTrackingDivergence(divergenceOutput);
+  if (divergence) {
+    snapshot.upstreamAhead = divergence.ahead;
+    snapshot.upstreamBehind = divergence.behind;
+  }
+
   if (diff) {
     snapshot.diff =
       diff.length > config.maxDiffChars

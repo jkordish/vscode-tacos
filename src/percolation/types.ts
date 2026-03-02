@@ -5,6 +5,8 @@ export const PERCOLATION_SCHEMA_VERSION = 1;
 export type NormalizedSignalKind =
   | 'resume'
   | 'branch-switch'
+  | 'git-commit'
+  | 'git-divergence'
   | 'checkpoint-note'
   | 'task-failure'
   | 'debug-failure'
