@@ -16,6 +16,7 @@ TaCoS generates local-first resume briefs, highlights safe next actions, and sup
 - focus-triggered and manual resume summaries,
 - companion panel with evidence-backed actions,
 - stable disclosure layout with policy-driven emphasis badges (no auto-expand/reorder churn),
+- normalized percolation signal adapters feeding ranking decisions on each summary trigger (trust-aware in Restricted Mode),
 - long-gap orientation hints and low-confidence clarification behavior,
 - checkpoint notes and scoped scratchpad,
 - restore working set actions with trust-sensitive guards,

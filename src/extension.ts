@@ -93,6 +93,7 @@ import {
   type PercolationMemoryStatus,
   type PercolationMemoryStore,
 } from './percolation/memory';
+import { buildPercolationSignalBundle } from './percolation/signals';
 import { evaluatePercolationSuppression } from './percolation/suppression';
 import {
   resolveSummarySurfaceDecision,
@@ -101,6 +102,7 @@ import {
 } from './percolation/surfaceBroker';
 import {
   createPercolationPolicyInput,
+  type NormalizedSignal,
   type PercolationPolicyMode,
   type PercolationSuppressionReason,
 } from './percolation/types';
@@ -290,6 +292,7 @@ const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>(
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const MAX_NUDGE_FEEDBACK_ENTRIES_PER_SCOPE = 40;
 const MAX_PERCOLATION_MEMORY_ENTRIES_PER_SCOPE = 80;
+const MAX_PERCOLATION_SIGNAL_CONTEXTS = 40;
 const PERCOLATION_DISMISS_MEMORY_MS = 30 * 60_000;
 const CHECKPOINT_WORKSPACE_GLOBAL_SCOPE = 'workspace-global';
 const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
@@ -378,6 +381,7 @@ interface RuntimeState {
   lastDebugConfigName?: string;
   lastDebugWorkspaceRoot?: string;
   metricSession?: MetricRecord;
+  percolationSignalsByContextHash: Map<string, NormalizedSignal[]>;
   workspaceTrusted: boolean;
   terminalHooks: vscode.Disposable[];
   refinementSequence: number;
@@ -557,6 +561,7 @@ export function activate(context: vscode.ExtensionContext): void {
     lastTaskExitCode: persistedTaskMetadata?.exitCode,
     lastTaskEndedAt: persistedTaskMetadata?.timestamp,
     lastTerminalCwd: readPersistedTerminalCwd(context, initialWorkspaceRoot),
+    percolationSignalsByContextHash: new Map<string, NormalizedSignal[]>(),
     workspaceTrusted: vscode.workspace.isTrusted,
     terminalHooks: [],
     refinementSequence: 0,
@@ -726,6 +731,7 @@ export function activate(context: vscode.ExtensionContext): void {
         panelWorkspaceRoot: state.panelWorkspaceRoot,
         hasScratchSummary: Boolean(state.scratchSummary),
         scratchContextHash: state.scratchSummary?.contextHash,
+        percolationSignalCacheEntries: state.percolationSignalsByContextHash.size,
         recentFilesCount: state.recentFiles.values().length,
         recentTerminalCount: state.recentTerminal.values().length,
         recentDebugCount: state.recentDebug.values().length,
@@ -739,6 +745,10 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       state.panel.dispose();
+      return true;
+    }),
+    vscode.commands.registerCommand('tacos.__test.resetRuntimeWorkspaceState', async () => {
+      resetRuntimeWorkspaceState();
       return true;
     }),
     vscode.commands.registerCommand('tacos.__test.getResumeFlowSnapshot', async () => {
@@ -2243,6 +2253,36 @@ async function applyBranchHistory(
   return summary;
 }
 
+function adaptAndRememberPercolationSignals(
+  summary: ResumeSummary,
+  runtimeSignals: ResumeSignals,
+  config: ExtensionConfig,
+  triggerReason: TriggerReason,
+  hasCheckpointNote: boolean,
+  adaptedAt?: number,
+): NormalizedSignal[] {
+  const mode = resolveCompanionRuntimeMode(config);
+  const trusted = state.workspaceTrusted && vscode.workspace.isTrusted;
+  const adaptationNow =
+    typeof adaptedAt === 'number' && Number.isFinite(adaptedAt) && adaptedAt > 0
+      ? Math.floor(adaptedAt)
+      : Date.now();
+  const percolationSignals = buildPercolationSignalBundle({
+    summary,
+    runtimeSignals,
+    mode,
+    trusted,
+    triggerReason,
+    now: adaptationNow,
+    hasCheckpointNote,
+  });
+  rememberPercolationSignalsForContext(summary.contextHash, percolationSignals, {
+    mode,
+    trusted,
+  });
+  return percolationSignals;
+}
+
 async function prepareTriggerSummary(
   context: vscode.ExtensionContext,
   root: string,
@@ -2319,14 +2359,24 @@ async function prepareTriggerSummary(
     await context.workspaceState.update(cacheKey, localSummary);
   }
 
+  const adaptationNow = Date.now();
+  const triggerReason = contextUnchanged && cached ? 'cached' : reason;
   const summary = contextUnchanged && cached ? cached : localSummary;
+  adaptAndRememberPercolationSignals(
+    summary,
+    signals,
+    config,
+    triggerReason,
+    checkpointContext.primaryNote?.status === 'open',
+    adaptationNow,
+  );
   const shouldRefineWithAi =
     providerPlan.activeProvider !== 'local' && summary.source !== providerPlan.activeProvider;
 
   return {
     root,
     cacheKey,
-    triggerReason: contextUnchanged && cached ? 'cached' : reason,
+    triggerReason,
     summary,
     localSummary,
     aiPayloadSummary,
@@ -2392,6 +2442,14 @@ async function refineSummaryInBackground(
   }
   state.activeRefinementSequence = undefined;
   state.activeRefinementContextHash = undefined;
+  adaptAndRememberPercolationSignals(
+    refined,
+    prepared.signals,
+    prepared.config,
+    prepared.triggerReason,
+    prepared.checkpointPrimaryNote?.status === 'open',
+    Date.now(),
+  );
 
   await context.workspaceState.update(prepared.cacheKey, refined);
 
@@ -2439,6 +2497,14 @@ async function generateSummary(
   const refinedWithIntentOverride = applyIntentOverrideToSummary(
     refinedWithCheckpoint,
     prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
+  );
+  adaptAndRememberPercolationSignals(
+    refinedWithIntentOverride,
+    prepared.signals,
+    prepared.config,
+    prepared.triggerReason,
+    prepared.checkpointPrimaryNote?.status === 'open',
+    Date.now(),
   );
 
   await context.workspaceState.update(prepared.cacheKey, refinedWithIntentOverride);
@@ -3411,11 +3477,140 @@ function isBlockedPrimaryCtaMessage(message: WebviewMessage): boolean {
   return 'primarySurface' in message && message.primarySurface === 'blocked';
 }
 
+interface PercolationSignalCacheScope {
+  mode: PercolationPolicyMode;
+  trusted: boolean;
+}
+
+function percolationSignalCacheKey(
+  contextHash: string,
+  scope: PercolationSignalCacheScope,
+): string | undefined {
+  const normalizedContextHash = contextHash.trim();
+  if (!normalizedContextHash) {
+    return undefined;
+  }
+
+  return `${normalizedContextHash}::${scope.mode}::${scope.trusted ? 'trusted' : 'restricted'}`;
+}
+
+function rememberPercolationSignalsForContext(
+  contextHash: string,
+  signals: ReadonlyArray<NormalizedSignal>,
+  scope: PercolationSignalCacheScope,
+): void {
+  const cacheKey = percolationSignalCacheKey(contextHash, scope);
+  if (!cacheKey || signals.length === 0) {
+    return;
+  }
+
+  const snapshot = signals.map((signal) => ({
+    ...signal,
+    meta: { ...signal.meta },
+  }));
+  // Maintain LRU semantics: refresh key order when overwriting an existing entry.
+  state.percolationSignalsByContextHash.delete(cacheKey);
+  state.percolationSignalsByContextHash.set(cacheKey, snapshot);
+  while (state.percolationSignalsByContextHash.size > MAX_PERCOLATION_SIGNAL_CONTEXTS) {
+    const oldest = state.percolationSignalsByContextHash.keys().next();
+    if (oldest.done || typeof oldest.value !== 'string') {
+      break;
+    }
+    state.percolationSignalsByContextHash.delete(oldest.value);
+  }
+}
+
+function readPercolationSignalsForContext(
+  contextHash: string,
+  scope: PercolationSignalCacheScope,
+): ReadonlyArray<NormalizedSignal> | undefined {
+  const cacheKey = percolationSignalCacheKey(contextHash, scope);
+  if (!cacheKey) {
+    return undefined;
+  }
+
+  const signals = state.percolationSignalsByContextHash.get(cacheKey);
+  if (!signals || signals.length === 0) {
+    return undefined;
+  }
+
+  return signals;
+}
+
+function buildFallbackRuntimeSignalsForRanking(
+  summary: ResumeSummary,
+  workspaceRoot: string,
+  trusted: boolean,
+): ResumeSignals {
+  const normalizedWorkspaceRoot = workspaceRoot.trim();
+  const fallbackRoot = normalizedWorkspaceRoot || (state.panelWorkspaceRoot ?? '');
+  const fallbackFiles = summary.recentFilesSnapshot?.length
+    ? summary.recentFilesSnapshot
+    : summary.topFiles;
+  const changedFiles = fallbackFiles.slice(0, 10);
+
+  return {
+    workspaceRoot: fallbackRoot,
+    workspaceName: fallbackRoot ? path.basename(fallbackRoot) : '',
+    branch: summary.currentBranch ?? '',
+    gitStatus: '',
+    gitDiffStat: '',
+    gitDiff: '',
+    gitLog: '',
+    changedFiles,
+    openFiles: summary.topFiles.slice(0, 10),
+    recentFiles: fallbackFiles.slice(0, 15),
+    recentTerminal: trusted ? state.recentTerminal.values() : [],
+    recentDebug: state.recentDebug.values(),
+    recentUrls: state.recentUrls.values(),
+    failingCommand: summary.lastFailingCommand ?? state.lastFailingCommand,
+    doneItems: state.doneItems.values(),
+    resumeGapMinutes: summary.resumeGapMinutes,
+  };
+}
+
+function resolveAdaptedSignalsForRanking(
+  summary: ResumeSummary,
+  mode: PercolationPolicyMode,
+  trusted: boolean,
+  evaluationNow: number,
+  options: RankPercolationOptions,
+): ReadonlyArray<Partial<NormalizedSignal>> | undefined {
+  if (options.signals && options.signals.length > 0) {
+    return options.signals;
+  }
+
+  const cacheScope = { mode, trusted };
+  const cached = readPercolationSignalsForContext(summary.contextHash, cacheScope);
+  if (cached && cached.length > 0) {
+    return cached;
+  }
+
+  const workspaceRoot = pickWorkspaceRoot(options.workspaceRoot) ?? '';
+  const fallbackRuntimeSignals = buildFallbackRuntimeSignalsForRanking(
+    summary,
+    workspaceRoot,
+    trusted,
+  );
+  const adapted = buildPercolationSignalBundle({
+    summary,
+    runtimeSignals: fallbackRuntimeSignals,
+    mode,
+    trusted,
+    triggerReason: 'cached',
+    now: evaluationNow,
+    hasCheckpointNote: false,
+  });
+  rememberPercolationSignalsForContext(summary.contextHash, adapted, cacheScope);
+  return adapted;
+}
+
 interface RankPercolationOptions {
   context?: vscode.ExtensionContext;
   workspaceRoot?: string;
   now?: number;
   ignoreMemory?: boolean;
+  signals?: ReadonlyArray<Partial<NormalizedSignal>>;
 }
 
 function rankPercolationForSummary(
@@ -3424,9 +3619,18 @@ function rankPercolationForSummary(
   options: RankPercolationOptions = {},
 ): ReturnType<typeof rankCandidates> {
   const evaluationNow = options.now ?? Date.now();
+  const trusted = state.workspaceTrusted && vscode.workspace.isTrusted;
+  const adaptedSignals = resolveAdaptedSignalsForRanking(
+    summary,
+    mode,
+    trusted,
+    evaluationNow,
+    options,
+  );
   const input = createPercolationPolicyInput(summary, {
     mode,
-    now: summary.generatedAt > 0 ? summary.generatedAt : evaluationNow,
+    now: evaluationNow,
+    signals: adaptedSignals,
   });
   if (options.context && options.workspaceRoot && !options.ignoreMemory) {
     const workspaceRoot = options.workspaceRoot.trim();
@@ -9148,6 +9352,7 @@ function resetRuntimeWorkspaceState(): void {
   state.panelResumePathState = undefined;
   state.panelResumePathScope = undefined;
   state.activeNudges = undefined;
+  state.percolationSignalsByContextHash.clear();
   state.scratchSummary = undefined;
   state.detailsMarkdownCache = undefined;
   if (state.panel) {

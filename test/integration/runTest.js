@@ -93,6 +93,13 @@ async function main() {
     );
 
     await runSuite(
+      'percolation-signal-cache-reset',
+      path.resolve(__dirname, 'suite', 'percolationSignalCacheReset.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'demo-resume-card',
       path.resolve(__dirname, 'suite', 'demoResumeCard.js'),
       [fixtureWorkspace, '--disable-extensions'],

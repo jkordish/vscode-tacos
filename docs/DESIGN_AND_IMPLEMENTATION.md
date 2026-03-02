@@ -28,6 +28,7 @@ Principles:
 
 - Workspace/editor signals, git snapshot, optional terminal/debug traces, URLs.
 - Collection is bounded by settings and trust state.
+- Percolation signal adapters normalize trigger-time runtime state into typed policy signals (`src/percolation/signals.ts`) for deterministic ranking input.
 
 ### Sanitization / privacy filtering
 

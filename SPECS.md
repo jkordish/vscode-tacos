@@ -970,3 +970,55 @@ Resume prompts and nudges can become disruptive without timing controls.
 ### Links to plan items / issues / PRs
 
 - Plan: `PLANS.md` item `P6`.
+
+## Feature: Percolation Signal Normalization Adapters
+
+### Problem
+
+Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/privacy), but without a single normalized signal bundle per trigger, policy behavior is harder to reason about and test.
+
+### Goals
+
+- Normalize trigger-time runtime context into typed percolation signals.
+- Feed ranked percolation decisions from adapter output instead of ad hoc defaults.
+- Keep trust-sensitive signal adapters filtered in Restricted Mode.
+
+### Non-goals
+
+- Learned or opaque ranking heuristics.
+- New remote telemetry pipelines.
+
+### User-facing behavior
+
+- Percolation ranking decisions are driven by a deterministic signal bundle on each summary trigger.
+- Restricted Mode does not promote trust-sensitive branch/task failure adapters as runtime signals.
+- Trust/privacy mode transitions surface through explicit normalized trust/privacy signals.
+
+### Technical shape / architecture notes
+
+- Signal adapter layer in `src/percolation/signals.ts`.
+- Trigger orchestration records per-context normalized bundles in `src/extension.ts`.
+- Ranking input (`createPercolationPolicyInput`) consumes adapted signal bundles when available.
+
+### Settings and commands affected
+
+- No new settings.
+- No new commands.
+
+### Acceptance criteria
+
+- Every trigger path has a normalized signal bundle available for ranking.
+- Adapter outputs are deterministic and covered by trusted/restricted unit tests.
+
+### Risks / failure modes
+
+- Duplicate or stale signal bundles can bias ranking output if context cache handling regresses.
+
+### Open questions
+
+- Should optional per-signal debug counters be exposed in local diagnostics in a future slice?
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P8`.
+- Issue: https://github.com/jkordish/vscode-tacos/issues/248
