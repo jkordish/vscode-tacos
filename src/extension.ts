@@ -370,6 +370,7 @@ interface RuntimeState {
   panelScratchpadPreviewLines: string[];
   panelScratchpadExists: boolean;
   panelScratchpadHasContent: boolean;
+  panelScratchpadPriorExcerpt?: string;
   panelScratchpadUpdatedAt?: number;
   panelScratchpadScopeLabel?: string;
   panelResumePathState?: ResumePathState;
@@ -555,6 +556,7 @@ export function activate(context: vscode.ExtensionContext): void {
     panelScratchpadPreviewLines: [],
     panelScratchpadExists: false,
     panelScratchpadHasContent: false,
+    panelScratchpadPriorExcerpt: undefined,
     panelScratchpadUpdatedAt: undefined,
     panelScratchpadScopeLabel: undefined,
     panelResumePathState: undefined,
@@ -3779,10 +3781,12 @@ function resolvePercolationUserPriors(
     panelContextMatches && state.panelPrimaryCheckpointNote?.status === 'open'
       ? state.panelPrimaryCheckpointNote
       : undefined;
-  const scratchpadExcerptFromState =
-    panelContextMatches && state.panelScratchpadPreviewLines.length > 0
-      ? buildScratchpadPriorExcerptFromPreviewLines(state.panelScratchpadPreviewLines)
-      : undefined;
+  const scratchpadExcerptFromState = panelContextMatches
+    ? (state.panelScratchpadPriorExcerpt ??
+      (state.panelScratchpadPreviewLines.length > 0
+        ? buildScratchpadPriorExcerptFromPreviewLines(state.panelScratchpadPreviewLines)
+        : undefined))
+    : undefined;
   const correctionHints = Array.isArray(summary.userCorrections) ? summary.userCorrections : [];
   const selectedCorrectionHints = explicitCorrectionHints ?? correctionHints;
   const workspaceRoot = options.workspaceRoot?.trim() ?? '';
@@ -4660,6 +4664,7 @@ async function showDetailsPanel(
     | 'providerModeSnapshot'
     | 'aiPayloadConsentSignature'
     | 'manualPercolationBypass'
+    | 'percolationPriors'
   > = {},
 ): Promise<void> {
   const demoMode = isDemoResumeSummary(summary);
@@ -4675,6 +4680,7 @@ async function showDetailsPanel(
   state.panelPrimaryCheckpointNote = options.checkpointPrimaryNote;
   state.panelCheckpointScope = options.checkpointScope;
   state.panelManualPercolationBypass = Boolean(options.manualPercolationBypass);
+  state.panelScratchpadPriorExcerpt = options.percolationPriors?.scratchpadExcerpt;
   if (demoMode) {
     state.panelCheckpointNotes = [];
     state.panelPrimaryCheckpointNote = undefined;
@@ -4685,6 +4691,7 @@ async function showDetailsPanel(
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
+    state.panelScratchpadPriorExcerpt = undefined;
     state.panelScratchpadUpdatedAt = undefined;
     state.panelScratchpadScopeLabel = undefined;
   }
@@ -4715,6 +4722,7 @@ async function showDetailsPanel(
       state.panelScratchpadPreviewLines = [];
       state.panelScratchpadExists = false;
       state.panelScratchpadHasContent = false;
+      state.panelScratchpadPriorExcerpt = undefined;
       state.panelScratchpadUpdatedAt = undefined;
       state.panelScratchpadScopeLabel = undefined;
       state.panelSectionState = undefined;
@@ -5454,6 +5462,9 @@ function renderWebview(
     SCRATCHPAD_PREVIEW_MAX_LINES,
   );
   const scratchpadScopeLabel = state.panelScratchpadScopeLabel?.trim() ?? '';
+  const panelScratchpadPriorExcerpt =
+    state.panelScratchpadPriorExcerpt ??
+    buildScratchpadPriorExcerptFromPreviewLines(scratchpadPreviewLines);
   const showScratchpadCard = state.panelScratchpadExists || state.panelScratchpadHasContent;
   const scratchpadCard = demoMode
     ? ''
@@ -5539,7 +5550,7 @@ function renderWebview(
                 : undefined,
             correctionHints: summary.userCorrections,
             correctionsUpdatedAt: panelCorrectionsUpdatedAt,
-            scratchpadExcerpt: buildScratchpadPriorExcerptFromPreviewLines(scratchpadPreviewLines),
+            scratchpadExcerpt: panelScratchpadPriorExcerpt,
             scratchpadHasContent: state.panelScratchpadHasContent,
             scratchpadUpdatedAt: state.panelScratchpadUpdatedAt,
           },
@@ -9621,6 +9632,7 @@ function resetRuntimeWorkspaceState(): void {
   state.panelScratchpadPreviewLines = [];
   state.panelScratchpadExists = false;
   state.panelScratchpadHasContent = false;
+  state.panelScratchpadPriorExcerpt = undefined;
   state.panelScratchpadUpdatedAt = undefined;
   state.panelScratchpadScopeLabel = undefined;
   state.panelResumePathState = undefined;
@@ -10132,6 +10144,7 @@ async function refreshPanelCheckpointState(
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
+    state.panelScratchpadPriorExcerpt = undefined;
     state.panelScratchpadUpdatedAt = undefined;
     state.panelScratchpadScopeLabel = undefined;
     return;
@@ -10814,6 +10827,7 @@ async function refreshPanelScratchpadState(
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
+    state.panelScratchpadPriorExcerpt = undefined;
     state.panelScratchpadUpdatedAt = undefined;
     state.panelScratchpadScopeLabel = undefined;
     return;
@@ -10847,8 +10861,16 @@ async function refreshPanelScratchpadState(
     }
   }
 
+  let panelScratchpadPriorExcerpt: string | undefined;
+  if (exists && sizeBytes > SCRATCHPAD_PREVIEW_MAX_BYTES) {
+    panelScratchpadPriorExcerpt = await loadCappedScratchpadExcerptFromFile(uri);
+  } else {
+    panelScratchpadPriorExcerpt = buildAiScratchpadExcerpt(content);
+  }
+
   state.panelScratchpadExists = exists;
   state.panelScratchpadHasContent = exists ? sizeBytes > 0 : content.trim().length > 0;
+  state.panelScratchpadPriorExcerpt = panelScratchpadPriorExcerpt;
   state.panelScratchpadUpdatedAt = updatedAt;
   state.panelScratchpadPreviewLines =
     exists && sizeBytes > SCRATCHPAD_PREVIEW_MAX_BYTES
