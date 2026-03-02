@@ -234,7 +234,8 @@ const NEGATION_MARKER_TOKENS = new Set([
   'cannot',
   'cant',
 ]);
-const NEGATION_CUE_REGEX = /\b(?:do\s+not|don['’]?t|not|never|without|avoid|skip|prevent)\b/iu;
+const NEGATION_CUE_REGEX =
+  /\b(?:do\s+not|don['’]?t|cannot|can['’]?t|not|never|without|avoid|skip|prevent)\b/iu;
 const PRIOR_FRESHNESS_HALF_LIFE_MS = 12 * 60 * 60 * 1000;
 const PRIOR_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -283,7 +284,11 @@ function toFiniteTimestamp(value: unknown): number | undefined {
 }
 
 function tokenizePriorText(value: string): string[] {
-  const matches = value.toLowerCase().match(PRIOR_TOKEN_REGEX) ?? [];
+  const normalizedValue = value
+    .toLowerCase()
+    .replace(/can['’]?t/gu, 'cannot')
+    .replace(/don['’]?t/gu, 'dont');
+  const matches = normalizedValue.match(PRIOR_TOKEN_REGEX) ?? [];
   const unique = new Set<string>();
   for (const match of matches) {
     if (match.length < 3 || PRIOR_TOKEN_STOP_WORDS.has(match)) {
@@ -307,7 +312,7 @@ function resolvePriorFreshness(updatedAt: unknown, now: number): number {
   if (ageMs >= PRIOR_STALE_AFTER_MS) {
     return 0.2;
   }
-  return Math.max(0.3, Math.min(1, Math.exp(-ageMs / PRIOR_FRESHNESS_HALF_LIFE_MS)));
+  return Math.max(0.3, Math.min(1, Math.exp((-ageMs * Math.LN2) / PRIOR_FRESHNESS_HALF_LIFE_MS)));
 }
 
 function computeTokenOverlap(
@@ -389,10 +394,9 @@ function resolvePolicyPriors(
   priors?: PercolationUserPriors,
 ): PercolationUserPriors | undefined {
   const summaryCorrections = Array.isArray(summary.userCorrections) ? summary.userCorrections : [];
-  const correctionHints = uniqueNonEmptyStrings([
-    ...(priors?.correctionHints ?? []),
-    ...summaryCorrections,
-  ]);
+  const correctionHints = Array.isArray(priors?.correctionHints)
+    ? uniqueNonEmptyStrings(priors.correctionHints)
+    : uniqueNonEmptyStrings(summaryCorrections);
   const checkpointNoteText = priors?.checkpointNoteText?.trim() ?? '';
   const scratchpadExcerpt = normalizeScratchpadExcerptForPrior(priors?.scratchpadExcerpt);
   const hasScratchpadContent = priors?.scratchpadHasContent === true;

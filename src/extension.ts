@@ -300,6 +300,7 @@ const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
 const SCRATCHPAD_PREVIEW_MAX_BYTES = 256 * 1024;
 const AI_SCRATCHPAD_MAX_LINES = 80;
 const AI_SCRATCHPAD_MAX_CHARS = 4_000;
+const AI_SCRATCHPAD_MAX_READ_BYTES = 512 * 1024;
 const execFileAsync = promisify(execFile);
 const markdownRenderer = new MarkdownIt({
   html: false,
@@ -3769,10 +3770,10 @@ function resolvePercolationUserPriors(
   options: RankPercolationOptions,
 ): PercolationUserPriors | undefined {
   const explicitPriors = options.priors;
-  const explicitCorrectionHints =
-    explicitPriors?.correctionHints && explicitPriors.correctionHints.length > 0
-      ? explicitPriors.correctionHints
-      : undefined;
+  const hasExplicitCorrectionHints = Array.isArray(explicitPriors?.correctionHints);
+  const explicitCorrectionHints = hasExplicitCorrectionHints
+    ? (explicitPriors?.correctionHints ?? [])
+    : undefined;
   const panelContextMatches = state.panelSummary?.contextHash === summary.contextHash;
   const fallbackCheckpoint =
     panelContextMatches && state.panelPrimaryCheckpointNote?.status === 'open'
@@ -3787,7 +3788,7 @@ function resolvePercolationUserPriors(
   const workspaceRoot = options.workspaceRoot?.trim() ?? '';
   const inferredCorrectionUpdatedAt =
     explicitPriors?.correctionsUpdatedAt === undefined &&
-    !explicitCorrectionHints &&
+    !hasExplicitCorrectionHints &&
     selectedCorrectionHints.length > 0 &&
     options.context &&
     workspaceRoot
@@ -3805,7 +3806,9 @@ function resolvePercolationUserPriors(
     scratchpadHasContent:
       explicitPriors?.scratchpadHasContent ??
       (panelContextMatches ? state.panelScratchpadHasContent : undefined),
-    scratchpadUpdatedAt: explicitPriors?.scratchpadUpdatedAt,
+    scratchpadUpdatedAt:
+      explicitPriors?.scratchpadUpdatedAt ??
+      (panelContextMatches ? state.panelScratchpadUpdatedAt : undefined),
   };
   const checkpointText = resolved.checkpointNoteText?.trim() ?? '';
   const correctionCount = (resolved.correctionHints ?? []).filter(
@@ -10721,6 +10724,32 @@ function buildAiScratchpadExcerpt(rawContent: string): string | undefined {
   return `${joined.slice(0, AI_SCRATCHPAD_MAX_CHARS)}\n...truncated...`;
 }
 
+async function loadCappedScratchpadExcerptFromFile(
+  uri: vscode.Uri,
+  maxBytes = AI_SCRATCHPAD_MAX_READ_BYTES,
+): Promise<string | undefined> {
+  if (uri.scheme !== 'file' || !uri.fsPath) {
+    return undefined;
+  }
+
+  let handle: fs.FileHandle | undefined;
+  try {
+    handle = await fs.open(uri.fsPath, 'r');
+    const buffer = Buffer.alloc(maxBytes);
+    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
+    if (bytesRead <= 0) {
+      return undefined;
+    }
+    return buildAiScratchpadExcerpt(buffer.subarray(0, bytesRead).toString('utf8'));
+  } catch {
+    return undefined;
+  } finally {
+    if (handle) {
+      await handle.close();
+    }
+  }
+}
+
 function applyScratchpadExcerptToSummary(summary: ResumeSummary, excerpt: string): ResumeSummary {
   const section = ['## Scratchpad excerpt (opt-in)', '```text', excerpt, '```'].join('\n');
 
@@ -10757,8 +10786,10 @@ async function loadScratchpadPriorSnapshot(
       };
     }
     if (stat.size > SCRATCHPAD_PREVIEW_MAX_BYTES) {
+      const cappedExcerpt = await loadCappedScratchpadExcerptFromFile(uri);
       return {
         hasContent: true,
+        excerpt: cappedExcerpt,
         updatedAt,
       };
     }

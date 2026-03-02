@@ -416,4 +416,68 @@ describe('createPercolationPolicyInput', () => {
     expect(meta.priorSuppressionCorrections).toBe(true);
     expect(meta.priorSuppressionCorrectionNegation).toBe(true);
   });
+
+  it("treats contracted negation corrections like can't as suppression cues", () => {
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        correctionHints: ["can't ship release to production"],
+      },
+      candidates: [
+        {
+          id: 'candidate:ship-release',
+          kind: 'next-step',
+          title: 'Ship release to production',
+          detail: 'Ship the new release',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    const meta = input.candidates[0]?.meta ?? {};
+    expect(meta.priorPromotionCorrections).toBeUndefined();
+    expect(meta.priorSuppressionCorrections).toBe(true);
+    expect(meta.priorSuppressionCorrectionNegation).toBe(true);
+  });
+
+  it('treats explicit empty correction hints as an override (no fallback merge)', () => {
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+      userCorrections: ['stabilize parser tests before shipping'],
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        correctionHints: [],
+      },
+      candidates: [
+        {
+          id: 'candidate:parser-tests',
+          kind: 'next-step',
+          title: 'Stabilize parser tests',
+          detail: 'Fix parser regressions',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    expect(input.candidates[0]?.meta.userPriorApplied).toBeUndefined();
+    expect(input.candidates[0]?.meta.priorPromotionCorrections).toBeUndefined();
+    expect(input.candidates[0]?.meta.priorSuppressionCorrections).toBeUndefined();
+  });
 });
