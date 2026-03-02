@@ -27,6 +27,7 @@ All notable changes to this project are documented in this file.
 - Focus-triggered surface arbitration now runs through a deterministic notification broker (`none`/`statusbar`/`panel`/`notification`) with explicit reason enums and high-value-actionable notification gating; `tacos.uiSurface` remains a hard cap.
 - Companion Home now resolves policy output into fixed `Now/Next/Blocked/Restore` slots with deterministic single-primary CTA arbitration across `Next` and `Blocked`.
 - Companion `Next`/`Blocked` status captions now include explicit emphasis tokens (`PRIMARY`/`ADVISORY`/`SUPPRESSED`) with reduced-motion-safe transitions and forced-colors safeguards.
+- Companion Home now exposes a one-click `Why am I seeing this?` action that opens the Trust Center explainability trail (`More Context` → `Trust Center` → nested decision details).
 
 ## [0.7.0] - 2026-03-01
 

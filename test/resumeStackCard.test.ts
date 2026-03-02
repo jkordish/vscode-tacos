@@ -15,6 +15,8 @@ describe('renderResumeStackCard', () => {
       hasPrimaryNextAction: true,
       primaryNextActionTrustedHtml:
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open file</button>',
+      whySurfacedActionTrustedHtml:
+        '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>',
       nextStepRationaleTrustedHtml:
         '<details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">Based on file evidence: src/extension.ts.</p></details>',
       nextStepsListTrustedHtml: '',
@@ -54,6 +56,7 @@ describe('renderResumeStackCard', () => {
                <ul class="compact-list"><li>No next steps captured yet.</li></ul>
                <div class="status-actions">
                  <button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open file</button>
+                 <button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>
                  <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
                  <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
                </div>
@@ -92,6 +95,8 @@ describe('renderResumeStackCard', () => {
       hasPrimaryNextAction: true,
       primaryNextActionTrustedHtml:
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open Problems</button>',
+      whySurfacedActionTrustedHtml:
+        '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>',
       nextStepRationaleTrustedHtml: '',
       nextStepsListTrustedHtml: '<li>Run focused verify pass</li>',
       hasBlocker: true,
@@ -119,6 +124,7 @@ describe('renderResumeStackCard', () => {
     expect(html).toContain('data-action="restoreOpenProblems"');
     expect(html).toContain('data-blocker-primary-action="true"');
     expect(html).toContain('data-primary-next-safe-action="home"');
+    expect(html).toContain('data-action="openWhySurfaced"');
     expect(html).toContain('<li>Run focused verify pass</li>');
   });
 });

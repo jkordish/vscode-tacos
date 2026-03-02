@@ -317,12 +317,14 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Primary CTA precedence is deterministic (`blocked` actionable > `next` actionable > none).
 - Demoted/non-primary actions remain visible as secondary/advisory controls.
 - Advisory-only labeling is explicit when no safe primary action is available.
+- Top-card `Why am I seeing this?` action opens `More Context` and expands `Trust Center` explainability in one click.
 
 ### Technical shape / architecture notes
 
 - Central arbitration utility in `src/companionPrimaryCta.ts`.
 - `renderWebview` in `src/extension.ts` resolves one `CompanionPrimaryCtaDecision` and passes slot source classes + emphasis tokens into `renderResumeStackCard`.
 - Primary CTA impression metric remains single-count per context and stores policy source class.
+- `openWhySurfaced` is handled in `src/webview/panelClientScript.ts` and expands `moreContext`, `trustCenter`, and nested why-surfaced disclosures without bypassing trust/privacy guards.
 
 ### Settings and commands affected
 

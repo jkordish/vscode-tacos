@@ -559,6 +559,38 @@ export function renderPanelClientScript(
             return;
           }
 
+          if (action === 'openWhySurfaced') {
+            const moreContext = document.querySelector(
+              'details[data-panel-section="moreContext"]',
+            );
+            if (moreContext instanceof HTMLDetailsElement) {
+              moreContext.open = true;
+            }
+
+            const trustCenter = document.querySelector(
+              'details[data-panel-section="trustCenter"]',
+            );
+            if (trustCenter instanceof HTMLDetailsElement) {
+              trustCenter.open = true;
+            }
+
+            const whySurfaced = document.querySelector('details[data-why-surfaced-details="true"]');
+            if (whySurfaced instanceof HTMLDetailsElement) {
+              whySurfaced.open = true;
+
+              const whySurfacedSummary = whySurfaced.querySelector('summary');
+              if (whySurfacedSummary instanceof HTMLElement) {
+                whySurfacedSummary.focus();
+                if (typeof whySurfacedSummary.scrollIntoView === 'function') {
+                  whySurfacedSummary.scrollIntoView({ block: 'start' });
+                }
+              }
+            }
+
+            announceStatus('Opened Why am I seeing this? details.');
+            return;
+          }
+
           if (action === 'openTopFile') {
             const index = parseDatasetInteger(actionElement.dataset.topFileIndex);
             if (index === undefined) {
