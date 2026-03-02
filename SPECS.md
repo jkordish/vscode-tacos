@@ -240,6 +240,171 @@ Status bar text previously mirrored long-form summary headlines, which increased
 - Plan: `PLANS.md` item `P6`.
 - Issue: https://github.com/jkordish/vscode-tacos/issues/238
 
+## Feature: Notification Surface Decision Broker
+
+### Problem
+
+Focus-triggered summary prompting relied primarily on static `tacos.uiSurface` configuration and simple focus context, which could over-notify on low-value cases.
+
+### Goals
+
+- Route focus summaries through a deterministic broker that chooses the minimum required surface.
+- Allow notifications only when the top surfaced candidate is high-value and actionable.
+- Preserve `tacos.uiSurface` as a hard cap/user override.
+
+### Non-goals
+
+- Adaptive/learned ranking.
+- New notification settings.
+
+### User-facing behavior
+
+- Broker emits one of four surfaces: `none`, `statusbar`, `panel`, `notification`.
+- When `tacos.uiSurface=notification`, low-value, missing-primary, or suppressed decisions downgrade to panel/background updates instead of toasts.
+- Notification toasts are reserved for high-urgency, high-confidence, actionable candidates.
+
+### Technical shape / architecture notes
+
+- Deterministic broker lives in `src/percolation/surfaceBroker.ts`.
+- `presentSummary` consumes broker output and uses explicit reason enums for surface selection classes.
+- Integration probe command (`tacos.__test.getFocusSurfaceDecision`) and unit tests cover broker outcome matrix.
+
+### Settings and commands affected
+
+- Settings: `tacos.uiSurface`.
+- Commands: no end-user command changes; test harness adds `tacos.__test.getFocusSurfaceDecision`.
+
+### Acceptance criteria
+
+- Surface broker returns deterministic output with explicit reason enum for each path.
+- Notification path only occurs for high-value actionable candidates.
+- `tacos.uiSurface=statusbar|silent` continues to cap output to ambient/silent behavior.
+
+### Risks / failure modes
+
+- Threshold tuning too strict can over-suppress useful notifications.
+- Threshold tuning too loose can regress interruption calmness.
+
+### Open questions
+
+- Should broker reason classes be exported in diagnostics snapshots by default?
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P6`.
+- Issue: https://github.com/jkordish/vscode-tacos/issues/239
+
+## Feature: Companion Home Slot Policy and Single-Primary CTA Arbitration
+
+### Problem
+
+Companion Home top-card content and CTA priority were previously composed from separate local checks, which could produce inconsistent emphasis between `Next` and `Blocked`.
+
+### Goals
+
+- Keep slot placement stable while mapping policy output into fixed `Now/Next/Blocked/Restore` lanes.
+- Enforce exactly one primary CTA marker across `Next` and `Blocked` per rendered context.
+- Keep advisory-only states explicit when no executable CTA is available.
+
+### Non-goals
+
+- Dynamic card reordering.
+- New action types.
+
+### User-facing behavior
+
+- Companion Home remains fixed-order: `Now`, `Next`, `Blocked`, `Restore`.
+- Primary CTA precedence is deterministic (`blocked` actionable > `next` actionable > none).
+- Demoted/non-primary actions remain visible as secondary/advisory controls.
+- Advisory-only labeling is explicit when no safe primary action is available.
+
+### Technical shape / architecture notes
+
+- Central arbitration utility in `src/companionPrimaryCta.ts`.
+- `renderWebview` in `src/extension.ts` resolves one `CompanionPrimaryCtaDecision` and passes slot source classes + emphasis tokens into `renderResumeStackCard`.
+- Primary CTA impression metric remains single-count per context and stores policy source class.
+
+### Settings and commands affected
+
+- No new settings.
+- No end-user command changes; integration snapshot command includes CTA/token diagnostics for test assertions.
+
+### Acceptance criteria
+
+- Exactly one primary CTA marker is emitted across `Next` and `Blocked`.
+- Companion Home slot source classes map deterministically from policy/arbitration output.
+- Advisory-only rows are clearly labeled when no executable primary CTA exists.
+
+### Risks / failure modes
+
+- Blocker precedence could hide useful next-step affordances if secondary presentation regresses.
+- Metric drift if primary CTA source class is not set consistently.
+
+### Open questions
+
+- Should CTA arbitration reason classes be exposed in diagnostics snapshots by default?
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P6`.
+- Issues:
+  - https://github.com/jkordish/vscode-tacos/issues/236
+  - https://github.com/jkordish/vscode-tacos/issues/240
+
+## Feature: Adaptive Emphasis Tokens and Motion-Safe Companion Transitions
+
+### Problem
+
+Policy emphasis shifts were mostly implied by content changes, which made glanceability weaker and reduced explicit state signaling.
+
+### Goals
+
+- Apply explicit emphasis tokens to Companion `Next` and `Blocked` state captions.
+- Keep transitions subtle and disabled under reduced-motion preferences.
+- Preserve accessibility under forced-colors/high-contrast modes.
+
+### Non-goals
+
+- Large animation systems.
+- Layout movement based on token state.
+
+### User-facing behavior
+
+- Companion state captions display one of `PRIMARY`, `ADVISORY`, or `SUPPRESSED`.
+- Token styling uses calm, low-motion state changes.
+- Reduced-motion environments disable token/disclosure transitions.
+
+### Technical shape / architecture notes
+
+- Token markup is rendered in `src/resumeStackCard.ts`.
+- Token styling and motion guards live in `src/webview/panelStyles.ts`.
+- Unit coverage includes style guard assertions in `test/panelStyles.test.ts`.
+
+### Settings and commands affected
+
+- No new settings.
+- No command changes.
+
+### Acceptance criteria
+
+- Token classes/attributes are applied from policy output.
+- Reduced-motion media query disables token/disclosure transitions.
+- Forced-colors mode keeps tokens legible with automatic system color mapping.
+
+### Risks / failure modes
+
+- Overly strong token palette could create visual noise.
+- Incomplete motion guards could regress a11y expectations.
+
+### Open questions
+
+- Should token state be included in diagnostics snapshots for support/debug export?
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P6`.
+- Issue: https://github.com/jkordish/vscode-tacos/issues/241
+
 ## Feature: Context Collection
 
 ### Problem

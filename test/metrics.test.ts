@@ -138,6 +138,10 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('companionActionFollowThroughRate');
     expect(lines[0]).toContain('summaryQuietActions');
     expect(lines[0]).toContain('interruptionTimingClass');
+    expect(lines[0]).toContain('surfaceSelectionNone');
+    expect(lines[0]).toContain('surfaceSelectionStatusbar');
+    expect(lines[0]).toContain('surfaceSelectionPanel');
+    expect(lines[0]).toContain('surfaceSelectionNotification');
     expect(lines[0]).toContain('companionPrimaryCtaImpressions');
     expect(lines[0]).toContain('companionPrimaryCtaSourceClass');
     expect(lines[0]).toContain('companionPrimaryCtaClicks');
@@ -155,7 +159,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('aiSendAllowedAfterReviewTotal');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('"/workspace/repo,feature"');
-    expect(lines[1]).toContain(',statusbar,0,unknown,');
+    expect(lines[1]).toContain(',statusbar,,,,,0,unknown,');
     expect(lines[1]).toContain(',2,next-step-action:openFile,1,1,');
     expect(lines[1]).toContain(',0.7500,0.2500,0.5000,1.0000');
   });

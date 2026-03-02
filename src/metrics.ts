@@ -7,6 +7,10 @@ const CSV_HEADERS = [
   'workspaceRoot',
   'trigger',
   'uiSurface',
+  'surfaceSelectionNone',
+  'surfaceSelectionStatusbar',
+  'surfaceSelectionPanel',
+  'surfaceSelectionNotification',
   'interruptionEvent',
   'interruptionTimingClass',
   'firstMeaningfulEditLagMs',
@@ -461,6 +465,10 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     metric.trigger === 'focus' ||
     metric.trigger === 'manual' ||
     metric.trigger === 'cached' ||
+    (metric.surfaceSelectionNone ?? 0) > 0 ||
+    (metric.surfaceSelectionStatusbar ?? 0) > 0 ||
+    (metric.surfaceSelectionPanel ?? 0) > 0 ||
+    (metric.surfaceSelectionNotification ?? 0) > 0 ||
     metric.interruptionTimingClass === 'boundary' ||
     metric.interruptionTimingClass === 'mid-activity' ||
     metric.interruptionTimingClass === 'unknown' ||
@@ -521,6 +529,10 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       metric.workspaceRoot,
       metric.trigger,
       metric.uiSurface ?? '',
+      toOptionalNumber(metric.surfaceSelectionNone),
+      toOptionalNumber(metric.surfaceSelectionStatusbar),
+      toOptionalNumber(metric.surfaceSelectionPanel),
+      toOptionalNumber(metric.surfaceSelectionNotification),
       toOptionalNumber(metric.interruptionEvent),
       metric.interruptionTimingClass ?? '',
       toOptionalNumber(metric.firstMeaningfulEditLagMs),

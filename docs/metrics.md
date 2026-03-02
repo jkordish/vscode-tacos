@@ -38,6 +38,10 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `workspaceRoot`                       | string  | Workspace root path for local grouping.                                         |
 | `trigger`                             | enum    | Summary trigger (`focus`, `manual`, `cached`).                                  |
 | `uiSurface`                           | enum    | UI surface mode (`statusbar`, `notification`, `silent`).                        |
+| `surfaceSelectionNone`                | integer | Count of broker-selected `none` surface outcomes in the session.                |
+| `surfaceSelectionStatusbar`           | integer | Count of broker-selected `statusbar` surface outcomes in the session.           |
+| `surfaceSelectionPanel`               | integer | Count of broker-selected `panel` surface outcomes in the session.               |
+| `surfaceSelectionNotification`        | integer | Count of broker-selected `notification` surface outcomes in the session.        |
 | `interruptionEvent`                   | integer | `1` when focus-triggered summary used notification prompt mode, else `0`/empty. |
 | `interruptionTimingClass`             | enum    | Focus-return timing class: `boundary`, `mid-activity`, or `unknown`.            |
 | `firstMeaningfulEditLagMs`            | integer | Milliseconds from session start to first meaningful edit.                       |
@@ -49,7 +53,7 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `companionQuickActionsTaken`          | integer | Number of prompt-mode quick actions taken (copy/pause/open flows).              |
 | `companionNudgeImpressions`           | integer | Number of accepted companion nudge impressions in session.                      |
 | `companionPrimaryCtaImpressions`      | integer | Number of sessions where TaCoS rendered a primary next-action CTA.              |
-| `companionPrimaryCtaSourceClass`      | string  | Source class for the primary CTA (for example `next-step-action:openFile`).     |
+| `companionPrimaryCtaSourceClass`      | string  | Policy source class for the single primary CTA (for example `policy:next-step-action:openFile` or `policy:blocker:taskFailure`). |
 | `companionPrimaryCtaClicks`           | integer | Number of primary CTA clicks taken by the user.                                 |
 | `companionPrimaryCtaCompletions`      | integer | Number of primary CTA attempts that completed successfully.                     |
 | `helpfulnessRating`                   | integer | Optional local rating (`1`-`5`) from `TaCoS: Rate Summary Helpfulness`.         |
@@ -81,6 +85,9 @@ Track these explicitly for stabilization/adoption gating:
 - `firstRunLagMs`
 - `firstActionLagMs`
 - `companionPromptImpressions`
+- `surfaceSelectionStatusbar`
+- `surfaceSelectionPanel`
+- `surfaceSelectionNotification`
 - `companionForcedOpenDetailsClicks`
 - `companionNudgeImpressions`
 - `companionPrimaryCtaImpressions`

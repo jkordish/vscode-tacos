@@ -142,6 +142,10 @@ export interface MetricRecord {
   workspaceRoot: string;
   trigger: TriggerReason;
   uiSurface?: UiSurface;
+  surfaceSelectionNone?: number;
+  surfaceSelectionStatusbar?: number;
+  surfaceSelectionPanel?: number;
+  surfaceSelectionNotification?: number;
   interruptionEvent?: number;
   interruptionTimingClass?: 'boundary' | 'mid-activity' | 'unknown';
   firstMeaningfulEditLagMs?: number;
