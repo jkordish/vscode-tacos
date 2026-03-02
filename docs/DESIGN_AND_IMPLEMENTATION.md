@@ -51,6 +51,7 @@ Principles:
 
 - Companion webview panel (primary detail/action UI).
 - Status bar and notification prompts.
+- Status bar semantics are compact and policy-driven (`class + reason`) so ambient state remains stable; active-mode elevation is reserved for rare high-risk blocked states.
 - Command palette and keybinding surfaces.
 - Collapsible panel sections keep stable order and persisted expansion state; policy emphasis is conveyed via summary badges/accent instead of auto-expansion or reordering, and only targets sections currently rendered by settings/trust mode.
 

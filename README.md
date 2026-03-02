@@ -71,6 +71,13 @@ TaCoS is desktop-first today. It runs in the Node-hosted VS Code extension runti
 - Policy emphasis can add badge/accent cues to collapsed sections (`Trust Center`, `Timeline`, `Evidence`, `Details`, `More Context`) without auto-expanding them.
 - Emphasis targets only visible sections under current settings (for example, no timeline focus when `tacos.showTimeline` is disabled).
 
+## Status Bar Behavior
+
+- Status bar uses compact policy-driven semantics for ambient scanning.
+- Active mode shows concise status classes (`next`, `blocked`, `clarify`, `evidence`, `trust`, `restore`, `status`, `calm`) with short reason suffixes.
+- Quiet-hours suppression maps to a calm status instead of long dynamic headline text.
+- Visual elevation in active mode is reserved for high-risk blocked states.
+
 ## Commands Overview
 
 ### Resume and context

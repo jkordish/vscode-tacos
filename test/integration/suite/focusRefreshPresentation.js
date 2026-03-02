@@ -15,18 +15,63 @@ async function run() {
   const originalPauseGlobal = pauseInspected?.globalValue;
   const enabledInspected = config.inspect('enabled');
   const originalEnabledGlobal = enabledInspected?.globalValue;
+  const summaryQuietHoursInspected = config.inspect('summaryQuietHours');
+  const originalSummaryQuietHoursGlobal = summaryQuietHoursInspected?.globalValue;
 
   try {
     await config.update('enabled', true, vscode.ConfigurationTarget.Global);
     await config.update('pauseSummaries', false, vscode.ConfigurationTarget.Global);
     await config.update('uiSurface', 'statusbar', vscode.ConfigurationTarget.Global);
 
-    const activeStatusSnapshot = await vscode.commands.executeCommand('tacos.__test.getStatusBarSnapshot');
+    const activeStatusSnapshot = await vscode.commands.executeCommand(
+      'tacos.__test.getStatusBarSnapshot',
+    );
     assert.equal(activeStatusSnapshot?.mode, 'active');
     assert.ok(
-      typeof activeStatusSnapshot?.text === 'string' && activeStatusSnapshot.text.includes('TaCoS:'),
+      typeof activeStatusSnapshot?.text === 'string' &&
+        activeStatusSnapshot.text.includes('TaCoS:'),
       'Expected status bar snapshot text to include TaCoS prefix.',
     );
+    assert.equal(
+      typeof activeStatusSnapshot?.statusClass === 'string' &&
+        activeStatusSnapshot.statusClass.startsWith('active-'),
+      true,
+      'Expected active status bar class marker to be present.',
+    );
+    assert.equal(
+      typeof activeStatusSnapshot?.statusReason === 'string' &&
+        activeStatusSnapshot.statusReason.trim().length > 0,
+      true,
+      'Expected active status bar reason marker to be present.',
+    );
+
+    await config.update('summaryQuietHours', '00:00-23:59', vscode.ConfigurationTarget.Global);
+    const quietSuppressed = await vscode.commands.executeCommand(
+      'tacos.__test.getStatusBarSnapshot',
+    );
+    assert.equal(
+      quietSuppressed?.statusClass,
+      'active-suppressed',
+      'Expected quiet-hours suppression to surface as active-suppressed status class.',
+    );
+    assert.equal(
+      quietSuppressed?.statusReason,
+      'quiet window',
+      'Expected quiet-hours suppression reason to use compact quiet-window label.',
+    );
+    assert.ok(
+      typeof quietSuppressed?.text === 'string' && quietSuppressed.text.includes('TaCoS: calm'),
+      'Expected suppressed status text to use calm compact label.',
+    );
+    const quietSuppressedAgain = await vscode.commands.executeCommand(
+      'tacos.__test.getStatusBarSnapshot',
+    );
+    assert.equal(
+      quietSuppressedAgain?.text,
+      quietSuppressed?.text,
+      'Expected compact suppressed status text to remain stable across repeated reads.',
+    );
+    await config.update('summaryQuietHours', '', vscode.ConfigurationTarget.Global);
 
     await config.update('uiSurface', 'statusbar', vscode.ConfigurationTarget.Global);
     const backgroundMode = await vscode.commands.executeCommand(
@@ -39,7 +84,9 @@ async function run() {
     );
 
     await config.update('uiSurface', 'notification', vscode.ConfigurationTarget.Global);
-    const promptMode = await vscode.commands.executeCommand('tacos.__test.getFocusPresentationMode');
+    const promptMode = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusPresentationMode',
+    );
     assert.equal(
       promptMode,
       'prompt',
@@ -47,7 +94,9 @@ async function run() {
     );
 
     await config.update('uiSurface', 'silent', vscode.ConfigurationTarget.Global);
-    const silentMode = await vscode.commands.executeCommand('tacos.__test.getFocusPresentationMode');
+    const silentMode = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusPresentationMode',
+    );
     assert.equal(
       silentMode,
       'silent',
@@ -137,7 +186,9 @@ async function run() {
     );
 
     await config.update('pauseSummaries', true, vscode.ConfigurationTarget.Global);
-    const pausedStatusSnapshot = await vscode.commands.executeCommand('tacos.__test.getStatusBarSnapshot');
+    const pausedStatusSnapshot = await vscode.commands.executeCommand(
+      'tacos.__test.getStatusBarSnapshot',
+    );
     assert.equal(pausedStatusSnapshot?.mode, 'paused');
 
     await config.update('pauseSummaries', false, vscode.ConfigurationTarget.Global);
@@ -160,6 +211,13 @@ async function run() {
     await config.update(
       'uiSurface',
       typeof originalUiSurfaceGlobal === 'undefined' ? undefined : originalUiSurfaceGlobal,
+      vscode.ConfigurationTarget.Global,
+    );
+    await config.update(
+      'summaryQuietHours',
+      typeof originalSummaryQuietHoursGlobal === 'undefined'
+        ? undefined
+        : originalSummaryQuietHoursGlobal,
       vscode.ConfigurationTarget.Global,
     );
   }

@@ -184,6 +184,60 @@ Users can miss high-signal context when panel sections are collapsed, but auto-e
 - Issue: https://github.com/jkordish/vscode-tacos/issues/237
 - PR: https://github.com/jkordish/vscode-tacos/pull/267
 
+## Feature: Compact Status Bar Percolation Semantics
+
+### Problem
+
+Status bar text previously mirrored long-form summary headlines, which increased jitter and made ambient state harder to scan quickly.
+
+### Goals
+
+- Keep status bar semantics compact and policy-driven.
+- Reflect the currently selected percolation state class in one glance.
+- Reserve visual elevation for rare, high-risk active states.
+
+### Non-goals
+
+- Replacing panel or notification surfaces.
+- Introducing new user settings for status formatting.
+
+### User-facing behavior
+
+- Active mode uses compact status classes (`next`, `blocked`, `clarify`, `evidence`, `trust`, `restore`, `status`, `calm`).
+- Status text includes concise reason suffixes (for example `quiet window`, `policy action`, `failing command`).
+- Active-mode background elevation is reserved for high-risk blocked states; paused/disabled/restricted modes keep explicit mode elevation.
+
+### Technical shape / architecture notes
+
+- Status semantics are resolved centrally in `updateCompanionStatusBar` in `src/extension.ts`.
+- Percolation suppression + ranked primary kind determine status class and reason.
+- Integration test snapshot includes status class/reason metadata via `tacos.__test.getStatusBarSnapshot`.
+
+### Settings and commands affected
+
+- Settings: `tacos.summaryQuietHours`, `tacos.enabled`, `tacos.pauseSummaries`.
+- Commands: no new commands; existing `tacos.openCompanionActions` surface remains unchanged.
+
+### Acceptance criteria
+
+- Status text reflects the top percolated state class in active mode.
+- Quiet-hours suppression yields a deterministic compact `calm` status class and reason.
+- Repeated reads under unchanged conditions keep stable compact status text.
+
+### Risks / failure modes
+
+- Over-compression can reduce clarity if reason labels drift from actual policy outputs.
+- Over-eager elevation could reintroduce ambient noise.
+
+### Open questions
+
+- Should the status class/reason be exported in diagnostics by default for support bundles?
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P6`.
+- Issue: https://github.com/jkordish/vscode-tacos/issues/238
+
 ## Feature: Context Collection
 
 ### Problem

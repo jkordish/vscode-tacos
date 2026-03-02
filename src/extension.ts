@@ -331,6 +331,9 @@ interface RuntimeState {
   lastFailingCommandRaw?: string;
   scratchSummary?: ResumeSummary;
   statusBar?: vscode.StatusBarItem;
+  statusBarClass: CompanionStatusBarClass;
+  statusBarReason: string;
+  statusBarElevated: boolean;
   activeNudges?: {
     contextHash: string;
     decision: CompanionNudgeDecision;
@@ -442,6 +445,19 @@ type ScratchpadScopeMode = 'partition' | 'workspace';
 
 type SummaryPresentationMode = 'auto-open-details' | 'background' | 'prompt' | 'silent';
 type CompanionRuntimeMode = 'active' | 'paused' | 'restricted' | 'disabled';
+type CompanionStatusBarClass =
+  | 'active-idle'
+  | 'active-suppressed'
+  | 'active-next'
+  | 'active-blocked'
+  | 'active-clarify'
+  | 'active-evidence'
+  | 'active-trust'
+  | 'active-restore'
+  | 'active-status'
+  | 'restricted'
+  | 'paused'
+  | 'disabled';
 
 interface PersistedTaskMetadata {
   taskName: string;
@@ -495,6 +511,9 @@ export function activate(context: vscode.ExtensionContext): void {
     lastFailingCommand: persistedActivity.sanitized.lastFailingCommand,
     lastFailingCommandRaw: undefined,
     scratchSummary: undefined,
+    statusBarClass: 'active-idle',
+    statusBarReason: 'awaiting summary',
+    statusBarElevated: false,
     activeNudges: undefined,
     panelCheckpointNotes: [],
     panelPrimaryCheckpointNote: undefined,
@@ -569,6 +588,9 @@ export function activate(context: vscode.ExtensionContext): void {
         text: state.statusBar?.text ?? '',
         tooltip: typeof state.statusBar?.tooltip === 'string' ? state.statusBar.tooltip : '',
         mode: resolveCompanionRuntimeMode(getConfig()),
+        statusClass: state.statusBarClass,
+        statusReason: state.statusBarReason,
+        elevated: state.statusBarElevated,
       };
     }),
     vscode.commands.registerCommand('tacos.__test.getPartitionScopeSnapshot', async () => {
@@ -3441,6 +3463,164 @@ function summarizeForStatusBar(raw: string, maxChars = 44): string {
   return `${compact.slice(0, maxChars - 1)}…`;
 }
 
+function summarizeStatusReason(raw: string, maxChars = 22): string {
+  const compact = raw.replace(/\s+/g, ' ').trim();
+  if (!compact) {
+    return '';
+  }
+
+  if (compact.length <= maxChars) {
+    return compact;
+  }
+
+  return `${compact.slice(0, maxChars - 1)}…`;
+}
+
+function describeSuppressionReason(reason: string | undefined): string {
+  if (!reason) {
+    return 'suppressed';
+  }
+
+  if (reason === 'quiet-hours') {
+    return 'quiet window';
+  }
+  if (reason === 'cooldown') {
+    return 'cooldown';
+  }
+  if (reason === 'no-change') {
+    return 'no change';
+  }
+  if (reason === 'noise-budget') {
+    return 'noise budget';
+  }
+  if (reason === 'low-confidence') {
+    return 'low confidence';
+  }
+
+  return reason;
+}
+
+interface CompanionStatusBarSemantic {
+  className: CompanionStatusBarClass;
+  headline: string;
+  reason: string;
+  elevation: 'none' | 'prominent' | 'warning';
+}
+
+function resolveCompanionStatusBarSemantic(
+  mode: CompanionRuntimeMode,
+  percolationSuppression: ReturnType<typeof evaluatePercolationSuppression>,
+  primary: RankedSurfacedItem | undefined,
+  summary: ResumeSummary | undefined,
+  summaryProvider: SummaryProvider,
+): CompanionStatusBarSemantic {
+  if (mode === 'restricted') {
+    return {
+      className: 'restricted',
+      headline: 'restricted',
+      reason: 'workspace trust',
+      elevation: 'warning',
+    };
+  }
+
+  if (mode === 'paused') {
+    return {
+      className: 'paused',
+      headline: 'paused',
+      reason: 'user pause',
+      elevation: 'prominent',
+    };
+  }
+
+  if (mode === 'disabled') {
+    return {
+      className: 'disabled',
+      headline: 'disabled',
+      reason: 'extension off',
+      elevation: 'prominent',
+    };
+  }
+
+  if (percolationSuppression.suppressed) {
+    return {
+      className: 'active-suppressed',
+      headline: 'calm',
+      reason: describeSuppressionReason(percolationSuppression.reason),
+      elevation: 'none',
+    };
+  }
+
+  if (!primary) {
+    return {
+      className: summary ? 'active-status' : 'active-idle',
+      headline: 'ready',
+      reason: summary ? 'summary cached' : 'awaiting summary',
+      elevation: 'none',
+    };
+  }
+
+  if (primary.kind === 'blocked') {
+    return {
+      className: 'active-blocked',
+      headline: 'blocked',
+      reason: summary?.lastFailingCommand ? 'failing command' : 'blocker',
+      elevation: primary.urgency >= 0.85 && primary.confidence >= 0.65 ? 'warning' : 'none',
+    };
+  }
+
+  if (primary.kind === 'clarification') {
+    return {
+      className: 'active-clarify',
+      headline: 'clarify',
+      reason: 'low confidence',
+      elevation: 'none',
+    };
+  }
+
+  if (primary.kind === 'trust-privacy') {
+    return {
+      className: 'active-trust',
+      headline: 'trust',
+      reason: summaryProvider === 'local' ? 'local-first' : 'ai path',
+      elevation: 'none',
+    };
+  }
+
+  if (primary.kind === 'evidence') {
+    return {
+      className: 'active-evidence',
+      headline: 'evidence',
+      reason: 'drill-down',
+      elevation: 'none',
+    };
+  }
+
+  if (primary.kind === 'restore') {
+    return {
+      className: 'active-restore',
+      headline: 'restore',
+      reason: 'working set',
+      elevation: 'none',
+    };
+  }
+
+  if (primary.kind === 'recommended-action' || primary.kind === 'next-step') {
+    return {
+      className: 'active-next',
+      headline: 'next',
+      reason: 'policy action',
+      elevation: 'none',
+    };
+  }
+
+  return {
+    className: 'active-status',
+    headline: 'status',
+    reason: 'policy signal',
+    elevation: 'none',
+  };
+}
+
 function updateCompanionStatusBar(): void {
   if (!state.statusBar) {
     return;
@@ -3483,30 +3663,35 @@ function updateCompanionStatusBar(): void {
         : mode === 'disabled'
           ? 'disabled'
           : 'active';
-  const activeHeadline = summary ? selectNotificationHeadline(summary, rankedPrimary) : '';
-  const statusHeadline =
-    mode === 'active'
-      ? summarizeForStatusBar(activeHeadline)
-      : mode === 'restricted'
-        ? 'restricted mode'
-        : mode === 'paused'
-          ? 'paused'
-          : 'disabled';
+  const semantic = resolveCompanionStatusBarSemantic(
+    mode,
+    percolationSuppression,
+    rankedPrimary,
+    summary,
+    config.summaryProvider,
+  );
   const topStep = summary?.nextSteps[0]?.trim();
-  const blockerCount = summary?.lastFailingCommand ? 1 : 0;
-  const blockerSuffix = blockerCount > 0 ? ` · ${blockerCount} blocker` : '';
-  const quietSuffix = mode === 'active' && quietState.active ? ' · quiet' : '';
+  const statusReason =
+    mode === 'active' && quietState.active && percolationSuppression.reason !== 'quiet-hours'
+      ? 'quiet'
+      : semantic.reason;
+  const reasonSuffix = statusReason ? ` · ${summarizeStatusReason(statusReason)}` : '';
   const trustCue = buildTrustCue(summary);
-  state.statusBar.text = `${modeIcon} TaCoS: ${statusHeadline}${blockerSuffix}${quietSuffix}`;
+  state.statusBarClass = semantic.className;
+  state.statusBarReason = statusReason;
+  state.statusBarElevated = semantic.elevation !== 'none';
+  state.statusBar.text = `${modeIcon} TaCoS: ${semantic.headline}${reasonSuffix}`;
   state.statusBar.backgroundColor =
-    mode === 'restricted'
+    semantic.elevation === 'warning'
       ? new vscode.ThemeColor('statusBarItem.warningBackground')
-      : mode === 'paused' || mode === 'disabled'
+      : semantic.elevation === 'prominent'
         ? new vscode.ThemeColor('statusBarItem.prominentBackground')
         : undefined;
   state.statusBar.tooltip = [
     'TaCoS Companion',
     `Mode: ${modeLabel}`,
+    `Status class: ${state.statusBarClass}`,
+    `Status reason: ${state.statusBarReason || 'none'}`,
     `Surface: ${config.uiSurface}`,
     `Provider: ${describeProvider(config.summaryProvider)}`,
     `Privacy preset: ${PRIVACY_PRESET_LABELS[config.privacyPreset]}`,
