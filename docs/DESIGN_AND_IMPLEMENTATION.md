@@ -104,6 +104,7 @@ Key capability clusters:
 `package.json` contributes the `tacos.*` configuration surface for:
 
 - trigger timing and presentation,
+- percolation rollout controls (policy engine, explainability affordances, notification broker),
 - context depth and privacy,
 - nudge suppression and quiet windows,
 - provider mode and OpenAI endpoint/model/timeout,
@@ -122,6 +123,7 @@ Primary stores:
 - Metrics schema includes blocker-promotion source counters (`taskFailure`, `commandFailure`, `diagnostics`, `branchContext`, `lowConfidence`, `restricted`, `noNextSteps`) for per-session blocker-mix analysis.
 - Metrics schema also includes prior-driven promotion counters (`priorPromotionCheckpoint`, `priorPromotionCorrections`, `priorPromotionScratchpad`) for ranking-prior attribution.
 - Metrics schema includes novelty bucket distribution counters (`noveltyScoreBucketLow`, `noveltyScoreBucketMedium`, `noveltyScoreBucketHigh`) for per-session percolation novelty analysis.
+- Metrics schema includes percolation decision-chain counters (`percolationDecisionCount`, segmented surface selections including `panel-silent`/`panel-emphasis`, and confidence-band counters) for policy-outcome analysis.
 - Suppression memory for nudge cooldown windows and noise-budget windows is partition-scoped; explicit task-partition switches clear destination-scope suppression memory.
 - extension storage scratchpad files scoped by workspace/partition context.
 
@@ -138,7 +140,7 @@ Retention:
 
 ## Diagnostics and Metrics
 
-- `TaCoS: Copy Diagnostics` emits privacy-safe environment/mode context.
+- `TaCoS: Copy Diagnostics` emits privacy-safe environment/mode context plus active percolation rollout flag state.
 - `TaCoS: Export Local Metrics` writes local artifacts only.
 - Metrics are not auto-uploaded by TaCoS.
 

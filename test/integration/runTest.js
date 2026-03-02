@@ -86,6 +86,13 @@ async function main() {
     );
 
     await runSuite(
+      'percolation-decision-matrix',
+      path.resolve(__dirname, 'suite', 'percolationDecisionMatrix.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'resume-flow-critical-path',
       path.resolve(__dirname, 'suite', 'resumeFlowCriticalPath.js'),
       [fixtureWorkspace, '--disable-extensions'],

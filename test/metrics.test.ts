@@ -139,6 +139,17 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
+
+  it('treats percolation decision counters as recorded metric activity', () => {
+    const metric = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'focus',
+      percolationDecisionCount: 1,
+    } as unknown as MetricRecord;
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -186,10 +197,16 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('companionActionFollowThroughRate');
     expect(lines[0]).toContain('summaryQuietActions');
     expect(lines[0]).toContain('interruptionTimingClass');
+    expect(lines[0]).toContain('percolationDecisionCount');
     expect(lines[0]).toContain('surfaceSelectionNone');
     expect(lines[0]).toContain('surfaceSelectionStatusbar');
     expect(lines[0]).toContain('surfaceSelectionPanel');
+    expect(lines[0]).toContain('surfaceSelectionPanelSilent');
+    expect(lines[0]).toContain('surfaceSelectionPanelEmphasis');
     expect(lines[0]).toContain('surfaceSelectionNotification');
+    expect(lines[0]).toContain('percolationConfidenceBandLow');
+    expect(lines[0]).toContain('percolationConfidenceBandMedium');
+    expect(lines[0]).toContain('percolationConfidenceBandHigh');
     expect(lines[0]).toContain('companionPrimaryCtaImpressions');
     expect(lines[0]).toContain('companionPrimaryCtaSourceClass');
     expect(lines[0]).toContain('companionPrimaryCtaClicks');
@@ -214,7 +231,8 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('aiSendAllowedAfterReviewTotal');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('"/workspace/repo,feature"');
-    expect(lines[1]).toContain(',statusbar,,,,,0,unknown,');
+    expect(lines[1]).toContain(',statusbar,');
+    expect(lines[1]).toContain(',unknown,');
     expect(lines[1]).toContain(',2,next-step-action:openFile,1,1,');
     expect(lines[1]).toContain(',,1,,,,,');
     expect(lines[1]).toContain(',0.7500,0.2500,0.5000,1.0000');
@@ -330,6 +348,12 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| Forced-open rate (`forced/prompt`) | 0.4000 |');
     expect(markdown).toContain('| Nudge impressions (total) | 3 |');
     expect(markdown).toContain('| Nudge impressions per session | 1.00 |');
+    expect(markdown).toContain('| Percolation decisions (total) | 0 |');
+    expect(markdown).toContain('| surfaceSelectionPanelSilent (total) | 0 |');
+    expect(markdown).toContain('| surfaceSelectionPanelEmphasis (total) | 0 |');
+    expect(markdown).toContain('| percolationConfidenceBandLow (total) | 0 |');
+    expect(markdown).toContain('| percolationConfidenceBandMedium (total) | 0 |');
+    expect(markdown).toContain('| percolationConfidenceBandHigh (total) | 0 |');
     expect(markdown).toContain('| Companion quick actions taken (total) | 0 |');
     expect(markdown).toContain(
       '| Companion follow-through rate (`quickActions/prompt`) | 0.0000 |',

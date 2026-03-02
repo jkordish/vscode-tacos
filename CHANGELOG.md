@@ -37,6 +37,8 @@ All notable changes to this project are documented in this file.
 - Percolation ranking now applies normalized user-authored priors from checkpoint notes, saved corrections, and scratchpad context, with deterministic correction-precedence conflict resolution and per-session prior-promotion metrics (`checkpoint`, `corrections`, `scratchpad`).
 - `Changes Since Last Time` now uses precision buckets (`Code`, `Runs`, `Blocker`, `Key files`, `Git`, `References`) plus deterministic novelty profiling, and default percolation candidate novelty now adapts to that profile with new local novelty-bucket metrics counters (`low`, `medium`, `high`).
 - Auto-trigger no-change fingerprinting now uses a partition-aware `v2` payload, and task-partition switches reset destination-scope suppression memory (`no-change`, nudge cooldown, and noise-budget windows) to avoid stale suppression carryover.
+- Metrics exports now include percolation decision-chain counters (`percolationDecisionCount`, segmented panel surface classes `panel-silent`/`panel-emphasis`, and low/medium/high primary-confidence bands), and the metrics dictionary/baseline snapshot include those fields.
+- Added staged percolation rollout flags (`tacos.percolationPolicyEnabled`, `tacos.percolationExplainabilityEnabled`, `tacos.percolationNotificationBrokerEnabled`) with safe legacy `uiSurface` fallback behavior and diagnostics bundle visibility for configured vs active rollout state.
 
 ## [0.7.0] - 2026-03-01
 

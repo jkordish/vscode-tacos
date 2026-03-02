@@ -255,7 +255,6 @@ Focus-triggered summary prompting relied primarily on static `tacos.uiSurface` c
 ### Non-goals
 
 - Adaptive/learned ranking.
-- New notification settings.
 
 ### User-facing behavior
 
@@ -271,7 +270,7 @@ Focus-triggered summary prompting relied primarily on static `tacos.uiSurface` c
 
 ### Settings and commands affected
 
-- Settings: `tacos.uiSurface`.
+- Settings: `tacos.uiSurface`, `tacos.percolationPolicyEnabled`, `tacos.percolationNotificationBrokerEnabled`.
 - Commands: no end-user command changes; test harness adds `tacos.__test.getFocusSurfaceDecision`.
 
 ### Acceptance criteria
@@ -279,6 +278,8 @@ Focus-triggered summary prompting relied primarily on static `tacos.uiSurface` c
 - Surface broker returns deterministic output with explicit reason enum for each path.
 - Notification path only occurs for high-value actionable candidates.
 - `tacos.uiSurface=statusbar|silent` continues to cap output to ambient/silent behavior.
+- Disabling `tacos.percolationNotificationBrokerEnabled` keeps `tacos.uiSurface` behavior but bypasses suppression-aware broker downgrades.
+- Disabling `tacos.percolationPolicyEnabled` falls back to legacy `uiSurface` presentation semantics and bypasses percolation suppression/ranking-driven arbitration.
 
 ### Risks / failure modes
 
@@ -338,7 +339,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 
 ### Settings and commands affected
 
-- No new settings.
+- Settings: `tacos.percolationExplainabilityEnabled`.
 - No end-user command changes; integration snapshot command includes CTA/token diagnostics for test assertions.
 
 ### Acceptance criteria
@@ -346,6 +347,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Exactly one primary CTA marker is emitted across `Next` and `Blocked`.
 - Companion Home slot source classes map deterministically from policy/arbitration output.
 - Advisory-only rows are clearly labeled when no executable primary CTA exists.
+- Disabling `tacos.percolationExplainabilityEnabled` hides top-card and Trust Center `Why am I seeing this?` explainability affordances while preserving core resume guidance/actions.
 
 ### Risks / failure modes
 
@@ -913,6 +915,8 @@ Maintainers need actionable debug/product signals without hidden telemetry.
 
 - Exported artifacts contain local-only data.
 - Diagnostics avoid raw secret content.
+- Diagnostics snapshot includes configured and active percolation rollout flag state (`policy`, `explainability`, `notification broker`).
+- Metrics CSV/baseline snapshot include percolation decision-chain fields (`percolationDecisionCount`, segmented surface selections including `panel-silent`/`panel-emphasis`, and confidence-band counters).
 
 ### Risks / failure modes
 

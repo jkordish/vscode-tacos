@@ -26,6 +26,9 @@ export interface ExtensionConfig {
   metricsEnabled: boolean;
   uiSurface: UiSurface;
   autoRefreshInBackground: boolean;
+  percolationPolicyEnabled: boolean;
+  percolationExplainabilityEnabled: boolean;
+  percolationNotificationBrokerEnabled: boolean;
   companionNudgesEnabled: boolean;
   companionNudgeAggressiveness: CompanionNudgeAggressiveness;
   companionNudgeQuietHours: string;
@@ -166,10 +169,16 @@ export interface MetricRecord {
   workspaceRoot: string;
   trigger: TriggerReason;
   uiSurface?: UiSurface;
+  percolationDecisionCount?: number;
   surfaceSelectionNone?: number;
   surfaceSelectionStatusbar?: number;
   surfaceSelectionPanel?: number;
+  surfaceSelectionPanelSilent?: number;
+  surfaceSelectionPanelEmphasis?: number;
   surfaceSelectionNotification?: number;
+  percolationConfidenceBandLow?: number;
+  percolationConfidenceBandMedium?: number;
+  percolationConfidenceBandHigh?: number;
   interruptionEvent?: number;
   interruptionTimingClass?: 'boundary' | 'mid-activity' | 'unknown';
   firstMeaningfulEditLagMs?: number;

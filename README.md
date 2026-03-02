@@ -24,7 +24,8 @@ TaCoS generates local-first resume briefs, highlights safe next actions, and sup
 - long-gap orientation hints and low-confidence clarification behavior,
 - checkpoint notes and scoped scratchpad,
 - task partition switching with per-partition suppression-memory boundaries (`no-change` fingerprinting, nudge cooldown memory, and noise-budget memory reset on partition switch),
-- local metrics counters for prior-driven ranking promotions (`checkpoint`, `corrections`, `scratchpad`) plus novelty bucket distribution (`low`, `medium`, `high`),
+- local metrics counters for percolation decision chains (decision count, surface selection classes including `panel-silent`/`panel-emphasis`, confidence bands), prior-driven ranking promotions (`checkpoint`, `corrections`, `scratchpad`), and novelty bucket distribution (`low`, `medium`, `high`),
+- staged percolation rollout controls (`percolationPolicyEnabled`, `percolationExplainabilityEnabled`, `percolationNotificationBrokerEnabled`) with safe fallback to legacy `uiSurface` behavior,
 - restore working set actions with trust-sensitive guards,
 - standup update generation,
 - pause/snooze/quiet-hours controls,
@@ -156,6 +157,7 @@ TaCoS is desktop-first today. It runs in the Node-hosted VS Code extension runti
 - context depth: `includeDiff`, `maxDiffChars`, `includeTerminalHistory`, `includeDebugHistory`, `cacheIfContextUnchanged`
 - privacy and retention: `redactionPatterns`, `privacyPreset`, `retentionPolicy`
 - UI behavior: `uiSurface` (hard cap; notification only on high-value actionable decisions), `pauseSummaries`, `showTimeline`
+- percolation rollout controls: `percolationPolicyEnabled`, `percolationExplainabilityEnabled`, `percolationNotificationBrokerEnabled`
 - nudges: `companionNudgesEnabled`, `companionNudgeAggressiveness`, `companionNudgeQuietHours`, `companionNudgeCooldownMinutes`
 - providers: `summaryProvider`, `openaiModel`, `openaiBaseUrl`, `openaiTimeoutMs`, `aiIncludeCheckpointNotes`, `aiIncludeScratchpad`
 - operational: `metricsEnabled`, `codexOpenCommand`

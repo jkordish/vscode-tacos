@@ -16,6 +16,10 @@ function quietWindowThatIncludesNow(now) {
   return `${formatMinuteOfDay(startMinute)}-${formatMinuteOfDay(endMinute)}`;
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function run() {
   const extension = vscode.extensions.getExtension('jkordish.vscode-tacos');
   assert.ok(extension, 'Expected extension jkordish.vscode-tacos to be installed in test host.');
@@ -32,11 +36,31 @@ async function run() {
   const originalEnabledGlobal = enabledInspected?.globalValue;
   const summaryQuietHoursInspected = config.inspect('summaryQuietHours');
   const originalSummaryQuietHoursGlobal = summaryQuietHoursInspected?.globalValue;
+  const percolationPolicyInspected = config.inspect('percolationPolicyEnabled');
+  const originalPercolationPolicyGlobal = percolationPolicyInspected?.globalValue;
+  const percolationExplainabilityInspected = config.inspect('percolationExplainabilityEnabled');
+  const originalPercolationExplainabilityGlobal = percolationExplainabilityInspected?.globalValue;
+  const percolationNotificationBrokerInspected = config.inspect(
+    'percolationNotificationBrokerEnabled',
+  );
+  const originalPercolationNotificationBrokerGlobal =
+    percolationNotificationBrokerInspected?.globalValue;
 
   try {
     await config.update('enabled', true, vscode.ConfigurationTarget.Global);
     await config.update('pauseSummaries', false, vscode.ConfigurationTarget.Global);
     await config.update('uiSurface', 'statusbar', vscode.ConfigurationTarget.Global);
+    await config.update('percolationPolicyEnabled', true, vscode.ConfigurationTarget.Global);
+    await config.update(
+      'percolationExplainabilityEnabled',
+      true,
+      vscode.ConfigurationTarget.Global,
+    );
+    await config.update(
+      'percolationNotificationBrokerEnabled',
+      true,
+      vscode.ConfigurationTarget.Global,
+    );
 
     const activeStatusSnapshot = await vscode.commands.executeCommand(
       'tacos.__test.getStatusBarSnapshot',
@@ -187,6 +211,139 @@ async function run() {
       'notification-suppressed',
       'Expected explicit suppressed reason class for downgraded notification path.',
     );
+    let invalidSuppressionError;
+    try {
+      await vscode.commands.executeCommand('tacos.__test.getFocusSurfaceDecision', {
+        suppressionReason: 'unexpected-value',
+      });
+    } catch (error) {
+      invalidSuppressionError = error;
+    }
+    assert.equal(
+      Boolean(invalidSuppressionError),
+      true,
+      'Expected invalid suppression reason override to fail fast in test probe command.',
+    );
+
+    await config.update(
+      'percolationNotificationBrokerEnabled',
+      false,
+      vscode.ConfigurationTarget.Global,
+    );
+    const brokerDisabledDecision = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSurfaceDecision',
+      {
+        suppressionReason: 'quiet-hours',
+        primary: {
+          kind: 'blocked',
+          actionId: 'restoreRerunTask',
+          urgency: 0.95,
+          confidence: 0.9,
+          score: 0.88,
+        },
+      },
+    );
+    assert.equal(
+      brokerDisabledDecision?.surface,
+      'notification',
+      'Expected broker-disabled path to fall back to legacy notification prompt behavior.',
+    );
+    assert.equal(
+      brokerDisabledDecision?.reason,
+      'ui-surface-notification',
+      'Expected broker-disabled fallback to emit legacy prompt reason.',
+    );
+    await config.update(
+      'summaryQuietHours',
+      quietWindowThatIncludesNow(Date.now()),
+      vscode.ConfigurationTarget.Global,
+    );
+    const brokerDisabledQuietStatus = await vscode.commands.executeCommand(
+      'tacos.__test.getStatusBarSnapshot',
+    );
+    assert.notEqual(
+      brokerDisabledQuietStatus?.statusClass,
+      'active-suppressed',
+      'Expected broker-disabled status semantics to avoid suppressed class for quiet-hours fallback paths.',
+    );
+    assert.notEqual(
+      brokerDisabledQuietStatus?.statusReason,
+      'quiet window',
+      'Expected broker-disabled status semantics to avoid quiet-window suppression reason.',
+    );
+    await config.update('summaryQuietHours', '', vscode.ConfigurationTarget.Global);
+    await vscode.commands.executeCommand('tacos.__test.setLastSummaryContextUnchanged', true);
+    const brokerDisabledNoChangeStatus = await vscode.commands.executeCommand(
+      'tacos.__test.getStatusBarSnapshot',
+    );
+    assert.notEqual(
+      brokerDisabledNoChangeStatus?.statusClass,
+      'active-suppressed',
+      'Expected broker-disabled status semantics to avoid suppressed class for no-change fallback paths.',
+    );
+    assert.notEqual(
+      brokerDisabledNoChangeStatus?.statusReason,
+      'no change',
+      'Expected broker-disabled status semantics to avoid no-change suppression reason.',
+    );
+    await vscode.commands.executeCommand('tacos.__test.setLastSummaryContextUnchanged', false);
+
+    await config.update(
+      'percolationNotificationBrokerEnabled',
+      true,
+      vscode.ConfigurationTarget.Global,
+    );
+    await config.update('percolationPolicyEnabled', false, vscode.ConfigurationTarget.Global);
+    const policyDisabledDecision = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSurfaceDecision',
+      {
+        suppressionReason: 'quiet-hours',
+        primary: {
+          kind: 'blocked',
+          actionId: 'restoreRerunTask',
+          urgency: 0.95,
+          confidence: 0.9,
+          score: 0.88,
+        },
+      },
+    );
+    assert.equal(
+      policyDisabledDecision?.surface,
+      'notification',
+      'Expected policy-disabled path to ignore suppression and use legacy uiSurface behavior.',
+    );
+    assert.equal(
+      policyDisabledDecision?.reason,
+      'ui-surface-notification',
+      'Expected policy-disabled fallback to emit legacy prompt reason.',
+    );
+
+    await config.update('uiSurface', 'silent', vscode.ConfigurationTarget.Global);
+    const policyDisabledSilentDecision = await vscode.commands.executeCommand(
+      'tacos.__test.getFocusSurfaceDecision',
+      {
+        primary: {
+          kind: 'blocked',
+          actionId: 'restoreRerunTask',
+          urgency: 0.95,
+          confidence: 0.9,
+          score: 0.88,
+        },
+      },
+    );
+    assert.equal(
+      policyDisabledSilentDecision?.surface,
+      'none',
+      'Expected policy-disabled silent fallback to keep quiet none-surface behavior.',
+    );
+    assert.equal(
+      policyDisabledSilentDecision?.reason,
+      'ui-surface-silent',
+      'Expected policy-disabled silent fallback to use ui-surface-silent reason.',
+    );
+
+    await config.update('percolationPolicyEnabled', true, vscode.ConfigurationTarget.Global);
+    await config.update('uiSurface', 'notification', vscode.ConfigurationTarget.Global);
 
     await config.update('uiSurface', 'statusbar', vscode.ConfigurationTarget.Global);
     const cappedStatusbarDecision = await vscode.commands.executeCommand(
@@ -210,6 +367,56 @@ async function run() {
       cappedStatusbarDecision?.reason,
       'ui-surface-statusbar-cap',
       'Expected statusbar cap reason enum when notification-capable candidate exists.',
+    );
+
+    await config.update('uiSurface', 'statusbar', vscode.ConfigurationTarget.Global);
+    await config.update('percolationPolicyEnabled', true, vscode.ConfigurationTarget.Global);
+    await config.update(
+      'percolationExplainabilityEnabled',
+      true,
+      vscode.ConfigurationTarget.Global,
+    );
+    await vscode.commands.executeCommand('tacos.showNow');
+    await wait(150);
+    const explainabilityEnabledSnapshot = await vscode.commands.executeCommand(
+      'tacos.__test.getResumeFlowSnapshot',
+    );
+    assert.equal(
+      explainabilityEnabledSnapshot?.hasWhySurfacedAction,
+      true,
+      'Expected explainability-enabled mode to render Why am I seeing this? action in Companion Home.',
+    );
+    assert.equal(
+      explainabilityEnabledSnapshot?.hasWhySurfacedDetails,
+      true,
+      'Expected explainability-enabled mode to render Trust Center explainability disclosure.',
+    );
+
+    await config.update(
+      'percolationExplainabilityEnabled',
+      false,
+      vscode.ConfigurationTarget.Global,
+    );
+    await vscode.commands.executeCommand('tacos.showNow');
+    await wait(150);
+    const explainabilityDisabledSnapshot = await vscode.commands.executeCommand(
+      'tacos.__test.getResumeFlowSnapshot',
+    );
+    assert.equal(
+      explainabilityDisabledSnapshot?.hasWhySurfacedAction,
+      false,
+      'Expected explainability-disabled mode to hide Why am I seeing this? action in Companion Home.',
+    );
+    assert.equal(
+      explainabilityDisabledSnapshot?.hasWhySurfacedDetails,
+      false,
+      'Expected explainability-disabled mode to hide Trust Center explainability disclosure.',
+    );
+
+    await config.update(
+      'percolationExplainabilityEnabled',
+      true,
+      vscode.ConfigurationTarget.Global,
     );
 
     const now = Date.now();
@@ -332,6 +539,27 @@ async function run() {
       typeof originalSummaryQuietHoursGlobal === 'undefined'
         ? undefined
         : originalSummaryQuietHoursGlobal,
+      vscode.ConfigurationTarget.Global,
+    );
+    await config.update(
+      'percolationPolicyEnabled',
+      typeof originalPercolationPolicyGlobal === 'undefined'
+        ? undefined
+        : originalPercolationPolicyGlobal,
+      vscode.ConfigurationTarget.Global,
+    );
+    await config.update(
+      'percolationExplainabilityEnabled',
+      typeof originalPercolationExplainabilityGlobal === 'undefined'
+        ? undefined
+        : originalPercolationExplainabilityGlobal,
+      vscode.ConfigurationTarget.Global,
+    );
+    await config.update(
+      'percolationNotificationBrokerEnabled',
+      typeof originalPercolationNotificationBrokerGlobal === 'undefined'
+        ? undefined
+        : originalPercolationNotificationBrokerGlobal,
       vscode.ConfigurationTarget.Global,
     );
     await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);

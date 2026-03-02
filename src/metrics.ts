@@ -7,10 +7,16 @@ const CSV_HEADERS = [
   'workspaceRoot',
   'trigger',
   'uiSurface',
+  'percolationDecisionCount',
   'surfaceSelectionNone',
   'surfaceSelectionStatusbar',
   'surfaceSelectionPanel',
+  'surfaceSelectionPanelSilent',
+  'surfaceSelectionPanelEmphasis',
   'surfaceSelectionNotification',
+  'percolationConfidenceBandLow',
+  'percolationConfidenceBandMedium',
+  'percolationConfidenceBandHigh',
   'interruptionEvent',
   'interruptionTimingClass',
   'firstMeaningfulEditLagMs',
@@ -332,6 +338,17 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const lagRun = summarizeLag(metrics, 'firstRunLagMs');
   const lagAction = summarizeLag(metrics, 'firstActionLagMs');
 
+  const percolationDecisionCount = summarizeTotal(metrics, 'percolationDecisionCount');
+  const surfaceSelectionStatusbar = summarizeTotal(metrics, 'surfaceSelectionStatusbar');
+  const surfaceSelectionPanelSilent = summarizeTotal(metrics, 'surfaceSelectionPanelSilent');
+  const surfaceSelectionPanelEmphasis = summarizeTotal(metrics, 'surfaceSelectionPanelEmphasis');
+  const surfaceSelectionNotification = summarizeTotal(metrics, 'surfaceSelectionNotification');
+  const percolationConfidenceBandLow = summarizeTotal(metrics, 'percolationConfidenceBandLow');
+  const percolationConfidenceBandMedium = summarizeTotal(
+    metrics,
+    'percolationConfidenceBandMedium',
+  );
+  const percolationConfidenceBandHigh = summarizeTotal(metrics, 'percolationConfidenceBandHigh');
   const promptImpressions = summarizeTotal(metrics, 'companionPromptImpressions');
   const forcedOpenClicks = summarizeTotal(metrics, 'companionForcedOpenDetailsClicks');
   const quickActionsTaken = summarizeTotal(metrics, 'companionQuickActionsTaken');
@@ -428,6 +445,14 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| Forced-open rate (\`forced/prompt\`) | ${formatNumber(forcedOpenRate, 4)} |`,
     `| Nudge impressions (total) | ${nudgeImpressions} |`,
     `| Nudge impressions per session | ${formatNumber(nudgePerSession)} |`,
+    `| Percolation decisions (total) | ${percolationDecisionCount} |`,
+    `| surfaceSelectionStatusbar (total) | ${surfaceSelectionStatusbar} |`,
+    `| surfaceSelectionPanelSilent (total) | ${surfaceSelectionPanelSilent} |`,
+    `| surfaceSelectionPanelEmphasis (total) | ${surfaceSelectionPanelEmphasis} |`,
+    `| surfaceSelectionNotification (total) | ${surfaceSelectionNotification} |`,
+    `| percolationConfidenceBandLow (total) | ${percolationConfidenceBandLow} |`,
+    `| percolationConfidenceBandMedium (total) | ${percolationConfidenceBandMedium} |`,
+    `| percolationConfidenceBandHigh (total) | ${percolationConfidenceBandHigh} |`,
     `| Companion quick actions taken (total) | ${quickActionsTaken} |`,
     `| Companion follow-through rate (\`quickActions/prompt\`) | ${formatNumber(followThroughRate, 4)} |`,
     `| Primary CTA impressions (total) | ${primaryCtaImpressions} |`,
@@ -506,10 +531,16 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     metric.trigger === 'focus' ||
     metric.trigger === 'manual' ||
     metric.trigger === 'cached' ||
+    (metric.percolationDecisionCount ?? 0) > 0 ||
     (metric.surfaceSelectionNone ?? 0) > 0 ||
     (metric.surfaceSelectionStatusbar ?? 0) > 0 ||
     (metric.surfaceSelectionPanel ?? 0) > 0 ||
+    (metric.surfaceSelectionPanelSilent ?? 0) > 0 ||
+    (metric.surfaceSelectionPanelEmphasis ?? 0) > 0 ||
     (metric.surfaceSelectionNotification ?? 0) > 0 ||
+    (metric.percolationConfidenceBandLow ?? 0) > 0 ||
+    (metric.percolationConfidenceBandMedium ?? 0) > 0 ||
+    (metric.percolationConfidenceBandHigh ?? 0) > 0 ||
     metric.interruptionTimingClass === 'boundary' ||
     metric.interruptionTimingClass === 'mid-activity' ||
     metric.interruptionTimingClass === 'unknown' ||
@@ -585,10 +616,16 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       metric.workspaceRoot,
       metric.trigger,
       metric.uiSurface ?? '',
+      toOptionalNumber(metric.percolationDecisionCount),
       toOptionalNumber(metric.surfaceSelectionNone),
       toOptionalNumber(metric.surfaceSelectionStatusbar),
       toOptionalNumber(metric.surfaceSelectionPanel),
+      toOptionalNumber(metric.surfaceSelectionPanelSilent),
+      toOptionalNumber(metric.surfaceSelectionPanelEmphasis),
       toOptionalNumber(metric.surfaceSelectionNotification),
+      toOptionalNumber(metric.percolationConfidenceBandLow),
+      toOptionalNumber(metric.percolationConfidenceBandMedium),
+      toOptionalNumber(metric.percolationConfidenceBandHigh),
       toOptionalNumber(metric.interruptionEvent),
       metric.interruptionTimingClass ?? '',
       toOptionalNumber(metric.firstMeaningfulEditLagMs),

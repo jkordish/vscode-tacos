@@ -38,10 +38,16 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `workspaceRoot`                       | string  | Workspace root path for local grouping.                                         |
 | `trigger`                             | enum    | Summary trigger (`focus`, `manual`, `cached`).                                  |
 | `uiSurface`                           | enum    | UI surface mode (`statusbar`, `notification`, `silent`).                        |
+| `percolationDecisionCount`            | integer | Number of percolation surface-arbitration decisions recorded in the session.    |
 | `surfaceSelectionNone`                | integer | Count of broker-selected `none` surface outcomes in the session.                |
 | `surfaceSelectionStatusbar`           | integer | Count of broker-selected `statusbar` surface outcomes in the session.           |
 | `surfaceSelectionPanel`               | integer | Count of broker-selected `panel` surface outcomes in the session.               |
+| `surfaceSelectionPanelSilent`         | integer | Count of `panel` outcomes classified as ambient/silent background updates.       |
+| `surfaceSelectionPanelEmphasis`       | integer | Count of `panel` outcomes classified as emphasized drill-down paths.             |
 | `surfaceSelectionNotification`        | integer | Count of broker-selected `notification` surface outcomes in the session.        |
+| `percolationConfidenceBandLow`        | integer | Count of percolation decisions where primary candidate confidence was low.       |
+| `percolationConfidenceBandMedium`     | integer | Count of percolation decisions where primary candidate confidence was medium.    |
+| `percolationConfidenceBandHigh`       | integer | Count of percolation decisions where primary candidate confidence was high.      |
 | `interruptionEvent`                   | integer | `1` when focus-triggered summary used notification prompt mode, else `0`/empty. |
 | `interruptionTimingClass`             | enum    | Focus-return timing class: `boundary`, `mid-activity`, or `unknown`.            |
 | `firstMeaningfulEditLagMs`            | integer | Milliseconds from session start to first meaningful edit.                       |
@@ -56,6 +62,30 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `companionPrimaryCtaSourceClass`      | string  | Policy source class for the single primary CTA (for example `policy:next-step-action:openFile` or `policy:blocker:taskFailure`). |
 | `companionPrimaryCtaClicks`           | integer | Number of primary CTA clicks taken by the user.                                 |
 | `companionPrimaryCtaCompletions`      | integer | Number of primary CTA attempts that completed successfully.                     |
+| `blockerPromotionTaskFailure`         | integer | Count of blocker promotions attributed to task failure signals.                  |
+| `blockerPromotionCommandFailure`      | integer | Count of blocker promotions attributed to failing command signals.               |
+| `blockerPromotionDiagnostics`         | integer | Count of blocker promotions attributed to diagnostics signals.                   |
+| `blockerPromotionBranchContext`       | integer | Count of blocker promotions attributed to branch/divergence context.             |
+| `blockerPromotionLowConfidence`       | integer | Count of blocker promotions attributed to low-confidence context.                |
+| `blockerPromotionRestricted`          | integer | Count of blocker promotions attributed to Restricted Mode constraints.           |
+| `blockerPromotionNoNextSteps`         | integer | Count of blocker promotions attributed to missing safe next steps.               |
+| `priorPromotionCheckpoint`            | integer | Count of ranking promotions attributed to checkpoint-note priors.                |
+| `priorPromotionCorrections`           | integer | Count of ranking promotions attributed to saved correction priors.               |
+| `priorPromotionScratchpad`            | integer | Count of ranking promotions attributed to scratchpad priors.                     |
+| `trustTrayOpens`                      | integer | Count of trust/privacy tray disclosure opens in trusted mode.                   |
+| `restrictedTrustTrayOpens`            | integer | Count of trust/privacy tray disclosure opens in Restricted Mode.                |
+| `whySurfacedOpens`                    | integer | Count of one-click `Why am I seeing this?` drill-down opens.                    |
+| `percolationSuppressedQuietHours`     | integer | Count of percolation suppressions attributed to configured quiet hours.          |
+| `percolationSuppressedCooldown`       | integer | Count of percolation suppressions attributed to cooldown gating.                 |
+| `percolationSuppressedNoChange`       | integer | Count of percolation suppressions attributed to no-change fingerprint checks.    |
+| `percolationSuppressedNoiseBudget`    | integer | Count of percolation suppressions attributed to noise-budget gating.             |
+| `percolationSuppressedLowConfidence`  | integer | Count of percolation suppressions attributed to low-confidence safeguards.       |
+| `noveltyScoreBucketLow`               | integer | Count of sessions whose selected novelty profile bucket was `low`.               |
+| `noveltyScoreBucketMedium`            | integer | Count of sessions whose selected novelty profile bucket was `medium`.            |
+| `noveltyScoreBucketHigh`              | integer | Count of sessions whose selected novelty profile bucket was `high`.              |
+| `percolationDismissActions`           | integer | Count of percolation-memory dismiss actions captured from panel controls.        |
+| `percolationSnoozeActions`            | integer | Count of percolation-memory snooze actions captured from panel controls.         |
+| `lowConfidenceClarificationRate`      | ratio   | `1` when low-confidence summary selected clarification-first primary path.       |
 | `helpfulnessRating`                   | integer | Optional local rating (`1`-`5`) from `TaCoS: Rate Summary Helpfulness`.         |
 | `pauseActions`                        | integer | Count of pause actions taken during session.                                    |
 | `snoozeActions`                       | integer | Count of snooze actions taken during session.                                   |
@@ -84,10 +114,15 @@ Track these explicitly for stabilization/adoption gating:
 - `firstMeaningfulEditLagMs`
 - `firstRunLagMs`
 - `firstActionLagMs`
+- `percolationDecisionCount`
 - `companionPromptImpressions`
 - `surfaceSelectionStatusbar`
-- `surfaceSelectionPanel`
+- `surfaceSelectionPanelSilent`
+- `surfaceSelectionPanelEmphasis`
 - `surfaceSelectionNotification`
+- `percolationConfidenceBandLow`
+- `percolationConfidenceBandMedium`
+- `percolationConfidenceBandHigh`
 - `companionForcedOpenDetailsClicks`
 - `companionNudgeImpressions`
 - `companionPrimaryCtaImpressions`
