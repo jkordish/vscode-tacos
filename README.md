@@ -6,6 +6,13 @@ TaCoS is a VS Code extension that helps you resume work quickly with an instant 
 
 - [5-minute Quickstart](docs/quickstart.md)
 - [Privacy & Safety](docs/privacy-safety.md)
+- [Design and Implementation Guide](docs/DESIGN_AND_IMPLEMENTATION.md)
+
+## Operating Docs
+
+- [AGENTS.md](AGENTS.md): repo operating contract and merge/release guardrails.
+- [SPECS.md](SPECS.md): canonical behavior/spec contracts.
+- [PLANS.md](PLANS.md): active execution ledger and sequencing.
 
 ## Why TaCoS
 
@@ -281,16 +288,21 @@ In Restricted Mode:
 
 When trust is granted, full behavior is re-enabled safely.
 
+## Runtime Compatibility
+
+TaCoS currently targets VS Code desktop extension host runtime only. The extension uses Node.js APIs (`child_process`, filesystem, HTTP modules) and does not currently declare a browser entrypoint.
+
 ## Development
 
 ```bash
 npm ci
-npm run compile
+npm run build
+npm run typecheck
 npm run lint
 npm run format:check
 npm test
 npm run test:integration
-npx @vscode/vsce package --no-dependencies
+npm run package:vsix
 ```
 
 One-command gate:

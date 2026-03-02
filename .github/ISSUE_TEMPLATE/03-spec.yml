@@ -1,0 +1,57 @@
+name: Spec proposal
+description: Create or revise a canonical product/technical spec before implementation.
+title: "spec: "
+labels:
+  - spec
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to add or revise specification-level behavior in `SPECS.md`.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_scope
+    attributes:
+      label: Proposed scope
+      description: Goals, non-goals, and constraints for this spec slice.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Objective checks that define done.
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and failure modes
+    validations:
+      required: true
+  - type: textarea
+    id: test_strategy
+    attributes:
+      label: Test strategy
+      description: Unit/integration/manual evidence expected.
+    validations:
+      required: true
+  - type: input
+    id: specs_target
+    attributes:
+      label: SPECS.md target section
+      placeholder: Existing heading link or proposed heading title
+    validations:
+      required: true
+  - type: input
+    id: plans_target
+    attributes:
+      label: PLANS.md execution target
+      description: Link or describe where this spec will be sequenced.
+    validations:
+      required: true

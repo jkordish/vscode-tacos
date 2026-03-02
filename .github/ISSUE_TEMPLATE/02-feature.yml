@@ -1,0 +1,61 @@
+name: Feature request
+description: Propose a user-facing enhancement backed by explicit goals and constraints.
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature work should map to `SPECS.md` (behavior contract) and `PLANS.md` (execution order).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user pain is this solving?
+    validations:
+      required: true
+  - type: textarea
+    id: goals
+    attributes:
+      label: Goals
+      description: Concrete outcomes this change must deliver.
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: What this request explicitly does not include.
+    validations:
+      required: true
+  - type: textarea
+    id: user_behavior
+    attributes:
+      label: Proposed user-facing behavior
+      description: Commands/settings/panel behavior expected after implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: technical_shape
+    attributes:
+      label: Technical shape
+      description: A minimal architecture sketch (modules, trust/safety impact, tests).
+    validations:
+      required: true
+  - type: input
+    id: spec_link
+    attributes:
+      label: SPECS.md link (required)
+      description: Link an existing section or propose where a new one will be added.
+      placeholder: https://github.com/<org>/<repo>/blob/main/SPECS.md#...
+    validations:
+      required: true
+  - type: input
+    id: plan_link
+    attributes:
+      label: PLANS.md link (required)
+      description: Link the initiative/sequence item for execution.
+      placeholder: https://github.com/<org>/<repo>/blob/main/PLANS.md#...
+    validations:
+      required: true
