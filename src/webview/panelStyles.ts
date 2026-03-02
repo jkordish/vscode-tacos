@@ -298,6 +298,26 @@ export const PANEL_WEBVIEW_STYLE = `
         align-items: center;
         gap: var(--space-2);
       }
+      .card > details[data-panel-section][data-panel-emphasis-level='elevated'] > summary {
+        border-left: 2px solid var(--vscode-textLink-foreground);
+        padding-left: var(--space-1);
+      }
+      .card > details[data-panel-section][data-panel-emphasis-level='critical'] > summary {
+        border-left: 2px solid var(--vscode-errorForeground);
+        padding-left: var(--space-1);
+      }
+      .panel-emphasis-badge {
+        margin-left: auto;
+        font-size: 11px;
+        padding: 1px var(--space-2);
+      }
+      .panel-emphasis-elevated {
+        border-color: var(--vscode-textLink-foreground);
+      }
+      .panel-emphasis-critical {
+        border-color: var(--vscode-errorForeground);
+        color: var(--vscode-errorForeground);
+      }
       .section-heading {
         font-weight: 700;
         font-size: 1.1em;
@@ -606,6 +626,7 @@ export const PANEL_WEBVIEW_STYLE = `
         .badge.kind-file,
         button.badge.clickable.kind-url,
         button.badge.clickable.kind-file,
+        .panel-emphasis-badge,
         .evidence-affordance,
         .evidence-item,
         .text-link-button {
@@ -614,6 +635,10 @@ export const PANEL_WEBVIEW_STYLE = `
         }
         .card > details[data-panel-section] > summary::before {
           color: ButtonText;
+        }
+        .card > details[data-panel-section][data-panel-emphasis-level='elevated'] > summary,
+        .card > details[data-panel-section][data-panel-emphasis-level='critical'] > summary {
+          border-left-color: ButtonText;
         }
         .state-safe,
         .state-clear,

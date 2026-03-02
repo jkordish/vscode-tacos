@@ -1,5 +1,31 @@
 import { escapeHtml } from '../webviewSecurity';
 
+export type PanelSectionEmphasisLevel = 'elevated' | 'critical';
+
+export interface PanelSectionEmphasis {
+  level: PanelSectionEmphasisLevel;
+  sourceClass: string;
+  badgeLabel: string;
+}
+
+export function renderPanelSectionEmphasisAttrs(emphasis?: PanelSectionEmphasis): string {
+  if (!emphasis) {
+    return '';
+  }
+
+  return `data-panel-emphasis-level="${escapeHtml(emphasis.level)}" data-panel-emphasis-source="${escapeHtml(emphasis.sourceClass)}"`;
+}
+
+export function renderPanelSectionEmphasisBadge(emphasis?: PanelSectionEmphasis): string {
+  if (!emphasis) {
+    return '';
+  }
+
+  return `<span class="badge panel-emphasis-badge panel-emphasis-${escapeHtml(
+    emphasis.level,
+  )}" data-panel-emphasis-badge="true">${escapeHtml(emphasis.badgeLabel)}</span>`;
+}
+
 export interface StatusCardInput {
   sourceLabel: string;
   generatedAtLabel: string;
@@ -36,12 +62,15 @@ export interface TrustCenterCardInput {
   autoSummaryToggleDisabledAttr: string;
   autoSummaryToggleLabel: string;
   expanded: boolean;
+  emphasis?: PanelSectionEmphasis;
 }
 
 export function renderTrustCenterCard(input: TrustCenterCardInput): string {
+  const emphasisAttrs = renderPanelSectionEmphasisAttrs(input.emphasis);
+  const emphasisBadge = renderPanelSectionEmphasisBadge(input.emphasis);
   return `<div class="card">
-      <details data-panel-section="trustCenter" ${input.expanded ? 'open' : ''}>
-        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Trust Center</span></summary>
+      <details data-panel-section="trustCenter" ${emphasisAttrs ? `${emphasisAttrs} ` : ''}${input.expanded ? 'open' : ''}>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Trust Center</span>${emphasisBadge}</summary>
         <div class="panel-section-body">
           <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(input.trustTrackingLabel)}</div>
           <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
@@ -99,6 +128,7 @@ export interface TimelineCardInput {
   showTimeline: boolean;
   timelineGroupsTrustedHtml: string;
   expanded: boolean;
+  emphasis?: PanelSectionEmphasis;
 }
 
 export function renderTimelineCard(input: TimelineCardInput): string {
@@ -106,9 +136,11 @@ export function renderTimelineCard(input: TimelineCardInput): string {
     return '';
   }
 
+  const emphasisAttrs = renderPanelSectionEmphasisAttrs(input.emphasis);
+  const emphasisBadge = renderPanelSectionEmphasisBadge(input.emphasis);
   return `<div class="card">
-      <details data-panel-section="timeline" ${input.expanded ? 'open' : ''}>
-        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Timeline</span></summary>
+      <details data-panel-section="timeline" ${emphasisAttrs ? `${emphasisAttrs} ` : ''}${input.expanded ? 'open' : ''}>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Timeline</span>${emphasisBadge}</summary>
         <div class="panel-section-body">
           ${input.timelineGroupsTrustedHtml || '<p class="muted">No timeline entries captured yet.</p>'}
         </div>
@@ -165,14 +197,17 @@ export interface EvidenceCardInput {
   evidenceItemsTrustedHtml: string;
   hiddenEvidenceCount: number;
   expanded: boolean;
+  emphasis?: PanelSectionEmphasis;
 }
 
 export function renderEvidenceCard(input: EvidenceCardInput): string {
   const hasExtraEvidence = input.hiddenEvidenceCount > 0;
   const showMoreLabel = hasExtraEvidence ? `Show ${input.hiddenEvidenceCount} more` : 'Show more';
+  const emphasisAttrs = renderPanelSectionEmphasisAttrs(input.emphasis);
+  const emphasisBadge = renderPanelSectionEmphasisBadge(input.emphasis);
   return `<div class="card">
-      <details data-panel-section="evidence" ${input.expanded ? 'open' : ''}>
-        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Evidence</span></summary>
+      <details data-panel-section="evidence" ${emphasisAttrs ? `${emphasisAttrs} ` : ''}${input.expanded ? 'open' : ''}>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Evidence</span>${emphasisBadge}</summary>
         <div class="panel-section-body">
           <ul class="evidence-list" id="evidence-list">${
             input.evidenceItemsTrustedHtml || '<li>None captured</li>'
@@ -187,10 +222,18 @@ export function renderEvidenceCard(input: EvidenceCardInput): string {
     </div>`;
 }
 
-export function renderDetailsCard(detailsTrustedHtml: string, expanded: boolean): string {
+export function renderDetailsCard(
+  detailsTrustedHtml: string,
+  expanded: boolean,
+  emphasis?: PanelSectionEmphasis,
+): string {
+  const emphasisAttrs = renderPanelSectionEmphasisAttrs(emphasis);
+  const emphasisBadge = renderPanelSectionEmphasisBadge(emphasis);
   return `<div class="card">
-      <details data-panel-section="details" ${expanded ? 'open' : ''}>
-        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Details</span></summary>
+      <details data-panel-section="details" ${
+        emphasisAttrs ? `${emphasisAttrs} ` : ''
+      }${expanded ? 'open' : ''}>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Details</span>${emphasisBadge}</summary>
         <div class="panel-section-body">
           <div class="details-markdown">${detailsTrustedHtml}</div>
         </div>

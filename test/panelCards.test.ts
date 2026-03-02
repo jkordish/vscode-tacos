@@ -32,6 +32,11 @@ describe('panelCards', () => {
       autoSummaryToggleDisabledAttr: '',
       autoSummaryToggleLabel: 'Pause auto summaries',
       expanded: false,
+      emphasis: {
+        level: 'elevated',
+        sourceClass: 'policy:trust-privacy',
+        badgeLabel: 'Trust',
+      },
     });
 
     expect(status).toContain('<h3>Status</h3>');
@@ -40,6 +45,10 @@ describe('panelCards', () => {
       'class="section-heading" role="heading" aria-level="3">Trust Center</span>',
     );
     expect(trust).toContain('data-panel-section="trustCenter"');
+    expect(trust).toContain('data-panel-emphasis-level="elevated"');
+    expect(trust).toContain('data-panel-emphasis-source="policy:trust-privacy"');
+    expect(trust).toContain('data-panel-emphasis-badge="true"');
+    expect(trust).toContain('>Trust</span></summary>');
     expect(trust).toContain('data-action="openPrivacySafety"');
     expect(trust).toContain('<li>Recent files: 2</li>');
     expect(trust).toContain('data-why-surfaced-details="true"');

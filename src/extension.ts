@@ -128,6 +128,8 @@ import {
   renderChangesSinceCard,
   renderDetailsCard,
   renderEvidenceCard,
+  renderPanelSectionEmphasisAttrs,
+  renderPanelSectionEmphasisBadge,
   renderQuickActionsCard,
   renderRecapCard,
   renderRestorePackCard,
@@ -135,6 +137,7 @@ import {
   renderTimelineCard,
   renderTitledListCard,
   renderTrustCenterCard,
+  type PanelSectionEmphasis,
 } from './webview/panelCards';
 import {
   renderCheckpointCard,
@@ -699,6 +702,22 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasTimelineSection = panelHtml.includes('data-panel-section="timeline"');
       const hasEvidenceSection = panelHtml.includes('data-panel-section="evidence"');
       const hasDetailsSection = panelHtml.includes('data-panel-section="details"');
+      const panelSectionOrder = [
+        ...panelHtml.matchAll(/<details[^>]*data-panel-section="([^"]+)"/gu),
+      ].map((match) => match[1]);
+      const panelEmphasisBadgeCount = (panelHtml.match(/data-panel-emphasis-badge="true"/gu) ?? [])
+        .length;
+      const emphasizedPanelSections = [
+        ...panelHtml.matchAll(
+          /<details[^>]*data-panel-section="([^"]+)"[^>]*data-panel-emphasis-level="([^"]+)"[^>]*>/gu,
+        ),
+      ].map((match) => match[1]);
+      const hasMoreContextEmphasis =
+        /data-panel-section="moreContext"[^>]*data-panel-emphasis-level=/u.test(panelHtml);
+      const moreContextEmphasisSource =
+        panelHtml.match(
+          /data-panel-section="moreContext"[^>]*data-panel-emphasis-source="([^"]+)"/u,
+        )?.[1] ?? '';
       const hasAnchorOpenLinkAction = /<a[^>]*data-action=["']openLink["']/u.test(panelHtml);
       const hasAnchorOpenTopFileAction = /<a[^>]*data-action=["']openTopFile["']/u.test(panelHtml);
       const hasAnchorOpenEvidenceAction = /<a[^>]*data-action=["']openEvidence["']/u.test(
@@ -739,6 +758,9 @@ export function activate(context: vscode.ExtensionContext): void {
       const timelineExpanded = /data-panel-section="timeline"[^>]*\sopen(?:\s|>)/u.test(panelHtml);
       const evidenceExpanded = /data-panel-section="evidence"[^>]*\sopen(?:\s|>)/u.test(panelHtml);
       const detailsExpanded = /data-panel-section="details"[^>]*\sopen(?:\s|>)/u.test(panelHtml);
+      const moreContextExpanded = /data-panel-section="moreContext"[^>]*\sopen(?:\s|>)/u.test(
+        panelHtml,
+      );
       const hasDisabledRestoreWorkingSet = /data-action="restoreWorkingSet"[^>]*disabled/u.test(
         panelHtml,
       );
@@ -808,6 +830,11 @@ export function activate(context: vscode.ExtensionContext): void {
         hasTimelineSection,
         hasEvidenceSection,
         hasDetailsSection,
+        panelSectionOrder,
+        panelEmphasisBadgeCount,
+        emphasizedPanelSections,
+        hasMoreContextEmphasis,
+        moreContextEmphasisSource,
         hasAnchorOpenLinkAction,
         hasAnchorOpenTopFileAction,
         hasAnchorOpenEvidenceAction,
@@ -828,6 +855,7 @@ export function activate(context: vscode.ExtensionContext): void {
         timelineExpanded,
         evidenceExpanded,
         detailsExpanded,
+        moreContextExpanded,
         hasResumePathCard: panelHtml.includes('<h3>Resume Path</h3>'),
         resumePathStepCount: (panelHtml.match(/<input[^>]*data-resume-path-toggle="true"/gu) ?? [])
           .length,
@@ -3281,6 +3309,81 @@ function resolveCompanionSlotSourceClasses(
   };
 }
 
+type PanelSectionPolicyTarget = Exclude<PanelSectionId, 'moreContext'>;
+
+const PANEL_SECTION_FOCUS_LABELS: Record<PanelSectionPolicyTarget, string> = {
+  trustCenter: 'Trust',
+  timeline: 'Timeline',
+  evidence: 'Evidence',
+  details: 'Details',
+};
+
+function resolvePanelSectionEmphasis(
+  summary: ResumeSummary,
+  primary: RankedSurfacedItem | undefined,
+  blockerDecision: BlockerDecision,
+  companionRuntimeMode: CompanionRuntimeMode,
+  showTimeline: boolean,
+  timelineGroupsCount: number,
+  summaryProvider: SummaryProvider,
+): Partial<Record<PanelSectionId, PanelSectionEmphasis>> {
+  let focusSection: PanelSectionPolicyTarget = 'details';
+  let focusLevel: PanelSectionEmphasis['level'] = 'elevated';
+  let focusBadge = 'Policy';
+  let focusSourceClass = 'policy:fallback';
+
+  const hasEvidenceLinks = (primary?.evidenceIds.length ?? 0) > 0;
+  const hasChangesSinceLastResume = (summary.changesSinceLastResume?.length ?? 0) > 0;
+
+  if (companionRuntimeMode === 'restricted') {
+    focusSection = 'trustCenter';
+    focusLevel = 'critical';
+    focusBadge = 'Restricted';
+    focusSourceClass = 'runtime:restricted';
+  } else if (summaryProvider !== 'local') {
+    focusSection = 'trustCenter';
+    focusBadge = 'AI path';
+    focusSourceClass = `provider:${summaryProvider}`;
+  } else if (primary?.kind === 'trust-privacy') {
+    focusSection = 'trustCenter';
+    focusBadge = 'Trust';
+    focusSourceClass = 'policy:trust-privacy';
+  } else if (primary?.kind === 'evidence' || hasEvidenceLinks) {
+    focusSection = 'evidence';
+    focusBadge = 'Evidence';
+    focusSourceClass = hasEvidenceLinks ? 'policy:primary-evidence' : 'policy:evidence';
+  } else if (showTimeline && hasChangesSinceLastResume && timelineGroupsCount > 0) {
+    focusSection = 'timeline';
+    focusBadge = 'Recent';
+    focusSourceClass = 'policy:recent-change';
+  } else if (blockerDecision.hasBlocker || summary.lowConfidence || summary.longGap) {
+    focusSection = 'details';
+    focusBadge = 'Reorient';
+    focusSourceClass = blockerDecision.hasBlocker
+      ? 'policy:blocker-context'
+      : summary.lowConfidence
+        ? 'policy:low-confidence'
+        : 'policy:long-gap';
+  } else if (showTimeline && timelineGroupsCount > 0) {
+    focusSection = 'timeline';
+    focusBadge = 'Recent';
+    focusSourceClass = 'policy:timeline-signal';
+  }
+
+  return {
+    [focusSection]: {
+      level: focusLevel,
+      sourceClass: focusSourceClass,
+      badgeLabel: focusBadge,
+    },
+    moreContext: {
+      level: 'elevated',
+      sourceClass: `policy-focus:${focusSection}`,
+      badgeLabel: `Focus: ${PANEL_SECTION_FOCUS_LABELS[focusSection]}`,
+    },
+  };
+}
+
 function selectNotificationHeadline(
   summary: ResumeSummary,
   primary: RankedSurfacedItem | undefined,
@@ -4895,11 +4998,23 @@ function renderWebview(
     : 'Pause auto summaries';
   const autoSummaryToggleDisabledAttr =
     autoSummariesDisabled || demoMode ? 'disabled aria-disabled="true"' : '';
+  const panelSectionEmphasis: Partial<Record<PanelSectionId, PanelSectionEmphasis>> = demoMode
+    ? {}
+    : resolvePanelSectionEmphasis(
+        summary,
+        rankedPrimaryCandidate,
+        blockerDecision,
+        companionRuntimeMode,
+        config.showTimeline,
+        timelineGroups.length,
+        config.summaryProvider,
+      );
   const timelineGroupsHtml = renderTimelineGroupsHtml({ timelineGroups });
   const timelineCard = renderTimelineCard({
     showTimeline: config.showTimeline,
     timelineGroupsTrustedHtml: timelineGroupsHtml,
     expanded: expandedSections.has('timeline'),
+    emphasis: panelSectionEmphasis.timeline,
   });
   const recapCard =
     recapDoneItems.length > 0 || recapPendingItems.length > 0
@@ -4939,6 +5054,7 @@ function renderWebview(
     autoSummaryToggleDisabledAttr,
     autoSummaryToggleLabel,
     expanded: expandedSections.has('trustCenter'),
+    emphasis: panelSectionEmphasis.trustCenter,
   });
   const topFilesCard = renderTitledListCard({
     title: 'Top Files',
@@ -4956,8 +5072,13 @@ function renderWebview(
     evidenceItemsTrustedHtml: evidenceItems,
     hiddenEvidenceCount,
     expanded: expandedSections.has('evidence'),
+    emphasis: panelSectionEmphasis.evidence,
   });
-  const detailsCard = renderDetailsCard(detailsHtml, expandedSections.has('details'));
+  const detailsCard = renderDetailsCard(
+    detailsHtml,
+    expandedSections.has('details'),
+    panelSectionEmphasis.details,
+  );
   const moreContextCards = [
     trustCenterCard,
     recapCard,
@@ -4971,10 +5092,18 @@ function renderWebview(
   ]
     .filter(Boolean)
     .join('\n\n');
+  const moreContextEmphasisAttrs = renderPanelSectionEmphasisAttrs(
+    panelSectionEmphasis.moreContext,
+  );
+  const moreContextEmphasisBadge = renderPanelSectionEmphasisBadge(
+    panelSectionEmphasis.moreContext,
+  );
   const moreContextCard = moreContextCards
     ? `<div class="card">
-      <details data-panel-section="moreContext" ${expandedSections.has('moreContext') ? 'open' : ''}>
-        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">More Context</span></summary>
+      <details data-panel-section="moreContext" ${
+        moreContextEmphasisAttrs ? `${moreContextEmphasisAttrs} ` : ''
+      }${expandedSections.has('moreContext') ? 'open' : ''}>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">More Context</span>${moreContextEmphasisBadge}</summary>
         <div class="panel-section-body more-context-stack">
           ${moreContextCards}
         </div>

@@ -128,6 +128,62 @@ Users lose task context after focus switches and interruptions.
 
 - Plan: `PLANS.md` item `P6`.
 
+## Feature: Panel Disclosure Emphasis and Stability
+
+### Problem
+
+Users can miss high-signal context when panel sections are collapsed, but auto-expanding or reordering sections causes disorientation and layout jitter.
+
+### Goals
+
+- Keep disclosure section order stable across resume generations.
+- Preserve user-expanded/collapsed section state.
+- Surface urgency with non-disruptive emphasis cues.
+
+### Non-goals
+
+- Automatic section expansion.
+- Dynamic section reordering.
+
+### User-facing behavior
+
+- TaCoS can show policy-driven emphasis badges/accent on collapsed sections.
+- Emphasis applies to `Trust Center`, `Timeline`, `Evidence`, `Details`, and `More Context` wrapper.
+- Existing expansion state persistence behavior remains unchanged.
+
+### Technical shape / architecture notes
+
+- Emphasis policy resolution happens in `src/extension.ts`.
+- Disclosure rendering uses shared emphasis helpers in `src/webview/panelCards.ts`.
+- Styling is centralized in `src/webview/panelStyles.ts`.
+
+### Settings and commands affected
+
+- No new settings.
+- No new commands.
+
+### Acceptance criteria
+
+- Emphasis metadata renders deterministically for policy-selected sections.
+- Section order and persisted disclosure state remain stable.
+- No section is auto-expanded by emphasis rules.
+- Emphasis policy does not target sections hidden by current settings (for example `Timeline` when `tacos.showTimeline` is disabled).
+
+### Risks / failure modes
+
+- Over-emphasis can reduce signal quality if policy thresholds are too broad.
+- Rendering helper drift could create inconsistent emphasis markup if reused incorrectly.
+
+### Open questions
+
+- Should emphasis source classes be surfaced in diagnostics by default?
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P6`.
+- Issue: https://github.com/jkordish/vscode-tacos/issues/237
+- PR: https://github.com/jkordish/vscode-tacos/pull/267
+
 ## Feature: Context Collection
 
 ### Problem
