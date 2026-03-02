@@ -2225,7 +2225,6 @@ interface PreparedTriggerSummary {
   checkpointPrimaryNote?: CheckpointNote;
   checkpointScope: string;
   signals: ResumeSignals;
-  percolationSignals: NormalizedSignal[];
   config: ExtensionConfig;
   providerPlan: ProviderPlan;
   shouldRefineWithAi: boolean;
@@ -2257,6 +2256,8 @@ function adaptAndRememberPercolationSignals(
   hasCheckpointNote: boolean,
   adaptedAt?: number,
 ): NormalizedSignal[] {
+  const mode = resolveCompanionRuntimeMode(config);
+  const trusted = state.workspaceTrusted && vscode.workspace.isTrusted;
   const adaptationNow =
     typeof adaptedAt === 'number' && Number.isFinite(adaptedAt) && adaptedAt > 0
       ? Math.floor(adaptedAt)
@@ -2264,13 +2265,16 @@ function adaptAndRememberPercolationSignals(
   const percolationSignals = buildPercolationSignalBundle({
     summary,
     runtimeSignals,
-    mode: resolveCompanionRuntimeMode(config),
-    trusted: state.workspaceTrusted && vscode.workspace.isTrusted,
+    mode,
+    trusted,
     triggerReason,
     now: adaptationNow,
     hasCheckpointNote,
   });
-  rememberPercolationSignalsForContext(summary.contextHash, percolationSignals);
+  rememberPercolationSignalsForContext(summary.contextHash, percolationSignals, {
+    mode,
+    trusted,
+  });
   return percolationSignals;
 }
 
@@ -2353,7 +2357,7 @@ async function prepareTriggerSummary(
   const adaptationNow = Date.now();
   const triggerReason = contextUnchanged && cached ? 'cached' : reason;
   const summary = contextUnchanged && cached ? cached : localSummary;
-  const percolationSignals = adaptAndRememberPercolationSignals(
+  adaptAndRememberPercolationSignals(
     summary,
     signals,
     config,
@@ -2377,7 +2381,6 @@ async function prepareTriggerSummary(
     checkpointPrimaryNote: checkpointContext.primaryNote,
     checkpointScope: checkpointContext.scope,
     signals,
-    percolationSignals,
     config,
     providerPlan,
     shouldRefineWithAi,
@@ -3469,12 +3472,30 @@ function isBlockedPrimaryCtaMessage(message: WebviewMessage): boolean {
   return 'primarySurface' in message && message.primarySurface === 'blocked';
 }
 
+interface PercolationSignalCacheScope {
+  mode: PercolationPolicyMode;
+  trusted: boolean;
+}
+
+function percolationSignalCacheKey(
+  contextHash: string,
+  scope: PercolationSignalCacheScope,
+): string | undefined {
+  const normalizedContextHash = contextHash.trim();
+  if (!normalizedContextHash) {
+    return undefined;
+  }
+
+  return `${normalizedContextHash}::${scope.mode}::${scope.trusted ? 'trusted' : 'restricted'}`;
+}
+
 function rememberPercolationSignalsForContext(
   contextHash: string,
   signals: ReadonlyArray<NormalizedSignal>,
+  scope: PercolationSignalCacheScope,
 ): void {
-  const normalizedContextHash = contextHash.trim();
-  if (!normalizedContextHash || signals.length === 0) {
+  const cacheKey = percolationSignalCacheKey(contextHash, scope);
+  if (!cacheKey || signals.length === 0) {
     return;
   }
 
@@ -3482,7 +3503,9 @@ function rememberPercolationSignalsForContext(
     ...signal,
     meta: { ...signal.meta },
   }));
-  state.percolationSignalsByContextHash.set(normalizedContextHash, snapshot);
+  // Maintain LRU semantics: refresh key order when overwriting an existing entry.
+  state.percolationSignalsByContextHash.delete(cacheKey);
+  state.percolationSignalsByContextHash.set(cacheKey, snapshot);
   while (state.percolationSignalsByContextHash.size > MAX_PERCOLATION_SIGNAL_CONTEXTS) {
     const oldest = state.percolationSignalsByContextHash.keys().next();
     if (oldest.done || typeof oldest.value !== 'string') {
@@ -3494,13 +3517,14 @@ function rememberPercolationSignalsForContext(
 
 function readPercolationSignalsForContext(
   contextHash: string,
+  scope: PercolationSignalCacheScope,
 ): ReadonlyArray<NormalizedSignal> | undefined {
-  const normalizedContextHash = contextHash.trim();
-  if (!normalizedContextHash) {
+  const cacheKey = percolationSignalCacheKey(contextHash, scope);
+  if (!cacheKey) {
     return undefined;
   }
 
-  const signals = state.percolationSignalsByContextHash.get(normalizedContextHash);
+  const signals = state.percolationSignalsByContextHash.get(cacheKey);
   if (!signals || signals.length === 0) {
     return undefined;
   }
@@ -3522,10 +3546,11 @@ function rankPercolationForSummary(
   options: RankPercolationOptions = {},
 ): ReturnType<typeof rankCandidates> {
   const evaluationNow = options.now ?? Date.now();
+  const trusted = state.workspaceTrusted && vscode.workspace.isTrusted;
   const adaptedSignals =
     options.signals && options.signals.length > 0
       ? options.signals
-      : readPercolationSignalsForContext(summary.contextHash);
+      : readPercolationSignalsForContext(summary.contextHash, { mode, trusted });
   const input = createPercolationPolicyInput(summary, {
     mode,
     now: summary.generatedAt > 0 ? summary.generatedAt : evaluationNow,
