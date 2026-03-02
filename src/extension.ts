@@ -2326,10 +2326,7 @@ async function prepareTriggerSummary(
     baseSummary.currentBranch,
   );
   const aiPayloadScratchpadExcerpt = config.aiIncludeScratchpad
-    ? (scratchpadPrior.excerpt ??
-      (scratchpadPrior.hasContent
-        ? await loadScratchpadExcerptForAi(context, root, baseSummary.currentBranch)
-        : undefined))
+    ? scratchpadPrior.excerpt
     : undefined;
   let aiPayloadSummary =
     aiPayloadCheckpointNotes.length > 0
@@ -10740,30 +10737,6 @@ async function loadScratchpadPriorSnapshot(
     };
   } catch {
     return { hasContent: false };
-  }
-}
-
-async function loadScratchpadExcerptForAi(
-  context: vscode.ExtensionContext,
-  workspaceRoot: string,
-  branchHint?: string,
-): Promise<string | undefined> {
-  if (!workspaceRoot) {
-    return undefined;
-  }
-
-  const { uri, scopeState } = resolveScratchpadFileUri(context, workspaceRoot, branchHint);
-  await migrateLegacyScratchpadFileIfNeeded(context, workspaceRoot, scopeState.scope, uri);
-  try {
-    const stat = await vscode.workspace.fs.stat(uri);
-    if (stat.size <= 0) {
-      return undefined;
-    }
-    const bytes = await vscode.workspace.fs.readFile(uri);
-    const content = Buffer.from(bytes).toString('utf8');
-    return buildAiScratchpadExcerpt(content);
-  } catch {
-    return undefined;
   }
 }
 
