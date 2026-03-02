@@ -731,6 +731,7 @@ export function activate(context: vscode.ExtensionContext): void {
         panelWorkspaceRoot: state.panelWorkspaceRoot,
         hasScratchSummary: Boolean(state.scratchSummary),
         scratchContextHash: state.scratchSummary?.contextHash,
+        percolationSignalCacheEntries: state.percolationSignalsByContextHash.size,
         recentFilesCount: state.recentFiles.values().length,
         recentTerminalCount: state.recentTerminal.values().length,
         recentDebugCount: state.recentDebug.values().length,
@@ -744,6 +745,10 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       state.panel.dispose();
+      return true;
+    }),
+    vscode.commands.registerCommand('tacos.__test.resetRuntimeWorkspaceState', async () => {
+      resetRuntimeWorkspaceState();
       return true;
     }),
     vscode.commands.registerCommand('tacos.__test.getResumeFlowSnapshot', async () => {
@@ -9276,6 +9281,7 @@ function resetRuntimeWorkspaceState(): void {
   state.panelResumePathState = undefined;
   state.panelResumePathScope = undefined;
   state.activeNudges = undefined;
+  state.percolationSignalsByContextHash.clear();
   state.scratchSummary = undefined;
   state.detailsMarkdownCache = undefined;
   if (state.panel) {
