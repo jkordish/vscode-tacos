@@ -3355,6 +3355,22 @@ function nudgeActionLabel(action: string): string {
   return 'Take action';
 }
 
+function isBlockedPrimaryCtaMessage(message: WebviewMessage): boolean {
+  if (
+    message.type !== 'sessionAddCheckpoint' &&
+    message.type !== 'refreshSummary' &&
+    message.type !== 'restoreRerunTask' &&
+    message.type !== 'restoreCopyFailingCommand' &&
+    message.type !== 'restoreOpenProblems' &&
+    message.type !== 'restoreOpenDiagnosticFile' &&
+    message.type !== 'restoreCheckoutPreviousBranch'
+  ) {
+    return false;
+  }
+
+  return 'primarySurface' in message && message.primarySurface === 'blocked';
+}
+
 interface RankPercolationOptions {
   context?: vscode.ExtensionContext;
   workspaceRoot?: string;
@@ -4240,6 +4256,17 @@ async function showDetailsPanel(
       if (demoMode && DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES.has(message.type)) {
         return;
       }
+      const blockedPrimaryCta = isBlockedPrimaryCtaMessage(message);
+      const recordBlockedPrimaryClick = (): void => {
+        if (blockedPrimaryCta) {
+          recordCompanionPrimaryCtaClick();
+        }
+      };
+      const recordBlockedPrimaryCompletion = (completed: boolean): void => {
+        if (blockedPrimaryCta && completed) {
+          recordCompanionPrimaryCtaCompletion();
+        }
+      };
 
       if (message.type === 'setPanelSectionExpanded') {
         const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
@@ -4270,12 +4297,14 @@ async function showDetailsPanel(
 
         const firstAction = state.panelSummary?.recommendedFirstAction?.trim();
         const seededValue = firstAction ? `Next: ${firstAction}` : undefined;
-        await promptAndSaveCheckpointNote(context, workspaceRoot, {
+        recordBlockedPrimaryClick();
+        const saved = await promptAndSaveCheckpointNote(context, workspaceRoot, {
           title: 'TaCoS: Capture Session Checkpoint',
           prompt: 'Save a one-line checkpoint for your next resume.',
           placeHolder: 'Example: Continue from parser error and rerun npm test',
           initialValue: seededValue,
         });
+        recordBlockedPrimaryCompletion(saved);
         await refreshPanelCheckpointState(context, workspaceRoot);
         rerenderPanel();
         return;
@@ -4395,7 +4424,9 @@ async function showDetailsPanel(
         }
 
         recordCompanionQuickAction();
+        recordBlockedPrimaryClick();
         await triggerSummary(context, 'manual', workspaceRoot);
+        recordBlockedPrimaryCompletion(true);
         return;
       }
 
@@ -4571,13 +4602,17 @@ async function showDetailsPanel(
 
       if (message.type === 'restoreOpenProblems') {
         recordCompanionQuickAction();
+        recordBlockedPrimaryClick();
         await openProblemsView();
+        recordBlockedPrimaryCompletion(true);
         return;
       }
 
       if (message.type === 'restoreOpenDiagnosticFile') {
         recordCompanionQuickAction();
-        await openPrimaryDiagnosticFile(state.panelWorkspaceRoot);
+        recordBlockedPrimaryClick();
+        const completed = await openPrimaryDiagnosticFile(state.panelWorkspaceRoot);
+        recordBlockedPrimaryCompletion(completed);
         return;
       }
 
@@ -4605,7 +4640,9 @@ async function showDetailsPanel(
 
       if (message.type === 'restoreRerunTask') {
         recordCompanionQuickAction();
-        await rerunLastTask();
+        recordBlockedPrimaryClick();
+        const completed = await rerunLastTask();
+        recordBlockedPrimaryCompletion(completed);
         return;
       }
 
@@ -4617,13 +4654,20 @@ async function showDetailsPanel(
 
       if (message.type === 'restoreCheckoutPreviousBranch') {
         recordCompanionQuickAction();
-        await checkoutPreviousBranch(state.panelSummary, state.panelWorkspaceRoot);
+        recordBlockedPrimaryClick();
+        const completed = await checkoutPreviousBranch(
+          state.panelSummary,
+          state.panelWorkspaceRoot,
+        );
+        recordBlockedPrimaryCompletion(completed);
         return;
       }
 
       if (message.type === 'restoreCopyFailingCommand') {
         recordCompanionQuickAction();
-        await copyFailingCommand();
+        recordBlockedPrimaryClick();
+        const completed = await copyFailingCommand();
+        recordBlockedPrimaryCompletion(completed);
         return;
       }
 
@@ -5020,7 +5064,6 @@ function renderWebview(
   const primaryNextActionSummary =
     directNextActionSummary || selectPanelPrimarySummary(summary, rankedPrimaryCandidate);
   const primaryNextActionDisabledAttr = demoMode ? 'disabled aria-disabled="true"' : '';
-  const primaryNextActionStepIndexForHome = hasPrimaryNextAction ? primaryNextActionStepIndex : -1;
   const primaryNextActionPrimaryAttr = hasPrimaryNextAction
     ? 'data-primary-next-safe-action="home" '
     : '';
@@ -5043,7 +5086,7 @@ function renderWebview(
     nextSteps: summary.nextSteps,
     nextStepEvidenceIds: summary.nextStepEvidenceIds,
     nextStepActions,
-    primaryNextActionStepIndex: primaryNextActionStepIndexForHome,
+    primaryNextActionStepIndex,
     lowConfidence: Boolean(summary.lowConfidence),
     evidenceById,
   });
@@ -6312,11 +6355,11 @@ async function openProblemsView(): Promise<void> {
   await vscode.commands.executeCommand('workbench.actions.view.problems');
 }
 
-async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promise<void> {
+async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promise<boolean> {
   const diagnostics = collectWorkspaceDiagnostics(preferredWorkspaceRoot);
   if (!diagnostics.top) {
     void vscode.window.showInformationMessage('TaCoS: no active diagnostics are available.');
-    return;
+    return false;
   }
 
   const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
@@ -6324,12 +6367,12 @@ async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promi
     void vscode.window.showWarningMessage(
       'TaCoS blocked diagnostic navigation because no workspace root is available.',
     );
-    return;
+    return false;
   }
 
   if (!isPathWithinWorkspaceRoot(workspaceRoot, diagnostics.top.absolutePath)) {
     void vscode.window.showWarningMessage('TaCoS blocked an unsafe diagnostic file target.');
-    return;
+    return false;
   }
 
   const doc = await vscode.workspace.openTextDocument(
@@ -6343,6 +6386,7 @@ async function openPrimaryDiagnosticFile(preferredWorkspaceRoot?: string): Promi
   const range = new vscode.Range(position, position);
   editor.selection = new vscode.Selection(position, position);
   editor.revealRange(range, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+  return true;
 }
 
 interface NextStepActionOutcome {
@@ -6394,8 +6438,7 @@ async function runNextStepActionDetailed(
   }
 
   if (action.kind === 'copyFailingCommand') {
-    await copyFailingCommand();
-    return { attempted: true, completed: true };
+    return { attempted: true, completed: await copyFailingCommand() };
   }
 
   if (action.kind === 'rerunTask') {
@@ -6803,17 +6846,18 @@ async function checkoutPreviousBranch(
   }
 }
 
-async function copyFailingCommand(): Promise<void> {
+async function copyFailingCommand(): Promise<boolean> {
   const command = getCopyableFailingCommand();
   if (!command) {
     void vscode.window.showInformationMessage(
       'TaCoS: no copyable failing command is available (raw commands are not persisted).',
     );
-    return;
+    return false;
   }
 
   await vscode.env.clipboard.writeText(command);
   void vscode.window.showInformationMessage('TaCoS: failing command copied to clipboard.');
+  return true;
 }
 
 function getCopyableFailingCommand(): string | undefined {
