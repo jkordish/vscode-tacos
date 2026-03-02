@@ -1,0 +1,7 @@
+# Default ownership
+* @jkordish
+
+# TODO(ownership): Split by area once additional maintainers are active.
+# Example:
+# /src/webview/ @jkordish @frontend-owner
+# /src/llm.ts @jkordish @ai-safety-owner

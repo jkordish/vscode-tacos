@@ -6,7 +6,17 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
-- No notable changes yet.
+- Docs-driven operating model docs: `AGENTS.md`, `SPECS.md`, `PLANS.md`.
+- Canonical design/implementation guide: `docs/DESIGN_AND_IMPLEMENTATION.md`.
+- Repository governance docs: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `.github/CODEOWNERS`.
+- Docs-driven GitHub issue forms (`01-bug`, `02-feature`, `03-spec`) and updated PR template.
+- Bundled build script (`scripts/build.mjs`) using `esbuild`.
+
+### Changed
+
+- Build pipeline now separates bundling (`npm run build`) from static type checks (`npm run typecheck`).
+- Verification and CI workflows now run format/lint/typecheck/build/unit gates before integration/package checks.
+- README now links operating docs and documents desktop-only runtime posture explicitly.
 
 ## [0.7.0] - 2026-03-01
 

@@ -1,0 +1,62 @@
+name: Bug report
+description: Report a behavior regression or defect in vscode-tacos.
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use `TaCoS: Copy Diagnostics` and share only sanitized output.
+        Do not paste secrets, tokens, or private command history.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe expected behavior vs actual behavior.
+      placeholder: Expected ... but observed ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: spec_link
+    attributes:
+      label: Related SPECS.md section
+      description: Link the relevant heading in `SPECS.md` if this bug violates expected behavior.
+      placeholder: https://github.com/<org>/<repo>/blob/main/SPECS.md#...
+    validations:
+      required: false
+  - type: input
+    id: plan_link
+    attributes:
+      label: Related PLANS.md item
+      description: Link the execution item if this affects an active initiative.
+      placeholder: https://github.com/<org>/<repo>/blob/main/PLANS.md#...
+    validations:
+      required: false
+  - type: dropdown
+    id: trust_mode
+    attributes:
+      label: Workspace trust mode
+      options:
+        - trusted
+        - restricted
+        - not sure
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics (`TaCoS: Copy Diagnostics`)
+      render: text
+    validations:
+      required: true

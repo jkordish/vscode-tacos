@@ -25,8 +25,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Compile extension
-        run: npm run compile
+      - name: Quality gates (format, lint, typecheck, build, unit)
+        run: npm run verify:quick
 
       - name: Package VSIX
         run: |

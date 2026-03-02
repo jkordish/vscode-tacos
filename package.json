@@ -495,18 +495,21 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "build": "node ./scripts/build.mjs",
+    "build:watch": "node ./scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit -p ./",
+    "compile": "npm run build",
+    "watch": "npm run build:watch",
     "lint": "eslint . --ext .ts",
-    "format": "prettier --write \"{src,test}/**/*.ts\" \"*.{json,md,yml,yaml,cjs}\"",
-    "format:check": "prettier --check \"{src,test}/**/*.ts\" \"*.{json,md,yml,yaml,cjs}\"",
+    "format": "prettier --write \"{src,test,scripts}/**/*.{ts,mjs}\" \"*.{json,md,yml,yaml,cjs,mjs}\"",
+    "format:check": "prettier --check \"{src,test,scripts}/**/*.{ts,mjs}\" \"*.{json,md,yml,yaml,cjs,mjs}\"",
     "metrics:summary": "node ./scripts/metrics-summary.mjs",
     "test": "jest --runInBand",
-    "test:integration": "node ./test/integration/runTest.js",
-    "verify:quick": "npm run format:check && npm run lint && npm run compile && npm test",
+    "test:integration": "npm run build && node ./test/integration/runTest.js",
+    "verify:quick": "npm run format:check && npm run lint && npm run typecheck && npm run build && npm test",
     "verify": "npm run verify:quick && npm run test:integration && npx @vscode/vsce package --no-dependencies --out vscode-tacos-verify.vsix",
-    "package:vsix": "vsce package",
-    "vscode:prepublish": "npm run compile"
+    "package:vsix": "vsce package --no-dependencies",
+    "vscode:prepublish": "npm run build"
   },
   "devDependencies": {
     "@swc/core": "^1.15.13",
@@ -520,6 +523,7 @@
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "3.7.1",
     "axe-core": "^4.11.1",
+    "esbuild": "^0.25.11",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^10.1.1",
     "jest": "^30.2.0",

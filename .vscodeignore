@@ -2,6 +2,13 @@
 coverage/**
 docs/**
 !docs/privacy-safety.md
+AGENTS.md
+SPECS.md
+PLANS.md
+CONTRIBUTING.md
+SECURITY.md
+SUPPORT.md
+scripts/**
 src/**
 test/**
 .gitignore
