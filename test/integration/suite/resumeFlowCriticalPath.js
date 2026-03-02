@@ -11,115 +11,123 @@ async function run() {
   await extension.activate();
 
   const config = vscode.workspace.getConfiguration('tacos');
-  await config.update('metricsEnabled', true, vscode.ConfigurationTarget.Global);
-  await vscode.env.clipboard.writeText('Run auth tests before shipping this patch.');
-  await vscode.commands.executeCommand('tacos.clearCheckpointNote');
-  await vscode.commands.executeCommand('tacos.addQuickCheckpointNote');
-  await vscode.commands.executeCommand('tacos.appendToScratchpad');
-  await vscode.commands.executeCommand('tacos.showNow');
-  await wait(150);
+  const metricsEnabledInspected = config.inspect('metricsEnabled');
+  const originalMetricsEnabledGlobal = metricsEnabledInspected?.globalValue;
 
-  const runtime = await vscode.commands.executeCommand('tacos.__test.getRuntimeStateSnapshot');
-  assert.equal(runtime?.hasMetricSession, true, 'Expected metrics session during summary presentation.');
-  assert.equal(runtime?.panelOpen, true, 'Expected details panel to open after tacos.showNow.');
-  assert.equal(
-    runtime?.hasScratchSummary,
-    true,
-    'Expected scratch summary to be populated in critical resume flow.',
-  );
-  const priorPromotionTotal =
-    (runtime?.metricPriorPromotionCheckpoint ?? 0) +
-    (runtime?.metricPriorPromotionCorrections ?? 0) +
-    (runtime?.metricPriorPromotionScratchpad ?? 0);
-  assert.equal(
-    priorPromotionTotal > 0,
-    true,
-    'Expected prior-promotion attribution to be recorded for non-prompt summary presentation paths.',
-  );
+  try {
+    await config.update('metricsEnabled', true, vscode.ConfigurationTarget.Global);
+    await vscode.env.clipboard.writeText('Run auth tests before shipping this patch.');
+    await vscode.commands.executeCommand('tacos.clearCheckpointNote');
+    await vscode.commands.executeCommand('tacos.addQuickCheckpointNote');
+    await vscode.commands.executeCommand('tacos.appendToScratchpad');
+    await vscode.commands.executeCommand('tacos.showNow');
+    await wait(150);
 
-  const resumeFlow = await vscode.commands.executeCommand('tacos.__test.getResumeFlowSnapshot');
-  assert.ok(resumeFlow, 'Expected resume flow snapshot payload.');
-  assert.equal(
-    resumeFlow?.hasPanelSummary,
-    true,
-    'Expected panel summary to be available for critical resume flow.',
-  );
-  assert.equal(
-    resumeFlow?.hasCompanionHomeCard,
-    true,
-    'Expected Companion Home card marker in panel render output.',
-  );
-  assert.equal(
-    resumeFlow?.isCompanionHomeFirstCard,
-    true,
-    'Expected Companion Home to be the first panel card for 5-second scanning.',
-  );
-  assert.deepEqual(
-    resumeFlow?.companionSectionOrder,
-    ['now', 'next', 'blocked', 'restore'],
-    'Expected Companion Home section order to stay fixed as Now/Next/Blocked/Restore.',
-  );
-  assert.equal(
-    resumeFlow?.companionSlotSourceCount,
-    4,
-    'Expected each Companion Home section to expose one slot source marker.',
-  );
-  assert.equal(
-    typeof resumeFlow?.nextSlotSourceClass === 'string' &&
-      resumeFlow.nextSlotSourceClass.length > 0,
-    true,
-    'Expected Next slot to expose a source-class marker.',
-  );
-  assert.equal(
-    resumeFlow?.blockedSlotSourceClass?.startsWith('blocker:'),
-    true,
-    'Expected Blocked slot source-class marker to be blocker-derived.',
-  );
-  assert.equal(
-    resumeFlow?.restoreSlotSourceClass,
-    'restore:availability-and-trust',
-    'Expected Restore slot to expose a stable restore source marker.',
-  );
-  assert.equal(
-    (resumeFlow?.emphasisTokenCount ?? 0) >= 2,
-    true,
-    'Expected Companion Home to render explicit emphasis tokens for Next and Blocked slots.',
-  );
-  assert.equal(
-    ['primary', 'advisory', 'suppressed'].includes(resumeFlow?.nextEmphasisToken ?? ''),
-    true,
-    'Expected Next slot emphasis token to use supported token states.',
-  );
-  assert.equal(
-    ['primary', 'advisory', 'suppressed'].includes(resumeFlow?.blockedEmphasisToken ?? ''),
-    true,
-    'Expected Blocked slot emphasis token to use supported token states.',
-  );
-  assert.equal(
-    resumeFlow?.hasLegacyNextStepsCard,
-    false,
-    'Expected legacy Next Steps card to be removed from panel composition.',
-  );
-  assert.equal(
-    resumeFlow?.hasIntentEditor,
-    true,
-    'Expected inline intent editor controls in Companion Home.',
-  );
-  assert.equal(
-    resumeFlow?.hasIntentSourceLabel,
-    true,
-    'Expected intent source label in Companion Home.',
-  );
-  assert.equal(
-    resumeFlow?.hasLastActionCue,
-    true,
-    'Expected Last action retrieval cue marker in Companion Home.',
-  );
-  assert.equal(
-    (resumeFlow?.totalPrimaryCtaCount ?? 0) <= 1,
-    true,
-    'Expected at most one primary CTA marker across Next and Blocked sections.',
-  );
+    const runtime = await vscode.commands.executeCommand('tacos.__test.getRuntimeStateSnapshot');
+    assert.equal(
+      runtime?.hasMetricSession,
+      true,
+      'Expected metrics session during summary presentation.',
+    );
+    assert.equal(runtime?.panelOpen, true, 'Expected details panel to open after tacos.showNow.');
+    assert.equal(
+      runtime?.hasScratchSummary,
+      true,
+      'Expected scratch summary to be populated in critical resume flow.',
+    );
+    const priorPromotionTotal =
+      (runtime?.metricPriorPromotionCheckpoint ?? 0) +
+      (runtime?.metricPriorPromotionCorrections ?? 0) +
+      (runtime?.metricPriorPromotionScratchpad ?? 0);
+    assert.equal(
+      priorPromotionTotal > 0,
+      true,
+      'Expected prior-promotion attribution to be recorded for non-prompt summary presentation paths.',
+    );
+
+    const resumeFlow = await vscode.commands.executeCommand('tacos.__test.getResumeFlowSnapshot');
+    assert.ok(resumeFlow, 'Expected resume flow snapshot payload.');
+    assert.equal(
+      resumeFlow?.hasPanelSummary,
+      true,
+      'Expected panel summary to be available for critical resume flow.',
+    );
+    assert.equal(
+      resumeFlow?.hasCompanionHomeCard,
+      true,
+      'Expected Companion Home card marker in panel render output.',
+    );
+    assert.equal(
+      resumeFlow?.isCompanionHomeFirstCard,
+      true,
+      'Expected Companion Home to be the first panel card for 5-second scanning.',
+    );
+    assert.deepEqual(
+      resumeFlow?.companionSectionOrder,
+      ['now', 'next', 'blocked', 'restore'],
+      'Expected Companion Home section order to stay fixed as Now/Next/Blocked/Restore.',
+    );
+    assert.equal(
+      resumeFlow?.companionSlotSourceCount,
+      4,
+      'Expected each Companion Home section to expose one slot source marker.',
+    );
+    assert.equal(
+      typeof resumeFlow?.nextSlotSourceClass === 'string' &&
+        resumeFlow.nextSlotSourceClass.length > 0,
+      true,
+      'Expected Next slot to expose a source-class marker.',
+    );
+    assert.equal(
+      resumeFlow?.blockedSlotSourceClass?.startsWith('blocker:'),
+      true,
+      'Expected Blocked slot source-class marker to be blocker-derived.',
+    );
+    assert.equal(
+      resumeFlow?.restoreSlotSourceClass,
+      'restore:availability-and-trust',
+      'Expected Restore slot to expose a stable restore source marker.',
+    );
+    assert.equal(
+      (resumeFlow?.emphasisTokenCount ?? 0) >= 2,
+      true,
+      'Expected Companion Home to render explicit emphasis tokens for Next and Blocked slots.',
+    );
+    assert.equal(
+      ['primary', 'advisory', 'suppressed'].includes(resumeFlow?.nextEmphasisToken ?? ''),
+      true,
+      'Expected Next slot emphasis token to use supported token states.',
+    );
+    assert.equal(
+      ['primary', 'advisory', 'suppressed'].includes(resumeFlow?.blockedEmphasisToken ?? ''),
+      true,
+      'Expected Blocked slot emphasis token to use supported token states.',
+    );
+    assert.equal(
+      resumeFlow?.hasLegacyNextStepsCard,
+      false,
+      'Expected legacy Next Steps card to be removed from panel composition.',
+    );
+    assert.equal(
+      resumeFlow?.hasIntentEditor,
+      true,
+      'Expected inline intent editor controls in Companion Home.',
+    );
+    assert.equal(
+      resumeFlow?.hasIntentSourceLabel,
+      true,
+      'Expected intent source label in Companion Home.',
+    );
+    assert.equal(
+      resumeFlow?.hasLastActionCue,
+      true,
+      'Expected Last action retrieval cue marker in Companion Home.',
+    );
+    assert.equal(
+      (resumeFlow?.totalPrimaryCtaCount ?? 0) <= 1,
+      true,
+      'Expected at most one primary CTA marker across Next and Blocked sections.',
+    );
   if (resumeFlow?.hasPrimaryBlockerAction) {
     assert.equal(
       resumeFlow?.primaryBlockerActionCount,
@@ -283,57 +291,64 @@ async function run() {
     'Expected Resume Path checklist to render exactly three toggle steps.',
   );
 
-  if ((resumeFlow?.nextStepsCount ?? 0) > 0) {
-    assert.equal(
-      Boolean(resumeFlow?.hasPrimaryNextAction || resumeFlow?.hasRecommendedFirstAction),
-      true,
-      'Expected either a primary safe action or recommended first action cue when next steps exist.',
-    );
+    if ((resumeFlow?.nextStepsCount ?? 0) > 0) {
+      assert.equal(
+        Boolean(resumeFlow?.hasPrimaryNextAction || resumeFlow?.hasRecommendedFirstAction),
+        true,
+        'Expected either a primary safe action or recommended first action cue when next steps exist.',
+      );
 
-    if (resumeFlow?.hasPrimaryNextAction) {
-      assert.ok(
-        typeof resumeFlow?.primaryNextActionLabel === 'string' &&
-          resumeFlow.primaryNextActionLabel.length > 0,
-        'Expected primary next action label to be non-empty.',
-      );
-      assert.equal(
-        resumeFlow?.nextSafeStatus,
-        'safe',
-        'Expected Next status marker to be safe when a primary action exists.',
-      );
-      assert.equal(
-        resumeFlow?.hasHomePrimaryNextAction,
-        true,
-        'Expected primary next action CTA marker in Companion Home.',
-      );
-      assert.equal(
-        resumeFlow?.primaryNextActionCtaCount,
-        1,
-        'Expected exactly one canonical primary next action CTA in the panel.',
-      );
-      assert.equal(
-        resumeFlow?.primaryBlockerActionCount,
-        0,
-        'Expected next-primary mode to suppress primary blocker action markers.',
-      );
-      assert.equal(
-        resumeFlow?.hasPrimaryNextActionRationale,
-        true,
-        'Expected primary next action rationale marker in Companion Home.',
-      );
-    } else {
-      assert.equal(
-        resumeFlow?.nextSafeStatus,
-        'advisory',
-        'Expected Next status marker to be advisory when no primary action exists.',
-      );
-      if (!resumeFlow?.hasNextActionCandidate) {
+      if (resumeFlow?.hasPrimaryNextAction) {
         assert.ok(
-          (resumeFlow?.advisoryOnlyRowCount ?? 0) > 0,
-          'Expected advisory-only copy when no safe one-click action is available.',
+          typeof resumeFlow?.primaryNextActionLabel === 'string' &&
+            resumeFlow.primaryNextActionLabel.length > 0,
+          'Expected primary next action label to be non-empty.',
         );
+        assert.equal(
+          resumeFlow?.nextSafeStatus,
+          'safe',
+          'Expected Next status marker to be safe when a primary action exists.',
+        );
+        assert.equal(
+          resumeFlow?.hasHomePrimaryNextAction,
+          true,
+          'Expected primary next action CTA marker in Companion Home.',
+        );
+        assert.equal(
+          resumeFlow?.primaryNextActionCtaCount,
+          1,
+          'Expected exactly one canonical primary next action CTA in the panel.',
+        );
+        assert.equal(
+          resumeFlow?.primaryBlockerActionCount,
+          0,
+          'Expected next-primary mode to suppress primary blocker action markers.',
+        );
+        assert.equal(
+          resumeFlow?.hasPrimaryNextActionRationale,
+          true,
+          'Expected primary next action rationale marker in Companion Home.',
+        );
+      } else {
+        assert.equal(
+          resumeFlow?.nextSafeStatus,
+          'advisory',
+          'Expected Next status marker to be advisory when no primary action exists.',
+        );
+        if (!resumeFlow?.hasNextActionCandidate) {
+          assert.ok(
+            (resumeFlow?.advisoryOnlyRowCount ?? 0) > 0,
+            'Expected advisory-only copy when no safe one-click action is available.',
+          );
+        }
       }
     }
+  } finally {
+    await config.update(
+      'metricsEnabled',
+      typeof originalMetricsEnabledGlobal === 'undefined' ? undefined : originalMetricsEnabledGlobal,
+      vscode.ConfigurationTarget.Global,
+    );
   }
 }
 
