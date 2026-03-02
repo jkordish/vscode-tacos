@@ -216,6 +216,28 @@ export const PANEL_WEBVIEW_STYLE = `
         margin: 0;
         padding: 0;
       }
+      .evidence-group {
+        list-style: none;
+        margin-bottom: var(--space-2);
+      }
+      .evidence-group:last-child {
+        margin-bottom: 0;
+      }
+      .extra-evidence-group {
+        display: none;
+      }
+      .evidence-list.show-more .extra-evidence-group {
+        display: block;
+      }
+      .evidence-group-heading {
+        display: block;
+        margin-bottom: var(--space-2);
+      }
+      .evidence-sublist {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
       .evidence-item {
         border: 1px solid var(--vscode-widget-border);
         border-radius: var(--radius-2);

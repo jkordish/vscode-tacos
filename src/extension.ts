@@ -156,7 +156,7 @@ import {
   renderCompanionNextSteps,
   renderCompanionNudgeCard,
   renderConfidenceCard,
-  renderEvidenceListItems,
+  renderGroupedEvidenceListItems,
   renderGroupedActionSections,
   renderIntentEditor,
   renderResumePathCard,
@@ -181,7 +181,7 @@ import { renderResumeStackCard } from './resumeStackCard';
 import { resolveScopeBranch as resolveScopeBranchFromInputs } from './scopeBranch';
 import { applyIntentOverrideToSummary, buildResumeSummary } from './summary';
 import { buildStandupUpdate } from './standup';
-import { buildTimelineGroups } from './timeline';
+import { buildEvidenceRelevanceGroups, buildTimelineGroups } from './timeline';
 import { buildTrustCue } from './trustCue';
 import { chooseWorkspaceRoot } from './workspaceRoot';
 import type {
@@ -5110,8 +5110,16 @@ function renderWebview(
     evidenceById,
   });
   const topFiles = renderTopFilesListItems(summary.topFiles);
-  const evidenceItems = renderEvidenceListItems(summary.evidenceCatalog ?? []);
-  const hiddenEvidenceCount = Math.max(0, (summary.evidenceCatalog?.length ?? 0) - 5);
+  const evidenceCatalog = summary.evidenceCatalog ?? [];
+  const evidenceGroups = buildEvidenceRelevanceGroups(
+    evidenceCatalog,
+    rankedPrimaryCandidate?.evidenceIds ?? [],
+  );
+  const evidenceItems =
+    evidenceGroups.length > 0
+      ? renderGroupedEvidenceListItems(evidenceGroups)
+      : '<li>None captured</li>';
+  const hiddenEvidenceCount = Math.max(0, evidenceCatalog.length - 5);
   const recapDoneItems = summary.doneSinceLastResume?.slice(0, 3) ?? [];
   const recapPendingItems = summary.pendingBlocked?.slice(0, 3) ?? [];
   const recapDoneList = recapDoneItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
@@ -5214,6 +5222,8 @@ function renderWebview(
   if (!demoMode && primaryCtaDecision.winner !== 'none') {
     recordCompanionPrimaryCtaImpression(companionSlotSources.primaryCta);
   }
+  const evidenceTrayActionHtml =
+    '<button type="button" class="secondary" data-action="openEvidenceTray">Open evidence tray</button>';
   const panelSectionState =
     activeExtensionContext && panelWorkspaceRoot
       ? resolvePanelSectionState(activeExtensionContext, panelWorkspaceRoot)
@@ -5581,6 +5591,7 @@ function renderWebview(
       primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
       whySurfacedActionTrustedHtml:
         '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>',
+      evidenceTrayActionTrustedHtml: evidenceTrayActionHtml,
       nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
       nextStepsListTrustedHtml: companionNextSteps,
       hasBlocker: blockerDecision.hasBlocker,

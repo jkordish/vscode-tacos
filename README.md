@@ -77,6 +77,7 @@ TaCoS is desktop-first today. It runs in the Node-hosted VS Code extension runti
 - Exactly one primary CTA is marked per context across `Next` and `Blocked`; non-primary actions remain available as advisory/secondary controls.
 - `Next` and `Blocked` state captions render explicit emphasis tokens (`PRIMARY`, `ADVISORY`, `SUPPRESSED`) with reduced-motion-safe transitions.
 - Companion Home includes a one-click `Why am I seeing this?` action that opens `More Context` → `Trust Center` → `Why am I seeing this?` explainability details.
+- Companion Home includes a one-click `Open evidence tray` action that opens `More Context` → `Evidence`, where evidence is grouped by surfaced-decision relevance.
 
 ## Status Bar Behavior
 

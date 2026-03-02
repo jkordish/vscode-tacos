@@ -55,6 +55,7 @@ Principles:
 - Focus-triggered summary presentation now runs through a deterministic surface broker (`none` vs `statusbar` vs `panel` vs `notification`) with explicit reason enums; `tacos.uiSurface` remains a hard cap/user override.
 - Companion Home keeps fixed `Now/Next/Blocked/Restore` slot order while a central CTA arbiter enforces one primary action across `Next` and `Blocked`; emphasis tokens (`PRIMARY`/`ADVISORY`/`SUPPRESSED`) are motion-safe and a11y-aware.
 - Companion Home includes a one-click `Why am I seeing this?` action that expands `More Context` and the nested Trust Center explainability disclosure.
+- Companion Home includes a one-click `Open evidence tray` action; Evidence now groups rows by surfaced-decision relevance while retaining the existing safe open/static affordance semantics.
 - Command palette and keybinding surfaces.
 - Collapsible panel sections keep stable order and persisted expansion state; policy emphasis is conveyed via summary badges/accent instead of auto-expansion or reordering, and only targets sections currently rendered by settings/trust mode.
 

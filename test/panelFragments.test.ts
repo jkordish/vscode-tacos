@@ -1,11 +1,12 @@
 import type { CompanionNudge } from '../src/companionNudges';
 import type { NextStepAction } from '../src/nextStepActions';
-import type { TimelineGroup } from '../src/timeline';
+import type { EvidenceRelevanceGroup, TimelineGroup } from '../src/timeline';
 import {
   renderCheckpointCard,
   renderCompanionNextSteps,
   renderCompanionNudgeCard,
   renderConfidenceCard,
+  renderGroupedEvidenceListItems,
   renderEvidenceListItems,
   renderGroupedActionSections,
   renderIntentEditor,
@@ -153,6 +154,56 @@ describe('panelFragments', () => {
     expect(topLinks).toContain('data-action="openLink"');
     expect(evidence).toContain('data-evidence-affordance="open"');
     expect(evidence).toContain('data-evidence-affordance="static"');
+  });
+
+  it('renders grouped evidence tray sections with stable affordances', () => {
+    const groups: EvidenceRelevanceGroup[] = [
+      {
+        key: 'primary',
+        label: 'For this surfaced decision',
+        items: [{ id: 'file:src/extension.ts', kind: 'file', label: 'src/extension.ts' }],
+      },
+      {
+        key: 'context',
+        label: 'Context-only evidence',
+        items: [{ id: 'git:status', kind: 'git', label: 'git status' }],
+      },
+    ];
+
+    const html = renderGroupedEvidenceListItems(groups);
+    expect(html).toContain('data-evidence-group="primary"');
+    expect(html).toContain('For this surfaced decision');
+    expect(html).toContain('data-evidence-group="context"');
+    expect(html).toContain('Context-only evidence');
+    expect(html).toContain('data-action="openEvidence"');
+    expect(html).toContain('data-evidence-affordance="open"');
+    expect(html).toContain('data-evidence-affordance="static"');
+  });
+
+  it('marks groups with only hidden rows so headings stay hidden until expanded', () => {
+    const groups: EvidenceRelevanceGroup[] = [
+      {
+        key: 'primary',
+        label: 'For this surfaced decision',
+        items: [
+          { id: 'file:1', kind: 'file', label: 'file-1' },
+          { id: 'file:2', kind: 'file', label: 'file-2' },
+          { id: 'file:3', kind: 'file', label: 'file-3' },
+          { id: 'file:4', kind: 'file', label: 'file-4' },
+          { id: 'file:5', kind: 'file', label: 'file-5' },
+        ],
+      },
+      {
+        key: 'context',
+        label: 'Context-only evidence',
+        items: [{ id: 'git:status', kind: 'git', label: 'git status' }],
+      },
+    ];
+
+    const html = renderGroupedEvidenceListItems(groups);
+    expect(html).toContain('data-evidence-group="primary"');
+    expect(html).toContain('data-evidence-group="context"');
+    expect(html).toContain('class="evidence-group extra-evidence-group"');
   });
 
   it('suppresses duplicate next-step action button when the same step is surfaced above the list', () => {
