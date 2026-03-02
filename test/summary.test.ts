@@ -157,11 +157,33 @@ describe('buildResumeSummary', () => {
     const summary = buildResumeSummary(sampleSignals());
 
     expect(summary.doneSinceLastResume).toEqual(['npm run build']);
-    expect(summary.changesSinceLastResume?.[0]).toContain('Diffstat:');
+    expect(summary.changesSinceLastResume).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Code:'),
+        expect.stringContaining('Runs:'),
+        expect.stringContaining('Key files:'),
+        expect.stringContaining('Novelty:'),
+      ]),
+    );
     expect(summary.pendingBlocked?.[0]).toContain('Failing command still unresolved');
     expect(summary.detailsMarkdown).toContain('## Session recap');
     expect(summary.detailsMarkdown).toContain('Changes since last resume');
+    expect(summary.detailsMarkdown).toContain('Novelty profile:');
     expect(summary.detailsMarkdown).toContain('Recommended first action');
+  });
+
+  it('builds a structured novelty profile from changes, runs, blockers, and context', () => {
+    const summary = buildResumeSummary(sampleSignals());
+
+    expect(summary.noveltyProfile).toMatchObject({
+      bucket: 'medium',
+      changedFilesCount: 1,
+      runCount: 2,
+      blockerCount: 1,
+      linkCount: 1,
+    });
+    expect(summary.noveltyProfile?.score ?? 0).toBeGreaterThan(0.34);
+    expect(summary.noveltyProfile?.score ?? 1).toBeLessThan(0.67);
   });
 
   it('marks low-confidence summaries explicitly when evidence is sparse', () => {
@@ -184,6 +206,8 @@ describe('buildResumeSummary', () => {
     expect(summary.candidateIntents?.length ?? 0).toBeGreaterThan(0);
     expect(summary.nextSteps[0]).toContain('Unclear intent');
     expect(summary.links.length).toBe(0);
+    expect(summary.noveltyProfile?.bucket).toBe('low');
+    expect(summary.noveltyProfile?.score ?? 1).toBeLessThan(0.34);
   });
 
   it('enters long-gap reorientation mode with safe starter copy when threshold is exceeded', () => {

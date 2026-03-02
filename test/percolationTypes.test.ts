@@ -210,6 +210,51 @@ describe('createPercolationPolicyInput', () => {
     });
   });
 
+  it('feeds summary novelty profile into default candidate novelty scores', () => {
+    const highNoveltySummary = buildSummary({
+      noveltyProfile: {
+        score: 0.9,
+        bucket: 'high',
+        changedFilesCount: 6,
+        runCount: 3,
+        blockerCount: 1,
+        keyFileCount: 3,
+        linkCount: 1,
+        gitContextCount: 2,
+      },
+    });
+    const lowNoveltySummary = buildSummary({
+      noveltyProfile: {
+        score: 0.1,
+        bucket: 'low',
+        changedFilesCount: 0,
+        runCount: 0,
+        blockerCount: 0,
+        keyFileCount: 0,
+        linkCount: 0,
+        gitContextCount: 0,
+      },
+      lastFailingCommand: undefined,
+    });
+
+    const highInput = createPercolationPolicyInput(highNoveltySummary, {
+      now: highNoveltySummary.generatedAt,
+    });
+    const lowInput = createPercolationPolicyInput(lowNoveltySummary, {
+      now: lowNoveltySummary.generatedAt,
+    });
+    const highRecommended = highInput.candidates.find(
+      (candidate) => candidate.kind === 'recommended-action',
+    );
+    const lowRecommended = lowInput.candidates.find(
+      (candidate) => candidate.kind === 'recommended-action',
+    );
+
+    expect((highRecommended?.novelty ?? 0) > (lowRecommended?.novelty ?? 1)).toBe(true);
+    expect(highRecommended?.meta.noveltyBucket).toBe('high');
+    expect(lowRecommended?.meta.noveltyBucket).toBe('low');
+  });
+
   it('uses explicit signals and candidates when provided', () => {
     const summary = buildSummary();
     const input = createPercolationPolicyInput(summary, {

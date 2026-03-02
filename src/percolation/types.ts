@@ -1,4 +1,4 @@
-import type { ResumeSummary } from '../types';
+import type { ResumeSummary, SummaryNoveltyBucket } from '../types';
 
 export const PERCOLATION_SCHEMA_VERSION = 1;
 
@@ -705,8 +705,56 @@ function defaultSignalsFromSummary(summary: ResumeSummary, now: number): Normali
   return signals.map((signal) => normalizeSignal(signal, now));
 }
 
+interface ResolvedSummaryNovelty {
+  score: number;
+  bucket: SummaryNoveltyBucket;
+}
+
+function bucketForNoveltyScore(score: number): SummaryNoveltyBucket {
+  if (score >= 0.67) {
+    return 'high';
+  }
+  if (score >= 0.34) {
+    return 'medium';
+  }
+  return 'low';
+}
+
+function resolveSummaryNovelty(summary: ResumeSummary): ResolvedSummaryNovelty {
+  const explicitProfile = summary.noveltyProfile;
+  if (explicitProfile) {
+    const normalizedScore = clamp01(explicitProfile.score, 0.5);
+    return {
+      score: normalizedScore,
+      bucket: explicitProfile.bucket ?? bucketForNoveltyScore(normalizedScore),
+    };
+  }
+
+  const hasChanges =
+    (summary.changesSinceLastResume ?? []).some(
+      (line) => line.trim() && !/no recent changes captured/iu.test(line),
+    ) || summary.topFiles.length > 0;
+  const hasBlocker = Boolean(summary.lastFailingCommand);
+  const baseline = hasChanges ? 0.45 : 0.15;
+  const blockerBoost = hasBlocker ? 0.2 : 0;
+  const score = clamp01(baseline + blockerBoost, baseline);
+  return {
+    score,
+    bucket: bucketForNoveltyScore(score),
+  };
+}
+
 function defaultCandidatesFromSummary(summary: ResumeSummary): SurfacedItem[] {
   const candidates: Array<Partial<SurfacedItem>> = [];
+  const summaryNovelty = resolveSummaryNovelty(summary);
+  const clarificationNovelty = clamp01(0.45 + summaryNovelty.score * 0.15, 0.55);
+  const recommendedNovelty = clamp01(0.2 + summaryNovelty.score * 0.5, 0.4);
+  const blockedNovelty = clamp01(
+    0.25 + summaryNovelty.score * 0.45 + (summary.lastFailingCommand ? 0.05 : 0),
+    0.4,
+  );
+  const nextStepNovelty = clamp01(0.2 + summaryNovelty.score * 0.42, 0.4);
+  const evidenceNovelty = clamp01(0.12 + summaryNovelty.score * 0.24, 0.25);
 
   if (summary.lowConfidence) {
     const firstSafeStep = summary.nextSteps[0]?.trim() ?? '';
@@ -721,12 +769,14 @@ function defaultCandidatesFromSummary(summary: ResumeSummary): SurfacedItem[] {
       actionId: 'sessionAddCheckpoint',
       confidence: 0.95,
       urgency: 0.82,
-      novelty: 0.55,
+      novelty: clarificationNovelty,
       interruptCost: 0.12,
       evidenceIds: summary.nextStepEvidenceIds?.[0] ?? [],
       meta: {
         lowConfidence: true,
         fallback: 'clarification-first',
+        noveltyBucket: summaryNovelty.bucket,
+        noveltyScore: roundMeta(summaryNovelty.score),
       },
     });
   }
@@ -740,11 +790,13 @@ function defaultCandidatesFromSummary(summary: ResumeSummary): SurfacedItem[] {
       actionId: 'runNextStepAction',
       confidence: summary.lowConfidence ? 0.35 : 0.8,
       urgency: 0.7,
-      novelty: 0.4,
+      novelty: recommendedNovelty,
       interruptCost: 0.45,
       evidenceIds: summary.nextStepEvidenceIds?.[0] ?? [],
       meta: {
         source: summary.source,
+        noveltyBucket: summaryNovelty.bucket,
+        noveltyScore: roundMeta(summaryNovelty.score),
       },
     });
   }
@@ -758,9 +810,13 @@ function defaultCandidatesFromSummary(summary: ResumeSummary): SurfacedItem[] {
       actionId: summary.lastFailingCommand ? 'restoreCopyFailingCommand' : undefined,
       confidence: summary.lowConfidence ? 0.4 : 0.75,
       urgency: 0.9,
-      novelty: 0.4,
+      novelty: blockedNovelty,
       interruptCost: 0.55,
       evidenceIds: summary.lastActionEvidenceId ? [summary.lastActionEvidenceId] : [],
+      meta: {
+        noveltyBucket: summaryNovelty.bucket,
+        noveltyScore: roundMeta(summaryNovelty.score),
+      },
     });
   }
 
@@ -773,9 +829,13 @@ function defaultCandidatesFromSummary(summary: ResumeSummary): SurfacedItem[] {
       actionId: 'copyNextSteps',
       confidence: summary.lowConfidence ? 0.45 : 0.72,
       urgency: 0.65,
-      novelty: 0.4,
+      novelty: nextStepNovelty,
       interruptCost: 0.35,
       evidenceIds: summary.nextStepEvidenceIds?.[0] ?? [],
+      meta: {
+        noveltyBucket: summaryNovelty.bucket,
+        noveltyScore: roundMeta(summaryNovelty.score),
+      },
     });
   }
 
@@ -788,11 +848,13 @@ function defaultCandidatesFromSummary(summary: ResumeSummary): SurfacedItem[] {
       actionId: 'openEvidence',
       confidence: 0.8,
       urgency: 0.4,
-      novelty: 0.25,
+      novelty: evidenceNovelty,
       interruptCost: 0.15,
       evidenceIds: summary.evidenceCatalog.map((item) => item.id),
       meta: {
         hasExternalLinks: summary.links.some((link) => link.kind === 'url'),
+        noveltyBucket: summaryNovelty.bucket,
+        noveltyScore: roundMeta(summaryNovelty.score),
       },
     });
   }

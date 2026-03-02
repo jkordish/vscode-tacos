@@ -146,7 +146,7 @@ Status vocabulary used in this file:
 
 ### P8. Signal normalization and resume semantics hardening
 
-- status: `doing`
+- status: `done`
 - why: percolation quality depends on normalized, deterministic signals that are safe across trusted and restricted modes.
 - scope: Epic `#228` core signal semantics and ranking-prior upgrades (DP-401 / `#248`, DP-402 / `#249`, DP-403 / `#250`, DP-404 / `#251`) before novelty/hash follow-ons.
 - dependencies: P3, P4.
@@ -155,10 +155,10 @@ Status vocabulary used in this file:
   - completed DP-402 / `#249` by enriching git semantic adapters with explicit `branch-switch`, `git-commit`, and `git-divergence` signals plus SHA-256/abbrev-safe parsing.
   - completed DP-403 / `#250` by upgrading blocker detection to scored cross-source arbitration with explicit severity/confidence/actionability metadata and blocker-source metric counters.
   - completed DP-404 / `#251` by integrating checkpoint notes, saved corrections, and scratchpad context as deterministic ranking priors with correction-precedence conflict handling and prior-promotion metrics.
+  - completed DP-405 / `#252` by upgrading `Changes Since Last Time` precision buckets (`Code`/`Runs`/`Blocker`/`Key files`/`Git`/`References`), adding deterministic summary novelty profiling, feeding novelty into default percolation candidate scoring, and exporting novelty bucket distribution counters in local metrics.
+  - completed DP-406 / `#253` by implementing auto-trigger no-change fingerprint v2 (partition-aware payload), partition-scoped nudge/noise-budget suppression memory keys, and explicit suppression-state reset rules when task partitions switch.
 - immediate next actions:
-  - sequence DP-405 (`#252`) to improve changes/novelty precision for ranking inputs.
-  - sequence DP-406 (`#253`) for no-change hash v2 and partition-switch suppression reset semantics.
-  - close Epic `#228` once remaining child issues land and verify gates stay green on `main`.
+  - close Epic `#228` with all child issues complete and keep `verify:quick` + integration suites green on `main`.
 - risks/rollback:
   - risk: duplicated or stale signal bundles can skew ranking behavior.
   - rollback: fall back to summary-only signal defaults while preserving adapter tests for incremental reland.
@@ -169,6 +169,8 @@ Status vocabulary used in this file:
   - https://github.com/jkordish/vscode-tacos/issues/248
   - https://github.com/jkordish/vscode-tacos/issues/249
   - https://github.com/jkordish/vscode-tacos/issues/250
+  - https://github.com/jkordish/vscode-tacos/issues/252
+  - https://github.com/jkordish/vscode-tacos/issues/253
 
 ## Blockers
 

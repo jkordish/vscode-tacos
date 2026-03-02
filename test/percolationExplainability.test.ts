@@ -84,18 +84,18 @@ describe('percolation explainability payload', () => {
     });
 
     expect(formatPercolationExplainabilityLines(payload)).toMatchInlineSnapshot(`
-[
-  "Surfaced item: Recommended first action",
-  "Kind: recommended-action",
-  "Score: 0.605",
-  "Confidence: 80%",
-  "Evidence IDs: ev-1",
-  "Suppression: cooldown",
-  "Reason: A deterministic ranking policy selected the highest-scoring candidate.",
-  "Reason: Top weighted factors: urgency=0.210, actionability=0.200, continuity=0.160.",
-  "Reason: Surfacing is currently suppressed by cooldown.",
-  "Missing signal: No recent failing command signal was detected.",
-]
-`);
+     [
+       "Surfaced item: Recommended first action",
+       "Kind: recommended-action",
+       "Score: 0.608",
+       "Confidence: 80%",
+       "Evidence IDs: ev-1",
+       "Suppression: cooldown",
+       "Reason: A deterministic ranking policy selected the highest-scoring candidate.",
+       "Reason: Top weighted factors: urgency=0.210, actionability=0.200, continuity=0.160.",
+       "Reason: Surfacing is currently suppressed by cooldown.",
+       "Missing signal: No recent failing command signal was detected.",
+     ]
+    `);
   });
 });
