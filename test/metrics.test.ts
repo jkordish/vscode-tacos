@@ -188,7 +188,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[1]).toContain('"/workspace/repo,feature"');
     expect(lines[1]).toContain(',statusbar,,,,,0,unknown,');
     expect(lines[1]).toContain(',2,next-step-action:openFile,1,1,');
-    expect(lines[1]).toContain(',1,,,,,,');
+    expect(lines[1]).toContain(',,1,,,,,');
     expect(lines[1]).toContain(',0.7500,0.2500,0.5000,1.0000');
   });
 });

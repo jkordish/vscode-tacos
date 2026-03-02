@@ -210,6 +210,40 @@ describe('decidePrimaryBlocker', () => {
     expect(decision.actionabilityScore).toBeLessThan(0.4);
   });
 
+  it('keeps low-confidence checkpoint guidance ahead of no-next-steps fallback', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      lowConfidence: true,
+      hasCheckpointNote: false,
+      hasNextSteps: false,
+      hasFailingTask: false,
+      lastFailingCommand: undefined,
+      diagnosticsErrorCount: 0,
+      switchedBranches: false,
+    });
+
+    expect(decision.kind).toBe('lowConfidence');
+    expect(decision.action?.type).toBe('sessionAddCheckpoint');
+  });
+
+  it('keeps task-failure blocker ahead of command-failure blocker when both exist', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      hasFailingTask: true,
+      lastTaskName: 'npm run verify',
+      lastTaskExitCode: 1,
+      lastFailingCommand: 'npm run verify',
+      availability: availability({
+        canRerunTask: false,
+        canCopyFailingCommand: true,
+      }),
+      diagnosticsErrorCount: 0,
+      switchedBranches: false,
+    });
+
+    expect(decision.kind).toBe('taskFailure');
+  });
+
   it('keeps actionable command recovery above high-count diagnostics', () => {
     const decision = decidePrimaryBlocker({
       ...baseInput(),

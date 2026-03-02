@@ -416,6 +416,10 @@ function buildNoNextStepsCandidate(input: BlockerModelInput): BlockerCandidate |
 }
 
 function compareCandidates(left: BlockerCandidate, right: BlockerCandidate): number {
+  if (left.precedenceRank !== right.precedenceRank) {
+    return left.precedenceRank - right.precedenceRank;
+  }
+
   if (left.priorityScore !== right.priorityScore) {
     return right.priorityScore - left.priorityScore;
   }
@@ -429,7 +433,7 @@ function compareCandidates(left: BlockerCandidate, right: BlockerCandidate): num
     return right.actionabilityScore - left.actionabilityScore;
   }
 
-  return left.precedenceRank - right.precedenceRank;
+  return 0;
 }
 
 export function decidePrimaryBlocker(input: BlockerModelInput): BlockerDecision {
