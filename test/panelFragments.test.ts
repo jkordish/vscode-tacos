@@ -180,6 +180,32 @@ describe('panelFragments', () => {
     expect(html).toContain('data-evidence-affordance="static"');
   });
 
+  it('marks groups with only hidden rows so headings stay hidden until expanded', () => {
+    const groups: EvidenceRelevanceGroup[] = [
+      {
+        key: 'primary',
+        label: 'For this surfaced decision',
+        items: [
+          { id: 'file:1', kind: 'file', label: 'file-1' },
+          { id: 'file:2', kind: 'file', label: 'file-2' },
+          { id: 'file:3', kind: 'file', label: 'file-3' },
+          { id: 'file:4', kind: 'file', label: 'file-4' },
+          { id: 'file:5', kind: 'file', label: 'file-5' },
+        ],
+      },
+      {
+        key: 'context',
+        label: 'Context-only evidence',
+        items: [{ id: 'git:status', kind: 'git', label: 'git status' }],
+      },
+    ];
+
+    const html = renderGroupedEvidenceListItems(groups);
+    expect(html).toContain('data-evidence-group="primary"');
+    expect(html).toContain('data-evidence-group="context"');
+    expect(html).toContain('class="evidence-group extra-evidence-group"');
+  });
+
   it('suppresses duplicate next-step action button when the same step is surfaced above the list', () => {
     const action: NextStepAction = {
       stepIndex: 0,

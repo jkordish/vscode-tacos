@@ -306,9 +306,14 @@ export function renderGroupedEvidenceListItems(groups: EvidenceRelevanceGroup[])
   let evidenceIndex = 0;
   return groups
     .map((group) => {
+      let visibleRowCount = 0;
       const rows = group.items
         .map((item) => {
-          const hiddenClass = evidenceIndex >= 5 ? 'extra-evidence' : '';
+          const isHidden = evidenceIndex >= 5;
+          const hiddenClass = isHidden ? 'extra-evidence' : '';
+          if (!isHidden) {
+            visibleRowCount += 1;
+          }
           evidenceIndex += 1;
           return renderEvidenceListItem(item, hiddenClass);
         })
@@ -316,7 +321,8 @@ export function renderGroupedEvidenceListItems(groups: EvidenceRelevanceGroup[])
       if (!rows) {
         return '';
       }
-      return `<li class="evidence-group" data-evidence-group="${escapeHtml(group.key)}"><h4 class="section-heading-inline evidence-group-heading">${escapeHtml(group.label)}</h4><ul class="evidence-sublist">${rows}</ul></li>`;
+      const hiddenGroupClass = visibleRowCount === 0 ? ' extra-evidence-group' : '';
+      return `<li class="evidence-group${hiddenGroupClass}" data-evidence-group="${escapeHtml(group.key)}"><h4 class="section-heading-inline evidence-group-heading">${escapeHtml(group.label)}</h4><ul class="evidence-sublist">${rows}</ul></li>`;
     })
     .filter(Boolean)
     .join('');

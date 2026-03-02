@@ -223,6 +223,12 @@ export const PANEL_WEBVIEW_STYLE = `
       .evidence-group:last-child {
         margin-bottom: 0;
       }
+      .extra-evidence-group {
+        display: none;
+      }
+      .evidence-list.show-more .extra-evidence-group {
+        display: block;
+      }
       .evidence-group-heading {
         display: block;
         margin-bottom: var(--space-2);
