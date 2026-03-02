@@ -98,9 +98,10 @@ Status vocabulary used in this file:
 - recent progress:
   - completed DP-202 panel section emphasis behavior (badge + accent only) with stable ordering and persisted disclosure state.
   - hardened DP-202 with follow-up fixes: snapshot section-order parsing now reads rendered disclosures only, and emphasis focus avoids hidden timeline sections when `tacos.showTimeline` is off.
+  - completed DP-238 compact status-bar semantics with policy-driven class/reason labels, deterministic quiet-hours suppression cues, and rare active-mode elevation for high-risk blocked states.
 - immediate next actions:
-  - land DP-203 policy signal transparency follow-up.
-  - continue with DP-204 confidence threshold tuning with deterministic fixtures.
+  - land DP-239 notification decision broker with explicit reason enums.
+  - sequence DP-236 companion-slot policy wiring after notification broker reason classes stabilize.
 - risks/rollback:
   - risk: over-aggressive suppression hides useful cues.
   - rollback: revert to previous ranking/suppression default behavior.
@@ -108,6 +109,7 @@ Status vocabulary used in this file:
   - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
   - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
   - https://github.com/jkordish/vscode-tacos/issues/237
+  - https://github.com/jkordish/vscode-tacos/issues/238
   - https://github.com/jkordish/vscode-tacos/pull/267
 
 ## Blockers

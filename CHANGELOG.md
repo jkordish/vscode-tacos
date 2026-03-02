@@ -22,6 +22,8 @@ All notable changes to this project are documented in this file.
 - Release workflow now supports optional VS Code Marketplace publish when `VSCE_PAT` is configured.
 - README/operator docs now align with current trust/privacy/provider boundaries and troubleshooting flow.
 - Panel-emphasis policy now avoids targeting hidden `Timeline` sections when `tacos.showTimeline` is disabled, and integration snapshot section-order parsing now reads rendered disclosure markup only.
+- Status bar now uses compact policy-driven class/reason semantics with deterministic quiet-hours suppression labeling and rare active-mode elevation for high-risk blocked states.
+- Status bar quiet-window labeling now takes precedence over generic suppression reasons in active mode (including temporary quiet windows), and paused labels reflect their actual pause source.
 
 ## [0.7.0] - 2026-03-01
 
