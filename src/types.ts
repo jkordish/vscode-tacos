@@ -153,6 +153,7 @@ export interface MetricRecord {
   companionQuickActionsTaken?: number;
   companionNudgeImpressions?: number;
   companionPrimaryCtaImpressions?: number;
+  companionPrimaryCtaSourceClass?: string;
   companionPrimaryCtaClicks?: number;
   companionPrimaryCtaCompletions?: number;
   whySurfacedOpens?: number;

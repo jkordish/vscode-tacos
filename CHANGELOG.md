@@ -8,15 +8,18 @@ All notable changes to this project are documented in this file.
 
 - Docs-driven operating model docs: `AGENTS.md`, `SPECS.md`, `PLANS.md`.
 - Canonical design/implementation guide: `docs/DESIGN_AND_IMPLEMENTATION.md`.
+- Canonical privacy/safety guide: `docs/PRIVACY_AND_SAFETY.md` with compatibility redirect from `docs/privacy-safety.md`.
 - Repository governance docs: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `.github/CODEOWNERS`.
-- Docs-driven GitHub issue forms (`01-bug`, `02-feature`, `03-spec`) and updated PR template.
+- Docs-driven GitHub issue forms (`01-bug`, `02-feature`, `03-spec`) and stricter PR template contract.
 - Bundled build script (`scripts/build.mjs`) using `esbuild`.
+- Explicit manifest runtime posture via `extensionKind: [\"workspace\"]`.
 
 ### Changed
 
 - Build pipeline now separates bundling (`npm run build`) from static type checks (`npm run typecheck`).
-- Verification and CI workflows now run format/lint/typecheck/build/unit gates before integration/package checks.
-- README now links operating docs and documents desktop-only runtime posture explicitly.
+- Verification and CI workflows now run format/lint/typecheck/unit gates before integration/package checks.
+- Release workflow now supports optional VS Code Marketplace publish when `VSCE_PAT` is configured.
+- README/operator docs now align with current trust/privacy/provider boundaries and troubleshooting flow.
 
 ## [0.7.0] - 2026-03-01
 

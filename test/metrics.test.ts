@@ -114,6 +114,7 @@ describe('buildMetricsCsv', () => {
         companionForcedOpenDetailsClicks: 1,
         companionQuickActionsTaken: 3,
         companionPrimaryCtaImpressions: 2,
+        companionPrimaryCtaSourceClass: 'next-step-action:openFile',
         companionPrimaryCtaClicks: 1,
         companionPrimaryCtaCompletions: 1,
         helpfulnessRating: 4,
@@ -138,6 +139,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('summaryQuietActions');
     expect(lines[0]).toContain('interruptionTimingClass');
     expect(lines[0]).toContain('companionPrimaryCtaImpressions');
+    expect(lines[0]).toContain('companionPrimaryCtaSourceClass');
     expect(lines[0]).toContain('companionPrimaryCtaClicks');
     expect(lines[0]).toContain('companionPrimaryCtaCompletions');
     expect(lines[0]).toContain('resumePathCompletions');
@@ -154,6 +156,7 @@ describe('buildMetricsCsv', () => {
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('"/workspace/repo,feature"');
     expect(lines[1]).toContain(',statusbar,0,unknown,');
+    expect(lines[1]).toContain(',2,next-step-action:openFile,1,1,');
     expect(lines[1]).toContain(',0.7500,0.2500,0.5000,1.0000');
   });
 });

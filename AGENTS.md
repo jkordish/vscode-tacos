@@ -1,91 +1,99 @@
 # AGENTS.md
 
-## Purpose
+## Repo Identity
 
-`vscode-tacos` is a VS Code extension that helps users resume interrupted work with local-first summaries, safe next actions, and optional AI refinement.
+`vscode-tacos` is a TypeScript VS Code extension (`TaCoS Resume Brief`) that helps developers resume work after interruptions with local-first resume briefs, safe next actions, and optional AI refinement.
 
-This file is the operator contract for anyone changing this repository (humans and AI agents).
+TaCoS is desktop-first today. Do not claim browser/web extension support unless runtime architecture is intentionally split and validated.
 
 ## Repo Map
 
-- `src/` extension runtime and feature modules.
-- `src/webview/` panel rendering and webview client script.
-- `test/` unit tests (`*.test.ts`) and VS Code integration suites (`test/integration`).
-- `docs/` product, safety, testing, and release documentation.
-- `.github/` CI workflows, issue forms, PR template, ownership metadata.
-- `scripts/` build/report helpers.
+- `src/extension.ts`: activation, orchestration, command wiring, trust gates, provider selection.
+- `src/*`: deterministic domain logic (summary, redaction, trust cues, restore safety, metrics, partitions, notes, scratchpad).
+- `src/webview/*`: companion panel HTML/CSS/client behavior.
+- `test/*.test.ts`: unit tests.
+- `test/integration/*`: VS Code extension integration harness (`@vscode/test-electron`).
+- `docs/*`: user-facing and operator documentation.
+- `.github/*`: CI, release workflows, issue forms, PR template, ownership.
+- `scripts/*`: build and local report helpers.
 
 ## Canonical Commands
 
-- Install: `npm ci`
-- Build bundle: `npm run build`
-- Watch build: `npm run build:watch`
-- Typecheck: `npm run typecheck`
-- Lint: `npm run lint`
-- Format check: `npm run format:check`
-- Unit tests: `npm test`
-- Integration tests: `npm run test:integration`
-- Quick verify gate: `npm run verify:quick`
-- Full verify gate: `npm run verify`
-- Package VSIX: `npm run package:vsix`
+- `npm ci`
+- `npm run build`
+- `npm run build:watch`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run format:check`
+- `npm test`
+- `npm run test:integration`
+- `npm run verify:quick`
+- `npm run verify`
+- `npm run package:vsix`
 
-## Rules For Code Changes
+## Change Rules
 
 - Keep behavior local-first and safe-by-default.
 - Treat model output as untrusted; never bypass evidence/path/url validation.
-- Do not add networked behavior without explicit spec coverage and consent UX.
-- Keep restricted-mode behavior safe: risky collection and execution actions must remain gated.
-- Preserve deterministic unit-testable logic for core decision engines.
-- Avoid tool sprawl: one lint path, one format path, one unit-test path.
+- Preserve Restricted Mode trust boundaries for risky collection and execution actions.
+- Do not add hidden networked behavior or telemetry pipelines.
+- Keep deterministic logic unit-testable and covered.
 
-## When `SPECS.md` Must Be Updated
+## Required Updates By Change Type
 
-Update `SPECS.md` when a change does any of the following:
+If you change user-visible behavior:
 
-- adds, removes, or materially changes user-visible behavior,
-- changes safety/privacy/trust boundaries,
-- changes acceptance criteria for a feature,
-- introduces a new feature slice or retires one.
+- update `SPECS.md`, `README.md`, and `CHANGELOG.md`.
+- update `PLANS.md` status/sequence when work starts, pauses, or completes.
 
-## When `PLANS.md` Must Be Updated
+If you add/change a command:
 
-Update `PLANS.md` when:
+- update command docs (`README.md`, `docs/DESIGN_AND_IMPLEMENTATION.md`).
+- add/update unit or integration coverage for command wiring/behavior.
 
-- work starts, pauses, or completes on an initiative,
-- sequencing/dependencies change,
-- a new blocker appears or clears,
-- immediate next actions change,
-- release readiness or rollback posture changes.
+If you add/change a setting:
 
-## Documentation Update Triggers
+- update docs (`README.md`, `SPECS.md`, design doc).
+- add/update tests for config wiring and behavior toggles.
 
-Update docs in the same PR when changing:
+If you change privacy/trust/AI payload behavior:
 
-- commands/configuration (`README.md`, `docs/DESIGN_AND_IMPLEMENTATION.md`),
-- trust/privacy/sanitization behavior (`docs/privacy-safety.md`, `SPECS.md`),
-- test strategy or harness behavior (`docs/integration-test-harness.md`),
-- release/package flow (`README.md`, `PLANS.md`, release docs as needed).
+- update `docs/PRIVACY_AND_SAFETY.md`, `SPECS.md`, and tests in the same PR.
+- verify consent boundaries remain explicit and fail-closed behavior is preserved.
+
+If you change packaging/release behavior:
+
+- update `AGENTS.md`, workflow files, and release docs together.
+- verify `npm run package:vsix` and CI packaging smoke steps still pass.
 
 ## Testing Expectations Before Merge
 
-Minimum for behavior changes:
+Minimum for most changes:
 
 - `npm run format:check`
 - `npm run lint`
 - `npm run typecheck`
 - `npm test`
 
-Also run `npm run test:integration` when command wiring, activation behavior, workspace trust behavior, webview interactions, or restore actions are touched. If skipped, explain why in the PR.
+Also run `npm run test:integration` when touching activation, commands, settings wiring, webview flows, trust gates, restore flows, or provider behavior.
 
-## Release / Publish Expectations
+Run `npm run package:vsix` when touching packaging, manifest metadata, workflow/release paths, or build outputs.
 
-- `main` must stay packageable (`npm run package:vsix`).
-- Tag-based workflow attaches a VSIX artifact.
-- Marketplace publish is intentionally separate; maintainers must provide publish credentials/secrets before enabling automated publish.
+## Docs and Planning Expectations
 
-## Guardrails For Humans And AI Agents
+- `SPECS.md` is the canonical behavior contract.
+- `PLANS.md` is the active execution ledger (`queued`, `doing`, `blocked`, `done`).
+- Active TODOs belong in `PLANS.md` or relevant spec sections, not a floating `TODO.md`.
 
-- No silent behavior changes: update specs/plans/docs in the same PR.
-- No secret material in tests/docs/issues.
-- Do not claim web extension support unless runtime architecture is updated for browser constraints.
-- Prefer small, reviewable commits that preserve passing gates.
+## Release and Publish Expectations
+
+- `main` must remain verify-clean and packageable.
+- Tag workflow must produce a VSIX artifact.
+- Marketplace publish is optional and credential-gated (`VSCE_PAT`), with explicit docs for missing config.
+
+## Guardrails For Humans and AI Agents
+
+- No silent behavior changes.
+- No secrets in docs/tests/issues.
+- No large refactor churn without explicit plan/spec updates.
+- Keep changes reviewable and tightly scoped.

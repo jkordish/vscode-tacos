@@ -1,31 +1,41 @@
 # Security Policy
 
-## Supported Versions
+## Reporting Security or Privacy Issues
 
-Current `main` branch is the supported security baseline.
+Do not report sensitive vulnerabilities in public issues.
 
-## Reporting a Vulnerability
+Preferred path:
 
-For suspected vulnerabilities, do not open a public issue.
-
-Use one of the following:
-
-1. GitHub Security Advisory (preferred):
-   - `Security` tab -> `Report a vulnerability`
-2. If advisory flow is unavailable, open a minimal issue without exploit details and request a private channel.
+1. GitHub Security Advisory (`Security` -> `Report a vulnerability`).
+2. If unavailable, open a minimal public issue requesting a private channel (without exploit details).
 
 Include:
 
 - affected version/commit,
-- impact summary,
-- reproduction steps,
-- proof-of-concept artifacts with secrets removed.
+- impact and attack surface,
+- reproducible steps,
+- sanitized proof artifacts.
 
-## Security Boundaries In This Repo
+## What Is Security/Privacy Sensitive Here
 
-- Workspace trust mode gates risky collection/actions.
-- AI payloads are sanitized and consent-gated.
-- API keys are stored in VS Code SecretStorage.
-- URLs and file paths are validated before action execution.
+Given TaCoS handles local context and optional AI payloads, sensitive areas include:
 
-Changes that modify these boundaries must update `SPECS.md`, `PLANS.md`, and relevant safety docs in the same PR.
+- trust/restricted-mode guard bypasses,
+- redaction/sanitization failures,
+- provider payload consent boundary regressions,
+- secret handling/storage regressions,
+- unsafe file/url/action validation bypasses,
+- diagnostics/metrics leaking unexpected sensitive data.
+
+## Supported Version Policy
+
+`main` is the active supported security baseline.
+
+## Maintainer Handling Expectations
+
+For security/privacy-impacting changes, update in the same PR:
+
+- `SPECS.md`
+- `docs/PRIVACY_AND_SAFETY.md`
+- relevant tests
+- `CHANGELOG.md` when user-visible behavior changes

@@ -38,6 +38,32 @@ async function run() {
     true,
     'Expected Companion Home to be the first panel card for 5-second scanning.',
   );
+  assert.deepEqual(
+    resumeFlow?.companionSectionOrder,
+    ['now', 'next', 'blocked', 'restore'],
+    'Expected Companion Home section order to stay fixed as Now/Next/Blocked/Restore.',
+  );
+  assert.equal(
+    resumeFlow?.companionSlotSourceCount,
+    4,
+    'Expected each Companion Home section to expose one slot source marker.',
+  );
+  assert.equal(
+    typeof resumeFlow?.nextSlotSourceClass === 'string' &&
+      resumeFlow.nextSlotSourceClass.length > 0,
+    true,
+    'Expected Next slot to expose a source-class marker.',
+  );
+  assert.equal(
+    resumeFlow?.blockedSlotSourceClass?.startsWith('blocker:'),
+    true,
+    'Expected Blocked slot source-class marker to be blocker-derived.',
+  );
+  assert.equal(
+    resumeFlow?.restoreSlotSourceClass,
+    'restore:availability-and-trust',
+    'Expected Restore slot to expose a stable restore source marker.',
+  );
   assert.equal(
     resumeFlow?.hasLegacyNextStepsCard,
     false,
@@ -230,6 +256,11 @@ async function run() {
         'Expected primary next action label to be non-empty.',
       );
       assert.equal(
+        resumeFlow?.nextSafeStatus,
+        'safe',
+        'Expected Next status marker to be safe when a primary action exists.',
+      );
+      assert.equal(
         resumeFlow?.hasHomePrimaryNextAction,
         true,
         'Expected primary next action CTA marker in Companion Home.',
@@ -243,6 +274,16 @@ async function run() {
         resumeFlow?.hasPrimaryNextActionRationale,
         true,
         'Expected primary next action rationale marker in Companion Home.',
+      );
+    } else {
+      assert.equal(
+        resumeFlow?.nextSafeStatus,
+        'advisory',
+        'Expected Next status marker to be advisory when no primary action exists.',
+      );
+      assert.ok(
+        (resumeFlow?.advisoryOnlyRowCount ?? 0) > 0,
+        'Expected advisory-only copy when no safe one-click action is available.',
       );
     }
   }

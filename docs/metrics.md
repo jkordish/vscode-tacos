@@ -49,6 +49,7 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `companionQuickActionsTaken`          | integer | Number of prompt-mode quick actions taken (copy/pause/open flows).              |
 | `companionNudgeImpressions`           | integer | Number of accepted companion nudge impressions in session.                      |
 | `companionPrimaryCtaImpressions`      | integer | Number of sessions where TaCoS rendered a primary next-action CTA.              |
+| `companionPrimaryCtaSourceClass`      | string  | Source class for the primary CTA (for example `next-step-action:openFile`).     |
 | `companionPrimaryCtaClicks`           | integer | Number of primary CTA clicks taken by the user.                                 |
 | `companionPrimaryCtaCompletions`      | integer | Number of primary CTA attempts that completed successfully.                     |
 | `helpfulnessRating`                   | integer | Optional local rating (`1`-`5`) from `TaCoS: Rate Summary Helpfulness`.         |
@@ -83,6 +84,7 @@ Track these explicitly for stabilization/adoption gating:
 - `companionForcedOpenDetailsClicks`
 - `companionNudgeImpressions`
 - `companionPrimaryCtaImpressions`
+- `companionPrimaryCtaSourceClass`
 - `companionPrimaryCtaClicks`
 - `companionPrimaryCtaCompletions`
 - `interruptionTimingClass`

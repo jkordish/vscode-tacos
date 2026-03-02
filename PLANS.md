@@ -1,151 +1,110 @@
 # PLANS.md
 
-Status markers:
+Status vocabulary used in this file:
 
-- `[done]` completed and merged
-- `[in-progress]` active implementation
-- `[next]` queued and sequenced
-- `[blocked]` waiting on external input
+- `queued`: sequenced but not started
+- `doing`: actively in progress
+- `blocked`: waiting on external input/decision
+- `done`: completed and merged
 
-## Current Initiatives
+## Current Execution Ledger
 
-### I0. Docs-driven operating model bootstrap
+### P1. Docs/control-plane bootstrap
 
-Status: `[done]`
+- status: `doing`
+- why: keep behavior contracts, execution sequencing, and contribution hygiene explicit.
+- scope: top-level operating docs, templates, and canonical privacy/design docs.
+- dependencies: none.
+- immediate next actions:
+  - finish docs consistency sweep (`README`, specs, privacy, templates).
+  - ensure command/settings/trust docs match manifest and runtime behavior.
+- risks/rollback:
+  - risk: doc drift from rapid feature iteration.
+  - rollback: narrow doc-only corrective PR.
+- links:
+  - `AGENTS.md`
+  - `SPECS.md`
 
-Why:
+### P2. Build/tooling cleanup
 
-- Establish one canonical flow for specification, execution planning, and contribution hygiene.
+- status: `queued`
+- why: preserve fast iteration and predictable packaging output.
+- scope: verify script contract alignment, CI gate clarity, packaging includes.
+- dependencies: P1.
+- immediate next actions:
+  - confirm `verify:quick` and `verify` semantics stay stable.
+  - verify VSIX contents remain intentional.
+- risks/rollback:
+  - risk: script churn causing local/CI mismatch.
+  - rollback: restore previous aliases while retaining bundled build.
+- links:
+  - `package.json`
+  - `.github/workflows/ci.yml`
 
-Scope:
+### P3. Trust/privacy/AI boundary audit
 
-- Add/refresh `AGENTS.md`, `SPECS.md`, `PLANS.md`, contribution/security/support docs, issue forms, and PR template.
-- Add a truthful design/implementation guide.
+- status: `queued`
+- why: TaCoS handles local context and optional provider boundaries.
+- scope: restricted-mode gates, consent boundaries, sanitizer fail-closed behavior, diagnostics safety wording.
+- dependencies: P1.
+- immediate next actions:
+  - audit trust-sensitive commands for explicit guard messaging.
+  - cross-check docs against actual provider payload behavior.
+- risks/rollback:
+  - risk: silent trust regressions in edge flows.
+  - rollback: force-disable affected path and patch quickly.
+- links:
+  - `docs/PRIVACY_AND_SAFETY.md`
+  - `src/extension.ts`
 
-Dependencies:
+### P4. Test hardening
 
-- None.
+- status: `queued`
+- why: preserve confidence in deterministic logic and command wiring.
+- scope: add/maintain coverage for trust gates, retention pruning, provider fallback/parsing, scoped note/scratchpad behavior.
+- dependencies: P2, P3.
+- immediate next actions:
+  - identify highest-risk untested edge cases from recent changes.
+  - add narrow deterministic tests before behavior expansion.
+- risks/rollback:
+  - risk: integration flakiness increases CI time.
+  - rollback: keep critical-path integration suites mandatory, move non-critical to scheduled runs.
+- links:
+  - `test/`
+  - `docs/integration-test-harness.md`
 
-Immediate next actions:
+### P5. Package/release readiness
 
-- Enforce this flow in all new issues/PRs.
-- Keep command/doc drift checks in PR review.
+- status: `queued`
+- why: each tag should be reliably packageable and release artifacts should be reproducible.
+- scope: release workflow, artifact checks, publish prerequisites documentation.
+- dependencies: P2.
+- immediate next actions:
+  - keep tag workflow artifact generation green.
+  - document Marketplace publish prerequisite (`VSCE_PAT`) and current posture.
+- risks/rollback:
+  - risk: release-day secret/config drift.
+  - rollback: ship VSIX artifact-only release and postpone publish.
+- links:
+  - `.github/workflows/release-vsix.yml`
+  - `README.md`
 
-Risks / rollback:
+### P6. First recommended feature slice after stabilization
 
-- Risk: stale docs if commands drift.
-- Rollback: revert doc-only files in one commit if critical inaccuracies are found.
-
-Links:
-
-- Spec baseline: `SPECS.md`.
-- Existing product docs: `README.md`, `docs/privacy-safety.md`.
-
-### I1. First shippable feature slice: dynamic percolation surfacing (`v0.8`)
-
-Status: `[next]`
-
-Why:
-
-- Improve resume signal quality and reduce cognitive load by prioritizing the most relevant evidence/actions.
-
-Scope:
-
-- Tighten ranking and suppression policy behavior.
-- Expose clear per-item explainability in panel surfaces.
-- Ship with deterministic policy tests and integration checks.
-
-Dependencies:
-
-- I0 docs model in place.
-
-Immediate next actions:
-
-- Select one narrow vertical slice from roadmap docs.
-- Define acceptance criteria in `SPECS.md` update for that slice.
-- Implement with unit + integration coverage.
-
-Risks / rollback:
-
-- Risk: aggressive suppression hides needed context.
-- Rollback: feature-flag or revert to current surfacing defaults.
-
-Links:
-
-- Roadmap detail: `docs/ux/dynamic-percolation-v0.8.0-spec.md`.
-- Candidate issues: `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`.
-
-### I2. Hardening and test quality pass
-
-Status: `[next]`
-
-Why:
-
-- Preserve fast iteration while preventing regressions in trust/safety and panel behavior.
-
-Scope:
-
-- Expand regression coverage around trust gating, restore action guards, and webview state restoration.
-- Audit flaky integration assumptions and tighten harness determinism.
-
-Dependencies:
-
-- I1 behavior changes.
-
-Immediate next actions:
-
-- Identify the top 3 uncovered regressions from recent releases.
-- Add focused tests and remove redundant cases.
-
-Risks / rollback:
-
-- Risk: longer CI runtime slows feedback.
-- Rollback: split slow suites and keep critical-path gates mandatory.
-
-Links:
-
-- Integration harness: `docs/integration-test-harness.md`.
-- Manual smoke runbook: `docs/manual-smoke-runbook.md`.
-
-### I3. Release/package readiness and publish prep
-
-Status: `[next]`
-
-Why:
-
-- Keep every release candidate packageable and ready for Marketplace/Open VSX publish enablement.
-
-Scope:
-
-- Ensure bundle/package scripts and CI artifacts stay green.
-- Document remaining secret/config requirements for publish.
-
-Dependencies:
-
-- I0 docs and tooling updates.
-
-Immediate next actions:
-
-- Validate VSIX packaging in CI and local verify flow.
-- Confirm release checklist references are current.
-
-Risks / rollback:
-
-- Risk: untested publish path on tag day.
-- Rollback: ship VSIX artifact only; delay direct publish until credentials are configured.
-
-Links:
-
-- Release workflow: `.github/workflows/release-vsix.yml`.
-- Checklists: `docs/release-0.6.0-checklist.md` and subsequent release notes.
+- status: `queued`
+- why: deliver user-facing improvement without destabilizing trust/privacy boundaries.
+- scope: one narrow dynamic-percolation slice that improves low-confidence clarification quality and explainability.
+- dependencies: P3, P4.
+- immediate next actions:
+  - define a narrow acceptance contract in `SPECS.md`.
+  - implement with deterministic unit coverage + one integration assertion.
+- risks/rollback:
+  - risk: over-aggressive suppression hides useful cues.
+  - rollback: revert to previous ranking/suppression default behavior.
+- links:
+  - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
+  - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
 
 ## Blockers
 
-- None currently recorded.
-
-## Sequencing Summary
-
-1. Complete I0 (docs-driven contract and templates).
-2. Execute one narrow I1 feature slice.
-3. Run I2 hardening tied to that slice.
-4. Close I3 package/release readiness for tag.
+- none currently.

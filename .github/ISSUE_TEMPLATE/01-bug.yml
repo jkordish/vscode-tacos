@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a behavior regression or defect in vscode-tacos.
+description: Report a reproducible defect in TaCoS behavior.
 title: "bug: "
 labels:
   - bug
@@ -7,16 +7,28 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use `TaCoS: Copy Diagnostics` and share only sanitized output.
-        Do not paste secrets, tokens, or private command history.
+        Please include sanitized diagnostics from `TaCoS: Copy Diagnostics`.
+        Do not post secrets, API keys, private local paths, or raw sensitive command history.
   - type: textarea
-    id: summary
+    id: expected_actual
     attributes:
-      label: What happened?
-      description: Describe expected behavior vs actual behavior.
+      label: Expected vs actual behavior
       placeholder: Expected ... but observed ...
     validations:
       required: true
+  - type: checkboxes
+    id: flow_area
+    attributes:
+      label: Where did this happen?
+      options:
+        - label: Auto summary (focus/idle)
+        - label: Manual summary command
+        - label: Restore working set flow
+        - label: Standup generation
+        - label: Codex handoff (`copyPromptAndOpenCodex`)
+        - label: Checkpoint/scratchpad flow
+        - label: Provider refinement flow
+        - label: Other UI/command surface
   - type: textarea
     id: repro
     attributes:
@@ -28,21 +40,32 @@ body:
     validations:
       required: true
   - type: input
-    id: spec_link
+    id: vscode_version
     attributes:
-      label: Related SPECS.md section
-      description: Link the relevant heading in `SPECS.md` if this bug violates expected behavior.
-      placeholder: https://github.com/<org>/<repo>/blob/main/SPECS.md#...
+      label: VS Code version
+      placeholder: e.g. 1.99.0
     validations:
-      required: false
+      required: true
   - type: input
-    id: plan_link
+    id: os
     attributes:
-      label: Related PLANS.md item
-      description: Link the execution item if this affects an active initiative.
-      placeholder: https://github.com/<org>/<repo>/blob/main/PLANS.md#...
+      label: OS
+      placeholder: e.g. macOS 15.3 / Ubuntu 24.04 / Windows 11
     validations:
-      required: false
+      required: true
+  - type: dropdown
+    id: workspace_context
+    attributes:
+      label: Workspace context
+      options:
+        - Local filesystem workspace
+        - Remote SSH workspace
+        - Dev Container workspace
+        - WSL workspace
+        - Codespaces workspace
+        - Not sure
+    validations:
+      required: true
   - type: dropdown
     id: trust_mode
     attributes:
@@ -53,6 +76,48 @@ body:
         - not sure
     validations:
       required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Summary provider
+      options:
+        - local
+        - vscode-lm
+        - openai
+        - not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: privacy_preset
+    attributes:
+      label: Privacy preset
+      options:
+        - minimal
+        - balanced
+        - max-context
+        - not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: ai_include_checkpoint
+    attributes:
+      label: AI included checkpoint notes?
+      options:
+        - "yes"
+        - "no"
+        - not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: ai_include_scratchpad
+    attributes:
+      label: AI included scratchpad content?
+      options:
+        - "yes"
+        - "no"
+        - not sure
+    validations:
+      required: true
   - type: textarea
     id: diagnostics
     attributes:
@@ -60,3 +125,24 @@ body:
       render: text
     validations:
       required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot or GIF (if user-visible)
+      description: Drag-and-drop media links if applicable.
+    validations:
+      required: false
+  - type: input
+    id: specs_link
+    attributes:
+      label: Related `SPECS.md` section (optional)
+      placeholder: https://github.com/<org>/<repo>/blob/main/SPECS.md#...
+    validations:
+      required: false
+  - type: input
+    id: plans_link
+    attributes:
+      label: Related `PLANS.md` item (optional)
+      placeholder: https://github.com/<org>/<repo>/blob/main/PLANS.md#...
+    validations:
+      required: false

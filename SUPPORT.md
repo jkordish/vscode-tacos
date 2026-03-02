@@ -1,27 +1,29 @@
 # Support
 
-## Where To Get Help
+## Use the Right Channel
 
-- Usage/setup questions: open a GitHub issue using the feature/bug templates.
-- Behavior regressions: open a bug report with diagnostics from `TaCoS: Copy Diagnostics`.
-- Security concerns: follow `SECURITY.md` (private reporting).
+- bug reports: GitHub bug form (`.github/ISSUE_TEMPLATE/01-bug.yml`)
+- feature requests: feature form (`02-feature.yml`)
+- larger spec proposals: spec form (`03-spec.yml`)
+- security/privacy issues: private reporting path in `SECURITY.md`
 
-## Before Opening An Issue
+## Before Filing a Bug
 
-1. Confirm your VS Code version and extension version.
-2. Re-run with current `main` or latest release if possible.
-3. Collect diagnostics using `TaCoS: Copy Diagnostics`.
-4. Remove secrets/private paths before posting.
+1. confirm extension/version and VS Code version.
+2. confirm trust mode (`trusted` or `restricted`).
+3. capture diagnostics with `TaCoS: Copy Diagnostics`.
+4. sanitize any private details before sharing.
 
-## What Maintainers Need
+## What Maintainers Need Most
 
-- clear expected vs actual behavior,
-- repro steps,
-- trust mode (`trusted`/`restricted`),
-- relevant settings (`tacos.*`) and provider mode,
-- test evidence if reporting a regression in a PR.
+- expected vs actual behavior,
+- reproducible steps,
+- relevant settings/provider mode,
+- trust state and workspace context,
+- screenshots/GIFs for user-visible regressions,
+- diagnostics snippet when available.
 
 ## Scope
 
-Support covers repository code, release artifacts, and documented extension behavior.
-General VS Code/editor environment troubleshooting outside TaCoS behavior may be redirected.
+Support covers documented TaCoS behavior and shipped repo artifacts.
+General VS Code/editor environment issues outside TaCoS behavior may be redirected.

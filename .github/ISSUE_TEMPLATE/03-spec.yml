@@ -1,13 +1,9 @@
 name: Spec proposal
-description: Create or revise a canonical product/technical spec before implementation.
+description: Propose a larger feature/spec slice before implementation.
 title: "spec: "
 labels:
   - spec
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Use this form to add or revise specification-level behavior in `SPECS.md`.
   - type: textarea
     id: problem
     attributes:
@@ -15,43 +11,74 @@ body:
     validations:
       required: true
   - type: textarea
-    id: proposed_scope
+    id: goals
     attributes:
-      label: Proposed scope
-      description: Goals, non-goals, and constraints for this spec slice.
+      label: Goals
     validations:
       required: true
   - type: textarea
-    id: acceptance
+    id: non_goals
     attributes:
-      label: Acceptance criteria
-      description: Objective checks that define done.
+      label: Non-goals
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: User-facing behavior
+    validations:
+      required: true
+  - type: textarea
+    id: architecture
+    attributes:
+      label: Technical shape / architecture notes
+      description: Modules/surfaces touched and why.
+    validations:
+      required: true
+  - type: textarea
+    id: commands_settings
+    attributes:
+      label: Commands/settings affected
+      description: New or changed `tacos.*` settings and command IDs.
+    validations:
+      required: true
+  - type: textarea
+    id: trust_privacy_ai
+    attributes:
+      label: Trust/privacy/AI impact
+      description: Restricted Mode behavior, redaction/consent boundaries, provider impact.
+    validations:
+      required: true
+  - type: textarea
+    id: rollout_rollback
+    attributes:
+      label: Rollout and rollback notes
     validations:
       required: true
   - type: textarea
     id: risks
     attributes:
-      label: Risks and failure modes
+      label: Risks / failure modes
     validations:
       required: true
   - type: textarea
-    id: test_strategy
+    id: test_plan
     attributes:
-      label: Test strategy
-      description: Unit/integration/manual evidence expected.
+      label: Test plan
+      description: Unit/integration/manual validation expected.
     validations:
       required: true
   - type: input
     id: specs_target
     attributes:
-      label: SPECS.md target section
-      placeholder: Existing heading link or proposed heading title
+      label: Target `SPECS.md` section
+      placeholder: Existing heading or proposed new section title
     validations:
       required: true
   - type: input
     id: plans_target
     attributes:
-      label: PLANS.md execution target
-      description: Link or describe where this spec will be sequenced.
+      label: Target `PLANS.md` item
+      placeholder: Existing item or proposed execution slot
     validations:
       required: true

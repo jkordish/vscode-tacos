@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
 import { buildAiPayloadPreviewMarkdown } from './aiPayloadPreview';
-import { decidePrimaryBlocker } from './blockerModel';
+import { decidePrimaryBlocker, type BlockerDecision } from './blockerModel';
 import {
   applyCompanionNudgeFeedback,
   chooseCompanionNudges,
@@ -70,6 +70,7 @@ import {
   buildNextStepActions,
   describeNextStepActionRationale,
   type NextStepAction,
+  type NextStepActionKind,
 } from './nextStepActions';
 import {
   isPathWithinWorkspaceRoot,
@@ -667,6 +668,26 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasActiveBlockedCard = panelHtml.includes('data-blocked-card="active"');
       const primaryNextActionCtaCount = (panelHtml.match(/data-primary-next-safe-action=/gu) ?? [])
         .length;
+      const companionSectionOrder = [
+        ...panelHtml.matchAll(/data-companion-section="([^"]+)"/gu),
+      ].map((match) => match[1]);
+      const companionSlotSourceMatches = [
+        ...panelHtml.matchAll(/data-companion-slot-source="([^"]+)"/gu),
+      ];
+      const nextSlotSourceClass =
+        panelHtml.match(
+          /data-companion-section="next"[^>]*data-companion-slot-source="([^"]+)"/u,
+        )?.[1] ?? '';
+      const blockedSlotSourceClass =
+        panelHtml.match(
+          /data-companion-section="blocked"[^>]*data-companion-slot-source="([^"]+)"/u,
+        )?.[1] ?? '';
+      const restoreSlotSourceClass =
+        panelHtml.match(
+          /data-companion-section="restore"[^>]*data-companion-slot-source="([^"]+)"/u,
+        )?.[1] ?? '';
+      const nextSafeStatus = panelHtml.match(/data-next-safe-status="([^"]+)"/u)?.[1] ?? '';
+      const advisoryOnlyRowCount = (panelHtml.match(/Advisory only/gu) ?? []).length;
       const restoreWorkingSetActionCount = (
         panelHtml.match(/data-action="restoreWorkingSet"/gu) ?? []
       ).length;
@@ -762,6 +783,13 @@ export function activate(context: vscode.ExtensionContext): void {
         hasPrimaryNextActionRationale: panelHtml.includes('data-next-step-rationale="true"'),
         hasHomePrimaryNextAction: panelHtml.includes('data-primary-next-safe-action="home"'),
         primaryNextActionCtaCount,
+        companionSectionOrder,
+        companionSlotSourceCount: companionSlotSourceMatches.length,
+        nextSlotSourceClass,
+        blockedSlotSourceClass,
+        restoreSlotSourceClass,
+        nextSafeStatus,
+        advisoryOnlyRowCount,
         hasLegacyNextStepsCard: panelHtml.includes('<h3>Next Steps</h3>'),
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
         hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
@@ -2999,16 +3027,22 @@ function recordCompanionNudgeImpression(): void {
     (state.metricSession.companionNudgeImpressions ?? 0) + 1;
 }
 
-function recordCompanionPrimaryCtaImpression(): void {
+function recordCompanionPrimaryCtaImpression(sourceClass?: string): void {
   if (!state.metricSession) {
     return;
   }
 
   if ((state.metricSession.companionPrimaryCtaImpressions ?? 0) > 0) {
+    if (!state.metricSession.companionPrimaryCtaSourceClass && sourceClass) {
+      state.metricSession.companionPrimaryCtaSourceClass = sourceClass;
+    }
     return;
   }
 
   state.metricSession.companionPrimaryCtaImpressions = 1;
+  if (sourceClass) {
+    state.metricSession.companionPrimaryCtaSourceClass = sourceClass;
+  }
 }
 
 function recordCompanionPrimaryCtaClick(): void {
@@ -3190,6 +3224,61 @@ function selectPanelPrimarySummary(
   }
 
   return summary.recommendedFirstAction?.trim() ?? summary.nextSteps[0] ?? '';
+}
+
+function resolveCompanionNextSlotSourceClass(
+  summary: ResumeSummary,
+  primaryNextAction: NextStepAction | undefined,
+  rankedPrimary: RankedSurfacedItem | undefined,
+): string {
+  if (primaryNextAction) {
+    return `next-step-action:${primaryNextAction.kind}`;
+  }
+
+  if (rankedPrimary) {
+    return `policy:${rankedPrimary.kind}`;
+  }
+
+  if (summary.recommendedFirstAction?.trim()) {
+    return 'summary:recommended-first-action';
+  }
+
+  if (summary.nextSteps.length > 0) {
+    return 'summary:first-next-step';
+  }
+
+  return 'summary:none';
+}
+
+function resolveCompanionPrimaryCtaSourceClass(
+  primaryNextAction: NextStepAction | undefined,
+): `next-step-action:${NextStepActionKind}` | undefined {
+  if (!primaryNextAction) {
+    return undefined;
+  }
+
+  return `next-step-action:${primaryNextAction.kind}`;
+}
+
+function resolveCompanionSlotSourceClasses(
+  summary: ResumeSummary,
+  primaryNextAction: NextStepAction | undefined,
+  rankedPrimary: RankedSurfacedItem | undefined,
+  blockerDecision: BlockerDecision,
+): {
+  now: string;
+  next: string;
+  blocked: string;
+  restore: string;
+  primaryCta?: `next-step-action:${NextStepActionKind}`;
+} {
+  return {
+    now: 'summary:intent-and-retrieval-cues',
+    next: resolveCompanionNextSlotSourceClass(summary, primaryNextAction, rankedPrimary),
+    blocked: `blocker:${blockerDecision.kind}`,
+    restore: 'restore:availability-and-trust',
+    primaryCta: resolveCompanionPrimaryCtaSourceClass(primaryNextAction),
+  };
 }
 
 function selectNotificationHeadline(
@@ -4435,6 +4524,7 @@ function renderWebview(
   const primaryNextAction = nextStepActions.find((candidate): candidate is NextStepAction =>
     Boolean(candidate),
   );
+  const primaryCtaSourceClass = resolveCompanionPrimaryCtaSourceClass(primaryNextAction);
   const primaryNextActionStepIndex = primaryNextAction?.stepIndex ?? -1;
   const directNextActionSummary =
     primaryNextActionStepIndex >= 0 ? (summary.nextSteps[primaryNextActionStepIndex] ?? '') : '';
@@ -4453,10 +4543,6 @@ function renderWebview(
   const primaryNextStepRationaleHtml = primaryNextStepRationale
     ? `<details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">${escapeHtml(primaryNextStepRationale)}</p></details>`
     : '';
-
-  if (primaryNextAction && !demoMode) {
-    recordCompanionPrimaryCtaImpression();
-  }
   const companionNextSteps = renderCompanionNextSteps({
     nextSteps: summary.nextSteps,
     nextStepEvidenceIds: summary.nextStepEvidenceIds,
@@ -4578,6 +4664,15 @@ function renderWebview(
     blockerDecision.hasBlocker && blockerAction?.disabled && blockerAction.disabledReason
       ? `<p class="muted blocker-disabled-reason">Unavailable: ${escapeHtml(blockerAction.disabledReason)}</p>`
       : '';
+  const companionSlotSources = resolveCompanionSlotSourceClasses(
+    summary,
+    primaryNextAction,
+    rankedPrimaryCandidate,
+    blockerDecision,
+  );
+  if (primaryNextAction && !demoMode) {
+    recordCompanionPrimaryCtaImpression(companionSlotSources.primaryCta);
+  }
   const panelSectionState =
     activeExtensionContext && panelWorkspaceRoot
       ? resolvePanelSectionState(activeExtensionContext, panelWorkspaceRoot)
@@ -4905,22 +5000,27 @@ function renderWebview(
       intentOverridden: summary.intentOverridden,
       intentEditorTrustedHtml: intentEditorHtml,
       mode,
+      nowSlotSourceClass: companionSlotSources.now,
       nowCheckpointLineTrustedHtml: nowCheckpointLine,
       lastActionLabel,
       lastActionContext,
       lastActionActionTrustedHtml: lastActionActionHtml,
+      nextSlotSourceClass: companionSlotSources.next,
       nextSafeActionSummary:
         primaryNextActionSummary || 'Refresh summary to regenerate first-action guidance.',
       hasPrimaryNextAction: Boolean(primaryNextAction),
+      primaryCtaSourceClass,
       primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
       nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
       nextStepsListTrustedHtml: companionNextSteps,
       hasBlocker: blockerDecision.hasBlocker,
+      blockedSlotSourceClass: companionSlotSources.blocked,
       blockerTitle,
       blockerDetail,
       blockerMetaTrustedHtml: blockerMetaHtml,
       blockerDisabledReasonTrustedHtml: blockerDisabledReasonHtml,
       blockerActionTrustedHtml: blockerActionHtml,
+      restoreSlotSourceClass: companionSlotSources.restore,
       restoreSectionsTrustedHtml: companionRestoreSections,
       restoreUnavailableHintsTrustedHtml: restoreUnavailableHints,
     }),
@@ -9872,7 +9972,12 @@ async function maybeShowOnboardingNotice(context: vscode.ExtensionContext): Prom
 }
 
 async function openPrivacySafetyDoc(context: vscode.ExtensionContext): Promise<void> {
-  const candidates = ['docs/privacy-safety.md', 'README.md', 'readme.md'];
+  const candidates = [
+    'docs/PRIVACY_AND_SAFETY.md',
+    'docs/privacy-safety.md',
+    'README.md',
+    'readme.md',
+  ];
   try {
     for (const candidate of candidates) {
       try {
