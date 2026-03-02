@@ -73,6 +73,24 @@ async function run() {
     );
     await config.update('summaryQuietHours', '', vscode.ConfigurationTarget.Global);
 
+    await vscode.commands.executeCommand('tacos.__test.setLastSummaryContextUnchanged', true);
+    await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', Date.now() + 60_000);
+    const temporaryQuietWithNoChange = await vscode.commands.executeCommand(
+      'tacos.__test.getStatusBarSnapshot',
+    );
+    assert.equal(
+      temporaryQuietWithNoChange?.statusClass,
+      'active-suppressed',
+      'Expected temporary quiet state to remain suppressed even when no-change suppression also applies.',
+    );
+    assert.equal(
+      temporaryQuietWithNoChange?.statusReason,
+      'quiet window',
+      'Expected temporary quiet state to take precedence over generic no-change suppression reason.',
+    );
+    await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);
+    await vscode.commands.executeCommand('tacos.__test.setLastSummaryContextUnchanged', false);
+
     await config.update('uiSurface', 'statusbar', vscode.ConfigurationTarget.Global);
     const backgroundMode = await vscode.commands.executeCommand(
       'tacos.__test.getFocusPresentationMode',
@@ -220,6 +238,8 @@ async function run() {
         : originalSummaryQuietHoursGlobal,
       vscode.ConfigurationTarget.Global,
     );
+    await vscode.commands.executeCommand('tacos.__test.setSummaryQuietUntil', 0);
+    await vscode.commands.executeCommand('tacos.__test.setLastSummaryContextUnchanged', false);
   }
 }
 

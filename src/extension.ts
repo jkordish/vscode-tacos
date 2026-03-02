@@ -1159,13 +1159,23 @@ export function activate(context: vscode.ExtensionContext): void {
       if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
         state.summaryQuietUntil = value;
         await context.workspaceState.update(KEY_SUMMARY_QUIET_UNTIL, value);
+        updateCompanionStatusBar();
         return true;
       }
 
       state.summaryQuietUntil = 0;
       await context.workspaceState.update(KEY_SUMMARY_QUIET_UNTIL, undefined);
+      updateCompanionStatusBar();
       return true;
     }),
+    vscode.commands.registerCommand(
+      'tacos.__test.setLastSummaryContextUnchanged',
+      async (value?: boolean) => {
+        state.lastSummaryContextUnchanged = value === true;
+        updateCompanionStatusBar();
+        return true;
+      },
+    ),
     vscode.commands.registerCommand('tacos.__test.switchTaskPartition', async (value?: string) => {
       const workspaceRoot = pickWorkspaceRoot();
       if (!workspaceRoot) {
@@ -3542,20 +3552,20 @@ function resolveCompanionStatusBarSemantic(
     };
   }
 
-  if (percolationSuppression.suppressed) {
-    return {
-      className: 'active-suppressed',
-      headline: 'calm',
-      reason: describeSuppressionReason(percolationSuppression.reason),
-      elevation: 'none',
-    };
-  }
-
   if (quietState.active) {
     return {
       className: 'active-suppressed',
       headline: 'calm',
       reason: 'quiet window',
+      elevation: 'none',
+    };
+  }
+
+  if (percolationSuppression.suppressed) {
+    return {
+      className: 'active-suppressed',
+      headline: 'calm',
+      reason: describeSuppressionReason(percolationSuppression.reason),
       elevation: 'none',
     };
   }
