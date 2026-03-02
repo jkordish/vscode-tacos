@@ -83,6 +83,32 @@ describe('percolation surface broker', () => {
     });
   });
 
+  it('preserves suppression reason metadata for cooldown and no-change paths', () => {
+    for (const suppressionReason of ['cooldown', 'no-change'] as const) {
+      const decision = resolveSummarySurfaceDecision({
+        configuredUiSurface: 'notification',
+        suppression: {
+          suppressed: true,
+          reason: suppressionReason,
+        },
+        primary: {
+          kind: 'blocked',
+          actionId: 'restoreRerunTask',
+          urgency: 0.95,
+          confidence: 0.9,
+          score: 0.88,
+        },
+      });
+
+      expect(decision).toEqual({
+        surface: 'panel',
+        presentationMode: 'background',
+        reason: 'notification-suppressed',
+        suppressionReason,
+      });
+    }
+  });
+
   it('uses advisory panel flow for non-urgent candidates', () => {
     const decision = resolveSummarySurfaceDecision({
       configuredUiSurface: 'notification',

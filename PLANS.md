@@ -211,6 +211,24 @@ Status vocabulary used in this file:
   - https://github.com/jkordish/vscode-tacos/issues/258
   - https://github.com/jkordish/vscode-tacos/issues/256
 
+### P11. Percolation integration decision matrix coverage
+
+- status: `done`
+- why: Child issue `#256` needs a regression-resistant integration matrix that explicitly covers suppression and restricted-path guard behavior alongside single-primary CTA invariants.
+- scope: add a dedicated integration matrix suite for ranking/suppression/surface arbitration assertions, wire it into the integration harness, and extend broker unit coverage for additional suppression reason paths.
+- dependencies: P6, P7, P8, P10.
+- recent progress:
+  - added `test/integration/suite/percolationDecisionMatrix.js` to assert high-value notification baseline, suppression downgrades for `quiet-hours`/`cooldown`/`no-change`, restricted execution guard behavior, and single-primary CTA invariant.
+  - wired the new suite into `test/integration/runTest.js` so it runs with the standard integration pass.
+  - expanded `test/percolationSurfaceBroker.test.ts` with explicit cooldown/no-change suppression reason preservation checks.
+  - validated with focused unit execution and full integration harness run.
+- risks/rollback:
+  - risk: matrix assertions can become brittle if probe payload shapes change without synchronized updates.
+  - rollback: keep existing `focusRefreshPresentation`/`resumeFlowCriticalPath` coverage and disable only the dedicated matrix suite while updating probe contracts.
+- links:
+  - https://github.com/jkordish/vscode-tacos/issues/229
+  - https://github.com/jkordish/vscode-tacos/issues/256
+
 ## Blockers
 
 - none currently.
