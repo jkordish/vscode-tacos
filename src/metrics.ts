@@ -32,6 +32,9 @@ const CSV_HEADERS = [
   'blockerPromotionLowConfidence',
   'blockerPromotionRestricted',
   'blockerPromotionNoNextSteps',
+  'priorPromotionCheckpoint',
+  'priorPromotionCorrections',
+  'priorPromotionScratchpad',
   'trustTrayOpens',
   'restrictedTrustTrayOpens',
   'whySurfacedOpens',
@@ -340,6 +343,9 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const blockerPromotionLowConfidence = summarizeTotal(metrics, 'blockerPromotionLowConfidence');
   const blockerPromotionRestricted = summarizeTotal(metrics, 'blockerPromotionRestricted');
   const blockerPromotionNoNextSteps = summarizeTotal(metrics, 'blockerPromotionNoNextSteps');
+  const priorPromotionCheckpoint = summarizeTotal(metrics, 'priorPromotionCheckpoint');
+  const priorPromotionCorrections = summarizeTotal(metrics, 'priorPromotionCorrections');
+  const priorPromotionScratchpad = summarizeTotal(metrics, 'priorPromotionScratchpad');
   const notesCreated = summarizeTotal(metrics, 'noteCreated');
   const notesMarkedDone = summarizeTotal(metrics, 'noteMarkedDone');
   const notesPinned = summarizeTotal(metrics, 'notePinned');
@@ -430,6 +436,9 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| blockerPromotionLowConfidence (total) | ${blockerPromotionLowConfidence} |`,
     `| blockerPromotionRestricted (total) | ${blockerPromotionRestricted} |`,
     `| blockerPromotionNoNextSteps (total) | ${blockerPromotionNoNextSteps} |`,
+    `| priorPromotionCheckpoint (total) | ${priorPromotionCheckpoint} |`,
+    `| priorPromotionCorrections (total) | ${priorPromotionCorrections} |`,
+    `| priorPromotionScratchpad (total) | ${priorPromotionScratchpad} |`,
     `| noteCreated (total) | ${notesCreated} |`,
     `| noteMarkedDone (total) | ${notesMarkedDone} |`,
     `| notePinned (total) | ${notesPinned} |`,
@@ -513,6 +522,9 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.blockerPromotionLowConfidence ?? 0) > 0 ||
     (metric.blockerPromotionRestricted ?? 0) > 0 ||
     (metric.blockerPromotionNoNextSteps ?? 0) > 0 ||
+    (metric.priorPromotionCheckpoint ?? 0) > 0 ||
+    (metric.priorPromotionCorrections ?? 0) > 0 ||
+    (metric.priorPromotionScratchpad ?? 0) > 0 ||
     (metric.trustTrayOpens ?? 0) > 0 ||
     (metric.restrictedTrustTrayOpens ?? 0) > 0 ||
     (metric.whySurfacedOpens ?? 0) > 0 ||
@@ -586,6 +598,9 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.blockerPromotionLowConfidence),
       toOptionalNumber(metric.blockerPromotionRestricted),
       toOptionalNumber(metric.blockerPromotionNoNextSteps),
+      toOptionalNumber(metric.priorPromotionCheckpoint),
+      toOptionalNumber(metric.priorPromotionCorrections),
+      toOptionalNumber(metric.priorPromotionScratchpad),
       toOptionalNumber(metric.trustTrayOpens),
       toOptionalNumber(metric.restrictedTrustTrayOpens),
       toOptionalNumber(metric.whySurfacedOpens),

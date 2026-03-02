@@ -985,6 +985,7 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 - Normalize trigger-time runtime context into typed percolation signals.
 - Feed ranked percolation decisions from adapter output instead of ad hoc defaults.
 - Keep trust-sensitive signal adapters filtered in Restricted Mode.
+- Apply user-authored ranking priors (checkpoint notes, saved corrections, scratchpad context) with deterministic precedence and suppression behavior.
 
 ### Non-goals
 
@@ -997,12 +998,14 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 - Restricted Mode does not promote trust-sensitive branch/task failure adapters as runtime signals.
 - Trust/privacy mode transitions surface through explicit normalized trust/privacy signals.
 - Git semantic adapters explicitly capture branch switch, recent commit checkpoint, and upstream divergence signals when trusted git context is available.
+- Ranking includes deterministic user-prior promotion/suppression metadata; saved corrections can suppress conflicting checkpoint/scratchpad promotions.
 
 ### Technical shape / architecture notes
 
 - Signal adapter layer in `src/percolation/signals.ts`.
 - Trigger orchestration records per-context normalized bundles in `src/extension.ts`.
 - Ranking input (`createPercolationPolicyInput`) consumes adapted signal bundles when available.
+- Ranking input normalizes user-prior hints through `PercolationUserPriors` and annotates candidate metadata (`priorPromotion`, `priorSuppression`, source flags) for policy scoring and metrics.
 
 ### Settings and commands affected
 
@@ -1014,6 +1017,7 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 - Every trigger path has a normalized signal bundle available for ranking.
 - Adapter outputs are deterministic and covered by trusted/restricted unit tests.
 - Policy input receives explicit git semantic signal records (`branch-switch`, `git-commit`, `git-divergence`) when those semantics are present.
+- Prior precedence and conflict resolution are deterministic across checkpoint/correction/scratchpad inputs and covered by unit tests.
 
 ### Risks / failure modes
 
@@ -1028,3 +1032,4 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 - Plan: `PLANS.md` item `P8`.
 - Issue: https://github.com/jkordish/vscode-tacos/issues/248
 - Issue: https://github.com/jkordish/vscode-tacos/issues/249
+- Issue: https://github.com/jkordish/vscode-tacos/issues/251

@@ -30,6 +30,7 @@ Principles:
 - Collection is bounded by settings and trust state.
 - Percolation signal adapters normalize trigger-time runtime state into typed policy signals (`src/percolation/signals.ts`) for deterministic ranking input.
 - Git semantic enrichment captures branch-switch, recent-commit checkpoint, and upstream divergence metadata from trusted git snapshots before policy ranking.
+- Percolation ranking normalizes user-authored priors (checkpoint note, saved corrections, scratchpad excerpt/content) and applies deterministic promotion/suppression with corrections precedence when priors conflict.
 
 ### Sanitization / privacy filtering
 
@@ -117,6 +118,7 @@ Primary stores:
 - `SecretStorage`: OpenAI API key.
 - local files: `.tacos/metrics.json` and `.tacos/metrics.csv` exports.
 - Metrics schema includes blocker-promotion source counters (`taskFailure`, `commandFailure`, `diagnostics`, `branchContext`, `lowConfidence`, `restricted`, `noNextSteps`) for per-session blocker-mix analysis.
+- Metrics schema also includes prior-driven promotion counters (`priorPromotionCheckpoint`, `priorPromotionCorrections`, `priorPromotionScratchpad`) for ranking-prior attribution.
 - extension storage scratchpad files scoped by workspace/partition context.
 
 Retention:

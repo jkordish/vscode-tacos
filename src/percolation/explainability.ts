@@ -56,6 +56,7 @@ function summarizeTopFactors(primary: RankedSurfacedItem): string | undefined {
     ['novelty', primary.scoreBreakdown.novelty],
     ['interruptCost', -primary.scoreBreakdown.interruptCost],
     ['confidence', primary.scoreBreakdown.confidence],
+    ['userPrior', primary.scoreBreakdown.userPrior],
   ] as const;
 
   const top = [...contributions]
@@ -80,6 +81,24 @@ export function buildPercolationExplainabilityPayload(
     const topFactors = summarizeTopFactors(primary);
     if (topFactors) {
       reasons.push(topFactors);
+    }
+    if (primary.meta.userPriorApplied === true) {
+      const priorSources: string[] = [];
+      if (primary.meta.priorPromotionCheckpoint === true) {
+        priorSources.push('checkpoint note');
+      }
+      if (primary.meta.priorPromotionCorrections === true) {
+        priorSources.push('saved correction');
+      }
+      if (primary.meta.priorPromotionScratchpad === true) {
+        priorSources.push('scratchpad');
+      }
+      if (priorSources.length > 0) {
+        reasons.push(`User-authored priors influenced ranking: ${priorSources.join(', ')}.`);
+      }
+      if (primary.meta.priorSuppressionCorrections === true) {
+        reasons.push('Saved corrections suppressed weaker candidate matches.');
+      }
     }
   }
 

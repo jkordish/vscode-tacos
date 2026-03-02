@@ -105,6 +105,7 @@ import {
   type NormalizedSignal,
   type PercolationPolicyMode,
   type PercolationSuppressionReason,
+  type PercolationUserPriors,
 } from './percolation/types';
 import {
   buildPartitionScope,
@@ -467,6 +468,7 @@ interface PresentSummaryOptions {
   providerModeSnapshot?: ProviderModeSnapshot;
   aiPayloadConsentSignature?: string;
   manualPercolationBypass?: boolean;
+  percolationPriors?: PercolationUserPriors;
 }
 
 type ScratchpadScopeMode = 'partition' | 'workspace';
@@ -2200,6 +2202,7 @@ async function triggerSummary(
     checkpointPrimaryNote: prepared.checkpointPrimaryNote,
     checkpointNotes: prepared.checkpointNotes,
     checkpointScope: prepared.checkpointScope,
+    percolationPriors: prepared.rankingPriors,
   });
   state.meaningfulActivitySinceCheckpointPrompt = false;
 
@@ -2229,6 +2232,7 @@ interface PreparedTriggerSummary {
   checkpointNotes: CheckpointNote[];
   checkpointPrimaryNote?: CheckpointNote;
   checkpointScope: string;
+  rankingPriors: PercolationUserPriors;
   signals: ResumeSignals;
   config: ExtensionConfig;
   providerPlan: ProviderPlan;
@@ -2316,8 +2320,16 @@ async function prepareTriggerSummary(
     config.aiIncludeCheckpointNotes && checkpointContext.primaryNote?.status === 'open'
       ? [checkpointContext.primaryNote.text]
       : [];
+  const scratchpadPrior = await loadScratchpadPriorSnapshot(
+    context,
+    root,
+    baseSummary.currentBranch,
+  );
   const aiPayloadScratchpadExcerpt = config.aiIncludeScratchpad
-    ? await loadScratchpadExcerptForAi(context, root, baseSummary.currentBranch)
+    ? (scratchpadPrior.excerpt ??
+      (scratchpadPrior.hasContent
+        ? await loadScratchpadExcerptForAi(context, root, baseSummary.currentBranch)
+        : undefined))
     : undefined;
   let aiPayloadSummary =
     aiPayloadCheckpointNotes.length > 0
@@ -2329,12 +2341,32 @@ async function prepareTriggerSummary(
       aiPayloadScratchpadExcerpt,
     );
   }
-  const corrections = getSummaryCorrectionsForContext(context, root, baseSummary.contextHash);
+  const correctionEntry = getSummaryCorrectionEntryForContext(
+    context,
+    root,
+    baseSummary.contextHash,
+  );
+  const corrections = correctionEntry?.corrections ?? [];
   const correctionsFingerprint = summarizeCorrectionsFingerprint(corrections);
   localSummary.userCorrections = corrections;
   localSummary.correctionsFingerprint = correctionsFingerprint;
   aiPayloadSummary.userCorrections = corrections;
   aiPayloadSummary.correctionsFingerprint = correctionsFingerprint;
+  const rankingPriors: PercolationUserPriors = {
+    checkpointNoteText:
+      checkpointContext.primaryNote?.status === 'open'
+        ? checkpointContext.primaryNote.text
+        : undefined,
+    checkpointUpdatedAt:
+      checkpointContext.primaryNote?.status === 'open'
+        ? checkpointContext.primaryNote.updatedAt
+        : undefined,
+    correctionHints: corrections,
+    correctionsUpdatedAt: correctionEntry?.updatedAt,
+    scratchpadHasContent: scratchpadPrior.hasContent,
+    scratchpadExcerpt: scratchpadPrior.excerpt,
+    scratchpadUpdatedAt: scratchpadPrior.updatedAt,
+  };
   const cacheKey = summaryCacheKey(context, root);
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
   const correctionsUnchanged =
@@ -2385,6 +2417,7 @@ async function prepareTriggerSummary(
     checkpointNotes: checkpointContext.notes,
     checkpointPrimaryNote: checkpointContext.primaryNote,
     checkpointScope: checkpointContext.scope,
+    rankingPriors,
     signals,
     config,
     providerPlan,
@@ -2677,7 +2710,9 @@ async function presentSummary(
       notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
         context,
         workspaceRoot,
+        priors: options.percolationPriors,
       }).primary;
+      recordPriorDrivenPromotion(notificationPrimary);
     }
     return notificationPrimary;
   };
@@ -2690,6 +2725,9 @@ async function presentSummary(
       notificationPrimary = ensureNotificationPrimary();
       recordLowConfidenceClarificationRate(summary, notificationPrimary);
     }
+  }
+  if (config.metricsEnabled && !notificationSuppression?.suppressed) {
+    notificationPrimary = ensureNotificationPrimary();
   }
 
   const surfaceDecision = resolveSummarySurfaceDecision({
@@ -3381,6 +3419,48 @@ function recordBlockerPromotionSource(blockerDecision: BlockerDecision): void {
   state.metricSession[metricFieldName] = 1;
 }
 
+type PriorPromotionMetricField =
+  | 'priorPromotionCheckpoint'
+  | 'priorPromotionCorrections'
+  | 'priorPromotionScratchpad';
+
+const PRIOR_PROMOTION_METRIC_FIELDS: Array<{
+  metaFlag: 'priorPromotionCheckpoint' | 'priorPromotionCorrections' | 'priorPromotionScratchpad';
+  metricFieldName: PriorPromotionMetricField;
+}> = [
+  {
+    metaFlag: 'priorPromotionCheckpoint',
+    metricFieldName: 'priorPromotionCheckpoint',
+  },
+  {
+    metaFlag: 'priorPromotionCorrections',
+    metricFieldName: 'priorPromotionCorrections',
+  },
+  {
+    metaFlag: 'priorPromotionScratchpad',
+    metricFieldName: 'priorPromotionScratchpad',
+  },
+];
+
+function recordPriorDrivenPromotion(
+  primary: RankedSurfacedItem | undefined,
+  options: { demoMode?: boolean } = {},
+): void {
+  if (!state.metricSession || !primary || options.demoMode === true) {
+    return;
+  }
+
+  for (const source of PRIOR_PROMOTION_METRIC_FIELDS) {
+    if (primary.meta[source.metaFlag] !== true) {
+      continue;
+    }
+    if ((state.metricSession[source.metricFieldName] ?? 0) > 0) {
+      continue;
+    }
+    state.metricSession[source.metricFieldName] = 1;
+  }
+}
+
 function recordLowConfidenceClarificationRate(
   summary: ResumeSummary,
   primary: RankedSurfacedItem | undefined,
@@ -3662,12 +3742,58 @@ function resolveAdaptedSignalsForRanking(
   return adapted;
 }
 
+function resolvePercolationUserPriors(
+  summary: ResumeSummary,
+  options: RankPercolationOptions,
+): PercolationUserPriors | undefined {
+  const explicitPriors = options.priors;
+  const panelContextMatches =
+    state.panelSummary?.contextHash === summary.contextHash ||
+    state.scratchSummary?.contextHash === summary.contextHash;
+  const fallbackCheckpoint =
+    panelContextMatches && state.panelPrimaryCheckpointNote?.status === 'open'
+      ? state.panelPrimaryCheckpointNote
+      : undefined;
+  const scratchpadExcerptFromState =
+    panelContextMatches && state.panelScratchpadPreviewLines.length > 0
+      ? state.panelScratchpadPreviewLines.join('\n')
+      : undefined;
+  const correctionHints = Array.isArray(summary.userCorrections) ? summary.userCorrections : [];
+  const resolved: PercolationUserPriors = {
+    checkpointNoteText:
+      explicitPriors?.checkpointNoteText ??
+      (fallbackCheckpoint?.status === 'open' ? fallbackCheckpoint.text : undefined),
+    checkpointUpdatedAt: explicitPriors?.checkpointUpdatedAt ?? fallbackCheckpoint?.updatedAt,
+    correctionHints:
+      explicitPriors?.correctionHints && explicitPriors.correctionHints.length > 0
+        ? explicitPriors.correctionHints
+        : correctionHints,
+    correctionsUpdatedAt: explicitPriors?.correctionsUpdatedAt,
+    scratchpadExcerpt: explicitPriors?.scratchpadExcerpt ?? scratchpadExcerptFromState,
+    scratchpadHasContent:
+      explicitPriors?.scratchpadHasContent ??
+      (panelContextMatches ? state.panelScratchpadHasContent : undefined),
+    scratchpadUpdatedAt: explicitPriors?.scratchpadUpdatedAt,
+  };
+  const checkpointText = resolved.checkpointNoteText?.trim() ?? '';
+  const correctionCount = (resolved.correctionHints ?? []).filter(
+    (hint) => hint.trim().length > 0,
+  ).length;
+  const scratchpadExcerpt = resolved.scratchpadExcerpt?.trim() ?? '';
+  const hasScratchpadContent = resolved.scratchpadHasContent === true;
+  if (!checkpointText && correctionCount === 0 && !scratchpadExcerpt && !hasScratchpadContent) {
+    return undefined;
+  }
+  return resolved;
+}
+
 interface RankPercolationOptions {
   context?: vscode.ExtensionContext;
   workspaceRoot?: string;
   now?: number;
   ignoreMemory?: boolean;
   signals?: ReadonlyArray<Partial<NormalizedSignal>>;
+  priors?: PercolationUserPriors;
 }
 
 function rankPercolationForSummary(
@@ -3684,10 +3810,12 @@ function rankPercolationForSummary(
     evaluationNow,
     options,
   );
+  const userPriors = resolvePercolationUserPriors(summary, options);
   const input = createPercolationPolicyInput(summary, {
     mode,
     now: evaluationNow,
     signals: adaptedSignals,
+    priors: userPriors,
   });
   if (options.context && options.workspaceRoot && !options.ignoreMemory) {
     const workspaceRoot = options.workspaceRoot.trim();
@@ -5357,6 +5485,18 @@ function renderWebview(
       : rankPercolationForSummary(summary, percolationMode, {
           context: activeExtensionContext,
           workspaceRoot: panelWorkspaceRoot,
+          priors: {
+            checkpointNoteText:
+              currentCheckpointNote?.status === 'open' ? currentCheckpointNote.text : undefined,
+            checkpointUpdatedAt:
+              currentCheckpointNote?.status === 'open'
+                ? currentCheckpointNote.updatedAt
+                : undefined,
+            correctionHints: summary.userCorrections,
+            scratchpadExcerpt:
+              scratchpadPreviewLines.length > 0 ? scratchpadPreviewLines.join('\n') : undefined,
+            scratchpadHasContent: state.panelScratchpadHasContent,
+          },
         }).primary;
   const canOpenProblems = diagnostics.errorCount > 0 || diagnostics.warningCount > 0;
   const canOpenDiagnosticFile = Boolean(diagnostics.top);
@@ -5394,6 +5534,7 @@ function renderWebview(
     availability,
   });
   if (!demoMode) {
+    recordPriorDrivenPromotion(rankedPrimaryCandidate);
     recordBlockerPromotionSource(blockerDecision);
   }
   const primaryCtaDecision = resolveCompanionPrimaryCtaDecision({
@@ -7523,13 +7664,13 @@ function readSummaryCorrectionStore(
   return normalized;
 }
 
-function getSummaryCorrectionsForContext(
+function getSummaryCorrectionEntryForContext(
   context: vscode.ExtensionContext,
   root: string,
   contextHash: string,
-): string[] {
+): SummaryCorrectionEntry | undefined {
   const store = readSummaryCorrectionStore(context, root);
-  return store[contextHash]?.corrections ?? [];
+  return store[contextHash];
 }
 
 async function persistSummaryCorrection(
@@ -10542,6 +10683,50 @@ function applyScratchpadExcerptToSummary(summary: ResumeSummary, excerpt: string
     ...summary,
     detailsMarkdown: `${summary.detailsMarkdown}\n\n${section}`,
   };
+}
+
+interface ScratchpadPriorSnapshot {
+  hasContent: boolean;
+  excerpt?: string;
+  updatedAt?: number;
+}
+
+async function loadScratchpadPriorSnapshot(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  branchHint?: string,
+): Promise<ScratchpadPriorSnapshot> {
+  if (!workspaceRoot) {
+    return { hasContent: false };
+  }
+
+  const { uri, scopeState } = resolveScratchpadFileUri(context, workspaceRoot, branchHint);
+  await migrateLegacyScratchpadFileIfNeeded(context, workspaceRoot, scopeState.scope, uri);
+  try {
+    const stat = await vscode.workspace.fs.stat(uri);
+    const updatedAt = stat.mtime > 0 ? stat.mtime : undefined;
+    if (stat.size <= 0) {
+      return {
+        hasContent: false,
+        updatedAt,
+      };
+    }
+    if (stat.size > SCRATCHPAD_PREVIEW_MAX_BYTES) {
+      return {
+        hasContent: true,
+        updatedAt,
+      };
+    }
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    const content = Buffer.from(bytes).toString('utf8');
+    return {
+      hasContent: content.trim().length > 0,
+      excerpt: buildAiScratchpadExcerpt(content),
+      updatedAt,
+    };
+  } catch {
+    return { hasContent: false };
+  }
 }
 
 async function loadScratchpadExcerptForAi(

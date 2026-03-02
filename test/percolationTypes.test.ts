@@ -258,4 +258,42 @@ describe('createPercolationPolicyInput', () => {
       title: 'Review privacy posture',
     });
   });
+
+  it('annotates candidates with deterministic user-authored prior metadata', () => {
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        checkpointNoteText: 'Run auth tests before release',
+        correctionHints: ['run auth tests stabilize token refresh'],
+        scratchpadExcerpt: 'Auth tests are flaky around token refresh',
+        scratchpadHasContent: true,
+      },
+      candidates: [
+        {
+          id: 'candidate:auth-tests',
+          kind: 'next-step',
+          title: 'Run auth tests',
+          detail: 'Stabilize token refresh before release',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    expect(input.candidates[0]?.meta).toMatchObject({
+      userPriorApplied: true,
+      priorPromotionCheckpoint: true,
+      priorPromotionCorrections: true,
+      priorPromotionScratchpad: true,
+    });
+    expect(((input.candidates[0]?.meta.priorPromotion as number) ?? 0) > 0).toBe(true);
+  });
 });
