@@ -103,6 +103,19 @@ export interface PercolationUserPriors {
   scratchpadUpdatedAt?: number;
 }
 
+export const SCRATCHPAD_LARGE_PREVIEW_UNAVAILABLE_PREFIX =
+  'Preview unavailable for large scratchpad';
+
+export function isScratchpadLargePreviewUnavailableLine(value: string): boolean {
+  return new RegExp(`^${SCRATCHPAD_LARGE_PREVIEW_UNAVAILABLE_PREFIX}\\s*\\(`, 'iu').test(
+    value.trim(),
+  );
+}
+
+export function formatScratchpadLargePreviewUnavailableLine(sizeBytes: number): string {
+  return `${SCRATCHPAD_LARGE_PREVIEW_UNAVAILABLE_PREFIX} (${Math.ceil(sizeBytes / 1024)} KB). Open Scratchpad to view.`;
+}
+
 function clamp01(value: unknown, fallback: number): number {
   if (typeof value !== 'number' || Number.isNaN(value)) {
     return fallback;
@@ -351,9 +364,7 @@ function normalizeScratchpadExcerptForPrior(value: string | undefined): string |
   const lines = value
     .split(/\r?\n/gu)
     .map((line) => line.trim())
-    .filter(
-      (line) => line.length > 0 && !/^Preview unavailable for large scratchpad\s*\(/iu.test(line),
-    );
+    .filter((line) => line.length > 0 && !isScratchpadLargePreviewUnavailableLine(line));
   if (lines.length === 0) {
     return undefined;
   }

@@ -102,6 +102,8 @@ import {
 } from './percolation/surfaceBroker';
 import {
   createPercolationPolicyInput,
+  formatScratchpadLargePreviewUnavailableLine,
+  isScratchpadLargePreviewUnavailableLine,
   type NormalizedSignal,
   type PercolationPolicyMode,
   type PercolationSuppressionReason,
@@ -341,6 +343,8 @@ class RingBuffer {
 
 interface ScratchSummaryPriorSnapshot {
   contextHash: string;
+  checkpointNoteText?: string;
+  checkpointUpdatedAt?: number;
   scratchpadExcerpt?: string;
   scratchpadHasContent?: boolean;
   scratchpadUpdatedAt?: number;
@@ -3759,17 +3763,12 @@ function resolveAdaptedSignalsForRanking(
   return adapted;
 }
 
-function isSyntheticScratchpadPreviewLine(line: string): boolean {
-  const normalized = line.trim();
-  return /^Preview unavailable for large scratchpad\s*\(/i.test(normalized);
-}
-
 function buildScratchpadPriorExcerptFromPreviewLines(
   lines: ReadonlyArray<string>,
 ): string | undefined {
   const excerptLines = lines
     .map((line) => line.trim())
-    .filter((line) => line.length > 0 && !isSyntheticScratchpadPreviewLine(line));
+    .filter((line) => line.length > 0 && !isScratchpadLargePreviewUnavailableLine(line));
   if (excerptLines.length === 0) {
     return undefined;
   }
@@ -3792,10 +3791,14 @@ function resolvePercolationUserPriors(
     state.scratchSummaryPriorSnapshot?.contextHash === summary.contextHash
       ? state.scratchSummaryPriorSnapshot
       : undefined;
-  const fallbackCheckpoint =
+  const panelCheckpoint =
     panelContextMatches && state.panelPrimaryCheckpointNote?.status === 'open'
       ? state.panelPrimaryCheckpointNote
       : undefined;
+  const fallbackCheckpointText =
+    panelCheckpoint?.text ?? scratchSummaryPriorSnapshot?.checkpointNoteText;
+  const fallbackCheckpointUpdatedAt =
+    panelCheckpoint?.updatedAt ?? scratchSummaryPriorSnapshot?.checkpointUpdatedAt;
   const scratchpadExcerptFromState = panelContextMatches
     ? (state.panelScratchpadPriorExcerpt ??
       (state.panelScratchpadPreviewLines.length > 0
@@ -3815,10 +3818,8 @@ function resolvePercolationUserPriors(
           ?.updatedAt
       : undefined;
   const resolved: PercolationUserPriors = {
-    checkpointNoteText:
-      explicitPriors?.checkpointNoteText ??
-      (fallbackCheckpoint?.status === 'open' ? fallbackCheckpoint.text : undefined),
-    checkpointUpdatedAt: explicitPriors?.checkpointUpdatedAt ?? fallbackCheckpoint?.updatedAt,
+    checkpointNoteText: explicitPriors?.checkpointNoteText ?? fallbackCheckpointText,
+    checkpointUpdatedAt: explicitPriors?.checkpointUpdatedAt ?? fallbackCheckpointUpdatedAt,
     correctionHints: selectedCorrectionHints,
     correctionsUpdatedAt: explicitPriors?.correctionsUpdatedAt ?? inferredCorrectionUpdatedAt,
     scratchpadExcerpt: explicitPriors?.scratchpadExcerpt ?? scratchpadExcerptFromState,
@@ -3833,15 +3834,6 @@ function resolvePercolationUserPriors(
         ? state.panelScratchpadUpdatedAt
         : scratchSummaryPriorSnapshot?.scratchpadUpdatedAt),
   };
-  const checkpointText = resolved.checkpointNoteText?.trim() ?? '';
-  const correctionCount = (resolved.correctionHints ?? []).filter(
-    (hint) => hint.trim().length > 0,
-  ).length;
-  const scratchpadExcerpt = resolved.scratchpadExcerpt?.trim() ?? '';
-  const hasScratchpadContent = resolved.scratchpadHasContent === true;
-  if (!checkpointText && correctionCount === 0 && !scratchpadExcerpt && !hasScratchpadContent) {
-    return undefined;
-  }
   return resolved;
 }
 
@@ -5362,6 +5354,8 @@ function updateSummaryScratchpad(
   if (percolationPriors) {
     state.scratchSummaryPriorSnapshot = {
       contextHash: summary.contextHash,
+      checkpointNoteText: percolationPriors.checkpointNoteText,
+      checkpointUpdatedAt: percolationPriors.checkpointUpdatedAt,
       scratchpadExcerpt: percolationPriors.scratchpadExcerpt,
       scratchpadHasContent: percolationPriors.scratchpadHasContent,
       scratchpadUpdatedAt: percolationPriors.scratchpadUpdatedAt,
@@ -10211,6 +10205,15 @@ async function refreshPanelCheckpointState(
     );
     state.panelSummary = nextSummary;
     state.scratchSummary = nextSummary;
+    if (state.scratchSummaryPriorSnapshot?.contextHash === nextSummary.contextHash) {
+      state.scratchSummaryPriorSnapshot = {
+        ...state.scratchSummaryPriorSnapshot,
+        checkpointNoteText:
+          resolved.primaryNote?.status === 'open' ? resolved.primaryNote.text : undefined,
+        checkpointUpdatedAt:
+          resolved.primaryNote?.status === 'open' ? resolved.primaryNote.updatedAt : undefined,
+      };
+    }
     updateCompanionStatusBar();
   }
 }
@@ -10926,9 +10929,7 @@ async function refreshPanelScratchpadState(
   state.panelScratchpadUpdatedAt = updatedAt;
   state.panelScratchpadPreviewLines =
     exists && sizeBytes > SCRATCHPAD_PREVIEW_MAX_BYTES
-      ? [
-          `Preview unavailable for large scratchpad (${Math.ceil(sizeBytes / 1024)} KB). Open Scratchpad to view.`,
-        ]
+      ? [formatScratchpadLargePreviewUnavailableLine(sizeBytes)]
       : extractScratchpadPreviewLines(content);
   state.panelScratchpadScopeLabel = scratchpadScopeLabel(scopeState);
 }
