@@ -91,19 +91,23 @@ Status vocabulary used in this file:
 
 ### P6. First recommended feature slice after stabilization
 
-- status: `queued`
+- status: `doing`
 - why: deliver user-facing improvement without destabilizing trust/privacy boundaries.
 - scope: one narrow dynamic-percolation slice that improves low-confidence clarification quality and explainability.
 - dependencies: P3, P4.
+- recent progress:
+  - completed DP-202 panel section emphasis behavior (badge + accent only) with stable ordering and persisted disclosure state.
 - immediate next actions:
-  - define a narrow acceptance contract in `SPECS.md`.
-  - implement with deterministic unit coverage + one integration assertion.
+  - land DP-203 policy signal transparency follow-up.
+  - continue with DP-204 confidence threshold tuning with deterministic fixtures.
 - risks/rollback:
   - risk: over-aggressive suppression hides useful cues.
   - rollback: revert to previous ranking/suppression default behavior.
 - links:
   - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
   - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
+  - https://github.com/jkordish/vscode-tacos/issues/237
+  - https://github.com/jkordish/vscode-tacos/pull/267
 
 ## Blockers
 

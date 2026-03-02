@@ -128,6 +128,8 @@ import {
   renderChangesSinceCard,
   renderDetailsCard,
   renderEvidenceCard,
+  renderPanelSectionEmphasisAttrs,
+  renderPanelSectionEmphasisBadge,
   renderQuickActionsCard,
   renderRecapCard,
   renderRestorePackCard,
@@ -5083,18 +5085,18 @@ function renderWebview(
   ]
     .filter(Boolean)
     .join('\n\n');
+  const moreContextEmphasisAttrs = renderPanelSectionEmphasisAttrs(
+    panelSectionEmphasis.moreContext,
+  );
+  const moreContextEmphasisBadge = renderPanelSectionEmphasisBadge(
+    panelSectionEmphasis.moreContext,
+  );
   const moreContextCard = moreContextCards
     ? `<div class="card">
       <details data-panel-section="moreContext" ${
-        panelSectionEmphasis.moreContext
-          ? `data-panel-emphasis-level="${escapeHtml(panelSectionEmphasis.moreContext.level)}" data-panel-emphasis-source="${escapeHtml(panelSectionEmphasis.moreContext.sourceClass)}" `
-          : ''
+        moreContextEmphasisAttrs ? `${moreContextEmphasisAttrs} ` : ''
       }${expandedSections.has('moreContext') ? 'open' : ''}>
-        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">More Context</span>${
-          panelSectionEmphasis.moreContext
-            ? `<span class="badge panel-emphasis-badge panel-emphasis-${escapeHtml(panelSectionEmphasis.moreContext.level)}" data-panel-emphasis-badge="true">${escapeHtml(panelSectionEmphasis.moreContext.badgeLabel)}</span>`
-            : ''
-        }</summary>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">More Context</span>${moreContextEmphasisBadge}</summary>
         <div class="panel-section-body more-context-stack">
           ${moreContextCards}
         </div>

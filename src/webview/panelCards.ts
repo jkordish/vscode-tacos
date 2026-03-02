@@ -8,7 +8,7 @@ export interface PanelSectionEmphasis {
   badgeLabel: string;
 }
 
-function renderPanelSectionEmphasisAttrs(emphasis?: PanelSectionEmphasis): string {
+export function renderPanelSectionEmphasisAttrs(emphasis?: PanelSectionEmphasis): string {
   if (!emphasis) {
     return '';
   }
@@ -16,7 +16,7 @@ function renderPanelSectionEmphasisAttrs(emphasis?: PanelSectionEmphasis): strin
   return `data-panel-emphasis-level="${escapeHtml(emphasis.level)}" data-panel-emphasis-source="${escapeHtml(emphasis.sourceClass)}"`;
 }
 
-function renderPanelSectionEmphasisBadge(emphasis?: PanelSectionEmphasis): string {
+export function renderPanelSectionEmphasisBadge(emphasis?: PanelSectionEmphasis): string {
   if (!emphasis) {
     return '';
   }
