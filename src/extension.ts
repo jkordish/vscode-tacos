@@ -10803,12 +10803,19 @@ async function loadCappedScratchpadExcerptFromFile(
   }
 
   try {
+    const stat = await vscode.workspace.fs.stat(uri);
+    if (stat.size <= 0) {
+      return undefined;
+    }
+    if (stat.size > maxBytes) {
+      // Remote/virtual fs providers do not expose partial reads; avoid loading oversized files.
+      return undefined;
+    }
     const bytes = await vscode.workspace.fs.readFile(uri);
     if (!bytes || bytes.byteLength <= 0) {
       return undefined;
     }
-    const capped = bytes.byteLength > maxBytes ? bytes.subarray(0, maxBytes) : bytes;
-    return buildAiScratchpadExcerpt(Buffer.from(capped).toString('utf8'));
+    return buildAiScratchpadExcerpt(Buffer.from(bytes).toString('utf8'));
   } catch {
     return undefined;
   }
