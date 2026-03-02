@@ -3232,6 +3232,17 @@ function recordCompanionPrimaryCtaCompletion(): void {
     (state.metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
 }
 
+function recordCompanionPrimaryCtaCompletionForSession(
+  metricSession: MetricRecord | undefined,
+): void {
+  if (!metricSession) {
+    return;
+  }
+
+  metricSession.companionPrimaryCtaCompletions =
+    (metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
+}
+
 function recordLowConfidenceClarificationRate(
   summary: ResumeSummary,
   primary: RankedSurfacedItem | undefined,
@@ -4257,13 +4268,21 @@ async function showDetailsPanel(
         return;
       }
       const blockedPrimaryCta = isBlockedPrimaryCtaMessage(message);
+      const blockedPrimaryMetricSession = blockedPrimaryCta ? state.metricSession : undefined;
       const recordBlockedPrimaryClick = (): void => {
         if (blockedPrimaryCta) {
           recordCompanionPrimaryCtaClick();
         }
       };
-      const recordBlockedPrimaryCompletion = (completed: boolean): void => {
+      const recordBlockedPrimaryCompletion = (
+        completed: boolean,
+        metricSessionOverride?: MetricRecord,
+      ): void => {
         if (blockedPrimaryCta && completed) {
+          if (metricSessionOverride) {
+            recordCompanionPrimaryCtaCompletionForSession(metricSessionOverride);
+            return;
+          }
           recordCompanionPrimaryCtaCompletion();
         }
       };
@@ -4426,7 +4445,7 @@ async function showDetailsPanel(
         recordCompanionQuickAction();
         recordBlockedPrimaryClick();
         await triggerSummary(context, 'manual', workspaceRoot);
-        recordBlockedPrimaryCompletion(true);
+        recordBlockedPrimaryCompletion(true, blockedPrimaryMetricSession);
         return;
       }
 
