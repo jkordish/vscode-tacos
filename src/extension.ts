@@ -102,6 +102,7 @@ import {
   type SummaryPresentationSurface,
   type SummarySurfaceDecision,
 } from './percolation/surfaceBroker';
+import { shouldRequirePromptPrimary } from './percolation/promptGate';
 import {
   createPercolationPolicyInput,
   formatScratchpadLargePreviewUnavailableLine,
@@ -2927,7 +2928,11 @@ async function presentSummary(
     return;
   }
 
-  if (rolloutFlags.policyEngineEnabled) {
+  const requirePromptPrimary = shouldRequirePromptPrimary({
+    notificationBrokerEnabled: rolloutFlags.notificationBrokerEnabled,
+    presentationMode,
+  });
+  if (requirePromptPrimary) {
     if (!notificationPrimary) {
       notificationPrimary = ensureNotificationPrimary();
     }
