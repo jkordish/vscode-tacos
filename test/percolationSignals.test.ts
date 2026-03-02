@@ -160,4 +160,42 @@ describe('buildPercolationSignalBundle', () => {
     const resume = signals.find((signal) => signal.kind === 'resume');
     expect(resume?.observedAt).toBe(summary.generatedAt);
   });
+
+  it('adds explicit git commit and divergence semantics when available', () => {
+    const signals = buildPercolationSignalBundle({
+      summary: buildSummary({
+        currentBranch: 'feature/percolation',
+        previousBranch: 'main',
+      }),
+      runtimeSignals: buildRuntimeSignals({
+        gitLog: 'abcdef1234567890 feat: tighten percolation logic',
+        recentCommitHash: 'abcdef1234567890',
+        recentCommitAt: 1_700_000_111_000,
+        divergenceAhead: 3,
+        divergenceBehind: 1,
+      }),
+      mode: 'active',
+      trusted: true,
+      triggerReason: 'focus',
+      now: 1_700_000_500_000,
+      hasCheckpointNote: true,
+    });
+
+    const recentCommit = signals.find((signal) => signal.kind === 'git-commit');
+    expect(recentCommit).toBeDefined();
+    expect(recentCommit?.observedAt).toBe(1_700_000_111_000);
+    expect(recentCommit?.meta).toMatchObject({
+      recentCommit: true,
+      hash: 'abcdef1234567890',
+      branch: 'feature/percolation',
+    });
+
+    const divergence = signals.find((signal) => signal.kind === 'git-divergence');
+    expect(divergence).toBeDefined();
+    expect(divergence?.meta).toMatchObject({
+      divergence: true,
+      ahead: 3,
+      behind: 1,
+    });
+  });
 });

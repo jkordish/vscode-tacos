@@ -12,6 +12,7 @@ export interface PercolationSignalAdapterInput {
 }
 
 const DEBUG_FAILURE_PATTERN = /\b(fail|failing|error|exception|panic|timeout|crash)\b/i;
+const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/iu;
 
 function hasBranchSwitch(summary: ResumeSummary): boolean {
   return Boolean(
@@ -50,6 +51,71 @@ function normalizeSignalsForRanking(
   });
 }
 
+function parseRecentCommitHashFromGitLog(gitLog: string): string | undefined {
+  const firstLine = gitLog
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (!firstLine) {
+    return undefined;
+  }
+
+  const hashToken = firstLine.split(/\s+/u)[0] ?? '';
+  return COMMIT_HASH_PATTERN.test(hashToken) ? hashToken.toLowerCase() : undefined;
+}
+
+function resolveRecentCommitSemantic(
+  runtime: ResumeSignals,
+  now: number,
+): { hash: string; observedAt: number } | undefined {
+  const explicitHash = runtime.recentCommitHash?.trim().toLowerCase() ?? '';
+  const hash = COMMIT_HASH_PATTERN.test(explicitHash)
+    ? explicitHash
+    : parseRecentCommitHashFromGitLog(runtime.gitLog);
+  if (!hash) {
+    return undefined;
+  }
+
+  const observedAt =
+    typeof runtime.recentCommitAt === 'number' &&
+    Number.isFinite(runtime.recentCommitAt) &&
+    runtime.recentCommitAt > 0
+      ? Math.floor(runtime.recentCommitAt)
+      : now;
+
+  return {
+    hash,
+    observedAt,
+  };
+}
+
+function resolveGitDivergenceSemantic(
+  runtime: ResumeSignals,
+): { ahead: number; behind: number; total: number } | undefined {
+  const ahead =
+    typeof runtime.divergenceAhead === 'number' &&
+    Number.isFinite(runtime.divergenceAhead) &&
+    runtime.divergenceAhead >= 0
+      ? Math.floor(runtime.divergenceAhead)
+      : 0;
+  const behind =
+    typeof runtime.divergenceBehind === 'number' &&
+    Number.isFinite(runtime.divergenceBehind) &&
+    runtime.divergenceBehind >= 0
+      ? Math.floor(runtime.divergenceBehind)
+      : 0;
+  const total = ahead + behind;
+  if (total <= 0) {
+    return undefined;
+  }
+
+  return {
+    ahead,
+    behind,
+    total,
+  };
+}
+
 export function buildPercolationSignalBundle(
   input: PercolationSignalAdapterInput,
 ): NormalizedSignal[] {
@@ -57,6 +123,9 @@ export function buildPercolationSignalBundle(
   const summary = input.summary;
   const runtime = input.runtimeSignals;
   const restricted = isRestrictedMode(input.mode, input.trusted);
+  const branchSwitched = !restricted && hasBranchSwitch(summary);
+  const recentCommit = !restricted ? resolveRecentCommitSemantic(runtime, now) : undefined;
+  const divergence = !restricted ? resolveGitDivergenceSemantic(runtime) : undefined;
   const rawSignals: Array<Partial<NormalizedSignal>> = [
     {
       id: 'signal:resume',
@@ -73,7 +142,7 @@ export function buildPercolationSignalBundle(
     },
   ];
 
-  if (!restricted && hasBranchSwitch(summary)) {
+  if (branchSwitched) {
     rawSignals.push({
       id: 'signal:branch-switch',
       kind: 'branch-switch',
@@ -84,6 +153,39 @@ export function buildPercolationSignalBundle(
       meta: {
         from: summary.previousBranch ?? '',
         to: summary.currentBranch ?? '',
+        branchSwitched: true,
+      },
+    });
+  }
+
+  if (recentCommit) {
+    rawSignals.push({
+      id: `signal:git-commit:${recentCommit.hash.slice(0, 12)}`,
+      kind: 'git-commit',
+      observedAt: recentCommit.observedAt,
+      confidence: 0.78,
+      actionability: 0.61,
+      interruptCost: 0.24,
+      meta: {
+        recentCommit: true,
+        hash: recentCommit.hash,
+        branch: summary.currentBranch ?? runtime.branch,
+      },
+    });
+  }
+
+  if (divergence) {
+    rawSignals.push({
+      id: `signal:git-divergence:${divergence.ahead}:${divergence.behind}`,
+      kind: 'git-divergence',
+      observedAt: now,
+      confidence: 0.81,
+      actionability: 0.66,
+      interruptCost: 0.31,
+      meta: {
+        divergence: true,
+        ahead: divergence.ahead,
+        behind: divergence.behind,
       },
     });
   }
@@ -141,6 +243,9 @@ export function buildPercolationSignalBundle(
         changedFiles: changedFileCount,
         resumeGapMinutes: resumeGapMinutes ?? -1,
         longGap: Boolean(summary.longGap),
+        branchSwitched,
+        recentCommit: Boolean(recentCommit),
+        divergence: Boolean(divergence),
       },
     });
   }

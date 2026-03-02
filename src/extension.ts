@@ -3548,6 +3548,17 @@ function buildFallbackRuntimeSignalsForRanking(
     ? summary.recentFilesSnapshot
     : summary.topFiles;
   const changedFiles = fallbackFiles.slice(0, 10);
+  const recentCommitEvidence = summary.evidenceCatalog?.find((item) => item.kind === 'commit');
+  const commitHashToken = recentCommitEvidence?.label?.trim().split(/\s+/u)[0] ?? '';
+  const recentCommitHash = /^[0-9a-f]{7,40}$/iu.test(commitHashToken)
+    ? commitHashToken.toLowerCase()
+    : undefined;
+  const recentCommitAt =
+    typeof recentCommitEvidence?.capturedAt === 'number' &&
+    Number.isFinite(recentCommitEvidence.capturedAt) &&
+    recentCommitEvidence.capturedAt > 0
+      ? Math.floor(recentCommitEvidence.capturedAt)
+      : undefined;
 
   return {
     workspaceRoot: fallbackRoot,
@@ -3556,7 +3567,11 @@ function buildFallbackRuntimeSignalsForRanking(
     gitStatus: '',
     gitDiffStat: '',
     gitDiff: '',
-    gitLog: '',
+    gitLog: recentCommitEvidence?.label ?? '',
+    recentCommitHash,
+    recentCommitAt,
+    divergenceAhead: undefined,
+    divergenceBehind: undefined,
     changedFiles,
     openFiles: summary.topFiles.slice(0, 10),
     recentFiles: fallbackFiles.slice(0, 15),
@@ -8882,6 +8897,10 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
         diffStat: '',
         diff: '',
         log: '',
+        headCommit: undefined,
+        headCommitAt: undefined,
+        upstreamAhead: undefined,
+        upstreamBehind: undefined,
         changedFiles: [],
         hasUncommitted: false,
         hasConflicts: false,
@@ -8918,6 +8937,28 @@ async function collectSignals(root: string, config: ExtensionConfig): Promise<Re
     gitDiffStat: redactText(git.diffStat, root, customPatterns),
     gitDiff: redactText(git.diff, root, customPatterns),
     gitLog: redactText(git.log, root, customPatterns),
+    recentCommitHash:
+      typeof git.headCommit === 'string' && git.headCommit.trim()
+        ? git.headCommit.trim()
+        : undefined,
+    recentCommitAt:
+      typeof git.headCommitAt === 'number' &&
+      Number.isFinite(git.headCommitAt) &&
+      git.headCommitAt > 0
+        ? Math.floor(git.headCommitAt)
+        : undefined,
+    divergenceAhead:
+      typeof git.upstreamAhead === 'number' &&
+      Number.isFinite(git.upstreamAhead) &&
+      git.upstreamAhead >= 0
+        ? Math.floor(git.upstreamAhead)
+        : undefined,
+    divergenceBehind:
+      typeof git.upstreamBehind === 'number' &&
+      Number.isFinite(git.upstreamBehind) &&
+      git.upstreamBehind >= 0
+        ? Math.floor(git.upstreamBehind)
+        : undefined,
     changedFiles: redactList(allChangedFiles, root, customPatterns),
     openFiles: redactList(openFiles, root, customPatterns),
     recentFiles: redactList(state.recentFiles.values(), root, customPatterns),

@@ -148,15 +148,16 @@ Status vocabulary used in this file:
 
 - status: `doing`
 - why: percolation quality depends on normalized, deterministic signals that are safe across trusted and restricted modes.
-- scope: Epic `#228`, starting with DP-401 / issue `#248` (typed signal bus + runtime adapters).
+- scope: Epic `#228` core signal semantics (DP-401 / `#248`, DP-402 / `#249`) before blocker-priority upgrades.
 - dependencies: P3, P4.
 - recent progress:
-  - reviewed open epic backlog (`#227-#229`) and confirmed `#248` as the next `v0.8.0` dependency item.
-  - began implementation for DP-401 with new percolation signal adapter wiring and trusted/restricted unit coverage.
+  - completed DP-401 / `#248` (typed signal bus + trust-aware adapters + cache-miss fallback + reset hygiene).
+  - started DP-402 / `#249` by enriching git semantic adapters with explicit `branch-switch`, `git-commit`, and `git-divergence` signals.
+  - added git semantic parser coverage and integration reset coverage for signal cache lifecycle guarantees.
 - immediate next actions:
-  - finish landing DP-401 (`src/percolation/signals.ts`, ranking input wiring, adapter tests).
-  - run verify gates and close issue `#248` once merged.
-  - sequence DP-402 (`#249`) and DP-403 (`#250`) after DP-401 merge.
+  - finish landing DP-402 (`src/git.ts` + `src/percolation/signals.ts` semantics and docs parity).
+  - run verify gates and close issue `#249` once merged.
+  - sequence DP-403 (`#250`) and DP-404 (`#251`) after DP-402 merge.
 - risks/rollback:
   - risk: duplicated or stale signal bundles can skew ranking behavior.
   - rollback: fall back to summary-only signal defaults while preserving adapter tests for incremental reland.
@@ -165,6 +166,7 @@ Status vocabulary used in this file:
   - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
   - https://github.com/jkordish/vscode-tacos/issues/228
   - https://github.com/jkordish/vscode-tacos/issues/248
+  - https://github.com/jkordish/vscode-tacos/issues/249
 
 ## Blockers
 

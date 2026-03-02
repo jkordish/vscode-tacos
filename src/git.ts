@@ -63,6 +63,70 @@ export function parsePorcelainPaths(statusOutput: string): string[] {
     });
 }
 
+function parseCommitHashFromText(value: string): string | undefined {
+  const firstToken = value.trim().split(/\s+/u)[0];
+  if (!firstToken || !/^[0-9a-f]{7,40}$/iu.test(firstToken)) {
+    return undefined;
+  }
+  return firstToken.toLowerCase();
+}
+
+export function parseLatestCommitOutput(
+  output: string,
+): { hash: string; authoredAt?: number } | undefined {
+  const firstLine = output
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (!firstLine) {
+    return undefined;
+  }
+
+  const [hashCandidate = '', authoredAtCandidate = ''] = firstLine.split(/\s+/u);
+  const hash = parseCommitHashFromText(hashCandidate);
+  if (!hash) {
+    return undefined;
+  }
+
+  const authoredAtSeconds = Number(authoredAtCandidate);
+  const authoredAt =
+    Number.isFinite(authoredAtSeconds) && authoredAtSeconds > 0
+      ? Math.floor(authoredAtSeconds * 1000)
+      : undefined;
+  return {
+    hash,
+    authoredAt,
+  };
+}
+
+export function parseTrackingDivergence(
+  output: string,
+): { ahead: number; behind: number } | undefined {
+  const firstLine = output
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .find(Boolean);
+  if (!firstLine) {
+    return undefined;
+  }
+
+  const match = firstLine.match(/^(\d+)\s+(\d+)$/u);
+  if (!match) {
+    return undefined;
+  }
+
+  const behind = Number(match[1]);
+  const ahead = Number(match[2]);
+  if (!Number.isFinite(behind) || !Number.isFinite(ahead)) {
+    return undefined;
+  }
+
+  return {
+    ahead: Math.max(0, Math.floor(ahead)),
+    behind: Math.max(0, Math.floor(behind)),
+  };
+}
+
 function detectConflicts(statusOutput: string): boolean {
   return statusOutput.split(/\r?\n/).some((line) => /^(UU|AA|DD|AU|UA|DU|UD)\s/.test(line));
 }
@@ -127,13 +191,15 @@ async function collectGitUncached(root: string, config: ExtensionConfig): Promis
     return snapshot;
   }
 
-  const [status, diffStat, log, diff] = await Promise.all([
+  const [status, diffStat, log, diff, latestCommitOutput, divergenceOutput] = await Promise.all([
     runGit(root, ['status', '--porcelain=v1', '-uall']).catch(() => ''),
     runGit(root, ['diff', '--stat']).catch(() => ''),
     runGit(root, ['log', '-n', '6', '--oneline', '--decorate']).catch(() => ''),
     config.includeDiff && config.maxDiffChars > 0
       ? runGit(root, ['diff', '--unified=0', '--no-color']).catch(() => '')
       : Promise.resolve(''),
+    runGit(root, ['log', '-n', '1', '--format=%H%x09%ct']).catch(() => ''),
+    runGit(root, ['rev-list', '--left-right', '--count', '@{upstream}...HEAD']).catch(() => ''),
   ]);
 
   snapshot.status = status;
@@ -142,6 +208,27 @@ async function collectGitUncached(root: string, config: ExtensionConfig): Promis
   snapshot.diffStat = diffStat;
   snapshot.changedFiles = parseDiffStatFiles(snapshot.diffStat);
   snapshot.log = log;
+  const latestCommit = parseLatestCommitOutput(latestCommitOutput);
+  if (latestCommit?.hash) {
+    snapshot.headCommit = latestCommit.hash;
+    snapshot.headCommitAt = latestCommit.authoredAt;
+  } else {
+    const firstCommitLine = log
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find(Boolean);
+    const fallbackHash = firstCommitLine ? parseCommitHashFromText(firstCommitLine) : undefined;
+    if (fallbackHash) {
+      snapshot.headCommit = fallbackHash;
+    }
+  }
+
+  const divergence = parseTrackingDivergence(divergenceOutput);
+  if (divergence) {
+    snapshot.upstreamAhead = divergence.ahead;
+    snapshot.upstreamBehind = divergence.behind;
+  }
+
   if (diff) {
     snapshot.diff =
       diff.length > config.maxDiffChars

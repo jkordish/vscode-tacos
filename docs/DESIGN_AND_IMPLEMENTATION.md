@@ -29,6 +29,7 @@ Principles:
 - Workspace/editor signals, git snapshot, optional terminal/debug traces, URLs.
 - Collection is bounded by settings and trust state.
 - Percolation signal adapters normalize trigger-time runtime state into typed policy signals (`src/percolation/signals.ts`) for deterministic ranking input.
+- Git semantic enrichment captures branch-switch, recent-commit checkpoint, and upstream divergence metadata from trusted git snapshots before policy ranking.
 
 ### Sanitization / privacy filtering
 
