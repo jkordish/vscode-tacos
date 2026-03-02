@@ -12,7 +12,7 @@ export interface PercolationSignalAdapterInput {
 }
 
 const DEBUG_FAILURE_PATTERN = /\b(fail|failing|error|exception|panic|timeout|crash)\b/i;
-const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,40}$/iu;
+const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,}$/iu;
 
 function hasBranchSwitch(summary: ResumeSummary): boolean {
   return Boolean(

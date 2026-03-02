@@ -45,6 +45,16 @@ describe('parseLatestCommitOutput', () => {
     });
   });
 
+  it('accepts SHA-256 commit hashes from git log output', () => {
+    const sha256Hash = '0123456789abcdef'.repeat(4);
+    const parsed = parseLatestCommitOutput(`${sha256Hash}\t1710000000`);
+
+    expect(parsed).toEqual({
+      hash: sha256Hash,
+      authoredAt: 1_710_000_000_000,
+    });
+  });
+
   it('returns undefined for malformed commit output', () => {
     expect(parseLatestCommitOutput('not-a-commit value')).toBeUndefined();
   });

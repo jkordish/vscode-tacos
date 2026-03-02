@@ -162,14 +162,15 @@ describe('buildPercolationSignalBundle', () => {
   });
 
   it('adds explicit git commit and divergence semantics when available', () => {
+    const sha256Hash = 'abcdef0123456789'.repeat(4);
     const signals = buildPercolationSignalBundle({
       summary: buildSummary({
         currentBranch: 'feature/percolation',
         previousBranch: 'main',
       }),
       runtimeSignals: buildRuntimeSignals({
-        gitLog: 'abcdef1234567890 feat: tighten percolation logic',
-        recentCommitHash: 'abcdef1234567890',
+        gitLog: `${sha256Hash} feat: tighten percolation logic`,
+        recentCommitHash: sha256Hash,
         recentCommitAt: 1_700_000_111_000,
         divergenceAhead: 3,
         divergenceBehind: 1,
@@ -186,7 +187,7 @@ describe('buildPercolationSignalBundle', () => {
     expect(recentCommit?.observedAt).toBe(1_700_000_111_000);
     expect(recentCommit?.meta).toMatchObject({
       recentCommit: true,
-      hash: 'abcdef1234567890',
+      hash: sha256Hash,
       branch: 'feature/percolation',
     });
 

@@ -65,7 +65,7 @@ export function parsePorcelainPaths(statusOutput: string): string[] {
 
 function parseCommitHashFromText(value: string): string | undefined {
   const firstToken = value.trim().split(/\s+/u)[0];
-  if (!firstToken || !/^[0-9a-f]{7,40}$/iu.test(firstToken)) {
+  if (!firstToken || !/^[0-9a-f]{7,}$/iu.test(firstToken)) {
     return undefined;
   }
   return firstToken.toLowerCase();

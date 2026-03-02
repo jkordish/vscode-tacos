@@ -3550,7 +3550,7 @@ function buildFallbackRuntimeSignalsForRanking(
   const changedFiles = fallbackFiles.slice(0, 10);
   const recentCommitEvidence = summary.evidenceCatalog?.find((item) => item.kind === 'commit');
   const commitHashToken = recentCommitEvidence?.label?.trim().split(/\s+/u)[0] ?? '';
-  const recentCommitHash = /^[0-9a-f]{7,40}$/iu.test(commitHashToken)
+  const recentCommitHash = /^[0-9a-f]{7,}$/iu.test(commitHashToken)
     ? commitHashToken.toLowerCase()
     : undefined;
   const recentCommitAt =
