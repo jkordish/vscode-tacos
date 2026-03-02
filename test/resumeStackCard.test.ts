@@ -33,7 +33,7 @@ describe('renderResumeStackCard', () => {
      "<div class="card">
            <h3>Companion Home</h3>
            <div class="companion-grid">
-             <section class="companion-block" data-companion-section="now">
+             <section class="companion-block" data-companion-section="now" data-companion-slot-source="summary:intent-and-retrieval-cues">
                <h4>Now</h4>
                <p class="companion-kicker">Current focus</p>
                <p class="companion-primary">Implement gating tests</p>
@@ -45,11 +45,11 @@ describe('renderResumeStackCard', () => {
                <p class="companion-meta">retrieval cue: last edit</p>
                <div class="status-actions"><button type="button" class="secondary" data-action="openEvidence" data-evidence-id="file:src/extension.ts">Open last action</button></div>
              </section>
-             <section class="companion-block" data-companion-section="next">
+             <section class="companion-block" data-companion-section="next" data-companion-slot-source="summary:none">
                <h4>Next</h4>
                <p class="companion-kicker">Next safe action</p>
                <p class="companion-primary">Open src/extension.ts and run verify</p>
-               <p class="state-caption state-safe">Status: Safe action available</p>
+               <p class="state-caption state-safe" data-next-safe-status="safe">Status: Safe action available</p>
                <details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">Based on file evidence: src/extension.ts.</p></details>
                <ul class="compact-list"><li>No next steps captured yet.</li></ul>
                <div class="status-actions">
@@ -58,7 +58,7 @@ describe('renderResumeStackCard', () => {
                  <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
                </div>
              </section>
-             <section class="companion-block" data-companion-section="blocked" data-blocked-card="none">
+             <section class="companion-block" data-companion-section="blocked" data-companion-slot-source="blocker:none" data-blocked-card="none">
                <h4>Blocked</h4>
                <p class="state-caption state-clear">Status: No blocker</p>
                <p class="companion-primary">No active blocker</p>
@@ -67,7 +67,7 @@ describe('renderResumeStackCard', () => {
                
                
              </section>
-             <section class="companion-block" data-companion-section="restore">
+             <section class="companion-block" data-companion-section="restore" data-companion-slot-source="restore:availability-and-trust">
                <h4>Restore</h4>
                <section class="action-group compact-action-group"><h5>Open</h5></section>
                
