@@ -356,6 +356,8 @@ interface RuntimeState {
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
   panelWorkspaceRoot?: string;
+  panelProviderModeSnapshot?: ProviderModeSnapshot;
+  panelAiPayloadConsentSignature?: string;
   panelCheckpointNotes: CheckpointNote[];
   panelPrimaryCheckpointNote?: CheckpointNote;
   panelCheckpointScope?: string;
@@ -407,6 +409,11 @@ interface RuntimeState {
   lastRedactionPatternWarningSignature?: string;
 }
 
+interface ProviderModeSnapshot {
+  requestedProvider: SummaryProvider;
+  activeProvider: SummaryProvider;
+}
+
 let state: RuntimeState;
 let activeExtensionContext: vscode.ExtensionContext | undefined;
 
@@ -453,6 +460,8 @@ interface PresentSummaryOptions {
   checkpointPrimaryNote?: CheckpointNote;
   checkpointNotes?: CheckpointNote[];
   checkpointScope?: string;
+  providerModeSnapshot?: ProviderModeSnapshot;
+  aiPayloadConsentSignature?: string;
   manualPercolationBypass?: boolean;
 }
 
@@ -529,6 +538,8 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBarReason: 'awaiting summary',
     statusBarElevated: false,
     activeNudges: undefined,
+    panelProviderModeSnapshot: undefined,
+    panelAiPayloadConsentSignature: undefined,
     panelCheckpointNotes: [],
     panelPrimaryCheckpointNote: undefined,
     panelCheckpointScope: undefined,
@@ -2171,6 +2182,11 @@ async function triggerSummary(
     preferBackgroundPresentation: reason === 'focus' && deferPromptToBackground,
     focusRegainedAt: reason === 'focus' ? focusRegainedAt : undefined,
     workspaceRoot: root,
+    providerModeSnapshot: {
+      requestedProvider: prepared.providerPlan.requestedProvider,
+      activeProvider: prepared.providerPlan.activeProvider,
+    },
+    aiPayloadConsentSignature: aiPayloadConsentSignature(prepared),
     checkpointPrimaryNote: prepared.checkpointPrimaryNote,
     checkpointNotes: prepared.checkpointNotes,
     checkpointScope: prepared.checkpointScope,
@@ -2560,6 +2576,8 @@ async function presentSummary(
   }
 
   await updateActiveNudges(context, summary, workspaceRoot, config, triggerReason === 'cached');
+  state.panelProviderModeSnapshot = options.providerModeSnapshot;
+  state.panelAiPayloadConsentSignature = options.aiPayloadConsentSignature;
   updateSummaryScratchpad(summary, options.workspaceRoot);
 
   const panelOptions: PresentSummaryOptions = {
@@ -4209,6 +4227,8 @@ async function showDetailsPanel(
     | 'checkpointPrimaryNote'
     | 'checkpointNotes'
     | 'checkpointScope'
+    | 'providerModeSnapshot'
+    | 'aiPayloadConsentSignature'
     | 'manualPercolationBypass'
   > = {},
 ): Promise<void> {
@@ -4219,6 +4239,8 @@ async function showDetailsPanel(
   }
   state.panelSummary = summary;
   state.panelWorkspaceRoot = workspaceRoot;
+  state.panelProviderModeSnapshot = options.providerModeSnapshot;
+  state.panelAiPayloadConsentSignature = options.aiPayloadConsentSignature;
   state.panelCheckpointNotes = sortCheckpointNotes(options.checkpointNotes ?? []);
   state.panelPrimaryCheckpointNote = options.checkpointPrimaryNote;
   state.panelCheckpointScope = options.checkpointScope;
@@ -4228,6 +4250,8 @@ async function showDetailsPanel(
     state.panelPrimaryCheckpointNote = undefined;
     state.panelCheckpointScope = undefined;
     state.panelManualPercolationBypass = false;
+    state.panelProviderModeSnapshot = undefined;
+    state.panelAiPayloadConsentSignature = undefined;
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
@@ -4250,6 +4274,8 @@ async function showDetailsPanel(
       state.panel = undefined;
       state.panelSummary = undefined;
       state.panelWorkspaceRoot = undefined;
+      state.panelProviderModeSnapshot = undefined;
+      state.panelAiPayloadConsentSignature = undefined;
       state.detailsMarkdownCache = undefined;
       state.panelCheckpointNotes = [];
       state.panelPrimaryCheckpointNote = undefined;
@@ -4505,7 +4531,12 @@ async function showDetailsPanel(
 
       if (message.type === 'revokeAiPayloadConsent') {
         recordCompanionQuickAction();
-        await revokeAiPayloadConsent(context);
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!workspaceRoot) {
+          void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+          return;
+        }
+        await revokeAiPayloadConsent(context, workspaceRoot);
         rerenderPanel();
         return;
       }
@@ -5471,16 +5502,22 @@ function renderWebview(
   const retentionPolicyLabel = demoMode
     ? 'Sample mode'
     : RETENTION_POLICY_LABELS[config.retentionPolicy];
+  const providerModeSnapshot = demoMode ? undefined : state.panelProviderModeSnapshot;
+  const activeAiProviderForConsent: SummaryProvider =
+    companionRuntimeMode === 'restricted' || companionRuntimeMode === 'disabled'
+      ? 'local'
+      : (providerModeSnapshot?.activeProvider ?? config.summaryProvider);
   const aiProviderModeLabel = demoMode
     ? 'Demo mode (no provider sends).'
-    : resolveAiProviderModeLabel(config, companionRuntimeMode);
+    : resolveAiProviderModeLabel(config, companionRuntimeMode, providerModeSnapshot);
   const aiConsentStatusLabel = demoMode
     ? 'Not required in sample mode.'
     : resolveAiConsentStatusLabel(
         activeExtensionContext,
         panelWorkspaceRoot,
-        config,
         companionRuntimeMode,
+        activeAiProviderForConsent,
+        state.panelAiPayloadConsentSignature,
       );
   const storedAiConsentSignature =
     !demoMode && activeExtensionContext && panelWorkspaceRoot
@@ -8201,54 +8238,72 @@ function aiPayloadConsentKey(workspaceRoot: string): string {
   return `${KEY_AI_PAYLOAD_CONSENT_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
 }
 
-function resolveAiPreviewProvider(
-  config: ExtensionConfig,
-  runtimeMode: CompanionRuntimeMode,
-): SummaryProvider {
-  if (runtimeMode === 'restricted' || runtimeMode === 'disabled') {
-    return 'local';
+function summaryProviderLabel(provider: SummaryProvider): string {
+  if (provider === 'local') {
+    return 'Local';
   }
-
-  return config.summaryProvider;
+  if (provider === 'openai') {
+    return 'OpenAI';
+  }
+  return 'VS Code LM';
 }
 
 function resolveAiProviderModeLabel(
   config: ExtensionConfig,
   runtimeMode: CompanionRuntimeMode,
+  providerModeSnapshot?: ProviderModeSnapshot,
 ): string {
-  const requestedProviderLabel =
-    config.summaryProvider === 'local'
-      ? 'Local'
-      : config.summaryProvider === 'openai'
-        ? 'OpenAI'
-        : 'VS Code LM';
+  const requestedProvider = providerModeSnapshot?.requestedProvider ?? config.summaryProvider;
+  const requestedProviderLabel = summaryProviderLabel(requestedProvider);
 
   if (runtimeMode === 'restricted') {
     return `${requestedProviderLabel} requested; Restricted Mode enforces local-only behavior.`;
   }
 
   if (runtimeMode === 'disabled') {
-    return `${requestedProviderLabel} requested; summaries are currently disabled.`;
+    return `${requestedProviderLabel} requested; summaries are disabled, so no provider sends run.`;
   }
 
-  if (config.summaryProvider === 'local') {
+  const activeProvider = providerModeSnapshot?.activeProvider ?? requestedProvider;
+  const activeProviderLabel = summaryProviderLabel(activeProvider);
+  if (activeProvider === requestedProvider) {
+    if (activeProvider === 'local') {
+      return 'Local-only mode.';
+    }
+    return `${activeProviderLabel} with explicit per-workspace consent.`;
+  }
+
+  if (requestedProvider === 'openai' && activeProvider === 'local') {
+    return 'OpenAI requested; local fallback is active because no OpenAI API key is available.';
+  }
+
+  if (requestedProvider === 'vscode-lm' && activeProvider === 'local') {
+    return 'VS Code LM requested; local fallback is active because no VS Code LM model is available.';
+  }
+
+  if (activeProvider === 'local') {
     return 'Local-only mode.';
   }
 
-  return `${requestedProviderLabel} with explicit per-workspace consent.`;
+  return `${requestedProviderLabel} requested; ${activeProviderLabel} currently active.`;
 }
 
 function resolveAiConsentStatusLabel(
   context: vscode.ExtensionContext | undefined,
   workspaceRoot: string | undefined,
-  config: ExtensionConfig,
   runtimeMode: CompanionRuntimeMode,
+  activeProvider: SummaryProvider,
+  expectedSignature?: string,
 ): string {
   if (runtimeMode === 'restricted') {
     return 'Not required while Restricted Mode is active.';
   }
 
-  if (runtimeMode === 'disabled' || config.summaryProvider === 'local') {
+  if (runtimeMode === 'disabled') {
+    return 'Not required while summaries are disabled.';
+  }
+
+  if (activeProvider === 'local') {
     return 'Not required in local-only mode.';
   }
 
@@ -8259,8 +8314,15 @@ function resolveAiConsentStatusLabel(
   const storedSignature = context.workspaceState
     .get<string>(aiPayloadConsentKey(workspaceRoot), '')
     .trim();
+  if (storedSignature && expectedSignature) {
+    if (storedSignature === expectedSignature) {
+      return 'Saved for this workspace (provider/inclusion scoped).';
+    }
+    return 'Saved for a previous provider/payload scope; TaCoS will ask again before AI send.';
+  }
+
   if (storedSignature) {
-    return 'Saved for this workspace (provider/inclusion scoped).';
+    return 'Saved for this workspace; TaCoS may ask again if provider or payload scope changes.';
   }
 
   return 'Not saved; TaCoS will ask before AI send.';
@@ -8301,53 +8363,45 @@ async function setAiPayloadConsent(
 }
 
 async function openAiPayloadPreviewFromPanel(context: vscode.ExtensionContext): Promise<void> {
-  const summary = state.panelSummary;
   const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
-  if (!summary || !workspaceRoot) {
+  if (!workspaceRoot) {
     void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
     return;
   }
 
-  const config = getConfig();
-  const runtimeMode = resolveCompanionRuntimeMode(config);
-  const provider = resolveAiPreviewProvider(config, runtimeMode);
-  const signals = await collectSignals(workspaceRoot, config);
-  const checkpointContext = await resolveCheckpointContext(
-    context,
-    workspaceRoot,
-    summary.currentBranch,
-    true,
-  );
-  const primaryNote = checkpointContext.primaryNote;
-  const includeCheckpointNotes = config.aiIncludeCheckpointNotes && primaryNote?.status === 'open';
-  const checkpointNotes = includeCheckpointNotes && primaryNote ? [primaryNote.text] : [];
-  const scratchpadExcerpt = config.aiIncludeScratchpad
-    ? await loadScratchpadExcerptForAi(context, workspaceRoot, summary.currentBranch)
-    : undefined;
+  const prepared = await prepareTriggerSummary(context, workspaceRoot, 'focus');
   const strictContext = buildStrictSanitizedSummaryContext(
-    signals,
-    summary,
-    config.redactionPatterns,
+    prepared.signals,
+    prepared.aiPayloadSummary,
+    prepared.config.redactionPatterns,
   );
+  const includeCheckpointNotes = prepared.aiPayloadCheckpointNotes.length > 0;
+  const includeScratchpad = Boolean(prepared.aiPayloadScratchpadExcerpt);
   const previewMarkdown = buildAiPayloadPreviewMarkdown({
-    provider,
+    provider: prepared.providerPlan.activeProvider,
     workspaceName: path.basename(workspaceRoot),
     generatedAt: Date.now(),
-    signals,
+    signals: prepared.signals,
     summary: {
-      intent: summary.intent,
-      intentOverridden: summary.intentOverridden,
-      nextSteps: summary.nextSteps,
-      topFiles: summary.topFiles,
-      links: summary.links,
-      evidenceCatalog: summary.evidenceCatalog,
+      intent: prepared.aiPayloadSummary.intent,
+      intentOverridden: prepared.aiPayloadSummary.intentOverridden,
+      nextSteps: prepared.aiPayloadSummary.nextSteps,
+      topFiles: prepared.aiPayloadSummary.topFiles,
+      links: prepared.aiPayloadSummary.links,
+      evidenceCatalog: prepared.aiPayloadSummary.evidenceCatalog,
     },
-    checkpointNotes,
+    checkpointNotes: prepared.aiPayloadCheckpointNotes,
     includeCheckpointNotes,
-    includeScratchpad: Boolean(scratchpadExcerpt),
-    scratchpadExcerpt,
+    includeScratchpad,
+    scratchpadExcerpt: prepared.aiPayloadScratchpadExcerpt,
     redactionReport: strictContext.report,
   });
+  state.panelProviderModeSnapshot = {
+    requestedProvider: prepared.providerPlan.requestedProvider,
+    activeProvider: prepared.providerPlan.activeProvider,
+  };
+  state.panelAiPayloadConsentSignature = aiPayloadConsentSignature(prepared);
+  rerenderPanel();
   const doc = await vscode.workspace.openTextDocument({
     language: 'markdown',
     content: previewMarkdown,
@@ -8360,8 +8414,11 @@ async function openAiPayloadPreviewFromPanel(context: vscode.ExtensionContext): 
   postPanelStatus('TaCoS: AI payload preview opened.');
 }
 
-async function revokeAiPayloadConsent(context: vscode.ExtensionContext): Promise<void> {
-  const workspaceRoot = pickWorkspaceRoot();
+async function revokeAiPayloadConsent(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!workspaceRoot) {
     void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
     return;
@@ -9071,6 +9128,8 @@ function resetRuntimeWorkspaceState(): void {
   state.lastMeaningfulActivityAt = 0;
   state.snoozeUntil = 0;
   state.summaryQuietUntil = 0;
+  state.panelProviderModeSnapshot = undefined;
+  state.panelAiPayloadConsentSignature = undefined;
   state.panelCheckpointNotes = [];
   state.panelPrimaryCheckpointNote = undefined;
   state.panelCheckpointScope = undefined;
