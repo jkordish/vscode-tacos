@@ -10932,6 +10932,18 @@ async function refreshPanelScratchpadState(
       ? [formatScratchpadLargePreviewUnavailableLine(sizeBytes)]
       : extractScratchpadPreviewLines(content);
   state.panelScratchpadScopeLabel = scratchpadScopeLabel(scopeState);
+  const activeScratchSummaryContextHash = state.scratchSummary?.contextHash;
+  if (
+    activeScratchSummaryContextHash &&
+    state.scratchSummaryPriorSnapshot?.contextHash === activeScratchSummaryContextHash
+  ) {
+    state.scratchSummaryPriorSnapshot = {
+      ...state.scratchSummaryPriorSnapshot,
+      scratchpadExcerpt: panelScratchpadPriorExcerpt,
+      scratchpadHasContent: state.panelScratchpadHasContent,
+      scratchpadUpdatedAt: updatedAt,
+    };
+  }
 }
 
 async function openScratchpadCommand(
