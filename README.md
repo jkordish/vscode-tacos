@@ -27,7 +27,6 @@ TaCoS generates local-first resume briefs, highlights safe next actions, and sup
 - local metrics counters for prior-driven ranking promotions (`checkpoint`, `corrections`, `scratchpad`) plus novelty bucket distribution (`low`, `medium`, `high`),
 - restore working set actions with trust-sensitive guards,
 - standup update generation,
-- task partition switching,
 - pause/snooze/quiet-hours controls,
 - local metrics export and diagnostics copy,
 - Codex handoff (`Copy Prompt and Open Codex`).
