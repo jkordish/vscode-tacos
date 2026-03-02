@@ -69,6 +69,7 @@ TaCoS is desktop-first today. It runs in the Node-hosted VS Code extension runti
 - Disclosure section order is stable across refreshes.
 - User-expanded/collapsed state is persisted.
 - Policy emphasis can add badge/accent cues to collapsed sections (`Trust Center`, `Timeline`, `Evidence`, `Details`, `More Context`) without auto-expanding them.
+- Emphasis targets only visible sections under current settings (for example, no timeline focus when `tacos.showTimeline` is disabled).
 
 ## Commands Overview
 

@@ -97,6 +97,7 @@ Status vocabulary used in this file:
 - dependencies: P3, P4.
 - recent progress:
   - completed DP-202 panel section emphasis behavior (badge + accent only) with stable ordering and persisted disclosure state.
+  - hardened DP-202 with follow-up fixes: snapshot section-order parsing now reads rendered disclosures only, and emphasis focus avoids hidden timeline sections when `tacos.showTimeline` is off.
 - immediate next actions:
   - land DP-203 policy signal transparency follow-up.
   - continue with DP-204 confidence threshold tuning with deterministic fixtures.

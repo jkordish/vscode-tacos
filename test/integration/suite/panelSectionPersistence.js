@@ -9,6 +9,9 @@ async function run() {
   const extension = vscode.extensions.getExtension('jkordish.vscode-tacos');
   assert.ok(extension, 'Expected extension jkordish.vscode-tacos to be installed in test host.');
   await extension.activate();
+  const config = vscode.workspace.getConfiguration('tacos');
+  const showTimelineInspected = config.inspect('showTimeline');
+  const originalShowTimelineGlobal = showTimelineInspected?.globalValue;
 
   try {
     await vscode.commands.executeCommand('tacos.showNow');
@@ -21,6 +24,15 @@ async function run() {
       'Expected panel section order list in resume flow snapshot.',
     );
     const sectionOrder = baseline?.panelSectionOrder ?? [];
+    const invalidSectionIds = sectionOrder.filter(
+      (sectionId) =>
+        !['moreContext', 'trustCenter', 'timeline', 'evidence', 'details'].includes(sectionId),
+    );
+    assert.deepEqual(
+      invalidSectionIds,
+      [],
+      'Expected panel section order to only include rendered disclosure section ids.',
+    );
     const moreContextIndex = sectionOrder.indexOf('moreContext');
     const trustCenterIndex = sectionOrder.indexOf('trustCenter');
     const evidenceIndex = sectionOrder.indexOf('evidence');
@@ -151,7 +163,40 @@ async function run() {
         'Expected details expansion state to persist across panel reopen.',
       );
     }
+
+    await config.update('showTimeline', false, vscode.ConfigurationTarget.Global);
+    await vscode.commands.executeCommand('tacos.showNow');
+    await wait(150);
+
+    const timelineDisabled = await vscode.commands.executeCommand(
+      'tacos.__test.getResumeFlowSnapshot',
+    );
+    assert.equal(
+      timelineDisabled?.hasTimelineSection,
+      false,
+      'Expected Timeline section to be absent when tacos.showTimeline is disabled.',
+    );
+    assert.equal(
+      (timelineDisabled?.panelSectionOrder ?? []).includes('timeline'),
+      false,
+      'Expected panel section order to exclude timeline when hidden.',
+    );
+    assert.equal(
+      (timelineDisabled?.emphasizedPanelSections ?? []).includes('timeline'),
+      false,
+      'Expected emphasis metadata to exclude timeline when section is hidden.',
+    );
+    assert.notEqual(
+      timelineDisabled?.moreContextEmphasisSource,
+      'policy-focus:timeline',
+      'Expected More Context emphasis source to avoid timeline focus when timeline is hidden.',
+    );
   } finally {
+    await config.update(
+      'showTimeline',
+      typeof originalShowTimelineGlobal === 'undefined' ? undefined : originalShowTimelineGlobal,
+      vscode.ConfigurationTarget.Global,
+    );
     await vscode.commands.executeCommand(
       'tacos.__test.setPanelSectionExpanded',
       'trustCenter',

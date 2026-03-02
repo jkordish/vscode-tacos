@@ -167,6 +167,7 @@ Users can miss high-signal context when panel sections are collapsed, but auto-e
 - Emphasis metadata renders deterministically for policy-selected sections.
 - Section order and persisted disclosure state remain stable.
 - No section is auto-expanded by emphasis rules.
+- Emphasis policy does not target sections hidden by current settings (for example `Timeline` when `tacos.showTimeline` is disabled).
 
 ### Risks / failure modes
 

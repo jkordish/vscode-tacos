@@ -702,9 +702,9 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasTimelineSection = panelHtml.includes('data-panel-section="timeline"');
       const hasEvidenceSection = panelHtml.includes('data-panel-section="evidence"');
       const hasDetailsSection = panelHtml.includes('data-panel-section="details"');
-      const panelSectionOrder = [...panelHtml.matchAll(/data-panel-section="([^"]+)"/gu)].map(
-        (match) => match[1],
-      );
+      const panelSectionOrder = [
+        ...panelHtml.matchAll(/<details[^>]*data-panel-section="([^"]+)"/gu),
+      ].map((match) => match[1]);
       const panelEmphasisBadgeCount = (panelHtml.match(/data-panel-emphasis-badge="true"/gu) ?? [])
         .length;
       const emphasizedPanelSections = [
@@ -714,6 +714,10 @@ export function activate(context: vscode.ExtensionContext): void {
       ].map((match) => match[1]);
       const hasMoreContextEmphasis =
         /data-panel-section="moreContext"[^>]*data-panel-emphasis-level=/u.test(panelHtml);
+      const moreContextEmphasisSource =
+        panelHtml.match(
+          /data-panel-section="moreContext"[^>]*data-panel-emphasis-source="([^"]+)"/u,
+        )?.[1] ?? '';
       const hasAnchorOpenLinkAction = /<a[^>]*data-action=["']openLink["']/u.test(panelHtml);
       const hasAnchorOpenTopFileAction = /<a[^>]*data-action=["']openTopFile["']/u.test(panelHtml);
       const hasAnchorOpenEvidenceAction = /<a[^>]*data-action=["']openEvidence["']/u.test(
@@ -830,6 +834,7 @@ export function activate(context: vscode.ExtensionContext): void {
         panelEmphasisBadgeCount,
         emphasizedPanelSections,
         hasMoreContextEmphasis,
+        moreContextEmphasisSource,
         hasAnchorOpenLinkAction,
         hasAnchorOpenTopFileAction,
         hasAnchorOpenEvidenceAction,
@@ -3318,6 +3323,7 @@ function resolvePanelSectionEmphasis(
   primary: RankedSurfacedItem | undefined,
   blockerDecision: BlockerDecision,
   companionRuntimeMode: CompanionRuntimeMode,
+  showTimeline: boolean,
   timelineGroupsCount: number,
   summaryProvider: SummaryProvider,
 ): Partial<Record<PanelSectionId, PanelSectionEmphasis>> {
@@ -3346,7 +3352,7 @@ function resolvePanelSectionEmphasis(
     focusSection = 'evidence';
     focusBadge = 'Evidence';
     focusSourceClass = hasEvidenceLinks ? 'policy:primary-evidence' : 'policy:evidence';
-  } else if (hasChangesSinceLastResume && timelineGroupsCount > 0) {
+  } else if (showTimeline && hasChangesSinceLastResume && timelineGroupsCount > 0) {
     focusSection = 'timeline';
     focusBadge = 'Recent';
     focusSourceClass = 'policy:recent-change';
@@ -3358,7 +3364,7 @@ function resolvePanelSectionEmphasis(
       : summary.lowConfidence
         ? 'policy:low-confidence'
         : 'policy:long-gap';
-  } else if (timelineGroupsCount > 0) {
+  } else if (showTimeline && timelineGroupsCount > 0) {
     focusSection = 'timeline';
     focusBadge = 'Recent';
     focusSourceClass = 'policy:timeline-signal';
@@ -4999,6 +5005,7 @@ function renderWebview(
         rankedPrimaryCandidate,
         blockerDecision,
         companionRuntimeMode,
+        config.showTimeline,
         timelineGroups.length,
         config.summaryProvider,
       );
