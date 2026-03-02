@@ -2229,13 +2229,14 @@ async function applyBranchHistory(
   context: vscode.ExtensionContext,
   root: string,
   summary: ResumeSummary,
+  persistCurrentBranch: boolean,
 ): Promise<ResumeSummary> {
   const previousBranch = context.workspaceState.get<string>(branchStateKey(root));
   if (summary.currentBranch && previousBranch && summary.currentBranch !== previousBranch) {
     summary.previousBranch = previousBranch;
   }
 
-  if (summary.currentBranch) {
+  if (persistCurrentBranch && summary.currentBranch) {
     await context.workspaceState.update(branchStateKey(root), summary.currentBranch);
   }
 
@@ -2246,7 +2247,11 @@ async function prepareTriggerSummary(
   context: vscode.ExtensionContext,
   root: string,
   reason: Exclude<TriggerReason, 'cached'>,
+  options: {
+    persistState?: boolean;
+  } = {},
 ): Promise<PreparedTriggerSummary> {
+  const persistState = options.persistState !== false;
   const config = getConfig();
   const providerPlan = await resolveProviderPlan(context, config, reason);
   const resumeGapMinutes = computeResumeGapMinutes(context, root);
@@ -2256,6 +2261,7 @@ async function prepareTriggerSummary(
     context,
     root,
     buildResumeSummary(signals, { longGapMinutes: config.longGapMinutes }),
+    persistState,
   );
   const intentOverride = readIntentOverrideForContext(context, root, inferredSummary.contextHash);
   const baseSummary = applyIntentOverrideToSummary(inferredSummary, intentOverride);
@@ -2309,7 +2315,7 @@ async function prepareTriggerSummary(
     intentUnchanged &&
     providerCompatibleWithCache;
 
-  if (!contextUnchanged) {
+  if (persistState && !contextUnchanged) {
     await context.workspaceState.update(cacheKey, localSummary);
   }
 
@@ -8369,7 +8375,9 @@ async function openAiPayloadPreviewFromPanel(context: vscode.ExtensionContext): 
     return;
   }
 
-  const prepared = await prepareTriggerSummary(context, workspaceRoot, 'focus');
+  const prepared = await prepareTriggerSummary(context, workspaceRoot, 'focus', {
+    persistState: false,
+  });
   const strictContext = buildStrictSanitizedSummaryContext(
     prepared.signals,
     prepared.aiPayloadSummary,
