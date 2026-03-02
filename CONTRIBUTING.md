@@ -1,22 +1,20 @@
 # Contributing
 
-## Working Model
+## Operating Model
 
-This repository uses a docs-driven flow:
+This repo is docs-driven:
 
-1. `SPECS.md` defines expected behavior.
-2. `PLANS.md` defines execution order and current status.
-3. Code changes implement those contracts.
-4. PRs include test evidence and doc updates.
+1. `SPECS.md` defines behavior contracts.
+2. `PLANS.md` tracks active execution order and status.
+3. code implements those contracts.
+4. PRs include docs and test evidence for the behavior changed.
 
-If your change affects behavior and there is no matching spec section, add/update `SPECS.md` first.
+`AGENTS.md` is the operator contract for maintainers and AI coding agents.
 
 ## Setup
 
 - Node.js 20.x
-- npm (lockfile is `package-lock.json`)
-
-Install dependencies:
+- npm (lockfile: `package-lock.json`)
 
 ```bash
 npm ci
@@ -24,40 +22,45 @@ npm ci
 
 ## Development Commands
 
-- Build extension bundle: `npm run build`
-- Watch build: `npm run build:watch`
-- Typecheck: `npm run typecheck`
-- Lint: `npm run lint`
-- Format check: `npm run format:check`
-- Unit tests: `npm test`
-- Integration tests: `npm run test:integration`
-- Full verify + package smoke: `npm run verify`
+- `npm run build`
+- `npm run build:watch`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run format:check`
+- `npm test`
+- `npm run test:integration`
+- `npm run verify:quick`
+- `npm run verify`
+- `npm run package:vsix`
 
-## Change Expectations
+## Expected Change Flow
 
-- Keep changes scoped and reviewable.
-- Preserve local-first behavior and trust/safety boundaries.
-- Add or update tests for changed logic.
-- Update docs in the same PR for behavior/config/process changes.
+1. If behavior changes, update/add relevant `SPECS.md` section first.
+2. Ensure work is tracked in `PLANS.md` (`queued`/`doing`/`blocked`/`done`).
+3. Implement code changes with tests.
+4. Update docs and changelog in the same PR.
 
-Required doc updates when applicable:
+## Required Updates by Change Type
 
-- `SPECS.md` for behavior/safety contract changes.
-- `PLANS.md` for active work status or sequencing changes.
-- `README.md` and `docs/DESIGN_AND_IMPLEMENTATION.md` for command/architecture/runtime changes.
+- command changes: update docs and command wiring tests.
+- setting changes: update docs and config behavior tests.
+- trust/privacy/AI boundary changes: update `docs/PRIVACY_AND_SAFETY.md`, `SPECS.md`, and tests.
+- packaging/release changes: update workflows/docs and run `npm run package:vsix`.
 
-## Pull Request Expectations
+## Pull Requests
 
-Use `.github/pull_request_template.md` and include:
+Use `.github/PULL_REQUEST_TEMPLATE.md` (or equivalent template path in this repo) and include:
 
-- linked spec and plan sections,
-- risk and rollback notes,
-- test command evidence,
-- screenshots/GIFs for UI changes.
+- linked issue/spec and plan item,
+- user-visible behavior summary,
+- trust/privacy/AI review notes when relevant,
+- docs update confirmation,
+- tests run,
+- VSIX verification when relevant,
+- changelog status.
 
-## Release and Packaging
+## Release Expectations
 
-- Ensure `npm run verify` passes.
-- Validate VSIX packaging via `npm run package:vsix`.
-- Tag-based GitHub workflow attaches VSIX artifacts.
-- Marketplace/Open VSX publish requires maintainer-managed credentials and is intentionally separate.
+- keep `main` verify-clean and packageable,
+- keep tag workflow artifact generation working,
+- direct marketplace publish requires maintainers to configure `VSCE_PAT`.

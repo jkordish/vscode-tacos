@@ -2,6 +2,7 @@
 coverage/**
 docs/**
 !docs/privacy-safety.md
+!docs/PRIVACY_AND_SAFETY.md
 AGENTS.md
 SPECS.md
 PLANS.md

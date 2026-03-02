@@ -1,7 +1,8 @@
-# Default ownership
+# Default ownership for the repository
 * @jkordish
 
-# TODO(ownership): Split by area once additional maintainers are active.
-# Example:
-# /src/webview/ @jkordish @frontend-owner
-# /src/llm.ts @jkordish @ai-safety-owner
+# TODO(ownership): split by subsystem when additional maintainers are active.
+# Suggested future split:
+# /src/webview/ @jkordish @ui-owner
+# /src/llm.ts @jkordish @ai-owner
+# /docs/ @jkordish @docs-owner

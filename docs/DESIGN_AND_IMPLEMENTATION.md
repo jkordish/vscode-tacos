@@ -1,155 +1,173 @@
-# Design and Implementation Guide
+# TaCoS Design and Implementation Guide
 
-## Project Shape and Boundaries
+## Purpose and UX Philosophy
 
-TaCoS is a VS Code extension focused on interruption recovery.
+TaCoS helps developers recover task context quickly after interruptions.
 
-Boundaries:
+Principles:
 
-- Local extension host logic owns context collection, summarization, safety checks, and action orchestration.
-- Webview UI renders summary/companion views and sends explicit user actions back to host.
-- AI providers are optional refinement backends; they do not own core behavior.
+- local-first by default,
+- evidence-backed and safe actions,
+- explicit trust/privacy boundaries,
+- low-friction controls for pause/snooze/quiet behavior.
 
-## Runtime Architecture
+## Activation Model
 
-Primary entrypoint:
+- Extension entrypoint: `src/extension.ts`.
+- Activation events: startup + command-based activation from `package.json`.
+- Runtime orchestrates focus-based triggers and manual command flows.
 
-- `src/extension.ts` initializes state, registers commands, collects signals, and coordinates summary/render pipelines.
+## Runtime Boundaries
 
-Supporting modules:
+### Activation / orchestration
 
-- Summary/intent/action logic: `src/summary.ts`, `src/nextStepActions.ts`, `src/noiseControl.ts`, `src/percolation/*`.
-- Safety/trust/privacy: `src/redaction.ts`, `src/pathSafety.ts`, `src/evidenceSafety.ts`, `src/restoreSafety.ts`.
-- Provider adapters: `src/llm.ts`, `src/vscodeLm.ts`.
-- Persistence/scoping: checkpoint/scratchpad/partition/resume-path modules.
-- Webview rendering and client behavior: `src/webview/*`, `src/webviewSecurity.ts`.
+- Registers commands, event listeners, and UI surfaces.
+- Coordinates summary generation, caching, provider refinement, and panel rendering.
 
-## Extension Architecture and Activation Model
+### Context collectors
 
-Activation:
+- Workspace/editor signals, git snapshot, optional terminal/debug traces, URLs.
+- Collection is bounded by settings and trust state.
 
-- Declared by startup and command-based activation events in `package.json`.
-- Primary activation occurs on startup and command invocation.
+### Sanitization / privacy filtering
 
-Contribution points:
+- Redaction utilities sanitize persisted and provider-bound content.
+- Strict sanitizer can block high-risk payload sends.
 
-- Commands (`tacos.*`) for summaries, restore flows, notes, scratchpad, privacy/safety, diagnostics, and provider control.
-- Configuration (`tacos.*`) for timing, privacy, provider choice, and UI behavior.
-- Keybindings for common resume actions.
+### Summary provider abstraction
 
-Why a webview exists:
+- `local`: deterministic summary.
+- `vscode-lm`: optional refinement using VS Code LM.
+- `openai`: optional refinement using OpenAI-compatible API.
 
-- The companion resume card stack requires richer stateful UI than native status/notification surfaces alone.
-- Native surfaces are still used for lightweight affordances (status bar and notifications).
+### Storage / retention / metrics
 
-## Commands, Settings, and User-facing Surfaces
+- Workspace/global state for scoped context.
+- SecretStorage for provider credentials.
+- Local file exports for metrics snapshots.
+- Retention pruning + explicit forget/revoke paths.
 
-User-facing surfaces:
+### UI surfaces and commands
 
-- Companion webview panel (primary detail/action surface).
-- Status bar companion state/action affordance.
-- Optional notification-mode prompting.
-- Commands exposed in the command palette.
+- Companion webview panel (primary detail/action UI).
+- Status bar and notification prompts.
+- Command palette and keybinding surfaces.
 
-Canonical command/settings references live in:
+### Trust / restricted-mode guards
 
-- `README.md`
-- `package.json` (`contributes.commands`, `contributes.configuration`)
+- Restricted Mode disables trust-sensitive collectors and execution-style restore actions.
+- UI and diagnostics explain guarded states.
 
-## Storage and State Model
+### Restore / standup / task partition workflows
+
+- Restore plans/actions are guard-aware.
+- Standup generation builds deterministic local text.
+- Task partitions scope notes/summaries/restore context.
+
+## Data Flow (High-Level)
+
+1. Trigger occurs (focus-return or command).
+2. Runtime resolves workspace/trust/scope and loads config.
+3. Context collection runs with trust/privacy constraints.
+4. Local summary is generated, validated, and rendered.
+5. Optional provider refinement runs if enabled/allowed.
+6. UI actions revalidate evidence before opening/running targets.
+7. Metrics/diagnostics remain local unless user explicitly exports/shares.
+
+## Command Surfaces
+
+Key capability clusters:
+
+- resume: show now, show last, copy prompt + open Codex,
+- controls: pause/resume/snooze/quiet/toggle,
+- notes/scratchpad: checkpoint and scratchpad commands,
+- execution helpers: restore working set, restore query capture, jump to last edit,
+- workflow: standup generation, task partition switching,
+- safety/admin: privacy preset, retention, diagnostics, sanitizer test, forget workspace, consent revoke.
+
+## Settings Model
+
+`package.json` contributes the `tacos.*` configuration surface for:
+
+- trigger timing and presentation,
+- context depth and privacy,
+- nudge suppression and quiet windows,
+- provider mode and OpenAI endpoint/model/timeout,
+- metrics enablement.
+
+Settings with trust-sensitive impact are constrained via manifest restricted configuration handling.
+
+## Storage and State
 
 Primary stores:
 
-- `workspaceState`: scoped activity, summary cache, notes, percolation memory, runtime flags.
-- `globalState`: small cross-workspace values where appropriate.
+- `workspaceState`: scoped activity, summaries, notes, partitions, nudge state, metrics records.
+- `globalState`: cross-workspace helper state where needed.
 - `SecretStorage`: OpenAI API key.
-- Local files: exported metrics under workspace `.tacos/`; extension-managed scratchpad files under extension storage.
+- local files: `.tacos/metrics.json` and `.tacos/metrics.csv` exports.
+- extension storage scratchpad files scoped by workspace/partition context.
 
-State principles:
+Retention:
 
-- Persist sanitized data only.
-- Keep scope explicit (workspace + branch + optional partition/task context).
-- Retention pruning controlled by `tacos.retentionPolicy`.
+- controlled by `tacos.retentionPolicy`.
+- explicit `Forget This Workspace Now` clears scoped state.
 
-## Trust and Security Model
+## Restore Flows
 
-Workspace Trust posture:
+- Restore actions are presented as safe plans first.
+- Trust-sensitive actions (rerun task/debug/checkout) are blocked in Restricted Mode.
+- Guard reasons are surfaced to users.
 
-- Extension declares `untrustedWorkspaces.supported = limited`.
-- Restricted Mode disables risky collection/actions (git execution, terminal collection, AI refinement, execution-style restore actions).
+## Diagnostics and Metrics
 
-Webview security:
+- `TaCoS: Copy Diagnostics` emits privacy-safe environment/mode context.
+- `TaCoS: Export Local Metrics` writes local artifacts only.
+- Metrics are not auto-uploaded by TaCoS.
 
-- Nonce-based strict CSP with default-deny policy.
-- Host validates all webview messages and action payloads.
+## What Is Intentionally Local-Only
 
-Evidence/action safety:
+- baseline summary generation,
+- workspace state persistence,
+- checkpoint/scratchpad storage,
+- metrics and diagnostics collection/export.
 
-- File actions must resolve inside workspace boundaries.
-- URL actions restricted to `http`/`https`.
-- Link/action evidence is validated before render and revalidated on invocation.
+## What Can Leave the Machine
 
-AI safety posture:
+Only provider payloads when all are true:
 
-- Local summary always available.
-- AI is opt-in and consent-gated.
-- Strict sanitizer can block payload send (fail closed).
-- Model output is parsed and schema-validated before application.
+- provider is `vscode-lm` or `openai`,
+- trust state allows provider path,
+- payload path is consented,
+- strict sanitizer permits send.
 
-## Telemetry Decision
+## Restricted in Untrusted Workspaces
 
-- No outbound product telemetry pipeline is implemented.
-- Metrics are local-only and user-exported on demand (`.tacos/metrics.json` and `.tacos/metrics.csv`).
-- This is an intentional privacy posture.
+- git command collection,
+- terminal command collection,
+- AI refinement,
+- execution-style restore actions.
 
-## Desktop-only vs Web-capable
+Local summary and core orientation remain available.
 
-Current status: desktop extension only.
+## Desktop-only Status
 
-Why:
-
-- Runtime depends on Node APIs and host process capabilities (`child_process`, filesystem, HTTP modules, git/task/debug integration).
-- No `browser` entrypoint is defined in the extension manifest.
-
-What would be required for web support:
-
-- Browser-compatible extension entrypoint and architecture split.
-- Replacement/removal of Node/process-dependent features.
-- Separate test matrix for browser host behavior.
+TaCoS is desktop-first currently because runtime depends on Node-hosted capabilities (`child_process`, filesystem, host integration). No browser entrypoint is declared.
 
 ## Testing Strategy
 
-Test layers:
-
-- Unit tests: deterministic logic in `test/*.test.ts` via Jest.
-- Integration tests: VS Code extension host behavior via `@vscode/test-electron` (`test/integration`).
+- unit: deterministic domain logic (`jest` + `@swc/jest`).
+- integration: extension host behavior (`@vscode/test-electron`).
 
 Quality gates:
 
-- `npm run format:check`
-- `npm run lint`
-- `npm run typecheck`
-- `npm test`
-- `npm run test:integration` (required for command/activation/webview/trust changes)
+- `npm run verify:quick`
+- `npm run test:integration`
+- `npm run package:vsix` for packaging-impacting changes.
 
-## Build, Packaging, and Release Flow
+## Packaging and Release Flow
 
-Build flow:
-
-- `npm run build` uses esbuild to bundle `src/extension.ts` to `dist/extension.js`.
-- `npm run typecheck` uses `tsc --noEmit` for static type safety.
-
-Packaging:
-
-- `npm run package:vsix` creates a VSIX via `vsce`.
-- `.vscodeignore` defines package include/exclude behavior.
-
-CI:
-
-- CI workflow runs format, lint, typecheck, unit tests, integration tests, and package smoke check.
-- Release workflow packages VSIX artifacts on version tags.
-
-Publish readiness:
-
-- Repository is package-ready.
-- Automated direct marketplace publish remains gated on maintainer-provided secrets/credentials.
+- `npm run build` bundles extension to `dist/extension.js`.
+- `npm run package:vsix` produces VSIX using `vsce`.
+- CI validates formatting/lint/typecheck/unit/integration/package smoke.
+- Tag workflow attaches VSIX artifacts.
+- Marketplace publish is credential-gated and documented as optional (`VSCE_PAT`).

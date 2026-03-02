@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Support and troubleshooting
+  - name: Usage and support
     url: https://github.com/jkordish/vscode-tacos/blob/main/SUPPORT.md
-    about: Ask usage/setup questions and share diagnostics safely.
+    about: Ask setup and usage questions, and share diagnostics safely.
+  - name: Privacy and safety guide
+    url: https://github.com/jkordish/vscode-tacos/blob/main/docs/PRIVACY_AND_SAFETY.md
+    about: Review trust, data, and provider boundaries before filing.
   - name: Security policy
     url: https://github.com/jkordish/vscode-tacos/blob/main/SECURITY.md
-    about: Report sensitive vulnerabilities through private channels.
+    about: Report vulnerabilities through private channels.

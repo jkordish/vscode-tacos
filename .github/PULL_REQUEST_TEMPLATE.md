@@ -2,40 +2,50 @@
 
 ## Linked Context
 
-- Spec section (`SPECS.md`):
-- Plan item (`PLANS.md`):
-- Related issue(s):
+- Issue/spec:
+- `SPECS.md` section(s):
+- `PLANS.md` item(s):
 
-## Change Type
+## Behavior Change
 
-- [ ] Bug fix
-- [ ] Feature
-- [ ] Refactor
-- [ ] Docs/process
-- [ ] Release/package
+- User-facing behavior changed:
+- Commands changed (if any):
+- Settings changed (if any):
 
-## Behavior and Risk
+## Trust / Privacy / AI Review
 
-- User-facing behavior change:
-- Safety/trust/privacy impact:
-- Rollback plan:
+- Restricted Mode impact:
+- Privacy/redaction/retention impact:
+- Provider/AI payload boundary impact:
 
-## Validation Evidence
+## Validation
 
 - [ ] `npm run format:check`
 - [ ] `npm run lint`
 - [ ] `npm run typecheck`
 - [ ] `npm test`
 - [ ] `npm run test:integration` (or explain skip)
-- [ ] `npm run package:vsix` (for release/package-impacting changes)
+- [ ] `npm run package:vsix` (or explain skip)
 
-## Documentation Updates
+## Documentation
 
 - [ ] `SPECS.md` updated (or N/A with reason)
 - [ ] `PLANS.md` updated (or N/A with reason)
-- [ ] `README.md` and/or `docs/DESIGN_AND_IMPLEMENTATION.md` updated for behavior/config/command changes
+- [ ] `README.md` updated for user-visible behavior/settings changes
+- [ ] `docs/DESIGN_AND_IMPLEMENTATION.md` updated if architecture/runtime behavior changed
+- [ ] `docs/PRIVACY_AND_SAFETY.md` updated if trust/privacy/provider boundaries changed
 
 ## UI Evidence (if applicable)
 
-- [ ] Screenshots or GIFs attached for panel/UX changes
-- [ ] Accessibility/trust-state behavior described for the changed UI
+- [ ] Screenshot/GIF attached
+- [ ] Accessibility/trust-state behavior described
+
+## Changelog
+
+- [ ] `CHANGELOG.md` updated
+- [ ] Changelog update intentionally not needed (explain)
+
+## Risk and Rollback
+
+- Risk summary:
+- Rollback approach:

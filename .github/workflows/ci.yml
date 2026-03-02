@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Quality gates (format, lint, typecheck, build, unit)
+      - name: Quality gates (format, lint, typecheck, unit)
         run: npm run verify:quick
 
       - name: Integration test
