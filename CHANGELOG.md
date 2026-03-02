@@ -28,6 +28,7 @@ All notable changes to this project are documented in this file.
 - Companion Home now resolves policy output into fixed `Now/Next/Blocked/Restore` slots with deterministic single-primary CTA arbitration across `Next` and `Blocked`.
 - Companion `Next`/`Blocked` status captions now include explicit emphasis tokens (`PRIMARY`/`ADVISORY`/`SUPPRESSED`) with reduced-motion-safe transitions and forced-colors safeguards.
 - Companion Home now exposes a one-click `Why am I seeing this?` action that opens the Trust Center explainability trail (`More Context` → `Trust Center` → nested decision details).
+- Evidence tray now supports one-click opening from Companion Home and groups entries into surfaced-decision evidence, other openable evidence, and context-only evidence while preserving safe open/static affordances.
 
 ## [0.7.0] - 2026-03-01
 

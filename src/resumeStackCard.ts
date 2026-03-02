@@ -38,6 +38,7 @@ export interface RenderResumeStackCardInput {
   nextEmphasisToken?: CompanionSlotToken;
   primaryNextActionTrustedHtml?: TrustedHtml;
   whySurfacedActionTrustedHtml?: TrustedHtml;
+  evidenceTrayActionTrustedHtml?: TrustedHtml;
   nextStepRationaleTrustedHtml?: TrustedHtml;
   nextStepsListTrustedHtml: TrustedHtml;
   hasBlocker: boolean;
@@ -67,6 +68,9 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
     : '';
   const blockedPrimaryCtaSourceAttr = input.blockedPrimaryCtaSourceClass
     ? ` data-primary-cta-source-class="${escapeHtml(input.blockedPrimaryCtaSourceClass)}"`
+    : '';
+  const blockedEvidenceTrayActionTrustedHtml = input.hasBlocker
+    ? (input.evidenceTrayActionTrustedHtml ?? '')
     : '';
 
   return `<div class="card">
@@ -114,6 +118,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <div class="status-actions">
             ${input.primaryNextActionTrustedHtml ?? ''}
             ${input.whySurfacedActionTrustedHtml ?? ''}
+            ${input.evidenceTrayActionTrustedHtml ?? ''}
             <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
             <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
           </div>
@@ -137,7 +142,11 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <p class="muted">${escapeHtml(input.blockerDetail)}</p>
           ${input.blockerMetaTrustedHtml ?? ''}
           ${input.blockerDisabledReasonTrustedHtml ?? ''}
-          ${input.blockerActionTrustedHtml ?? ''}
+          ${
+            input.blockerActionTrustedHtml || blockedEvidenceTrayActionTrustedHtml
+              ? `<div class="status-actions">${input.blockerActionTrustedHtml ?? ''}${blockedEvidenceTrayActionTrustedHtml}</div>`
+              : ''
+          }
         </section>
         <section class="companion-block" data-companion-section="restore" data-companion-slot-source="${escapeHtml(
           restoreSlotSourceClass,

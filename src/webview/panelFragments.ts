@@ -1,7 +1,7 @@
 import type { CompanionNudge } from '../companionNudges';
 import type { CheckpointNote } from '../checkpoint';
 import type { NextStepAction } from '../nextStepActions';
-import type { TimelineGroup } from '../timeline';
+import type { EvidenceRelevanceGroup, TimelineGroup } from '../timeline';
 import type { SummaryEvidenceItem, SummaryLink } from '../types';
 import { escapeHtml } from '../webviewSecurity';
 
@@ -279,25 +279,46 @@ const EVIDENCE_STATIC_HINT_TEXT = 'Informational evidence only; this item is not
 const TIMELINE_OPEN_HINT_TEXT = 'Opens validated evidence target';
 const TIMELINE_STATIC_HINT_TEXT = 'Informational timeline event only';
 
+function renderEvidenceListItem(item: SummaryEvidenceItem, hiddenClass = ''): string {
+  const clickable = item.kind === 'file' || item.kind === 'url';
+  const target = item.target
+    ? ` <span class="evidence-target">${escapeHtml(item.target)}</span>`
+    : '';
+  const affordanceClass = clickable
+    ? 'evidence-affordance evidence-affordance-clickable'
+    : 'evidence-affordance evidence-affordance-static';
+  const affordance = `<span class="${affordanceClass}" data-evidence-affordance="${
+    clickable ? 'open' : 'static'
+  }" aria-hidden="true">${clickable ? 'Open' : 'Not clickable'}</span>`;
+  const label = clickable
+    ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}" title="${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}">${escapeHtml(item.label)}</button>`
+    : `<span class="evidence-label" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_STATIC_HINT_TEXT)}">${escapeHtml(item.label)}</span>`;
+  return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> <code>${escapeHtml(item.id)}</code>${target}</div></li>`;
+}
+
 export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]): string {
   return evidenceCatalog
-    .map((item, index) => {
-      const clickable = item.kind === 'file' || item.kind === 'url';
-      const target = item.target
-        ? ` <span class="evidence-target">${escapeHtml(item.target)}</span>`
-        : '';
-      const hiddenClass = index >= 5 ? 'extra-evidence' : '';
-      const affordanceClass = clickable
-        ? 'evidence-affordance evidence-affordance-clickable'
-        : 'evidence-affordance evidence-affordance-static';
-      const affordance = `<span class="${affordanceClass}" data-evidence-affordance="${
-        clickable ? 'open' : 'static'
-      }" aria-hidden="true">${clickable ? 'Open' : 'Not clickable'}</span>`;
-      const label = clickable
-        ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}" title="${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}">${escapeHtml(item.label)}</button>`
-        : `<span class="evidence-label" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_STATIC_HINT_TEXT)}">${escapeHtml(item.label)}</span>`;
-      return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> <code>${escapeHtml(item.id)}</code>${target}</div></li>`;
+    .map((item, index) => renderEvidenceListItem(item, index >= 5 ? 'extra-evidence' : ''))
+    .join('');
+}
+
+export function renderGroupedEvidenceListItems(groups: EvidenceRelevanceGroup[]): string {
+  let evidenceIndex = 0;
+  return groups
+    .map((group) => {
+      const rows = group.items
+        .map((item) => {
+          const hiddenClass = evidenceIndex >= 5 ? 'extra-evidence' : '';
+          evidenceIndex += 1;
+          return renderEvidenceListItem(item, hiddenClass);
+        })
+        .join('');
+      if (!rows) {
+        return '';
+      }
+      return `<li class="evidence-group" data-evidence-group="${escapeHtml(group.key)}"><h4 class="section-heading-inline evidence-group-heading">${escapeHtml(group.label)}</h4><ul class="evidence-sublist">${rows}</ul></li>`;
     })
+    .filter(Boolean)
     .join('');
 }
 

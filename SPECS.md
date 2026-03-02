@@ -318,6 +318,8 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Demoted/non-primary actions remain visible as secondary/advisory controls.
 - Advisory-only labeling is explicit when no safe primary action is available.
 - Top-card `Why am I seeing this?` action opens `More Context` and expands `Trust Center` explainability in one click.
+- Top-card `Open evidence tray` action opens `More Context` and expands the `Evidence` tray in one click.
+- Evidence tray groups items by relevance: surfaced-decision evidence, other openable evidence, then context-only evidence.
 
 ### Technical shape / architecture notes
 
@@ -325,6 +327,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 - `renderWebview` in `src/extension.ts` resolves one `CompanionPrimaryCtaDecision` and passes slot source classes + emphasis tokens into `renderResumeStackCard`.
 - Primary CTA impression metric remains single-count per context and stores policy source class.
 - `openWhySurfaced` is handled in `src/webview/panelClientScript.ts` and expands `moreContext`, `trustCenter`, and nested why-surfaced disclosures without bypassing trust/privacy guards.
+- `openEvidenceTray` is handled in `src/webview/panelClientScript.ts` and expands `moreContext` + `evidence` disclosures while preserving existing click-time evidence target validation.
 
 ### Settings and commands affected
 

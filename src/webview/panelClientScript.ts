@@ -591,6 +591,32 @@ export function renderPanelClientScript(
             return;
           }
 
+          if (action === 'openEvidenceTray') {
+            const moreContext = document.querySelector(
+              'details[data-panel-section="moreContext"]',
+            );
+            if (moreContext instanceof HTMLDetailsElement) {
+              moreContext.open = true;
+            }
+
+            const evidenceDetails = document.querySelector(
+              'details[data-panel-section="evidence"]',
+            );
+            if (evidenceDetails instanceof HTMLDetailsElement) {
+              evidenceDetails.open = true;
+              const evidenceSummary = evidenceDetails.querySelector('summary');
+              if (evidenceSummary instanceof HTMLElement) {
+                evidenceSummary.focus();
+                if (typeof evidenceSummary.scrollIntoView === 'function') {
+                  evidenceSummary.scrollIntoView({ block: 'start' });
+                }
+              }
+            }
+
+            announceStatus('Opened evidence tray.');
+            return;
+          }
+
           if (action === 'openTopFile') {
             const index = parseDatasetInteger(actionElement.dataset.topFileIndex);
             if (index === undefined) {

@@ -31,10 +31,13 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain("actionElement.dataset.blockerPrimaryAction === 'true'");
     expect(script).toContain("vscode.postMessage({ type: action, primarySurface: 'blocked' });");
     expect(script).toContain("if (action === 'openWhySurfaced')");
+    expect(script).toContain("if (action === 'openEvidenceTray')");
     expect(script).toContain('details[data-panel-section="moreContext"]');
     expect(script).toContain('details[data-panel-section="trustCenter"]');
+    expect(script).toContain('details[data-panel-section="evidence"]');
     expect(script).toContain('details[data-why-surfaced-details="true"]');
     expect(script).toContain("announceStatus('Opened Why am I seeing this? details.')");
+    expect(script).toContain("announceStatus('Opened evidence tray.')");
     expect(script).toContain(
       'if (!event.altKey || !event.shiftKey || event.metaKey || event.ctrlKey)',
     );

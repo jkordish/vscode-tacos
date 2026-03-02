@@ -1,6 +1,7 @@
 import type { SummaryEvidenceItem } from './types';
 
 export type TimelineGroupKey = 'files' | 'terminal' | 'debugTasks' | 'urls' | 'git';
+export type EvidenceRelevanceGroupKey = 'primary' | 'openable' | 'context';
 
 export interface TimelineRow {
   evidenceId: string;
@@ -17,6 +18,12 @@ export interface TimelineGroup {
   key: TimelineGroupKey;
   label: string;
   rows: TimelineRow[];
+}
+
+export interface EvidenceRelevanceGroup {
+  key: EvidenceRelevanceGroupKey;
+  label: string;
+  items: SummaryEvidenceItem[];
 }
 
 const GROUP_ORDER: TimelineGroupKey[] = ['files', 'terminal', 'debugTasks', 'urls', 'git'];
@@ -150,4 +157,48 @@ export function buildTimelineGroups(
       rows,
     };
   }).filter((group) => group.rows.length > 0);
+}
+
+export function buildEvidenceRelevanceGroups(
+  evidenceCatalog: SummaryEvidenceItem[],
+  primaryEvidenceIds: string[] = [],
+): EvidenceRelevanceGroup[] {
+  if (evidenceCatalog.length === 0) {
+    return [];
+  }
+
+  const primaryEvidenceIdSet = new Set(
+    primaryEvidenceIds.map((id) => id.trim()).filter((id) => id.length > 0),
+  );
+  const primary = evidenceCatalog.filter((item) => primaryEvidenceIdSet.has(item.id));
+  const remaining = evidenceCatalog.filter((item) => !primaryEvidenceIdSet.has(item.id));
+  const openable = remaining.filter((item) => isEvidenceTimelineClickable(item));
+  const contextOnly = remaining.filter((item) => !isEvidenceTimelineClickable(item));
+  const groups: EvidenceRelevanceGroup[] = [];
+
+  if (primary.length > 0) {
+    groups.push({
+      key: 'primary',
+      label: 'For this surfaced decision',
+      items: primary,
+    });
+  }
+
+  if (openable.length > 0) {
+    groups.push({
+      key: 'openable',
+      label: primary.length > 0 ? 'Other openable evidence' : 'Openable evidence',
+      items: openable,
+    });
+  }
+
+  if (contextOnly.length > 0) {
+    groups.push({
+      key: 'context',
+      label: 'Context-only evidence',
+      items: contextOnly,
+    });
+  }
+
+  return groups;
 }

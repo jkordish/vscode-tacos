@@ -1,4 +1,4 @@
-import { buildTimelineGroups } from '../src/timeline';
+import { buildEvidenceRelevanceGroups, buildTimelineGroups } from '../src/timeline';
 import type { SummaryEvidenceItem } from '../src/types';
 
 describe('buildTimelineGroups', () => {
@@ -75,5 +75,36 @@ describe('buildTimelineGroups', () => {
     expect(hintsByKind.get('debug')).toBe('Not clickable');
     expect(hintsByKind.get('task')).toBe('Not clickable');
     expect(hintsByKind.get('branch')).toBe('Not clickable');
+  });
+
+  it('builds relevance groups for surfaced evidence while preserving catalog order', () => {
+    const groups = buildEvidenceRelevanceGroups(evidence, [
+      'url:https://example.com/pr/1',
+      'task:1',
+    ]);
+
+    expect(groups.map((group) => group.key)).toEqual(['primary', 'openable', 'context']);
+    expect(groups[0]?.items.map((item) => item.id)).toEqual([
+      'task:1',
+      'url:https://example.com/pr/1',
+    ]);
+    expect(groups[1]?.items.map((item) => item.id)).toEqual(['file:src/a.ts']);
+    expect(groups[2]?.items.map((item) => item.id)).toEqual([
+      'terminal:1',
+      'debug:1',
+      'branch:feature/x',
+    ]);
+  });
+
+  it('falls back to openable/context grouping when no surfaced evidence ids are provided', () => {
+    const groups = buildEvidenceRelevanceGroups(evidence, []);
+
+    expect(groups.map((group) => group.key)).toEqual(['openable', 'context']);
+    expect(groups[0]?.label).toBe('Openable evidence');
+    expect(groups[0]?.items.map((item) => item.id)).toEqual([
+      'file:src/a.ts',
+      'url:https://example.com/pr/1',
+    ]);
+    expect(groups[1]?.label).toBe('Context-only evidence');
   });
 });

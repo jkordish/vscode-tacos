@@ -122,22 +122,24 @@ Status vocabulary used in this file:
 
 - status: `doing`
 - why: preserve trust by making surfaced-decision rationale available immediately from Companion Home.
-- scope: Epic `#227`, starting with DP-301 / issue `#242` (one-click `Why am I seeing this?` path from top card plus Trust Center explainability parity).
+- scope: Epic `#227`, currently DP-302 / issue `#243` (grouped evidence tray and one-click tray open path from surfaced top-card context).
 - dependencies: P3, P4.
 - recent progress:
-  - identified existing explainability payload + Trust Center nested disclosure plumbing (`evidence IDs`, suppression reason when present, why-surfaced open counter hook).
-  - confirmed gap is top-card one-click affordance and fast expansion path to Trust Center explainability.
+  - completed DP-301 / `#242` (`Why am I seeing this?` one-click top-card path) and marked epic checklist progress.
+  - confirmed current `Evidence` card behavior and safe open/static affordance semantics to preserve during grouping.
 - immediate next actions:
-  - land DP-301 top-card `Why am I seeing this?` action and one-click expansion behavior.
-  - run unit/integration checks and close issue `#242` once merged.
+  - land DP-302 grouped evidence tray rendering (`surfaced decision`/`other openable`/`context-only`).
+  - add one-click Companion Home action to expand `More Context` -> `Evidence`.
+  - run unit/integration checks and close issue `#243` once merged.
 - risks/rollback:
-  - risk: explainability copy could become overly verbose.
-  - rollback: keep top-card affordance while tightening detail copy and disclosure defaults.
+  - risk: grouping can hide lower-priority evidence if ordering is not obvious.
+  - rollback: keep one-click tray open path and revert to flat list rendering while preserving safe affordances.
 - links:
   - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
   - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
   - https://github.com/jkordish/vscode-tacos/issues/227
   - https://github.com/jkordish/vscode-tacos/issues/242
+  - https://github.com/jkordish/vscode-tacos/issues/243
 
 ## Blockers
 

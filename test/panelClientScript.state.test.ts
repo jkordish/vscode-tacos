@@ -46,11 +46,16 @@ describe('panelClientScript state behavior', () => {
       <ul id="evidence-list"><li class="extra-evidence">more evidence</li></ul>
       <button type="button" data-action="toggleEvidenceMore" data-hidden-count="1">Show 1 more</button>
       <button type="button" data-action="openWhySurfaced">Why am I seeing this?</button>
+      <button type="button" data-action="openEvidenceTray">Open evidence tray</button>
       <button type="button" data-test-slot="primary" data-action="openEvidence" data-evidence-id="url:https://example.test/search?q=a=b&mode=full">Open evidence</button>
       <button type="button" data-test-slot="duplicate" data-action="openEvidence" data-evidence-id="url:https://example.test/search?q=a=b&mode=full">Open evidence duplicate</button>
       <button type="button" data-test-slot="pipe" data-action="openEvidence" data-evidence-id="file:src/foo|bar.ts">Open pipe evidence</button>
       <details data-panel-section="moreContext">
         <summary>More Context</summary>
+        <details data-panel-section="evidence">
+          <summary>Evidence</summary>
+          <ul><li>Evidence row</li></ul>
+        </details>
         <details data-panel-section="trustCenter">
           <summary>Trust Center</summary>
           <details data-why-surfaced-details="true">
@@ -142,6 +147,27 @@ describe('panelClientScript state behavior', () => {
     expect(trustCenter.open).toBe(true);
     expect(whySurfaced.open).toBe(true);
     expect(live.textContent).toBe('Opened Why am I seeing this? details.');
+  });
+
+  it('opens the Evidence tray from Companion Home in one click', () => {
+    bootstrap();
+    const openEvidenceTrayButton = document.querySelector(
+      '[data-action="openEvidenceTray"]',
+    ) as HTMLButtonElement;
+    const moreContext = document.querySelector(
+      'details[data-panel-section="moreContext"]',
+    ) as HTMLDetailsElement;
+    const evidence = document.querySelector(
+      'details[data-panel-section="evidence"]',
+    ) as HTMLDetailsElement;
+    const live = document.getElementById('panel-status-live') as HTMLElement;
+
+    openEvidenceTrayButton.click();
+    jest.advanceTimersByTime(20);
+
+    expect(moreContext.open).toBe(true);
+    expect(evidence.open).toBe(true);
+    expect(live.textContent).toBe('Opened evidence tray.');
   });
 
   it('persists focus and scroll state for rerender restoration', () => {
