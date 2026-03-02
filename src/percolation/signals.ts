@@ -1,4 +1,5 @@
 import type { ResumeSignals, ResumeSummary, TriggerReason } from '../types';
+import { parseCommitHashToken } from '../git';
 import { normalizeSignal, type NormalizedSignal, type PercolationPolicyMode } from './types';
 
 export interface PercolationSignalAdapterInput {
@@ -12,7 +13,6 @@ export interface PercolationSignalAdapterInput {
 }
 
 const DEBUG_FAILURE_PATTERN = /\b(fail|failing|error|exception|panic|timeout|crash)\b/i;
-const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,}$/iu;
 
 function hasBranchSwitch(summary: ResumeSummary): boolean {
   return Boolean(
@@ -60,18 +60,16 @@ function parseRecentCommitHashFromGitLog(gitLog: string): string | undefined {
     return undefined;
   }
 
-  const hashToken = firstLine.split(/\s+/u)[0] ?? '';
-  return COMMIT_HASH_PATTERN.test(hashToken) ? hashToken.toLowerCase() : undefined;
+  return parseCommitHashToken(firstLine);
 }
 
 function resolveRecentCommitSemantic(
   runtime: ResumeSignals,
   now: number,
 ): { hash: string; observedAt: number } | undefined {
-  const explicitHash = runtime.recentCommitHash?.trim().toLowerCase() ?? '';
-  const hash = COMMIT_HASH_PATTERN.test(explicitHash)
-    ? explicitHash
-    : parseRecentCommitHashFromGitLog(runtime.gitLog);
+  const hash =
+    parseCommitHashToken(runtime.recentCommitHash) ??
+    parseRecentCommitHashFromGitLog(runtime.gitLog);
   if (!hash) {
     return undefined;
   }

@@ -1,5 +1,6 @@
 import {
   parseDiffStatFiles,
+  parseCommitHashToken,
   parseLatestCommitOutput,
   parsePorcelainPaths,
   parseTrackingDivergence,
@@ -57,6 +58,23 @@ describe('parseLatestCommitOutput', () => {
 
   it('returns undefined for malformed commit output', () => {
     expect(parseLatestCommitOutput('not-a-commit value')).toBeUndefined();
+  });
+});
+
+describe('parseCommitHashToken', () => {
+  it('extracts and normalizes a hash token from decorated commit lines', () => {
+    expect(parseCommitHashToken('AbCdEf123 feat: parse summary')).toBe('abcdef123');
+  });
+
+  it('accepts full SHA-256 hashes', () => {
+    const sha256Hash = '0123456789abcdef'.repeat(4);
+    expect(parseCommitHashToken(sha256Hash)).toBe(sha256Hash);
+  });
+
+  it('returns undefined for invalid hash tokens', () => {
+    expect(parseCommitHashToken(undefined)).toBeUndefined();
+    expect(parseCommitHashToken('abc12')).toBeUndefined();
+    expect(parseCommitHashToken('not-a-hash value')).toBeUndefined();
   });
 });
 

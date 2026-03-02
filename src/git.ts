@@ -5,6 +5,7 @@ import type { ExtensionConfig, GitSnapshot } from './types';
 const execFileAsync = promisify(execFile);
 const GIT_CACHE_TTL_MS = 20_000;
 const GIT_COMMAND_TIMEOUT_MS = 2_000;
+const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,}$/iu;
 
 interface GitCacheEntry {
   snapshot: GitSnapshot;
@@ -63,11 +64,16 @@ export function parsePorcelainPaths(statusOutput: string): string[] {
     });
 }
 
-function parseCommitHashFromText(value: string): string | undefined {
-  const firstToken = value.trim().split(/\s+/u)[0];
-  if (!firstToken || !/^[0-9a-f]{7,}$/iu.test(firstToken)) {
+export function parseCommitHashToken(value: string | undefined): string | undefined {
+  if (!value) {
     return undefined;
   }
+
+  const firstToken = value.trim().split(/\s+/u)[0];
+  if (!firstToken || !COMMIT_HASH_PATTERN.test(firstToken)) {
+    return undefined;
+  }
+
   return firstToken.toLowerCase();
 }
 
@@ -83,7 +89,7 @@ export function parseLatestCommitOutput(
   }
 
   const [hashCandidate = '', authoredAtCandidate = ''] = firstLine.split(/\s+/u);
-  const hash = parseCommitHashFromText(hashCandidate);
+  const hash = parseCommitHashToken(hashCandidate);
   if (!hash) {
     return undefined;
   }
@@ -198,7 +204,7 @@ async function collectGitUncached(root: string, config: ExtensionConfig): Promis
     config.includeDiff && config.maxDiffChars > 0
       ? runGit(root, ['diff', '--unified=0', '--no-color']).catch(() => '')
       : Promise.resolve(''),
-    runGit(root, ['log', '-n', '1', '--format=%H%x09%ct']).catch(() => ''),
+    runGit(root, ['log', '-n', '1', '--format=%H%x09%at']).catch(() => ''),
     runGit(root, ['rev-list', '--left-right', '--count', '@{upstream}...HEAD']).catch(() => ''),
   ]);
 
@@ -217,7 +223,7 @@ async function collectGitUncached(root: string, config: ExtensionConfig): Promis
       .split(/\r?\n/u)
       .map((line) => line.trim())
       .find(Boolean);
-    const fallbackHash = firstCommitLine ? parseCommitHashFromText(firstCommitLine) : undefined;
+    const fallbackHash = parseCommitHashToken(firstCommitLine);
     if (fallbackHash) {
       snapshot.headCommit = fallbackHash;
     }

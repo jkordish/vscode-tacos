@@ -43,7 +43,7 @@ import {
   type EditLocation,
 } from './editActivity';
 import { isSummaryLinkEvidenceGrounded } from './evidenceSafety';
-import { collectGit, parsePorcelainPaths } from './git';
+import { collectGit, parseCommitHashToken, parsePorcelainPaths } from './git';
 import { buildStrictSanitizedSummaryContext, tryGenerateOpenAiSummary } from './llm';
 import {
   buildMetricsBaselineSnapshotMarkdown,
@@ -3549,10 +3549,7 @@ function buildFallbackRuntimeSignalsForRanking(
     : summary.topFiles;
   const changedFiles = fallbackFiles.slice(0, 10);
   const recentCommitEvidence = summary.evidenceCatalog?.find((item) => item.kind === 'commit');
-  const commitHashToken = recentCommitEvidence?.label?.trim().split(/\s+/u)[0] ?? '';
-  const recentCommitHash = /^[0-9a-f]{7,}$/iu.test(commitHashToken)
-    ? commitHashToken.toLowerCase()
-    : undefined;
+  const recentCommitHash = parseCommitHashToken(recentCommitEvidence?.label);
   const recentCommitAt =
     typeof recentCommitEvidence?.capturedAt === 'number' &&
     Number.isFinite(recentCommitEvidence.capturedAt) &&

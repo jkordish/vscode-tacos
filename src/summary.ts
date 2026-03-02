@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { parseCommitHashToken } from './git';
 import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
 import { normalizeIntentOverrideText } from './intentOverride';
 import type {
@@ -372,15 +373,22 @@ function buildEvidenceCatalog(signals: ResumeSignals, topFiles: string[]): Summa
     .split(/\r?\n/)
     .map((line) => line.trim())
     .find(Boolean);
-  const commitLabel = firstCommitLine ?? signals.recentCommitHash?.trim();
+  const recentCommitHash = parseCommitHashToken(signals.recentCommitHash);
+  const commitMessage = firstCommitLine?.split(/\s+/u).slice(1).join(' ').trim() ?? '';
+  const commitLabel =
+    recentCommitHash && commitMessage
+      ? `${recentCommitHash} ${commitMessage}`
+      : (recentCommitHash ?? firstCommitLine);
   if (commitLabel) {
     addEvidenceItem(catalog, {
       id: `commit:${hashIdFragment(commitLabel)}`,
       kind: 'commit',
       label: commitLabel,
       capturedAt:
-        typeof signals.recentCommitAt === 'number' && Number.isFinite(signals.recentCommitAt)
-          ? Math.max(0, Math.floor(signals.recentCommitAt))
+        typeof signals.recentCommitAt === 'number' &&
+        Number.isFinite(signals.recentCommitAt) &&
+        signals.recentCommitAt > 0
+          ? Math.floor(signals.recentCommitAt)
           : now - 15_000,
       meta: {
         preview: Boolean(firstCommitLine),
