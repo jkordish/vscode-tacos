@@ -31,6 +31,7 @@ All notable changes to this project are documented in this file.
 - Evidence tray now supports one-click opening from Companion Home and groups entries into surfaced-decision evidence, other openable evidence, and context-only evidence while preserving safe open/static affordances.
 - Trust Center now includes a concise privacy/trust tray with privacy preset, retention, provider mode, consent status, and one-click actions for AI payload preview and consent revocation.
 - Restricted Mode panel copy now explicitly calls out filtered signal classes, adds suppressed-execution guidance in Blocked/restore affordances, and records restricted trust-tray drill-down opens in local metrics.
+- Percolation ranking now consumes a trigger-time normalized signal bundle (new adapter layer) with explicit trusted-vs-restricted signal filtering and deterministic adapter tests.
 
 ## [0.7.0] - 2026-03-01
 

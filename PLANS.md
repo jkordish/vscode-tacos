@@ -120,18 +120,17 @@ Status vocabulary used in this file:
 
 ### P7. Trust/privacy explainability drill-down
 
-- status: `doing`
+- status: `done`
 - why: preserve trust by making surfaced-decision rationale available immediately from Companion Home.
-- scope: Epic `#227`, currently DP-304 / issue `#245` (Restricted Mode rendering + explicit suppression/explainability copy pass).
+- scope: Epic `#227` completion for core `v0.8.0` items (DP-301 through DP-304).
 - dependencies: P3, P4.
 - recent progress:
   - completed DP-301 / `#242` (`Why am I seeing this?` one-click top-card path) and marked epic checklist progress.
   - completed DP-302 / `#243` (grouped evidence tray with one-click Companion Home open path, safe affordance semantics, and hidden-group regression hardening).
   - completed DP-303 / `#244` (privacy/trust tray posture rows + payload preview + consent revoke controls + trust-tray open metric hook) in PR `#272`.
+  - completed DP-304 / `#245` (Restricted Mode rendering + explicit suppression/explainability copy pass) and merged follow-up fixes.
 - immediate next actions:
-  - land DP-304 restricted-mode copy pass (`filtered signals`, explicit `SUPPRESSED` execution guidance, and restore disable-reason completeness).
-  - add restricted-mode drill-down proxy metric for trust-tray opens.
-  - run verify gates and close issue `#245` once merged.
+  - track DP-305 (`#246`, post-`v0.8`) and DP-306 (`#247`, `v0.8.x`) as follow-on trust/privacy polish.
 - risks/rollback:
   - risk: restricted-mode copy can become too verbose and overpower primary resume guidance.
   - rollback: keep suppression semantics/guards intact and revert to shorter copy strings only.
@@ -144,6 +143,28 @@ Status vocabulary used in this file:
   - https://github.com/jkordish/vscode-tacos/issues/244
   - https://github.com/jkordish/vscode-tacos/issues/245
   - https://github.com/jkordish/vscode-tacos/pull/272
+
+### P8. Signal normalization and resume semantics hardening
+
+- status: `doing`
+- why: percolation quality depends on normalized, deterministic signals that are safe across trusted and restricted modes.
+- scope: Epic `#228`, starting with DP-401 / issue `#248` (typed signal bus + runtime adapters).
+- dependencies: P3, P4.
+- recent progress:
+  - reviewed open epic backlog (`#227-#229`) and confirmed `#248` as the next `v0.8.0` dependency item.
+  - began implementation for DP-401 with new percolation signal adapter wiring and trusted/restricted unit coverage.
+- immediate next actions:
+  - finish landing DP-401 (`src/percolation/signals.ts`, ranking input wiring, adapter tests).
+  - run verify gates and close issue `#248` once merged.
+  - sequence DP-402 (`#249`) and DP-403 (`#250`) after DP-401 merge.
+- risks/rollback:
+  - risk: duplicated or stale signal bundles can skew ranking behavior.
+  - rollback: fall back to summary-only signal defaults while preserving adapter tests for incremental reland.
+- links:
+  - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
+  - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
+  - https://github.com/jkordish/vscode-tacos/issues/228
+  - https://github.com/jkordish/vscode-tacos/issues/248
 
 ## Blockers
 
