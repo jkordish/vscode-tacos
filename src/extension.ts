@@ -2255,14 +2255,19 @@ function adaptAndRememberPercolationSignals(
   config: ExtensionConfig,
   triggerReason: TriggerReason,
   hasCheckpointNote: boolean,
+  adaptedAt?: number,
 ): NormalizedSignal[] {
+  const adaptationNow =
+    typeof adaptedAt === 'number' && Number.isFinite(adaptedAt) && adaptedAt > 0
+      ? Math.floor(adaptedAt)
+      : Date.now();
   const percolationSignals = buildPercolationSignalBundle({
     summary,
     runtimeSignals,
     mode: resolveCompanionRuntimeMode(config),
     trusted: state.workspaceTrusted && vscode.workspace.isTrusted,
     triggerReason,
-    now: summary.generatedAt > 0 ? summary.generatedAt : Date.now(),
+    now: adaptationNow,
     hasCheckpointNote,
   });
   rememberPercolationSignalsForContext(summary.contextHash, percolationSignals);
@@ -2345,6 +2350,7 @@ async function prepareTriggerSummary(
     await context.workspaceState.update(cacheKey, localSummary);
   }
 
+  const adaptationNow = Date.now();
   const triggerReason = contextUnchanged && cached ? 'cached' : reason;
   const summary = contextUnchanged && cached ? cached : localSummary;
   const percolationSignals = adaptAndRememberPercolationSignals(
@@ -2353,6 +2359,7 @@ async function prepareTriggerSummary(
     config,
     triggerReason,
     checkpointContext.primaryNote?.status === 'open',
+    adaptationNow,
   );
   const shouldRefineWithAi =
     providerPlan.activeProvider !== 'local' && summary.source !== providerPlan.activeProvider;
@@ -2433,6 +2440,7 @@ async function refineSummaryInBackground(
     prepared.config,
     prepared.triggerReason,
     prepared.checkpointPrimaryNote?.status === 'open',
+    Date.now(),
   );
 
   await context.workspaceState.update(prepared.cacheKey, refined);
@@ -2488,6 +2496,7 @@ async function generateSummary(
     prepared.config,
     prepared.triggerReason,
     prepared.checkpointPrimaryNote?.status === 'open',
+    Date.now(),
   );
 
   await context.workspaceState.update(prepared.cacheKey, refinedWithIntentOverride);

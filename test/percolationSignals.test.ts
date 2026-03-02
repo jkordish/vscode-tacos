@@ -134,4 +134,30 @@ describe('buildPercolationSignalBundle', () => {
       provider: 'openai',
     });
   });
+
+  it('stamps runtime-derived signals with trigger-time now when provided', () => {
+    const triggerNow = 1_700_000_777_000;
+    const summary = buildSummary({
+      generatedAt: 1_700_000_000_000,
+      resumeGapMinutes: 12,
+    });
+
+    const signals = buildPercolationSignalBundle({
+      summary,
+      runtimeSignals: buildRuntimeSignals(),
+      mode: 'active',
+      trusted: true,
+      triggerReason: 'cached',
+      now: triggerNow,
+      hasCheckpointNote: true,
+    });
+
+    const contextChange = signals.find((signal) => signal.kind === 'context-change');
+    const checkpointNote = signals.find((signal) => signal.kind === 'checkpoint-note');
+    expect(contextChange?.observedAt).toBe(triggerNow);
+    expect(checkpointNote?.observedAt).toBe(triggerNow);
+
+    const resume = signals.find((signal) => signal.kind === 'resume');
+    expect(resume?.observedAt).toBe(summary.generatedAt);
+  });
 });
