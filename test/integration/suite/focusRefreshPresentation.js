@@ -1,6 +1,21 @@
 const assert = require('node:assert/strict');
 const vscode = require('vscode');
 
+function formatMinuteOfDay(minute) {
+  const normalized = ((minute % 1440) + 1440) % 1440;
+  const hour = Math.floor(normalized / 60);
+  const minuteOfHour = normalized % 60;
+  return `${String(hour).padStart(2, '0')}:${String(minuteOfHour).padStart(2, '0')}`;
+}
+
+function quietWindowThatIncludesNow(now) {
+  const date = new Date(now);
+  const minuteOfDay = date.getHours() * 60 + date.getMinutes();
+  const startMinute = minuteOfDay - 1;
+  const endMinute = minuteOfDay + 2;
+  return `${formatMinuteOfDay(startMinute)}-${formatMinuteOfDay(endMinute)}`;
+}
+
 async function run() {
   const extension = vscode.extensions.getExtension('jkordish.vscode-tacos');
   assert.ok(extension, 'Expected extension jkordish.vscode-tacos to be installed in test host.');
@@ -45,7 +60,11 @@ async function run() {
       'Expected active status bar reason marker to be present.',
     );
 
-    await config.update('summaryQuietHours', '00:00-23:59', vscode.ConfigurationTarget.Global);
+    await config.update(
+      'summaryQuietHours',
+      quietWindowThatIncludesNow(Date.now()),
+      vscode.ConfigurationTarget.Global,
+    );
     const quietSuppressed = await vscode.commands.executeCommand(
       'tacos.__test.getStatusBarSnapshot',
     );
@@ -208,6 +227,11 @@ async function run() {
       'tacos.__test.getStatusBarSnapshot',
     );
     assert.equal(pausedStatusSnapshot?.mode, 'paused');
+    assert.equal(
+      pausedStatusSnapshot?.statusReason,
+      'settings pause',
+      'Expected paused status reason to describe the active pause source.',
+    );
 
     await config.update('pauseSummaries', false, vscode.ConfigurationTarget.Global);
     await config.update('enabled', false, vscode.ConfigurationTarget.Global);

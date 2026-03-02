@@ -3003,6 +3003,22 @@ function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeM
   return 'active';
 }
 
+function resolveCompanionPausedReason(config: ExtensionConfig, now: number): string {
+  if (state.snoozeUntil > now) {
+    return 'snoozed';
+  }
+
+  if (state.pauseUntilRestart) {
+    return 'until restart';
+  }
+
+  if (config.pauseSummaries) {
+    return 'settings pause';
+  }
+
+  return 'paused';
+}
+
 function classifyInterruptionTiming(
   triggerReason: TriggerReason,
   referenceAt?: number,
@@ -3521,6 +3537,7 @@ function resolveCompanionStatusBarSemantic(
   mode: CompanionRuntimeMode,
   percolationSuppression: ReturnType<typeof evaluatePercolationSuppression>,
   quietState: ReturnType<typeof resolveSummaryQuietState>,
+  pausedReason: string,
   primary: RankedSurfacedItem | undefined,
   summary: ResumeSummary | undefined,
   summaryProvider: SummaryProvider,
@@ -3538,7 +3555,7 @@ function resolveCompanionStatusBarSemantic(
     return {
       className: 'paused',
       headline: 'paused',
-      reason: 'user pause',
+      reason: pausedReason,
       elevation: 'prominent',
     };
   }
@@ -3651,6 +3668,7 @@ function updateCompanionStatusBar(): void {
   const mode = resolveCompanionRuntimeMode(config);
   const now = Date.now();
   const quietState = resolveSummaryQuietState(now, config.summaryQuietHours);
+  const pausedReason = resolveCompanionPausedReason(config, now);
   const summary = state.scratchSummary;
   const percolationSuppression = evaluatePercolationSuppression({
     enabled: config.enabled,
@@ -3660,7 +3678,7 @@ function updateCompanionStatusBar(): void {
     contextUnchanged: state.lastSummaryContextUnchanged,
   });
   const rankedPrimary =
-    mode === 'active' && summary && !percolationSuppression.suppressed
+    mode === 'active' && summary && !quietState.active && !percolationSuppression.suppressed
       ? rankPercolationForSummary(summary, mode, {
           context: activeExtensionContext,
           workspaceRoot,
@@ -3687,6 +3705,7 @@ function updateCompanionStatusBar(): void {
     mode,
     percolationSuppression,
     quietState,
+    pausedReason,
     rankedPrimary,
     summary,
     config.summaryProvider,

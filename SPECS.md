@@ -223,6 +223,7 @@ Status bar text previously mirrored long-form summary headlines, which increased
 - Status text reflects the top percolated state class in active mode.
 - Quiet-hours suppression yields a deterministic compact `calm` status class and reason.
 - Temporary quiet state reason (`quiet window`) takes precedence over generic suppression labels (for example `no-change`) in active mode.
+- Paused mode reason reflects the active pause source (`snoozed`, `until restart`, or `settings pause`).
 - Repeated reads under unchanged conditions keep stable compact status text.
 
 ### Risks / failure modes
