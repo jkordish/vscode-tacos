@@ -369,6 +369,7 @@ interface RuntimeState {
   panelScratchpadPreviewLines: string[];
   panelScratchpadExists: boolean;
   panelScratchpadHasContent: boolean;
+  panelScratchpadUpdatedAt?: number;
   panelScratchpadScopeLabel?: string;
   panelResumePathState?: ResumePathState;
   panelResumePathScope?: string;
@@ -553,6 +554,7 @@ export function activate(context: vscode.ExtensionContext): void {
     panelScratchpadPreviewLines: [],
     panelScratchpadExists: false,
     panelScratchpadHasContent: false,
+    panelScratchpadUpdatedAt: undefined,
     panelScratchpadScopeLabel: undefined,
     panelResumePathState: undefined,
     panelResumePathScope: undefined,
@@ -4680,6 +4682,7 @@ async function showDetailsPanel(
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
+    state.panelScratchpadUpdatedAt = undefined;
     state.panelScratchpadScopeLabel = undefined;
   }
 
@@ -4709,6 +4712,7 @@ async function showDetailsPanel(
       state.panelScratchpadPreviewLines = [];
       state.panelScratchpadExists = false;
       state.panelScratchpadHasContent = false;
+      state.panelScratchpadUpdatedAt = undefined;
       state.panelScratchpadScopeLabel = undefined;
       state.panelSectionState = undefined;
       state.panelSectionScope = undefined;
@@ -5509,6 +5513,14 @@ function renderWebview(
           quietHours: config.summaryQuietHours,
           contextUnchanged: state.lastSummaryContextUnchanged,
         });
+  const panelCorrectionsUpdatedAt =
+    !demoMode && activeExtensionContext && panelWorkspaceRoot
+      ? getSummaryCorrectionEntryForContext(
+          activeExtensionContext,
+          panelWorkspaceRoot,
+          summary.contextHash,
+        )?.updatedAt
+      : undefined;
   const rankedPrimaryCandidate =
     panelPercolationSuppression.suppressed || demoMode
       ? undefined
@@ -5523,8 +5535,10 @@ function renderWebview(
                 ? currentCheckpointNote.updatedAt
                 : undefined,
             correctionHints: summary.userCorrections,
+            correctionsUpdatedAt: panelCorrectionsUpdatedAt,
             scratchpadExcerpt: buildScratchpadPriorExcerptFromPreviewLines(scratchpadPreviewLines),
             scratchpadHasContent: state.panelScratchpadHasContent,
+            scratchpadUpdatedAt: state.panelScratchpadUpdatedAt,
           },
         }).primary;
   const canOpenProblems = diagnostics.errorCount > 0 || diagnostics.warningCount > 0;
@@ -9604,6 +9618,7 @@ function resetRuntimeWorkspaceState(): void {
   state.panelScratchpadPreviewLines = [];
   state.panelScratchpadExists = false;
   state.panelScratchpadHasContent = false;
+  state.panelScratchpadUpdatedAt = undefined;
   state.panelScratchpadScopeLabel = undefined;
   state.panelResumePathState = undefined;
   state.panelResumePathScope = undefined;
@@ -10114,6 +10129,7 @@ async function refreshPanelCheckpointState(
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
+    state.panelScratchpadUpdatedAt = undefined;
     state.panelScratchpadScopeLabel = undefined;
     return;
   }
@@ -10767,6 +10783,7 @@ async function refreshPanelScratchpadState(
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
+    state.panelScratchpadUpdatedAt = undefined;
     state.panelScratchpadScopeLabel = undefined;
     return;
   }
@@ -10779,10 +10796,12 @@ async function refreshPanelScratchpadState(
   await migrateLegacyScratchpadFileIfNeeded(context, root, scopeState.scope, uri);
   let exists = false;
   let sizeBytes = 0;
+  let updatedAt: number | undefined;
   try {
     const stat = await vscode.workspace.fs.stat(uri);
     exists = true;
     sizeBytes = stat.size;
+    updatedAt = stat.mtime > 0 ? stat.mtime : undefined;
   } catch {
     exists = false;
   }
@@ -10799,6 +10818,7 @@ async function refreshPanelScratchpadState(
 
   state.panelScratchpadExists = exists;
   state.panelScratchpadHasContent = exists ? sizeBytes > 0 : content.trim().length > 0;
+  state.panelScratchpadUpdatedAt = updatedAt;
   state.panelScratchpadPreviewLines =
     exists && sizeBytes > SCRATCHPAD_PREVIEW_MAX_BYTES
       ? [
