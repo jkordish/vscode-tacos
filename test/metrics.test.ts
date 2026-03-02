@@ -128,6 +128,17 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
+
+  it('treats novelty bucket counters as recorded metric activity', () => {
+    const metric = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'focus',
+      noveltyScoreBucketMedium: 1,
+    } as unknown as MetricRecord;
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -168,6 +179,9 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('percolationDismissActions');
     expect(lines[0]).toContain('percolationSnoozeActions');
     expect(lines[0]).toContain('percolationSuppressedLowConfidence');
+    expect(lines[0]).toContain('noveltyScoreBucketLow');
+    expect(lines[0]).toContain('noveltyScoreBucketMedium');
+    expect(lines[0]).toContain('noveltyScoreBucketHigh');
     expect(lines[0]).toContain('lowConfidenceClarificationRate');
     expect(lines[0]).toContain('companionActionFollowThroughRate');
     expect(lines[0]).toContain('summaryQuietActions');
@@ -332,6 +346,9 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| priorPromotionCheckpoint (total) | 0 |');
     expect(markdown).toContain('| priorPromotionCorrections (total) | 0 |');
     expect(markdown).toContain('| priorPromotionScratchpad (total) | 0 |');
+    expect(markdown).toContain('| noveltyScoreBucketLow (total) | 0 |');
+    expect(markdown).toContain('| noveltyScoreBucketMedium (total) | 0 |');
+    expect(markdown).toContain('| noveltyScoreBucketHigh (total) | 0 |');
     expect(markdown).toContain('| boundary | 1 | 0.3333 |');
     expect(markdown).toContain('| mid-activity | 1 | 0.3333 |');
     expect(markdown).toContain('| unknown | 1 | 0.3333 |');

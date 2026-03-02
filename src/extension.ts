@@ -109,6 +109,7 @@ import {
   type PercolationSuppressionReason,
   type PercolationUserPriors,
 } from './percolation/types';
+import { bucketForNoveltyScore } from './novelty';
 import {
   buildPartitionScope,
   inferTaskPartitionKey,
@@ -243,6 +244,7 @@ const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 const DEMO_RESUME_CONTEXT_HASH = '__tacos_demo_resume__';
 
 const KEY_METRIC_HISTORY = 'tacos.metricHistory';
+const AUTO_TRIGGER_FINGERPRINT_SCHEMA_VERSION = 'v2';
 const CHECKPOINT_PROMPT_COOLDOWN_MINUTES = 45;
 const FOCUS_TRIGGER_DEBOUNCE_MS = 1200;
 const FOCUS_BOUNDARY_WINDOW_MS = 90_000;
@@ -745,7 +747,29 @@ export function activate(context: vscode.ExtensionContext): void {
       },
     ),
     vscode.commands.registerCommand('tacos.__test.getRuntimeStateSnapshot', async () => {
+      const workspaceRoot = pickWorkspaceRoot();
+      const scopedAutoTriggerFingerprint =
+        workspaceRoot && activeExtensionContext
+          ? activeExtensionContext.workspaceState.get<string>(
+              autoTriggerFingerprintKey(activeExtensionContext, workspaceRoot),
+              '',
+            )
+          : '';
+      const scopedNudgeShownAt =
+        workspaceRoot && activeExtensionContext
+          ? activeExtensionContext.workspaceState.get<number>(
+              nudgeShownAtKey(activeExtensionContext, workspaceRoot),
+              0,
+            )
+          : 0;
+      const scopedNoiseBudgetEventCount =
+        workspaceRoot && activeExtensionContext
+          ? readNoiseBudgetEvents(activeExtensionContext, workspaceRoot).length
+          : 0;
+      const lastSummaryAt =
+        activeExtensionContext?.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0) ?? 0;
       return {
+        hasMetricSession: Boolean(state.metricSession),
         panelOpen: Boolean(state.panel),
         panelTitle: state.panel?.title,
         panelWorkspaceRoot: state.panelWorkspaceRoot,
@@ -757,8 +781,75 @@ export function activate(context: vscode.ExtensionContext): void {
         recentDebugCount: state.recentDebug.values().length,
         recentUrlsCount: state.recentUrls.values().length,
         doneItemsCount: state.doneItems.values().length,
+        lastSummaryContextUnchanged: state.lastSummaryContextUnchanged,
+        activeNudgeContextHash: state.activeNudges?.contextHash,
+        scopedAutoTriggerFingerprint,
+        scopedNudgeShownAt,
+        scopedNoiseBudgetEventCount,
+        lastSummaryAt,
+        metricPriorPromotionCheckpoint: state.metricSession?.priorPromotionCheckpoint ?? 0,
+        metricPriorPromotionCorrections: state.metricSession?.priorPromotionCorrections ?? 0,
+        metricPriorPromotionScratchpad: state.metricSession?.priorPromotionScratchpad ?? 0,
       };
     }),
+    vscode.commands.registerCommand(
+      'tacos.__test.seedScopeSuppressionState',
+      async (rawInput?: unknown) => {
+        const workspaceRoot = pickWorkspaceRoot();
+        if (!workspaceRoot) {
+          return false;
+        }
+
+        const input =
+          rawInput && typeof rawInput === 'object' ? (rawInput as Record<string, unknown>) : {};
+        const autoTriggerFingerprint =
+          typeof input.autoTriggerFingerprint === 'string'
+            ? input.autoTriggerFingerprint.trim()
+            : undefined;
+        if (autoTriggerFingerprint !== undefined) {
+          await context.workspaceState.update(
+            autoTriggerFingerprintKey(context, workspaceRoot),
+            autoTriggerFingerprint || undefined,
+          );
+        }
+
+        if (typeof input.nudgeShownAt === 'number' && Number.isFinite(input.nudgeShownAt)) {
+          await context.workspaceState.update(
+            nudgeShownAtKey(context, workspaceRoot),
+            input.nudgeShownAt > 0 ? Math.floor(input.nudgeShownAt) : undefined,
+          );
+        }
+
+        if (Array.isArray(input.noiseBudgetEvents)) {
+          const events = input.noiseBudgetEvents
+            .map((value) => (value && typeof value === 'object' ? value : undefined))
+            .filter((value): value is Record<string, unknown> => Boolean(value))
+            .map((value) => {
+              const kind = value.kind;
+              const at = value.at;
+              if (!isNoiseBudgetSignalKind(kind)) {
+                return undefined;
+              }
+              if (typeof at !== 'number' || !Number.isFinite(at) || at <= 0) {
+                return undefined;
+              }
+              return {
+                kind,
+                at: Math.floor(at),
+              };
+            })
+            .filter((value): value is { kind: NoiseBudgetSignalKind; at: number } =>
+              Boolean(value),
+            );
+          await context.workspaceState.update(
+            noiseBudgetEventsKey(context, workspaceRoot),
+            events.length > 0 ? events : undefined,
+          );
+        }
+
+        return true;
+      },
+    ),
     vscode.commands.registerCommand('tacos.__test.disposePanel', async () => {
       if (!state.panel) {
         return false;
@@ -1958,7 +2049,7 @@ async function handleFocusRegainSummaryTrigger(
     const lastWorkspaceOnBlur = context.workspaceState.get<string>(KEY_LAST_WORKSPACE_ON_BLUR, '');
     const projectSwitched = Boolean(lastWorkspaceOnBlur) && lastWorkspaceOnBlur !== root;
     const lastSummaryAt = context.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0);
-    const fingerprint = computeAutoTriggerFingerprint(root);
+    const fingerprint = computeAutoTriggerFingerprint(context, root);
     const lastFingerprint = context.workspaceState.get<string>(
       autoTriggerFingerprintKey(context, root),
       '',
@@ -2727,7 +2818,6 @@ async function presentSummary(
         workspaceRoot,
         priors: options.percolationPriors,
       }).primary;
-      recordPriorDrivenPromotion(notificationPrimary);
     }
     return notificationPrimary;
   };
@@ -2749,6 +2839,10 @@ async function presentSummary(
     !options.preferBackgroundPresentation
   ) {
     notificationPrimary = ensureNotificationPrimary();
+  }
+  if (config.metricsEnabled) {
+    notificationPrimary = ensureNotificationPrimary();
+    recordNoveltyScoreDistribution(notificationPrimary);
   }
 
   const surfaceDecision = resolveSummarySurfaceDecision({
@@ -2773,6 +2867,9 @@ async function presentSummary(
   if (state.metricSession) {
     state.metricSession.interruptionEvent =
       triggerReason === 'focus' && presentationMode === 'prompt' ? 1 : 0;
+  }
+  if (presentationMode !== 'silent') {
+    recordPriorDrivenPromotion(notificationPrimary);
   }
 
   if (presentationMode === 'auto-open-details') {
@@ -2861,8 +2958,9 @@ async function presentSummary(
   }
 }
 
-function nudgeShownAtKey(workspaceRoot: string): string {
-  return `${KEY_LAST_NUDGE_AT_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+function nudgeShownAtKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
+  const scope = partitionScope(context, workspaceRoot);
+  return `${KEY_LAST_NUDGE_AT_PREFIX}.${Buffer.from(scope).toString('base64url')}`;
 }
 
 function nudgeFeedbackKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
@@ -3070,8 +3168,9 @@ async function rememberPercolationPrimaryForSummary(
   return true;
 }
 
-function noiseBudgetEventsKey(workspaceRoot: string): string {
-  return `${KEY_NOISE_BUDGET_EVENTS_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+function noiseBudgetEventsKey(context: vscode.ExtensionContext, workspaceRoot: string): string {
+  const scope = partitionScope(context, workspaceRoot);
+  return `${KEY_NOISE_BUDGET_EVENTS_PREFIX}.${Buffer.from(scope).toString('base64url')}`;
 }
 
 function isNoiseBudgetSignalKind(value: unknown): value is NoiseBudgetSignalKind {
@@ -3082,7 +3181,7 @@ function readNoiseBudgetEvents(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
 ): NoiseBudgetEvent[] {
-  const raw = context.workspaceState.get<unknown>(noiseBudgetEventsKey(workspaceRoot), []);
+  const raw = context.workspaceState.get<unknown>(noiseBudgetEventsKey(context, workspaceRoot), []);
   if (!Array.isArray(raw)) {
     return [];
   }
@@ -3131,7 +3230,7 @@ async function consumeNoiseBudgetSignal(
   const nextEvents = decision.allowed
     ? [...decision.recentEvents, { kind: signalKind, at: now }]
     : decision.recentEvents;
-  await context.workspaceState.update(noiseBudgetEventsKey(workspaceRoot), nextEvents);
+  await context.workspaceState.update(noiseBudgetEventsKey(context, workspaceRoot), nextEvents);
   return {
     ...decision,
     recentEvents: nextEvents,
@@ -3152,7 +3251,10 @@ async function updateActiveNudges(
 
   const now = Date.now();
   const runtimeMode = resolveCompanionRuntimeMode(config);
-  const lastShownAt = context.workspaceState.get<number>(nudgeShownAtKey(workspaceRoot), 0);
+  const lastShownAt = context.workspaceState.get<number>(
+    nudgeShownAtKey(context, workspaceRoot),
+    0,
+  );
   let decision = chooseCompanionNudges({
     summary,
     provider: config.summaryProvider,
@@ -3200,7 +3302,7 @@ async function updateActiveNudges(
     return;
   }
 
-  await context.workspaceState.update(nudgeShownAtKey(workspaceRoot), now);
+  await context.workspaceState.update(nudgeShownAtKey(context, workspaceRoot), now);
   recordCompanionNudgeImpression();
 }
 
@@ -3493,6 +3595,43 @@ function recordLowConfidenceClarificationRate(
   state.metricSession.lowConfidenceClarificationRate = primary?.kind === 'clarification' ? 1 : 0;
 }
 
+type NoveltyScoreBucketMetricField =
+  | 'noveltyScoreBucketLow'
+  | 'noveltyScoreBucketMedium'
+  | 'noveltyScoreBucketHigh';
+
+const NOVELTY_SCORE_BUCKET_FIELDS: NoveltyScoreBucketMetricField[] = [
+  'noveltyScoreBucketLow',
+  'noveltyScoreBucketMedium',
+  'noveltyScoreBucketHigh',
+];
+
+function recordNoveltyScoreDistribution(primary: RankedSurfacedItem | undefined): void {
+  if (!state.metricSession || !primary) {
+    return;
+  }
+
+  const alreadyRecorded = NOVELTY_SCORE_BUCKET_FIELDS.some(
+    (fieldName) => (state.metricSession?.[fieldName] ?? 0) > 0,
+  );
+  if (alreadyRecorded) {
+    return;
+  }
+
+  const noveltyScore =
+    typeof primary.novelty === 'number' && Number.isFinite(primary.novelty)
+      ? Math.max(0, Math.min(1, primary.novelty))
+      : 0;
+  const noveltyBucket = bucketForNoveltyScore(noveltyScore);
+  const fieldName: NoveltyScoreBucketMetricField =
+    noveltyBucket === 'high'
+      ? 'noveltyScoreBucketHigh'
+      : noveltyBucket === 'medium'
+        ? 'noveltyScoreBucketMedium'
+        : 'noveltyScoreBucketLow';
+  state.metricSession[fieldName] = 1;
+}
+
 function recordMetricCounter(
   field:
     | 'surfaceSelectionNone'
@@ -3511,6 +3650,9 @@ function recordMetricCounter(
     | 'percolationSuppressedNoChange'
     | 'percolationSuppressedNoiseBudget'
     | 'percolationSuppressedLowConfidence'
+    | 'noveltyScoreBucketLow'
+    | 'noveltyScoreBucketMedium'
+    | 'noveltyScoreBucketHigh'
     | 'percolationDismissActions'
     | 'percolationSnoozeActions'
     | 'noteCreated'
@@ -6697,6 +6839,11 @@ async function applyTaskPartitionSwitch(
     taskPartitionStorageKey(workspaceRoot),
     nextValue ? nextValue : undefined,
   );
+  // Reset suppression memory for the destination partition scope so no-change
+  // from a previous scope does not suppress freshly switched task context.
+  await context.workspaceState.update(autoTriggerFingerprintKey(context, workspaceRoot), undefined);
+  await context.workspaceState.update(nudgeShownAtKey(context, workspaceRoot), undefined);
+  await context.workspaceState.update(noiseBudgetEventsKey(context, workspaceRoot), undefined);
 
   const snapshot = loadPersistedActivitySnapshot(context);
   state.recentFiles = new RingBuffer(15, snapshot.sanitized.recentFiles);
@@ -6709,6 +6856,9 @@ async function applyTaskPartitionSwitch(
   state.lastFocusGainedAt = 0;
   state.lastBoundarySignalAt = 0;
   state.lastMeaningfulActivityAt = 0;
+  state.lastSummaryContextUnchanged = false;
+  state.activeNudges = undefined;
+  state.percolationSignalsByContextHash.clear();
   state.scratchSummary = undefined;
   state.scratchSummaryPriorSnapshot = undefined;
   state.detailsMarkdownCache = undefined;
@@ -9597,8 +9747,9 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_TASK_PARTITION_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_SUMMARY_CORRECTIONS_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_LAST_CHECKPOINT_PROMPT_AT_PREFIX, workspaceRoot, false) ||
-      matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(key, KEY_LAST_NUDGE_AT_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_NUDGE_FEEDBACK_PREFIX, workspaceRoot, true) ||
+      matchesEncodedWorkspaceKey(key, KEY_NOISE_BUDGET_EVENTS_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_PERCOLATION_MEMORY_PREFIX, workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, KEY_WORKSPACE_ACTIVITY_AT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_RESUME_PATH_PREFIX, workspaceRoot, true) ||
@@ -9840,8 +9991,9 @@ async function applyRetentionPolicy(
   }
 }
 
-function computeAutoTriggerFingerprint(root: string): string {
+function computeAutoTriggerFingerprint(context: vscode.ExtensionContext, root: string): string {
   const config = getConfig();
+  const scope = partitionScope(context, root);
   const activeFileRaw = vscode.window.activeTextEditor?.document?.uri.fsPath
     ? toRelativePath(vscode.window.activeTextEditor.document.uri.fsPath, root)
     : '';
@@ -9858,19 +10010,24 @@ function computeAutoTriggerFingerprint(root: string): string {
     root,
     config.redactionPatterns,
   );
+  const fingerprintPayload = {
+    schemaVersion: AUTO_TRIGGER_FINGERPRINT_SCHEMA_VERSION,
+    scope,
+    activeFile,
+    recentFiles: redacted.recentFiles.slice(0, 3),
+    recentTerminal: redacted.recentTerminal.slice(0, 2),
+    recentDebug: redacted.recentDebug.slice(0, 2),
+    lastFailingCommand: redacted.lastFailingCommand ?? '',
+    doneItems: redacted.doneItems.slice(0, 2),
+    counters: {
+      recentFiles: redacted.recentFiles.length,
+      recentTerminal: redacted.recentTerminal.length,
+      recentDebug: redacted.recentDebug.length,
+      doneItems: redacted.doneItems.length,
+    },
+  };
 
-  return createHash('sha256')
-    .update(
-      [
-        activeFile,
-        redacted.recentFiles[0] ?? '',
-        redacted.recentTerminal[0] ?? '',
-        redacted.recentDebug[0] ?? '',
-        redacted.lastFailingCommand ?? '',
-        redacted.doneItems[0] ?? '',
-      ].join('|'),
-    )
-    .digest('hex');
+  return createHash('sha256').update(JSON.stringify(fingerprintPayload)).digest('hex');
 }
 
 interface CheckpointScopeState {

@@ -999,6 +999,8 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 - Trust/privacy mode transitions surface through explicit normalized trust/privacy signals.
 - Git semantic adapters explicitly capture branch switch, recent commit checkpoint, and upstream divergence signals when trusted git context is available.
 - Ranking includes deterministic user-prior promotion/suppression metadata; saved corrections can suppress conflicting checkpoint/scratchpad promotions.
+- No-change auto-trigger fingerprinting includes partition scope (`v2`) so task-partition transitions do not inherit stale no-change suppression.
+- Partition switches reset suppression memory for destination scope (`lastSummaryContextUnchanged`, nudge cooldown memory, and noise-budget memory).
 
 ### Technical shape / architecture notes
 
@@ -1006,6 +1008,8 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 - Trigger orchestration records per-context normalized bundles in `src/extension.ts`.
 - Ranking input (`createPercolationPolicyInput`) consumes adapted signal bundles when available.
 - Ranking input normalizes user-prior hints through `PercolationUserPriors` and annotates candidate metadata (`priorPromotion`, `priorSuppression`, source flags) for policy scoring and metrics.
+- Auto-trigger fingerprinting in `src/extension.ts` uses a structured `v2` payload (`scope`, active file, top activity snapshots, counters) hashed for deterministic significant-change checks.
+- Suppression-memory keys for nudge cooldown and noise-budget windows are partition-scoped and reset on explicit task-partition switches.
 
 ### Settings and commands affected
 
@@ -1018,6 +1022,7 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 - Adapter outputs are deterministic and covered by trusted/restricted unit tests.
 - Policy input receives explicit git semantic signal records (`branch-switch`, `git-commit`, `git-divergence`) when those semantics are present.
 - Prior precedence and conflict resolution are deterministic across checkpoint/correction/scratchpad inputs and covered by unit tests.
+- No-change and suppression-memory checks do not carry across task-partition transitions.
 
 ### Risks / failure modes
 
@@ -1033,3 +1038,63 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 - Issue: https://github.com/jkordish/vscode-tacos/issues/248
 - Issue: https://github.com/jkordish/vscode-tacos/issues/249
 - Issue: https://github.com/jkordish/vscode-tacos/issues/251
+- Issue: https://github.com/jkordish/vscode-tacos/issues/253
+
+## Feature: Changes Precision and Novelty Profiling
+
+### Problem
+
+`Changes Since Last Time` was useful but coarse, and percolation novelty scoring relied on static defaults instead of a structured summary signal.
+
+### Goals
+
+- Improve change-card precision across code deltas, runs, blockers, key files, git context, and references.
+- Produce a deterministic novelty profile (`score` + `low`/`medium`/`high` bucket) directly from summary signals.
+- Feed novelty profile values into default percolation candidate novelty fields.
+- Record local novelty bucket distribution counters in metrics exports.
+
+### Non-goals
+
+- Learned novelty tuning.
+- Networked telemetry.
+
+### User-facing behavior
+
+- `Changes Since Last Time` now renders precision buckets:
+  - `Code`, `Runs`, `Blocker`, `Key files`, `Git`, and `References` (when present).
+- Session recap includes explicit novelty profile labeling (`low`, `medium`, or `high` with deterministic score).
+- Candidate novelty for default percolation surfaced items adapts to summary novelty profile instead of using static constants.
+
+### Technical shape / architecture notes
+
+- `src/summary.ts` computes structured precision signals and a `SummaryNoveltyProfile`.
+- `ResumeSummary` includes optional `noveltyProfile` payload (`src/types.ts`).
+- `src/percolation/types.ts` consumes summary novelty profile to set default candidate novelty values and metadata.
+- `src/extension.ts` records one novelty bucket counter per metric session.
+- `src/metrics.ts` exports and summarizes novelty bucket counters in CSV/baseline outputs.
+
+### Settings and commands affected
+
+- No new settings.
+- No new commands.
+
+### Acceptance criteria
+
+- Precision buckets are deterministic for the same signal input.
+- Summary novelty profile is always present on locally generated summaries.
+- Default candidate novelty values increase/decrease with novelty profile score.
+- Metrics CSV/header + baseline snapshot include novelty bucket counters.
+
+### Risks / failure modes
+
+- Overweighting novelty can degrade continuity if profile scoring drifts.
+- Noisy terminal or git context can inflate novelty if precision parsing regresses.
+
+### Open questions
+
+- Should novelty profile details be surfaced in diagnostics payloads by default?
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P8`.
+- Issue: https://github.com/jkordish/vscode-tacos/issues/252

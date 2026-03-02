@@ -157,11 +157,65 @@ describe('buildResumeSummary', () => {
     const summary = buildResumeSummary(sampleSignals());
 
     expect(summary.doneSinceLastResume).toEqual(['npm run build']);
-    expect(summary.changesSinceLastResume?.[0]).toContain('Diffstat:');
+    expect(summary.changesSinceLastResume).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Code:'),
+        expect.stringContaining('Runs:'),
+        expect.stringContaining('Key files:'),
+        expect.stringContaining('Novelty:'),
+      ]),
+    );
     expect(summary.pendingBlocked?.[0]).toContain('Failing command still unresolved');
     expect(summary.detailsMarkdown).toContain('## Session recap');
     expect(summary.detailsMarkdown).toContain('Changes since last resume');
+    expect(summary.detailsMarkdown).toContain('Novelty profile:');
     expect(summary.detailsMarkdown).toContain('Recommended first action');
+  });
+
+  it('builds a structured novelty profile from changes, runs, blockers, and context', () => {
+    const summary = buildResumeSummary(sampleSignals());
+
+    expect(summary.noveltyProfile).toMatchObject({
+      bucket: 'medium',
+      changedFilesCount: 1,
+      runCount: 2,
+      blockerCount: 1,
+      linkCount: 1,
+    });
+    expect(summary.noveltyProfile?.score ?? 0).toBeGreaterThan(0.34);
+    expect(summary.noveltyProfile?.score ?? 1).toBeLessThan(0.67);
+  });
+
+  it('counts changed files as the union of porcelain and diffstat files', () => {
+    const signals = sampleSignals();
+    signals.changedFiles = ['src/extension.ts', 'scratch/new-notes.md', 'tmp/idea.txt'];
+    signals.gitDiffStat = [
+      ' src/extension.ts | 2 +-',
+      ' 1 file changed, 1 insertion(+), 1 deletion(-)',
+    ].join('\n');
+
+    const summary = buildResumeSummary(signals);
+    const codeLine =
+      summary.changesSinceLastResume?.find((line) => line.startsWith('Code:'))?.trim() ?? '';
+
+    expect(codeLine).toContain('Code: 3 files changed');
+    expect(summary.noveltyProfile?.changedFilesCount).toBe(3);
+  });
+
+  it('normalizes diffstat rename paths before changed-file union counting', () => {
+    const signals = sampleSignals();
+    signals.changedFiles = ['src/new-name.ts'];
+    signals.gitDiffStat = [
+      ' src/{old-name.ts => new-name.ts} | 6 +++---',
+      ' 1 file changed, 3 insertions(+), 3 deletions(-)',
+    ].join('\n');
+
+    const summary = buildResumeSummary(signals);
+    const codeLine =
+      summary.changesSinceLastResume?.find((line) => line.startsWith('Code:'))?.trim() ?? '';
+
+    expect(codeLine).toContain('Code: 1 file changed');
+    expect(summary.noveltyProfile?.changedFilesCount).toBe(1);
   });
 
   it('marks low-confidence summaries explicitly when evidence is sparse', () => {
@@ -184,6 +238,8 @@ describe('buildResumeSummary', () => {
     expect(summary.candidateIntents?.length ?? 0).toBeGreaterThan(0);
     expect(summary.nextSteps[0]).toContain('Unclear intent');
     expect(summary.links.length).toBe(0);
+    expect(summary.noveltyProfile?.bucket).toBe('low');
+    expect(summary.noveltyProfile?.score ?? 1).toBeLessThan(0.34);
   });
 
   it('enters long-gap reorientation mode with safe starter copy when threshold is exceeded', () => {

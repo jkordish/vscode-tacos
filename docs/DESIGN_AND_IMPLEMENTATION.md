@@ -30,6 +30,8 @@ Principles:
 - Collection is bounded by settings and trust state.
 - Percolation signal adapters normalize trigger-time runtime state into typed policy signals (`src/percolation/signals.ts`) for deterministic ranking input.
 - Git semantic enrichment captures branch-switch, recent-commit checkpoint, and upstream divergence metadata from trusted git snapshots before policy ranking.
+- Summary generation computes precision `Changes Since Last Time` buckets (`Code`, `Runs`, `Blocker`, `Key files`, `Git`, `References`) plus a deterministic novelty profile (`score` + `low`/`medium`/`high`) consumed by ranking defaults.
+- Focus auto-trigger significant-change checks use a structured no-change fingerprint `v2` payload that includes partition scope, so partition transitions do not inherit stale no-change state.
 - Percolation ranking normalizes user-authored priors (checkpoint note, saved corrections, scratchpad excerpt/content) and applies deterministic promotion/suppression with corrections precedence when priors conflict.
 
 ### Sanitization / privacy filtering
@@ -119,6 +121,8 @@ Primary stores:
 - local files: `.tacos/metrics.json` and `.tacos/metrics.csv` exports.
 - Metrics schema includes blocker-promotion source counters (`taskFailure`, `commandFailure`, `diagnostics`, `branchContext`, `lowConfidence`, `restricted`, `noNextSteps`) for per-session blocker-mix analysis.
 - Metrics schema also includes prior-driven promotion counters (`priorPromotionCheckpoint`, `priorPromotionCorrections`, `priorPromotionScratchpad`) for ranking-prior attribution.
+- Metrics schema includes novelty bucket distribution counters (`noveltyScoreBucketLow`, `noveltyScoreBucketMedium`, `noveltyScoreBucketHigh`) for per-session percolation novelty analysis.
+- Suppression memory for nudge cooldown windows and noise-budget windows is partition-scoped; explicit task-partition switches clear destination-scope suppression memory.
 - extension storage scratchpad files scoped by workspace/partition context.
 
 Retention:

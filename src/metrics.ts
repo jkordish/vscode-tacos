@@ -43,6 +43,9 @@ const CSV_HEADERS = [
   'percolationSuppressedNoChange',
   'percolationSuppressedNoiseBudget',
   'percolationSuppressedLowConfidence',
+  'noveltyScoreBucketLow',
+  'noveltyScoreBucketMedium',
+  'noveltyScoreBucketHigh',
   'percolationDismissActions',
   'percolationSnoozeActions',
   'lowConfidenceClarificationRate',
@@ -346,6 +349,9 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const priorPromotionCheckpoint = summarizeTotal(metrics, 'priorPromotionCheckpoint');
   const priorPromotionCorrections = summarizeTotal(metrics, 'priorPromotionCorrections');
   const priorPromotionScratchpad = summarizeTotal(metrics, 'priorPromotionScratchpad');
+  const noveltyScoreBucketLow = summarizeTotal(metrics, 'noveltyScoreBucketLow');
+  const noveltyScoreBucketMedium = summarizeTotal(metrics, 'noveltyScoreBucketMedium');
+  const noveltyScoreBucketHigh = summarizeTotal(metrics, 'noveltyScoreBucketHigh');
   const notesCreated = summarizeTotal(metrics, 'noteCreated');
   const notesMarkedDone = summarizeTotal(metrics, 'noteMarkedDone');
   const notesPinned = summarizeTotal(metrics, 'notePinned');
@@ -439,6 +445,9 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| priorPromotionCheckpoint (total) | ${priorPromotionCheckpoint} |`,
     `| priorPromotionCorrections (total) | ${priorPromotionCorrections} |`,
     `| priorPromotionScratchpad (total) | ${priorPromotionScratchpad} |`,
+    `| noveltyScoreBucketLow (total) | ${noveltyScoreBucketLow} |`,
+    `| noveltyScoreBucketMedium (total) | ${noveltyScoreBucketMedium} |`,
+    `| noveltyScoreBucketHigh (total) | ${noveltyScoreBucketHigh} |`,
     `| noteCreated (total) | ${notesCreated} |`,
     `| noteMarkedDone (total) | ${notesMarkedDone} |`,
     `| notePinned (total) | ${notesPinned} |`,
@@ -533,6 +542,9 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.percolationSuppressedNoChange ?? 0) > 0 ||
     (metric.percolationSuppressedNoiseBudget ?? 0) > 0 ||
     (metric.percolationSuppressedLowConfidence ?? 0) > 0 ||
+    (metric.noveltyScoreBucketLow ?? 0) > 0 ||
+    (metric.noveltyScoreBucketMedium ?? 0) > 0 ||
+    (metric.noveltyScoreBucketHigh ?? 0) > 0 ||
     (metric.percolationDismissActions ?? 0) > 0 ||
     (metric.percolationSnoozeActions ?? 0) > 0 ||
     (metric.lowConfidenceClarificationRate ?? 0) > 0 ||
@@ -609,6 +621,9 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.percolationSuppressedNoChange),
       toOptionalNumber(metric.percolationSuppressedNoiseBudget),
       toOptionalNumber(metric.percolationSuppressedLowConfidence),
+      toOptionalNumber(metric.noveltyScoreBucketLow),
+      toOptionalNumber(metric.noveltyScoreBucketMedium),
+      toOptionalNumber(metric.noveltyScoreBucketHigh),
       toOptionalNumber(metric.percolationDismissActions),
       toOptionalNumber(metric.percolationSnoozeActions),
       toOptionalNumber(metric.lowConfidenceClarificationRate),

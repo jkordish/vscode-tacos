@@ -110,6 +110,19 @@ export interface SummaryEvidenceItem {
 
 export type ResumeMode = 'coding' | 'debugging';
 
+export type SummaryNoveltyBucket = 'low' | 'medium' | 'high';
+
+export interface SummaryNoveltyProfile {
+  score: number;
+  bucket: SummaryNoveltyBucket;
+  changedFilesCount: number;
+  runCount: number;
+  blockerCount: number;
+  keyFileCount: number;
+  linkCount: number;
+  gitContextCount: number;
+}
+
 export interface ResumeSummary {
   intent: string;
   inferredIntent?: string;
@@ -135,6 +148,7 @@ export interface ResumeSummary {
   lastFailingCommand?: string;
   recentFilesSnapshot?: string[];
   topFiles: string[];
+  noveltyProfile?: SummaryNoveltyProfile;
   links: SummaryLink[];
   evidenceCatalog?: SummaryEvidenceItem[];
   userCorrections?: string[];
@@ -188,6 +202,9 @@ export interface MetricRecord {
   percolationSuppressedNoChange?: number;
   percolationSuppressedNoiseBudget?: number;
   percolationSuppressedLowConfidence?: number;
+  noveltyScoreBucketLow?: number;
+  noveltyScoreBucketMedium?: number;
+  noveltyScoreBucketHigh?: number;
   percolationDismissActions?: number;
   percolationSnoozeActions?: number;
   lowConfidenceClarificationRate?: number;

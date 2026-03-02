@@ -1,11 +1,13 @@
 import { createHash } from 'node:crypto';
-import { parseCommitHashToken } from './git';
+import { parseCommitHashToken, parseDiffStatFiles } from './git';
 import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
 import { normalizeIntentOverrideText } from './intentOverride';
+import { bucketForNoveltyScore } from './novelty';
 import type {
   ResumeMode,
   ResumeSignals,
   ResumeSummary,
+  SummaryNoveltyProfile,
   SummaryEvidenceItem,
   SummaryEvidenceKind,
   SummaryLink,
@@ -225,39 +227,291 @@ function buildPendingBlocked(signals: ResumeSignals, topFiles: string[]): string
   return dedupe(pending, 3).slice(0, 3);
 }
 
-function buildChangesSinceLastResume(signals: ResumeSignals, topFiles: string[]): string[] {
-  const changes: string[] = [];
-  const diffStatLine = signals.gitDiffStat
-    .split(/\r?\n/)
+interface DiffStatPrecision {
+  filesChanged?: number;
+  insertions?: number;
+  deletions?: number;
+}
+
+type RunCategory = 'test' | 'build' | 'lint' | 'debug' | 'other';
+
+interface RunPrecisionSummary {
+  total: number;
+  categories: Record<RunCategory, number>;
+  samples: string[];
+}
+
+interface ChangesSinceLastResumeResult {
+  items: string[];
+  noveltyProfile: SummaryNoveltyProfile;
+}
+
+function parseDiffStatPrecision(diffStat: string): DiffStatPrecision {
+  const totalLine = diffStat
+    .split(/\r?\n/u)
     .map((line) => line.trim())
-    .find(Boolean);
-  if (diffStatLine) {
-    changes.push(`Diffstat: ${diffStatLine}`);
+    .find((line) => /\bfiles?\s+changed\b/iu.test(line));
+  if (!totalLine) {
+    return {};
   }
 
-  const runs = dedupe(signals.recentTerminal, 2);
-  if (runs.length > 0) {
-    changes.push(`Runs: ${runs.join(' | ')}`);
+  const filesChangedMatch = totalLine.match(/(\d+)\s+files?\s+changed/iu);
+  const insertionsMatch = totalLine.match(/(\d+)\s+insertions?\(\+\)/iu);
+  const deletionsMatch = totalLine.match(/(\d+)\s+deletions?\(-\)/iu);
+
+  return {
+    filesChanged: filesChangedMatch ? Number(filesChangedMatch[1]) : undefined,
+    insertions: insertionsMatch ? Number(insertionsMatch[1]) : undefined,
+    deletions: deletionsMatch ? Number(deletionsMatch[1]) : undefined,
+  };
+}
+
+function classifyRunCategory(entry: string): RunCategory | undefined {
+  const normalized = entry.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
   }
 
+  if (
+    /^(cd|pwd|ls|clear|echo)\b/.test(normalized) ||
+    /^git\s+(status|diff|log|show|branch)\b/.test(normalized)
+  ) {
+    return undefined;
+  }
+
+  if (/\b(test|jest|vitest|mocha|pytest|go test)\b/.test(normalized)) {
+    return 'test';
+  }
+  if (/\b(build|compile|tsc|cargo build)\b/.test(normalized)) {
+    return 'build';
+  }
+  if (/\b(lint|eslint|ruff|golangci-lint)\b/.test(normalized)) {
+    return 'lint';
+  }
+  if (/\b(debug|launch|attach)\b/.test(normalized)) {
+    return 'debug';
+  }
+  return 'other';
+}
+
+function buildRunPrecisionSummary(signals: ResumeSignals): RunPrecisionSummary {
+  const categories: Record<RunCategory, number> = {
+    test: 0,
+    build: 0,
+    lint: 0,
+    debug: 0,
+    other: 0,
+  };
+  const samples: string[] = [];
+
+  for (const entry of dedupe(
+    signals.recentTerminal.map((command) => normalizeTerminalEntryForMode(command)),
+    6,
+  )) {
+    const category = classifyRunCategory(entry);
+    if (!category) {
+      continue;
+    }
+    categories[category] += 1;
+    if (samples.length < 2) {
+      samples.push(entry);
+    }
+  }
+
+  for (const debugEntry of dedupe(signals.recentDebug, 2)) {
+    categories.debug += 1;
+    if (samples.length < 2) {
+      samples.push(`debug: ${debugEntry}`);
+    }
+  }
+
+  const total =
+    categories.test + categories.build + categories.lint + categories.debug + categories.other;
+  return {
+    total,
+    categories,
+    samples,
+  };
+}
+
+function pluralize(count: number, singular: string, pluralSuffix = 's'): string {
+  return `${count} ${singular}${count === 1 ? '' : pluralSuffix}`;
+}
+
+function normalizeChangedPathForCounting(pathValue: string): string {
+  const trimmed = pathValue.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  // Normalize git diffstat rename segments like `src/{old.ts => new.ts}`.
+  const braceNormalized = trimmed.replace(/\{([^{}]*?)\s*=>\s*([^{}]*?)\}/gu, '$2');
+  if (!braceNormalized.includes('=>')) {
+    return braceNormalized;
+  }
+
+  // Normalize full-path rename entries like `old.ts => new.ts`.
+  const renamedSegments = braceNormalized
+    .split(/\s*=>\s*/u)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (renamedSegments.length === 0) {
+    return braceNormalized;
+  }
+  return renamedSegments[renamedSegments.length - 1] ?? braceNormalized;
+}
+
+function buildRunPrecisionLine(summary: RunPrecisionSummary): string | undefined {
+  if (summary.total <= 0) {
+    return undefined;
+  }
+
+  const categoryOrder: RunCategory[] = ['test', 'build', 'lint', 'debug', 'other'];
+  const categoryParts = categoryOrder
+    .map((category) => {
+      const value = summary.categories[category];
+      if (value <= 0) {
+        return '';
+      }
+      return `${value} ${category}`;
+    })
+    .filter(Boolean);
+  const sampleSuffix =
+    summary.samples.length > 0 ? ` Latest: ${summary.samples.slice(0, 2).join(' | ')}` : '';
+  return `Runs: ${summary.total} (${categoryParts.join(', ')})${sampleSuffix}`;
+}
+
+function computeNoveltyProfile(input: {
+  changedFilesCount: number;
+  runCount: number;
+  blockerCount: number;
+  keyFileCount: number;
+  linkCount: number;
+  gitContextCount: number;
+}): SummaryNoveltyProfile {
+  const score =
+    Math.min(1, input.changedFilesCount / 8) * 0.4 +
+    Math.min(1, input.runCount / 4) * 0.2 +
+    Math.min(1, input.blockerCount) * 0.2 +
+    Math.min(1, input.keyFileCount / 4) * 0.1 +
+    Math.min(1, input.linkCount / 3) * 0.05 +
+    Math.min(1, input.gitContextCount / 3) * 0.05;
+  const roundedScore = Math.max(0, Math.min(1, Math.round(score * 100) / 100));
+  const bucket = bucketForNoveltyScore(roundedScore);
+  return {
+    score: roundedScore,
+    bucket,
+    changedFilesCount: input.changedFilesCount,
+    runCount: input.runCount,
+    blockerCount: input.blockerCount,
+    keyFileCount: input.keyFileCount,
+    linkCount: input.linkCount,
+    gitContextCount: input.gitContextCount,
+  };
+}
+
+function buildChangesSinceLastResume(
+  signals: ResumeSignals,
+  topFiles: string[],
+): ChangesSinceLastResumeResult {
+  const changes: string[] = [];
+  const diffStatPrecision = parseDiffStatPrecision(signals.gitDiffStat);
+  const changedFileSet = new Set(
+    [...signals.changedFiles, ...parseDiffStatFiles(signals.gitDiffStat)]
+      .map((value) => normalizeChangedPathForCounting(value))
+      .filter(Boolean),
+  );
+  const changedFilesCount = Math.max(changedFileSet.size, diffStatPrecision.filesChanged ?? 0);
+  const codeDeltaParts: string[] = [];
+  if (typeof diffStatPrecision.insertions === 'number' && diffStatPrecision.insertions > 0) {
+    codeDeltaParts.push(`+${diffStatPrecision.insertions}`);
+  }
+  if (typeof diffStatPrecision.deletions === 'number' && diffStatPrecision.deletions > 0) {
+    codeDeltaParts.push(`-${diffStatPrecision.deletions}`);
+  }
+  if (changedFilesCount > 0) {
+    const deltaSuffix = codeDeltaParts.length > 0 ? ` (${codeDeltaParts.join(' / ')})` : '';
+    changes.push(`Code: ${pluralize(changedFilesCount, 'file')} changed${deltaSuffix}.`);
+  } else {
+    const diffStatLine = signals.gitDiffStat
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .find(Boolean);
+    if (diffStatLine) {
+      changes.push(`Code: ${diffStatLine}`);
+    }
+  }
+
+  const runSummary = buildRunPrecisionSummary(signals);
+  const runLine = buildRunPrecisionLine(runSummary);
+  if (runLine) {
+    changes.push(runLine);
+  }
+
+  const blockerCount = signals.failingCommand ? 1 : 0;
   if (signals.failingCommand) {
     changes.push(`Blocker: ${signals.failingCommand}`);
   }
 
-  if (topFiles.length > 0) {
-    changes.push(`Key files: ${topFiles.slice(0, 2).join(', ')}`);
+  const keyFileCandidates = dedupe(
+    topFiles.length > 0 ? topFiles : [...changedFileSet].slice(0, 4),
+    2,
+  );
+  const keyFileCount = new Set(
+    [...topFiles, ...signals.changedFiles].map((value) => value.trim()).filter(Boolean),
+  ).size;
+  if (keyFileCandidates.length > 0) {
+    changes.push(
+      `Key files: ${keyFileCandidates.join(', ')} (${Math.max(keyFileCount, keyFileCandidates.length)} touched).`,
+    );
+  }
+
+  const gitContextParts: string[] = [];
+  if (signals.branch.trim()) {
+    gitContextParts.push(`branch ${signals.branch.trim()}`);
+  }
+  const commitHash = parseCommitHashToken(signals.recentCommitHash);
+  if (commitHash) {
+    gitContextParts.push(`commit ${commitHash.slice(0, 10)}`);
+  }
+  if (
+    typeof signals.divergenceAhead === 'number' &&
+    Number.isFinite(signals.divergenceAhead) &&
+    signals.divergenceAhead >= 0 &&
+    typeof signals.divergenceBehind === 'number' &&
+    Number.isFinite(signals.divergenceBehind) &&
+    signals.divergenceBehind >= 0
+  ) {
+    gitContextParts.push(`divergence +${signals.divergenceAhead}/-${signals.divergenceBehind}`);
+  }
+  if (gitContextParts.length > 0) {
+    changes.push(`Git: ${gitContextParts.join('; ')}.`);
   }
 
   const links = dedupe(signals.recentUrls, 2);
+  const linkCount = new Set(signals.recentUrls.map((value) => value.trim()).filter(Boolean)).size;
   if (links.length > 0) {
-    changes.push(`Key links: ${links.join(', ')}`);
+    changes.push(`References: ${links.join(', ')}.`);
   }
 
   if (changes.length === 0) {
     changes.push('No recent changes captured.');
   }
 
-  return changes.slice(0, 5);
+  const noveltyProfile = computeNoveltyProfile({
+    changedFilesCount,
+    runCount: runSummary.total,
+    blockerCount,
+    keyFileCount: Math.max(keyFileCount, keyFileCandidates.length),
+    linkCount,
+    gitContextCount: gitContextParts.length,
+  });
+  const noveltyLine = `Novelty: ${noveltyProfile.bucket} (${noveltyProfile.score.toFixed(2)}).`;
+
+  return {
+    items: [...changes.slice(0, 6), noveltyLine],
+    noveltyProfile,
+  };
 }
 
 function normalizeTerminalEntryForMode(rawEntry: string): string {
@@ -812,7 +1066,9 @@ export function buildResumeSummary(
       ? buildLowConfidenceNextSteps(topFiles)
       : buildNextSteps(signals, topFiles).slice(0, 3);
   const doneSinceLastResume = buildDoneSinceLastResume(signals);
-  const changesSinceLastResume = buildChangesSinceLastResume(signals, topFiles);
+  const changesSinceLastResumeResult = buildChangesSinceLastResume(signals, topFiles);
+  const changesSinceLastResume = changesSinceLastResumeResult.items;
+  const noveltyProfile = changesSinceLastResumeResult.noveltyProfile;
   const pendingBlocked = buildPendingBlocked(signals, topFiles);
   const recommendedFirstAction = nextSteps[0] ?? pendingBlocked[0];
   const mode = detectResumeMode(signals);
@@ -873,6 +1129,7 @@ export function buildResumeSummary(
       : ['  - None captured']),
     '- Changes since last resume:',
     ...changesSinceLastResume.map((item) => `  - ${item}`),
+    `- Novelty profile: ${noveltyProfile.bucket} (${noveltyProfile.score.toFixed(2)})`,
     '- Pending / blocked:',
     ...(pendingBlocked.length > 0
       ? pendingBlocked.map((item) => `  - ${item}`)
@@ -934,6 +1191,7 @@ export function buildResumeSummary(
     lastFailingCommand: signals.failingCommand,
     recentFilesSnapshot,
     topFiles,
+    noveltyProfile,
     links,
     evidenceCatalog,
     detailsMarkdown,
