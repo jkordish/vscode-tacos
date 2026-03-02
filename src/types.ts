@@ -177,6 +177,9 @@ export interface MetricRecord {
   blockerPromotionLowConfidence?: number;
   blockerPromotionRestricted?: number;
   blockerPromotionNoNextSteps?: number;
+  priorPromotionCheckpoint?: number;
+  priorPromotionCorrections?: number;
+  priorPromotionScratchpad?: number;
   trustTrayOpens?: number;
   restrictedTrustTrayOpens?: number;
   whySurfacedOpens?: number;

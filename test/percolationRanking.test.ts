@@ -97,61 +97,65 @@ describe('rankCandidates', () => {
         scoreBreakdown: item.scoreBreakdown,
       })),
     ).toMatchInlineSnapshot(`
-[
-  {
-    "id": "candidate:blocker",
-    "score": 0.633,
-    "scoreBreakdown": {
-      "actionability": 0.2,
-      "confidence": 0.038,
-      "continuity": 0.14,
-      "interruptCost": 0.055,
-      "novelty": 0.04,
-      "total": 0.633,
-      "urgency": 0.27,
-    },
-  },
-  {
-    "id": "candidate:recommended-first-action",
-    "score": 0.605,
-    "scoreBreakdown": {
-      "actionability": 0.2,
-      "confidence": 0.04,
-      "continuity": 0.16,
-      "interruptCost": 0.045,
-      "novelty": 0.04,
-      "total": 0.605,
-      "urgency": 0.21,
-    },
-  },
-  {
-    "id": "candidate:next-step",
-    "score": 0.596,
-    "scoreBreakdown": {
-      "actionability": 0.2,
-      "confidence": 0.036,
-      "continuity": 0.16,
-      "interruptCost": 0.035,
-      "novelty": 0.04,
-      "total": 0.596,
-      "urgency": 0.195,
-    },
-  },
-  {
-    "id": "candidate:evidence",
-    "score": 0.47,
-    "scoreBreakdown": {
-      "actionability": 0.2,
-      "confidence": 0.04,
-      "continuity": 0.1,
-      "interruptCost": 0.015,
-      "novelty": 0.025,
-      "total": 0.47,
-      "urgency": 0.12,
-    },
-  },
-]
-`);
+     [
+       {
+         "id": "candidate:blocker",
+         "score": 0.633,
+         "scoreBreakdown": {
+           "actionability": 0.2,
+           "confidence": 0.038,
+           "continuity": 0.14,
+           "interruptCost": 0.055,
+           "novelty": 0.04,
+           "total": 0.633,
+           "urgency": 0.27,
+           "userPrior": 0,
+         },
+       },
+       {
+         "id": "candidate:recommended-first-action",
+         "score": 0.605,
+         "scoreBreakdown": {
+           "actionability": 0.2,
+           "confidence": 0.04,
+           "continuity": 0.16,
+           "interruptCost": 0.045,
+           "novelty": 0.04,
+           "total": 0.605,
+           "urgency": 0.21,
+           "userPrior": 0,
+         },
+       },
+       {
+         "id": "candidate:next-step",
+         "score": 0.596,
+         "scoreBreakdown": {
+           "actionability": 0.2,
+           "confidence": 0.036,
+           "continuity": 0.16,
+           "interruptCost": 0.035,
+           "novelty": 0.04,
+           "total": 0.596,
+           "urgency": 0.195,
+           "userPrior": 0,
+         },
+       },
+       {
+         "id": "candidate:evidence",
+         "score": 0.47,
+         "scoreBreakdown": {
+           "actionability": 0.2,
+           "confidence": 0.04,
+           "continuity": 0.1,
+           "interruptCost": 0.015,
+           "novelty": 0.025,
+           "total": 0.47,
+           "urgency": 0.12,
+           "userPrior": 0,
+         },
+       },
+     ]
+    `);
   });
 
   it('prioritizes clarification fallback when summary confidence is low', () => {
@@ -173,5 +177,92 @@ describe('rankCandidates', () => {
 
     expect(ranked.primary?.id).toBe('candidate:clarification');
     expect(ranked.primary?.kind).toBe('clarification');
+  });
+
+  it('promotes candidates that match an open checkpoint note prior', () => {
+    const summary = buildSummary({
+      pendingBlocked: undefined,
+      recommendedFirstAction: undefined,
+      nextSteps: [],
+      evidenceCatalog: undefined,
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        checkpointNoteText: 'Run checkout tests before shipping',
+      },
+      candidates: [
+        {
+          id: 'candidate:checkpoint-match',
+          kind: 'next-step',
+          title: 'Run checkout tests',
+          detail: 'Validate checkout flows before release',
+          confidence: 0.6,
+          urgency: 0.62,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+        {
+          id: 'candidate:other',
+          kind: 'next-step',
+          title: 'Update docs',
+          detail: 'Refresh release checklist docs',
+          confidence: 0.6,
+          urgency: 0.62,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    const ranked = rankCandidates(input);
+    expect(ranked.primary?.id).toBe('candidate:checkpoint-match');
+    expect(ranked.primary?.meta.priorPromotionCheckpoint).toBe(true);
+    expect((ranked.primary?.meta.priorPromotion as number) ?? 0).toBeGreaterThan(0);
+  });
+
+  it('applies correction precedence when checkpoint and correction priors conflict', () => {
+    const summary = buildSummary({
+      pendingBlocked: undefined,
+      recommendedFirstAction: undefined,
+      nextSteps: [],
+      evidenceCatalog: undefined,
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        checkpointNoteText: 'Ship release immediately',
+        correctionHints: ['intent is parser stabilization and test failures'],
+      },
+      candidates: [
+        {
+          id: 'candidate:ship-release',
+          kind: 'recommended-action',
+          title: 'Ship release immediately',
+          detail: 'Tag and publish release artifacts',
+          confidence: 0.72,
+          urgency: 0.65,
+          novelty: 0.35,
+          interruptCost: 0.35,
+        },
+        {
+          id: 'candidate:parser-fix',
+          kind: 'next-step',
+          title: 'Stabilize parser tests',
+          detail: 'Fix parser test failures before release',
+          confidence: 0.72,
+          urgency: 0.65,
+          novelty: 0.35,
+          interruptCost: 0.35,
+        },
+      ],
+    });
+
+    const ranked = rankCandidates(input);
+    expect(ranked.primary?.id).toBe('candidate:parser-fix');
+    const shipRelease = ranked.ranked.find((item) => item.id === 'candidate:ship-release');
+    expect(shipRelease?.meta.priorConflictResolution).toBe('corrections-precedence');
+    expect(shipRelease?.meta.priorSuppressionCorrections).toBe(true);
+    expect(((shipRelease?.meta.priorSuppression as number) ?? 0) > 0).toBe(true);
   });
 });

@@ -34,6 +34,7 @@ All notable changes to this project are documented in this file.
 - Percolation ranking now consumes a trigger-time normalized signal bundle (new adapter layer) with explicit trusted-vs-restricted signal filtering and deterministic adapter tests.
 - Percolation signal adapters now include explicit git semantics (`branch-switch`, `git-commit`, `git-divergence`) using trusted branch/commit/divergence metadata, with deterministic parser coverage and cache-reset integration checks.
 - Blocker detection now uses scored v2 cross-source arbitration (`task`, `command`, `diagnostics`, `branch`, `low-confidence`, `restricted`, `no-next-steps`) with explicit severity/confidence/actionability metadata and per-session blocker-promotion source counters in local metrics.
+- Percolation ranking now applies normalized user-authored priors from checkpoint notes, saved corrections, and scratchpad context, with deterministic correction-precedence conflict resolution and per-session prior-promotion metrics (`checkpoint`, `corrections`, `scratchpad`).
 
 ## [0.7.0] - 2026-03-01
 

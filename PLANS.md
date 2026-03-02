@@ -148,16 +148,17 @@ Status vocabulary used in this file:
 
 - status: `doing`
 - why: percolation quality depends on normalized, deterministic signals that are safe across trusted and restricted modes.
-- scope: Epic `#228` core signal semantics and blocker-priority upgrades (DP-401 / `#248`, DP-402 / `#249`, DP-403 / `#250`) before note/correction priors.
+- scope: Epic `#228` core signal semantics and ranking-prior upgrades (DP-401 / `#248`, DP-402 / `#249`, DP-403 / `#250`, DP-404 / `#251`) before novelty/hash follow-ons.
 - dependencies: P3, P4.
 - recent progress:
   - completed DP-401 / `#248` (typed signal bus + trust-aware adapters + cache-miss fallback + reset hygiene).
   - completed DP-402 / `#249` by enriching git semantic adapters with explicit `branch-switch`, `git-commit`, and `git-divergence` signals plus SHA-256/abbrev-safe parsing.
-  - started DP-403 / `#250` by upgrading blocker detection to scored cross-source arbitration with explicit severity/confidence/actionability metadata and blocker-source metric counters.
+  - completed DP-403 / `#250` by upgrading blocker detection to scored cross-source arbitration with explicit severity/confidence/actionability metadata and blocker-source metric counters.
+  - completed DP-404 / `#251` by integrating checkpoint notes, saved corrections, and scratchpad context as deterministic ranking priors with correction-precedence conflict handling and prior-promotion metrics.
 - immediate next actions:
-  - finish landing DP-403 (`src/blockerModel.ts` + blocker precedence matrix tests + metrics schema updates).
-  - run verify gates and close issue `#250` once merged.
-  - sequence DP-404 (`#251`) and DP-405 (`#252`) after blocker v2 merge.
+  - sequence DP-405 (`#252`) to improve changes/novelty precision for ranking inputs.
+  - sequence DP-406 (`#253`) for no-change hash v2 and partition-switch suppression reset semantics.
+  - close Epic `#228` once remaining child issues land and verify gates stay green on `main`.
 - risks/rollback:
   - risk: duplicated or stale signal bundles can skew ranking behavior.
   - rollback: fall back to summary-only signal defaults while preserving adapter tests for incremental reland.

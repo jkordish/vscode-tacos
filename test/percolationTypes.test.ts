@@ -258,4 +258,226 @@ describe('createPercolationPolicyInput', () => {
       title: 'Review privacy posture',
     });
   });
+
+  it('annotates candidates with deterministic user-authored prior metadata', () => {
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        checkpointNoteText: 'Run auth tests before release',
+        correctionHints: ['run auth tests stabilize token refresh'],
+        scratchpadExcerpt: 'Auth tests are flaky around token refresh',
+        scratchpadHasContent: true,
+      },
+      candidates: [
+        {
+          id: 'candidate:auth-tests',
+          kind: 'next-step',
+          title: 'Run auth tests',
+          detail: 'Stabilize token refresh before release',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    expect(input.candidates[0]?.meta).toMatchObject({
+      userPriorApplied: true,
+      priorPromotionCheckpoint: true,
+      priorPromotionCorrections: true,
+      priorPromotionScratchpad: true,
+    });
+    expect(((input.candidates[0]?.meta.priorPromotion as number) ?? 0) > 0).toBe(true);
+  });
+
+  it('does not attribute suppression to corrections when only stale checkpoint suppression applies', () => {
+    const now = Date.UTC(2026, 2, 2, 12, 0, 0);
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+      userCorrections: [],
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now,
+      priors: {
+        checkpointNoteText: 'legacy release handoff',
+        checkpointUpdatedAt: now - 10 * 24 * 60 * 60 * 1000,
+      },
+      candidates: [
+        {
+          id: 'candidate:parser-stabilization',
+          kind: 'next-step',
+          title: 'Stabilize parser tests',
+          detail: 'Fix parser regression failures',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    expect(input.candidates[0]?.meta.priorSuppression).toBeDefined();
+    expect(input.candidates[0]?.meta.priorSuppressionCheckpointStale).toBe(true);
+    expect(input.candidates[0]?.meta.priorSuppressionCorrections).toBeUndefined();
+  });
+
+  it('ignores synthetic large-scratchpad preview placeholder text as prior excerpt', () => {
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+    });
+    const placeholderInput = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        scratchpadExcerpt:
+          'Preview unavailable for large scratchpad (120 KB). Open Scratchpad to view.',
+        scratchpadHasContent: true,
+      },
+      candidates: [
+        {
+          id: 'candidate:auth-tests',
+          kind: 'next-step',
+          title: 'Run auth tests',
+          detail: 'Stabilize token refresh before release',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+    const baselineInput = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        scratchpadHasContent: true,
+      },
+      candidates: [
+        {
+          id: 'candidate:auth-tests',
+          kind: 'next-step',
+          title: 'Run auth tests',
+          detail: 'Stabilize token refresh before release',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    expect(placeholderInput.candidates[0]?.meta).toMatchObject({
+      priorPromotionScratchpad: true,
+    });
+    expect(placeholderInput.candidates[0]?.meta.priorPromotion).toEqual(
+      baselineInput.candidates[0]?.meta.priorPromotion,
+    );
+  });
+
+  it('does not promote candidates based on negated user corrections', () => {
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        correctionHints: ['do not ship release to production'],
+      },
+      candidates: [
+        {
+          id: 'candidate:ship-release',
+          kind: 'next-step',
+          title: 'Ship release to production',
+          detail: 'Ship the new release',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    const meta = input.candidates[0]?.meta ?? {};
+    expect(meta.priorPromotionCorrections).toBeUndefined();
+    expect(meta.priorSuppressionCorrections).toBe(true);
+    expect(meta.priorSuppressionCorrectionNegation).toBe(true);
+  });
+
+  it("treats contracted negation corrections like can't as suppression cues", () => {
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        correctionHints: ["can't ship release to production"],
+      },
+      candidates: [
+        {
+          id: 'candidate:ship-release',
+          kind: 'next-step',
+          title: 'Ship release to production',
+          detail: 'Ship the new release',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    const meta = input.candidates[0]?.meta ?? {};
+    expect(meta.priorPromotionCorrections).toBeUndefined();
+    expect(meta.priorSuppressionCorrections).toBe(true);
+    expect(meta.priorSuppressionCorrectionNegation).toBe(true);
+  });
+
+  it('treats explicit empty correction hints as an override (no fallback merge)', () => {
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+      userCorrections: ['stabilize parser tests before shipping'],
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        correctionHints: [],
+      },
+      candidates: [
+        {
+          id: 'candidate:parser-tests',
+          kind: 'next-step',
+          title: 'Stabilize parser tests',
+          detail: 'Fix parser regressions',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    expect(input.candidates[0]?.meta.userPriorApplied).toBeUndefined();
+    expect(input.candidates[0]?.meta.priorPromotionCorrections).toBeUndefined();
+    expect(input.candidates[0]?.meta.priorSuppressionCorrections).toBeUndefined();
+  });
 });

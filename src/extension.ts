@@ -102,9 +102,12 @@ import {
 } from './percolation/surfaceBroker';
 import {
   createPercolationPolicyInput,
+  formatScratchpadLargePreviewUnavailableLine,
+  isScratchpadLargePreviewUnavailableLine,
   type NormalizedSignal,
   type PercolationPolicyMode,
   type PercolationSuppressionReason,
+  type PercolationUserPriors,
 } from './percolation/types';
 import {
   buildPartitionScope,
@@ -299,6 +302,7 @@ const SCRATCHPAD_PREVIEW_MAX_LINES = 5;
 const SCRATCHPAD_PREVIEW_MAX_BYTES = 256 * 1024;
 const AI_SCRATCHPAD_MAX_LINES = 80;
 const AI_SCRATCHPAD_MAX_CHARS = 4_000;
+const AI_SCRATCHPAD_MAX_READ_BYTES = 512 * 1024;
 const execFileAsync = promisify(execFile);
 const markdownRenderer = new MarkdownIt({
   html: false,
@@ -337,6 +341,15 @@ class RingBuffer {
   }
 }
 
+interface ScratchSummaryPriorSnapshot {
+  contextHash: string;
+  checkpointNoteText?: string;
+  checkpointUpdatedAt?: number;
+  scratchpadExcerpt?: string;
+  scratchpadHasContent?: boolean;
+  scratchpadUpdatedAt?: number;
+}
+
 interface RuntimeState {
   output: vscode.OutputChannel;
   recentFiles: RingBuffer;
@@ -348,6 +361,7 @@ interface RuntimeState {
   lastFailingCommand?: string;
   lastFailingCommandRaw?: string;
   scratchSummary?: ResumeSummary;
+  scratchSummaryPriorSnapshot?: ScratchSummaryPriorSnapshot;
   statusBar?: vscode.StatusBarItem;
   statusBarClass: CompanionStatusBarClass;
   statusBarReason: string;
@@ -368,6 +382,8 @@ interface RuntimeState {
   panelScratchpadPreviewLines: string[];
   panelScratchpadExists: boolean;
   panelScratchpadHasContent: boolean;
+  panelScratchpadPriorExcerpt?: string;
+  panelScratchpadUpdatedAt?: number;
   panelScratchpadScopeLabel?: string;
   panelResumePathState?: ResumePathState;
   panelResumePathScope?: string;
@@ -467,6 +483,7 @@ interface PresentSummaryOptions {
   providerModeSnapshot?: ProviderModeSnapshot;
   aiPayloadConsentSignature?: string;
   manualPercolationBypass?: boolean;
+  percolationPriors?: PercolationUserPriors;
 }
 
 type ScratchpadScopeMode = 'partition' | 'workspace';
@@ -538,6 +555,7 @@ export function activate(context: vscode.ExtensionContext): void {
     lastFailingCommand: persistedActivity.sanitized.lastFailingCommand,
     lastFailingCommandRaw: undefined,
     scratchSummary: undefined,
+    scratchSummaryPriorSnapshot: undefined,
     statusBarClass: 'active-idle',
     statusBarReason: 'awaiting summary',
     statusBarElevated: false,
@@ -551,6 +569,8 @@ export function activate(context: vscode.ExtensionContext): void {
     panelScratchpadPreviewLines: [],
     panelScratchpadExists: false,
     panelScratchpadHasContent: false,
+    panelScratchpadPriorExcerpt: undefined,
+    panelScratchpadUpdatedAt: undefined,
     panelScratchpadScopeLabel: undefined,
     panelResumePathState: undefined,
     panelResumePathScope: undefined,
@@ -2200,6 +2220,7 @@ async function triggerSummary(
     checkpointPrimaryNote: prepared.checkpointPrimaryNote,
     checkpointNotes: prepared.checkpointNotes,
     checkpointScope: prepared.checkpointScope,
+    percolationPriors: prepared.rankingPriors,
   });
   state.meaningfulActivitySinceCheckpointPrompt = false;
 
@@ -2229,6 +2250,7 @@ interface PreparedTriggerSummary {
   checkpointNotes: CheckpointNote[];
   checkpointPrimaryNote?: CheckpointNote;
   checkpointScope: string;
+  rankingPriors: PercolationUserPriors;
   signals: ResumeSignals;
   config: ExtensionConfig;
   providerPlan: ProviderPlan;
@@ -2316,8 +2338,13 @@ async function prepareTriggerSummary(
     config.aiIncludeCheckpointNotes && checkpointContext.primaryNote?.status === 'open'
       ? [checkpointContext.primaryNote.text]
       : [];
+  const scratchpadPrior = await loadScratchpadPriorSnapshot(
+    context,
+    root,
+    baseSummary.currentBranch,
+  );
   const aiPayloadScratchpadExcerpt = config.aiIncludeScratchpad
-    ? await loadScratchpadExcerptForAi(context, root, baseSummary.currentBranch)
+    ? scratchpadPrior.excerpt
     : undefined;
   let aiPayloadSummary =
     aiPayloadCheckpointNotes.length > 0
@@ -2329,12 +2356,32 @@ async function prepareTriggerSummary(
       aiPayloadScratchpadExcerpt,
     );
   }
-  const corrections = getSummaryCorrectionsForContext(context, root, baseSummary.contextHash);
+  const correctionEntry = getSummaryCorrectionEntryForContext(
+    context,
+    root,
+    baseSummary.contextHash,
+  );
+  const corrections = correctionEntry?.corrections ?? [];
   const correctionsFingerprint = summarizeCorrectionsFingerprint(corrections);
   localSummary.userCorrections = corrections;
   localSummary.correctionsFingerprint = correctionsFingerprint;
   aiPayloadSummary.userCorrections = corrections;
   aiPayloadSummary.correctionsFingerprint = correctionsFingerprint;
+  const rankingPriors: PercolationUserPriors = {
+    checkpointNoteText:
+      checkpointContext.primaryNote?.status === 'open'
+        ? checkpointContext.primaryNote.text
+        : undefined,
+    checkpointUpdatedAt:
+      checkpointContext.primaryNote?.status === 'open'
+        ? checkpointContext.primaryNote.updatedAt
+        : undefined,
+    correctionHints: corrections,
+    correctionsUpdatedAt: correctionEntry?.updatedAt,
+    scratchpadHasContent: scratchpadPrior.hasContent,
+    scratchpadExcerpt: scratchpadPrior.excerpt,
+    scratchpadUpdatedAt: scratchpadPrior.updatedAt,
+  };
   const cacheKey = summaryCacheKey(context, root);
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
   const correctionsUnchanged =
@@ -2385,6 +2432,7 @@ async function prepareTriggerSummary(
     checkpointNotes: checkpointContext.notes,
     checkpointPrimaryNote: checkpointContext.primaryNote,
     checkpointScope: checkpointContext.scope,
+    rankingPriors,
     signals,
     config,
     providerPlan,
@@ -2454,7 +2502,7 @@ async function refineSummaryInBackground(
   await context.workspaceState.update(prepared.cacheKey, refined);
 
   if (state.scratchSummary?.contextHash === prepared.localSummary.contextHash) {
-    updateSummaryScratchpad(refined, prepared.root);
+    updateSummaryScratchpad(refined, prepared.root, prepared.rankingPriors);
     return;
   }
 
@@ -2650,7 +2698,7 @@ async function presentSummary(
   await updateActiveNudges(context, summary, workspaceRoot, config, triggerReason === 'cached');
   state.panelProviderModeSnapshot = options.providerModeSnapshot;
   state.panelAiPayloadConsentSignature = options.aiPayloadConsentSignature;
-  updateSummaryScratchpad(summary, options.workspaceRoot);
+  updateSummaryScratchpad(summary, options.workspaceRoot, options.percolationPriors);
 
   const panelOptions: PresentSummaryOptions = {
     ...options,
@@ -2677,7 +2725,9 @@ async function presentSummary(
       notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
         context,
         workspaceRoot,
+        priors: options.percolationPriors,
       }).primary;
+      recordPriorDrivenPromotion(notificationPrimary);
     }
     return notificationPrimary;
   };
@@ -2690,6 +2740,15 @@ async function presentSummary(
       notificationPrimary = ensureNotificationPrimary();
       recordLowConfidenceClarificationRate(summary, notificationPrimary);
     }
+  }
+  if (
+    config.metricsEnabled &&
+    config.uiSurface === 'notification' &&
+    !notificationSuppression?.suppressed &&
+    !options.autoOpenDetails &&
+    !options.preferBackgroundPresentation
+  ) {
+    notificationPrimary = ensureNotificationPrimary();
   }
 
   const surfaceDecision = resolveSummarySurfaceDecision({
@@ -3381,6 +3440,48 @@ function recordBlockerPromotionSource(blockerDecision: BlockerDecision): void {
   state.metricSession[metricFieldName] = 1;
 }
 
+type PriorPromotionMetricField =
+  | 'priorPromotionCheckpoint'
+  | 'priorPromotionCorrections'
+  | 'priorPromotionScratchpad';
+
+const PRIOR_PROMOTION_METRIC_FIELDS: Array<{
+  metaFlag: 'priorPromotionCheckpoint' | 'priorPromotionCorrections' | 'priorPromotionScratchpad';
+  metricFieldName: PriorPromotionMetricField;
+}> = [
+  {
+    metaFlag: 'priorPromotionCheckpoint',
+    metricFieldName: 'priorPromotionCheckpoint',
+  },
+  {
+    metaFlag: 'priorPromotionCorrections',
+    metricFieldName: 'priorPromotionCorrections',
+  },
+  {
+    metaFlag: 'priorPromotionScratchpad',
+    metricFieldName: 'priorPromotionScratchpad',
+  },
+];
+
+function recordPriorDrivenPromotion(
+  primary: RankedSurfacedItem | undefined,
+  options: { demoMode?: boolean } = {},
+): void {
+  if (!state.metricSession || !primary || options.demoMode === true) {
+    return;
+  }
+
+  for (const source of PRIOR_PROMOTION_METRIC_FIELDS) {
+    if (primary.meta[source.metaFlag] !== true) {
+      continue;
+    }
+    if ((state.metricSession[source.metricFieldName] ?? 0) > 0) {
+      continue;
+    }
+    state.metricSession[source.metricFieldName] = 1;
+  }
+}
+
 function recordLowConfidenceClarificationRate(
   summary: ResumeSummary,
   primary: RankedSurfacedItem | undefined,
@@ -3662,12 +3763,87 @@ function resolveAdaptedSignalsForRanking(
   return adapted;
 }
 
+function buildScratchpadPriorExcerptFromPreviewLines(
+  lines: ReadonlyArray<string>,
+): string | undefined {
+  const excerptLines = lines
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !isScratchpadLargePreviewUnavailableLine(line));
+  if (excerptLines.length === 0) {
+    return undefined;
+  }
+  return excerptLines.join('\n');
+}
+
+function resolvePercolationUserPriors(
+  summary: ResumeSummary,
+  options: RankPercolationOptions,
+): PercolationUserPriors | undefined {
+  const explicitPriors = options.priors;
+  const hasExplicitCorrectionHints = Array.isArray(explicitPriors?.correctionHints);
+  const explicitCorrectionHints = hasExplicitCorrectionHints
+    ? (explicitPriors?.correctionHints ?? [])
+    : undefined;
+  const panelContextMatches = state.panelSummary?.contextHash === summary.contextHash;
+  const scratchSummaryContextMatches = state.scratchSummary?.contextHash === summary.contextHash;
+  const scratchSummaryPriorSnapshot =
+    scratchSummaryContextMatches &&
+    state.scratchSummaryPriorSnapshot?.contextHash === summary.contextHash
+      ? state.scratchSummaryPriorSnapshot
+      : undefined;
+  const panelCheckpoint =
+    panelContextMatches && state.panelPrimaryCheckpointNote?.status === 'open'
+      ? state.panelPrimaryCheckpointNote
+      : undefined;
+  const fallbackCheckpointText =
+    panelCheckpoint?.text ?? scratchSummaryPriorSnapshot?.checkpointNoteText;
+  const fallbackCheckpointUpdatedAt =
+    panelCheckpoint?.updatedAt ?? scratchSummaryPriorSnapshot?.checkpointUpdatedAt;
+  const scratchpadExcerptFromState = panelContextMatches
+    ? (state.panelScratchpadPriorExcerpt ??
+      (state.panelScratchpadPreviewLines.length > 0
+        ? buildScratchpadPriorExcerptFromPreviewLines(state.panelScratchpadPreviewLines)
+        : undefined))
+    : scratchSummaryPriorSnapshot?.scratchpadExcerpt;
+  const correctionHints = Array.isArray(summary.userCorrections) ? summary.userCorrections : [];
+  const selectedCorrectionHints = explicitCorrectionHints ?? correctionHints;
+  const workspaceRoot = options.workspaceRoot?.trim() ?? '';
+  const inferredCorrectionUpdatedAt =
+    explicitPriors?.correctionsUpdatedAt === undefined &&
+    !hasExplicitCorrectionHints &&
+    selectedCorrectionHints.length > 0 &&
+    options.context &&
+    workspaceRoot
+      ? getSummaryCorrectionEntryForContext(options.context, workspaceRoot, summary.contextHash)
+          ?.updatedAt
+      : undefined;
+  const resolved: PercolationUserPriors = {
+    checkpointNoteText: explicitPriors?.checkpointNoteText ?? fallbackCheckpointText,
+    checkpointUpdatedAt: explicitPriors?.checkpointUpdatedAt ?? fallbackCheckpointUpdatedAt,
+    correctionHints: selectedCorrectionHints,
+    correctionsUpdatedAt: explicitPriors?.correctionsUpdatedAt ?? inferredCorrectionUpdatedAt,
+    scratchpadExcerpt: explicitPriors?.scratchpadExcerpt ?? scratchpadExcerptFromState,
+    scratchpadHasContent:
+      explicitPriors?.scratchpadHasContent ??
+      (panelContextMatches
+        ? state.panelScratchpadHasContent
+        : scratchSummaryPriorSnapshot?.scratchpadHasContent),
+    scratchpadUpdatedAt:
+      explicitPriors?.scratchpadUpdatedAt ??
+      (panelContextMatches
+        ? state.panelScratchpadUpdatedAt
+        : scratchSummaryPriorSnapshot?.scratchpadUpdatedAt),
+  };
+  return resolved;
+}
+
 interface RankPercolationOptions {
   context?: vscode.ExtensionContext;
   workspaceRoot?: string;
   now?: number;
   ignoreMemory?: boolean;
   signals?: ReadonlyArray<Partial<NormalizedSignal>>;
+  priors?: PercolationUserPriors;
 }
 
 function rankPercolationForSummary(
@@ -3684,10 +3860,12 @@ function rankPercolationForSummary(
     evaluationNow,
     options,
   );
+  const userPriors = resolvePercolationUserPriors(summary, options);
   const input = createPercolationPolicyInput(summary, {
     mode,
     now: evaluationNow,
     signals: adaptedSignals,
+    priors: userPriors,
   });
   if (options.context && options.workspaceRoot && !options.ignoreMemory) {
     const workspaceRoot = options.workspaceRoot.trim();
@@ -4497,12 +4675,13 @@ async function showDetailsPanel(
     | 'providerModeSnapshot'
     | 'aiPayloadConsentSignature'
     | 'manualPercolationBypass'
+    | 'percolationPriors'
   > = {},
 ): Promise<void> {
   const demoMode = isDemoResumeSummary(summary);
   const workspaceRoot = demoMode ? undefined : pickWorkspaceRoot(options.workspaceRoot);
   if (!demoMode) {
-    updateSummaryScratchpad(summary, workspaceRoot);
+    updateSummaryScratchpad(summary, workspaceRoot, options.percolationPriors);
   }
   state.panelSummary = summary;
   state.panelWorkspaceRoot = workspaceRoot;
@@ -4512,6 +4691,7 @@ async function showDetailsPanel(
   state.panelPrimaryCheckpointNote = options.checkpointPrimaryNote;
   state.panelCheckpointScope = options.checkpointScope;
   state.panelManualPercolationBypass = Boolean(options.manualPercolationBypass);
+  state.panelScratchpadPriorExcerpt = options.percolationPriors?.scratchpadExcerpt;
   if (demoMode) {
     state.panelCheckpointNotes = [];
     state.panelPrimaryCheckpointNote = undefined;
@@ -4522,6 +4702,8 @@ async function showDetailsPanel(
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
+    state.panelScratchpadPriorExcerpt = undefined;
+    state.panelScratchpadUpdatedAt = undefined;
     state.panelScratchpadScopeLabel = undefined;
   }
 
@@ -4551,6 +4733,8 @@ async function showDetailsPanel(
       state.panelScratchpadPreviewLines = [];
       state.panelScratchpadExists = false;
       state.panelScratchpadHasContent = false;
+      state.panelScratchpadPriorExcerpt = undefined;
+      state.panelScratchpadUpdatedAt = undefined;
       state.panelScratchpadScopeLabel = undefined;
       state.panelSectionState = undefined;
       state.panelSectionScope = undefined;
@@ -5161,8 +5345,24 @@ async function showDetailsPanel(
   state.panel.reveal(vscode.ViewColumn.Beside, true);
 }
 
-function updateSummaryScratchpad(summary: ResumeSummary, workspaceRoot?: string): void {
+function updateSummaryScratchpad(
+  summary: ResumeSummary,
+  workspaceRoot?: string,
+  percolationPriors?: PercolationUserPriors,
+): void {
   state.scratchSummary = summary;
+  if (percolationPriors) {
+    state.scratchSummaryPriorSnapshot = {
+      contextHash: summary.contextHash,
+      checkpointNoteText: percolationPriors.checkpointNoteText,
+      checkpointUpdatedAt: percolationPriors.checkpointUpdatedAt,
+      scratchpadExcerpt: percolationPriors.scratchpadExcerpt,
+      scratchpadHasContent: percolationPriors.scratchpadHasContent,
+      scratchpadUpdatedAt: percolationPriors.scratchpadUpdatedAt,
+    };
+  } else if (state.scratchSummaryPriorSnapshot?.contextHash !== summary.contextHash) {
+    state.scratchSummaryPriorSnapshot = undefined;
+  }
   updateCompanionStatusBar();
 
   if (!state.panel) {
@@ -5289,6 +5489,9 @@ function renderWebview(
     SCRATCHPAD_PREVIEW_MAX_LINES,
   );
   const scratchpadScopeLabel = state.panelScratchpadScopeLabel?.trim() ?? '';
+  const panelScratchpadPriorExcerpt =
+    state.panelScratchpadPriorExcerpt ??
+    buildScratchpadPriorExcerptFromPreviewLines(scratchpadPreviewLines);
   const showScratchpadCard = state.panelScratchpadExists || state.panelScratchpadHasContent;
   const scratchpadCard = demoMode
     ? ''
@@ -5351,12 +5554,33 @@ function renderWebview(
           quietHours: config.summaryQuietHours,
           contextUnchanged: state.lastSummaryContextUnchanged,
         });
+  const panelCorrectionsUpdatedAt =
+    !demoMode && activeExtensionContext && panelWorkspaceRoot
+      ? getSummaryCorrectionEntryForContext(
+          activeExtensionContext,
+          panelWorkspaceRoot,
+          summary.contextHash,
+        )?.updatedAt
+      : undefined;
   const rankedPrimaryCandidate =
     panelPercolationSuppression.suppressed || demoMode
       ? undefined
       : rankPercolationForSummary(summary, percolationMode, {
           context: activeExtensionContext,
           workspaceRoot: panelWorkspaceRoot,
+          priors: {
+            checkpointNoteText:
+              currentCheckpointNote?.status === 'open' ? currentCheckpointNote.text : undefined,
+            checkpointUpdatedAt:
+              currentCheckpointNote?.status === 'open'
+                ? currentCheckpointNote.updatedAt
+                : undefined,
+            correctionHints: summary.userCorrections,
+            correctionsUpdatedAt: panelCorrectionsUpdatedAt,
+            scratchpadExcerpt: panelScratchpadPriorExcerpt,
+            scratchpadHasContent: state.panelScratchpadHasContent,
+            scratchpadUpdatedAt: state.panelScratchpadUpdatedAt,
+          },
         }).primary;
   const canOpenProblems = diagnostics.errorCount > 0 || diagnostics.warningCount > 0;
   const canOpenDiagnosticFile = Boolean(diagnostics.top);
@@ -5394,6 +5618,7 @@ function renderWebview(
     availability,
   });
   if (!demoMode) {
+    recordPriorDrivenPromotion(rankedPrimaryCandidate);
     recordBlockerPromotionSource(blockerDecision);
   }
   const primaryCtaDecision = resolveCompanionPrimaryCtaDecision({
@@ -6485,6 +6710,7 @@ async function applyTaskPartitionSwitch(
   state.lastBoundarySignalAt = 0;
   state.lastMeaningfulActivityAt = 0;
   state.scratchSummary = undefined;
+  state.scratchSummaryPriorSnapshot = undefined;
   state.detailsMarkdownCache = undefined;
   if (state.panel) {
     state.panel.dispose();
@@ -7291,6 +7517,7 @@ async function runActionSafetyNoopChecks(
   const original = {
     panelSummary: state.panelSummary,
     scratchSummary: state.scratchSummary,
+    scratchSummaryPriorSnapshot: state.scratchSummaryPriorSnapshot,
     lastTaskName: state.lastTaskName,
     lastTaskWorkspaceRoot: state.lastTaskWorkspaceRoot,
     lastDebugConfigName: state.lastDebugConfigName,
@@ -7319,6 +7546,7 @@ async function runActionSafetyNoopChecks(
   try {
     state.panelSummary = undefined;
     state.scratchSummary = undefined;
+    state.scratchSummaryPriorSnapshot = undefined;
     if (root) {
       await context.workspaceState.update(summaryCacheKey(context, root), undefined);
     }
@@ -7365,6 +7593,7 @@ async function runActionSafetyNoopChecks(
   } finally {
     state.panelSummary = original.panelSummary;
     state.scratchSummary = original.scratchSummary;
+    state.scratchSummaryPriorSnapshot = original.scratchSummaryPriorSnapshot;
     state.lastTaskName = original.lastTaskName;
     state.lastTaskWorkspaceRoot = original.lastTaskWorkspaceRoot;
     state.lastDebugConfigName = original.lastDebugConfigName;
@@ -7523,13 +7752,13 @@ function readSummaryCorrectionStore(
   return normalized;
 }
 
-function getSummaryCorrectionsForContext(
+function getSummaryCorrectionEntryForContext(
   context: vscode.ExtensionContext,
   root: string,
   contextHash: string,
-): string[] {
+): SummaryCorrectionEntry | undefined {
   const store = readSummaryCorrectionStore(context, root);
-  return store[contextHash]?.corrections ?? [];
+  return store[contextHash];
 }
 
 async function persistSummaryCorrection(
@@ -9434,12 +9663,15 @@ function resetRuntimeWorkspaceState(): void {
   state.panelScratchpadPreviewLines = [];
   state.panelScratchpadExists = false;
   state.panelScratchpadHasContent = false;
+  state.panelScratchpadPriorExcerpt = undefined;
+  state.panelScratchpadUpdatedAt = undefined;
   state.panelScratchpadScopeLabel = undefined;
   state.panelResumePathState = undefined;
   state.panelResumePathScope = undefined;
   state.activeNudges = undefined;
   state.percolationSignalsByContextHash.clear();
   state.scratchSummary = undefined;
+  state.scratchSummaryPriorSnapshot = undefined;
   state.detailsMarkdownCache = undefined;
   if (state.panel) {
     state.panel.dispose();
@@ -9596,6 +9828,7 @@ async function applyRetentionPolicy(
   }
   if (clearedActiveSummary && pickWorkspaceRoot(state.panelWorkspaceRoot) === workspaceRoot) {
     state.scratchSummary = undefined;
+    state.scratchSummaryPriorSnapshot = undefined;
   }
 
   await pruneCheckpointNotesForWorkspace(context, workspaceRoot, cutoffAt);
@@ -9944,6 +10177,8 @@ async function refreshPanelCheckpointState(
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
+    state.panelScratchpadPriorExcerpt = undefined;
+    state.panelScratchpadUpdatedAt = undefined;
     state.panelScratchpadScopeLabel = undefined;
     return;
   }
@@ -9970,6 +10205,15 @@ async function refreshPanelCheckpointState(
     );
     state.panelSummary = nextSummary;
     state.scratchSummary = nextSummary;
+    if (state.scratchSummaryPriorSnapshot?.contextHash === nextSummary.contextHash) {
+      state.scratchSummaryPriorSnapshot = {
+        ...state.scratchSummaryPriorSnapshot,
+        checkpointNoteText:
+          resolved.primaryNote?.status === 'open' ? resolved.primaryNote.text : undefined,
+        checkpointUpdatedAt:
+          resolved.primaryNote?.status === 'open' ? resolved.primaryNote.updatedAt : undefined,
+      };
+    }
     updateCompanionStatusBar();
   }
 }
@@ -10535,6 +10779,48 @@ function buildAiScratchpadExcerpt(rawContent: string): string | undefined {
   return `${joined.slice(0, AI_SCRATCHPAD_MAX_CHARS)}\n...truncated...`;
 }
 
+async function loadCappedScratchpadExcerptFromFile(
+  uri: vscode.Uri,
+  maxBytes = AI_SCRATCHPAD_MAX_READ_BYTES,
+): Promise<string | undefined> {
+  if (uri.scheme === 'file' && uri.fsPath) {
+    let handle: fs.FileHandle | undefined;
+    try {
+      handle = await fs.open(uri.fsPath, 'r');
+      const buffer = Buffer.alloc(maxBytes);
+      const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
+      if (bytesRead <= 0) {
+        return undefined;
+      }
+      return buildAiScratchpadExcerpt(buffer.subarray(0, bytesRead).toString('utf8'));
+    } catch {
+      return undefined;
+    } finally {
+      if (handle) {
+        await handle.close();
+      }
+    }
+  }
+
+  try {
+    const stat = await vscode.workspace.fs.stat(uri);
+    if (stat.size <= 0) {
+      return undefined;
+    }
+    if (stat.size > maxBytes) {
+      // Remote/virtual fs providers do not expose partial reads; avoid loading oversized files.
+      return undefined;
+    }
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    if (!bytes || bytes.byteLength <= 0) {
+      return undefined;
+    }
+    return buildAiScratchpadExcerpt(Buffer.from(bytes).toString('utf8'));
+  } catch {
+    return undefined;
+  }
+}
+
 function applyScratchpadExcerptToSummary(summary: ResumeSummary, excerpt: string): ResumeSummary {
   const section = ['## Scratchpad excerpt (opt-in)', '```text', excerpt, '```'].join('\n');
 
@@ -10544,27 +10830,49 @@ function applyScratchpadExcerptToSummary(summary: ResumeSummary, excerpt: string
   };
 }
 
-async function loadScratchpadExcerptForAi(
+interface ScratchpadPriorSnapshot {
+  hasContent: boolean;
+  excerpt?: string;
+  updatedAt?: number;
+}
+
+async function loadScratchpadPriorSnapshot(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
   branchHint?: string,
-): Promise<string | undefined> {
+): Promise<ScratchpadPriorSnapshot> {
   if (!workspaceRoot) {
-    return undefined;
+    return { hasContent: false };
   }
 
   const { uri, scopeState } = resolveScratchpadFileUri(context, workspaceRoot, branchHint);
   await migrateLegacyScratchpadFileIfNeeded(context, workspaceRoot, scopeState.scope, uri);
   try {
     const stat = await vscode.workspace.fs.stat(uri);
+    const updatedAt = stat.mtime > 0 ? stat.mtime : undefined;
     if (stat.size <= 0) {
-      return undefined;
+      return {
+        hasContent: false,
+        updatedAt,
+      };
+    }
+    if (stat.size > SCRATCHPAD_PREVIEW_MAX_BYTES) {
+      const cappedExcerpt = await loadCappedScratchpadExcerptFromFile(uri);
+      return {
+        hasContent: true,
+        excerpt: cappedExcerpt,
+        updatedAt,
+      };
     }
     const bytes = await vscode.workspace.fs.readFile(uri);
     const content = Buffer.from(bytes).toString('utf8');
-    return buildAiScratchpadExcerpt(content);
+    return {
+      hasContent: content.trim().length > 0,
+      excerpt: buildAiScratchpadExcerpt(content),
+      updatedAt,
+    };
   } catch {
-    return undefined;
+    return { hasContent: false };
   }
 }
 
@@ -10577,6 +10885,8 @@ async function refreshPanelScratchpadState(
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
+    state.panelScratchpadPriorExcerpt = undefined;
+    state.panelScratchpadUpdatedAt = undefined;
     state.panelScratchpadScopeLabel = undefined;
     return;
   }
@@ -10589,10 +10899,12 @@ async function refreshPanelScratchpadState(
   await migrateLegacyScratchpadFileIfNeeded(context, root, scopeState.scope, uri);
   let exists = false;
   let sizeBytes = 0;
+  let updatedAt: number | undefined;
   try {
     const stat = await vscode.workspace.fs.stat(uri);
     exists = true;
     sizeBytes = stat.size;
+    updatedAt = stat.mtime > 0 ? stat.mtime : undefined;
   } catch {
     exists = false;
   }
@@ -10607,15 +10919,38 @@ async function refreshPanelScratchpadState(
     }
   }
 
+  let panelScratchpadPriorExcerpt: string | undefined;
+  if (exists && sizeBytes > SCRATCHPAD_PREVIEW_MAX_BYTES) {
+    panelScratchpadPriorExcerpt = await loadCappedScratchpadExcerptFromFile(uri);
+  } else {
+    panelScratchpadPriorExcerpt = buildAiScratchpadExcerpt(content);
+  }
+
   state.panelScratchpadExists = exists;
-  state.panelScratchpadHasContent = exists ? sizeBytes > 0 : content.trim().length > 0;
+  state.panelScratchpadHasContent = exists
+    ? sizeBytes > SCRATCHPAD_PREVIEW_MAX_BYTES
+      ? sizeBytes > 0
+      : content.trim().length > 0
+    : false;
+  state.panelScratchpadPriorExcerpt = panelScratchpadPriorExcerpt;
+  state.panelScratchpadUpdatedAt = updatedAt;
   state.panelScratchpadPreviewLines =
     exists && sizeBytes > SCRATCHPAD_PREVIEW_MAX_BYTES
-      ? [
-          `Preview unavailable for large scratchpad (${Math.ceil(sizeBytes / 1024)} KB). Open Scratchpad to view.`,
-        ]
+      ? [formatScratchpadLargePreviewUnavailableLine(sizeBytes)]
       : extractScratchpadPreviewLines(content);
   state.panelScratchpadScopeLabel = scratchpadScopeLabel(scopeState);
+  const activeScratchSummaryContextHash = state.scratchSummary?.contextHash;
+  if (
+    activeScratchSummaryContextHash &&
+    state.scratchSummaryPriorSnapshot?.contextHash === activeScratchSummaryContextHash
+  ) {
+    state.scratchSummaryPriorSnapshot = {
+      ...state.scratchSummaryPriorSnapshot,
+      scratchpadExcerpt: panelScratchpadPriorExcerpt,
+      scratchpadHasContent: state.panelScratchpadHasContent,
+      scratchpadUpdatedAt: updatedAt,
+    };
+  }
 }
 
 async function openScratchpadCommand(

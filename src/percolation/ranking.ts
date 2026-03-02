@@ -7,6 +7,7 @@ export interface RankingWeights {
   novelty: number;
   interruptCost: number;
   confidence: number;
+  userPrior: number;
 }
 
 export const DEFAULT_RANKING_WEIGHTS: RankingWeights = {
@@ -16,6 +17,7 @@ export const DEFAULT_RANKING_WEIGHTS: RankingWeights = {
   novelty: 0.1,
   interruptCost: 0.1,
   confidence: 0.05,
+  userPrior: 0.2,
 };
 
 export interface RankingScoreBreakdown {
@@ -25,6 +27,7 @@ export interface RankingScoreBreakdown {
   novelty: number;
   interruptCost: number;
   confidence: number;
+  userPrior: number;
   total: number;
 }
 
@@ -122,6 +125,7 @@ function mergeWeights(overrides?: Partial<RankingWeights>): RankingWeights {
     novelty: overrides.novelty ?? DEFAULT_RANKING_WEIGHTS.novelty,
     interruptCost: overrides.interruptCost ?? DEFAULT_RANKING_WEIGHTS.interruptCost,
     confidence: overrides.confidence ?? DEFAULT_RANKING_WEIGHTS.confidence,
+    userPrior: overrides.userPrior ?? DEFAULT_RANKING_WEIGHTS.userPrior,
   };
 }
 
@@ -132,6 +136,9 @@ function scoreItem(item: SurfacedItem, weights: RankingWeights): RankedSurfacedI
   const novelty = clamp01(item.novelty, 0.5);
   const interruptCost = clamp01(item.interruptCost, 0.5);
   const confidence = clamp01(item.confidence, 0.5);
+  const priorPromotion = readNumericMeta(item, 'priorPromotion') ?? 0;
+  const priorSuppression = readNumericMeta(item, 'priorSuppression') ?? 0;
+  const userPriorNet = priorPromotion - priorSuppression;
 
   const breakdown = {
     urgency: roundScore(urgency * weights.urgency),
@@ -140,6 +147,7 @@ function scoreItem(item: SurfacedItem, weights: RankingWeights): RankedSurfacedI
     novelty: roundScore(novelty * weights.novelty),
     interruptCost: roundScore(interruptCost * weights.interruptCost),
     confidence: roundScore(confidence * weights.confidence),
+    userPrior: roundScore(userPriorNet * weights.userPrior),
     total: 0,
   };
 
@@ -149,7 +157,8 @@ function scoreItem(item: SurfacedItem, weights: RankingWeights): RankedSurfacedI
       breakdown.continuity +
       breakdown.novelty +
       breakdown.confidence -
-      breakdown.interruptCost,
+      breakdown.interruptCost +
+      breakdown.userPrior,
   );
 
   return {

@@ -117,6 +117,17 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
+
+  it('treats prior-promotion counters as recorded metric activity', () => {
+    const metric = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'focus',
+      priorPromotionCorrections: 1,
+    } as unknown as MetricRecord;
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -172,6 +183,9 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('blockerPromotionTaskFailure');
     expect(lines[0]).toContain('blockerPromotionCommandFailure');
     expect(lines[0]).toContain('blockerPromotionDiagnostics');
+    expect(lines[0]).toContain('priorPromotionCheckpoint');
+    expect(lines[0]).toContain('priorPromotionCorrections');
+    expect(lines[0]).toContain('priorPromotionScratchpad');
     expect(lines[0]).toContain('restrictedTrustTrayOpens');
     expect(lines[0]).toContain('resumePathCompletions');
     expect(lines[0]).toContain('companionPrimaryCtaClickThroughRate');
@@ -315,6 +329,9 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| Primary CTA completion rate (`completions/clicks`) | 1.0000 |');
     expect(markdown).toContain('| blockerPromotionTaskFailure (total) | 1 |');
     expect(markdown).toContain('| blockerPromotionDiagnostics (total) | 1 |');
+    expect(markdown).toContain('| priorPromotionCheckpoint (total) | 0 |');
+    expect(markdown).toContain('| priorPromotionCorrections (total) | 0 |');
+    expect(markdown).toContain('| priorPromotionScratchpad (total) | 0 |');
     expect(markdown).toContain('| boundary | 1 | 0.3333 |');
     expect(markdown).toContain('| mid-activity | 1 | 0.3333 |');
     expect(markdown).toContain('| unknown | 1 | 0.3333 |');
