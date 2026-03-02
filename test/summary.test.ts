@@ -186,6 +186,22 @@ describe('buildResumeSummary', () => {
     expect(summary.noveltyProfile?.score ?? 1).toBeLessThan(0.67);
   });
 
+  it('counts changed files as the union of porcelain and diffstat files', () => {
+    const signals = sampleSignals();
+    signals.changedFiles = ['src/extension.ts', 'scratch/new-notes.md', 'tmp/idea.txt'];
+    signals.gitDiffStat = [
+      ' src/extension.ts | 2 +-',
+      ' 1 file changed, 1 insertion(+), 1 deletion(-)',
+    ].join('\n');
+
+    const summary = buildResumeSummary(signals);
+    const codeLine =
+      summary.changesSinceLastResume?.find((line) => line.startsWith('Code:'))?.trim() ?? '';
+
+    expect(codeLine).toContain('Code: 3 files changed');
+    expect(summary.noveltyProfile?.changedFilesCount).toBe(3);
+  });
+
   it('marks low-confidence summaries explicitly when evidence is sparse', () => {
     const signals = sampleSignals();
     signals.changedFiles = [];

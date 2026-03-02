@@ -50,6 +50,11 @@ async function run() {
     1,
     'Expected scoped noise-budget memory to be seeded before partition switch.',
   );
+  assert.equal(
+    typeof before?.lastSummaryAt === 'number' && before.lastSummaryAt > 0,
+    true,
+    'Expected global summary cooldown timestamp to be present before partition switch.',
+  );
 
   await vscode.commands.executeCommand('tacos.__test.switchTaskPartition', 'HOTFIX-2');
   await wait(200);
@@ -90,6 +95,11 @@ async function run() {
     after?.scopedNoiseBudgetEventCount,
     0,
     'Expected scoped noise-budget memory to reset for destination partition.',
+  );
+  assert.equal(
+    after?.lastSummaryAt,
+    before?.lastSummaryAt,
+    'Expected global summary cooldown timestamp to remain unchanged on partition switch.',
   );
 
   const scopeAfter = await vscode.commands.executeCommand('tacos.__test.getPartitionScopeSnapshot');

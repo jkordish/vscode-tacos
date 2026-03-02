@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { parseCommitHashToken, parseDiffStatFiles } from './git';
 import { normalizeHttpUrl, resolveFileTargetInWorkspace } from './pathSafety';
 import { normalizeIntentOverrideText } from './intentOverride';
+import { bucketForNoveltyScore } from './novelty';
 import type {
   ResumeMode,
   ResumeSignals,
@@ -373,7 +374,7 @@ function computeNoveltyProfile(input: {
     Math.min(1, input.linkCount / 3) * 0.05 +
     Math.min(1, input.gitContextCount / 3) * 0.05;
   const roundedScore = Math.max(0, Math.min(1, Math.round(score * 100) / 100));
-  const bucket = roundedScore >= 0.67 ? 'high' : roundedScore >= 0.34 ? 'medium' : 'low';
+  const bucket = bucketForNoveltyScore(roundedScore);
   return {
     score: roundedScore,
     bucket,
@@ -397,7 +398,7 @@ function buildChangesSinceLastResume(
       .map((value) => value.trim())
       .filter(Boolean),
   );
-  const changedFilesCount = diffStatPrecision.filesChanged ?? changedFileSet.size;
+  const changedFilesCount = Math.max(changedFileSet.size, diffStatPrecision.filesChanged ?? 0);
   const codeDeltaParts: string[] = [];
   if (typeof diffStatPrecision.insertions === 'number' && diffStatPrecision.insertions > 0) {
     codeDeltaParts.push(`+${diffStatPrecision.insertions}`);

@@ -109,6 +109,7 @@ import {
   type PercolationSuppressionReason,
   type PercolationUserPriors,
 } from './percolation/types';
+import { bucketForNoveltyScore } from './novelty';
 import {
   buildPartitionScope,
   inferTaskPartitionKey,
@@ -765,6 +766,8 @@ export function activate(context: vscode.ExtensionContext): void {
         workspaceRoot && activeExtensionContext
           ? readNoiseBudgetEvents(activeExtensionContext, workspaceRoot).length
           : 0;
+      const lastSummaryAt =
+        activeExtensionContext?.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0) ?? 0;
       return {
         panelOpen: Boolean(state.panel),
         panelTitle: state.panel?.title,
@@ -782,6 +785,7 @@ export function activate(context: vscode.ExtensionContext): void {
         scopedAutoTriggerFingerprint,
         scopedNudgeShownAt,
         scopedNoiseBudgetEventCount,
+        lastSummaryAt,
       };
     }),
     vscode.commands.registerCommand(
@@ -2810,7 +2814,6 @@ async function presentSummary(
         workspaceRoot,
         priors: options.percolationPriors,
       }).primary;
-      recordPriorDrivenPromotion(notificationPrimary);
     }
     return notificationPrimary;
   };
@@ -2882,6 +2885,7 @@ async function presentSummary(
   if (!notificationPrimary) {
     return;
   }
+  recordPriorDrivenPromotion(notificationPrimary);
 
   if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
     await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', notificationNow);
@@ -3612,10 +3616,11 @@ function recordNoveltyScoreDistribution(primary: RankedSurfacedItem | undefined)
     typeof primary.novelty === 'number' && Number.isFinite(primary.novelty)
       ? Math.max(0, Math.min(1, primary.novelty))
       : 0;
+  const noveltyBucket = bucketForNoveltyScore(noveltyScore);
   const fieldName: NoveltyScoreBucketMetricField =
-    noveltyScore >= 0.67
+    noveltyBucket === 'high'
       ? 'noveltyScoreBucketHigh'
-      : noveltyScore >= 0.34
+      : noveltyBucket === 'medium'
         ? 'noveltyScoreBucketMedium'
         : 'noveltyScoreBucketLow';
   state.metricSession[fieldName] = 1;
@@ -6828,12 +6833,11 @@ async function applyTaskPartitionSwitch(
     taskPartitionStorageKey(workspaceRoot),
     nextValue ? nextValue : undefined,
   );
-  // Reset suppression memory for the destination partition scope so no-change/cooldown
+  // Reset suppression memory for the destination partition scope so no-change
   // from a previous scope does not suppress freshly switched task context.
   await context.workspaceState.update(autoTriggerFingerprintKey(context, workspaceRoot), undefined);
   await context.workspaceState.update(nudgeShownAtKey(context, workspaceRoot), undefined);
   await context.workspaceState.update(noiseBudgetEventsKey(context, workspaceRoot), undefined);
-  await context.workspaceState.update(KEY_LAST_SUMMARY_AT, undefined);
 
   const snapshot = loadPersistedActivitySnapshot(context);
   state.recentFiles = new RingBuffer(15, snapshot.sanitized.recentFiles);

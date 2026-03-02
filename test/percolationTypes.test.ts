@@ -255,6 +255,28 @@ describe('createPercolationPolicyInput', () => {
     expect(lowRecommended?.meta.noveltyBucket).toBe('low');
   });
 
+  it('falls back to score-derived novelty bucket when explicit novelty bucket is invalid', () => {
+    const summary = buildSummary({
+      noveltyProfile: {
+        score: 0.91,
+        bucket: 'unexpected' as unknown as 'low',
+        changedFilesCount: 4,
+        runCount: 2,
+        blockerCount: 0,
+        keyFileCount: 1,
+        linkCount: 0,
+        gitContextCount: 1,
+      },
+    });
+
+    const input = createPercolationPolicyInput(summary, { now: summary.generatedAt });
+    const recommended = input.candidates.find(
+      (candidate) => candidate.kind === 'recommended-action',
+    );
+
+    expect(recommended?.meta.noveltyBucket).toBe('high');
+  });
+
   it('uses explicit signals and candidates when provided', () => {
     const summary = buildSummary();
     const input = createPercolationPolicyInput(summary, {

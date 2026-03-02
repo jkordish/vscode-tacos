@@ -1,3 +1,4 @@
+import { bucketForNoveltyScore, isSummaryNoveltyBucket } from '../novelty';
 import type { ResumeSummary, SummaryNoveltyBucket } from '../types';
 
 export const PERCOLATION_SCHEMA_VERSION = 1;
@@ -710,23 +711,17 @@ interface ResolvedSummaryNovelty {
   bucket: SummaryNoveltyBucket;
 }
 
-function bucketForNoveltyScore(score: number): SummaryNoveltyBucket {
-  if (score >= 0.67) {
-    return 'high';
-  }
-  if (score >= 0.34) {
-    return 'medium';
-  }
-  return 'low';
-}
-
 function resolveSummaryNovelty(summary: ResumeSummary): ResolvedSummaryNovelty {
   const explicitProfile = summary.noveltyProfile;
   if (explicitProfile) {
     const normalizedScore = clamp01(explicitProfile.score, 0.5);
+    const explicitBucket = explicitProfile.bucket;
+    const bucket = isSummaryNoveltyBucket(explicitBucket)
+      ? explicitBucket
+      : bucketForNoveltyScore(normalizedScore);
     return {
       score: normalizedScore,
-      bucket: explicitProfile.bucket ?? bucketForNoveltyScore(normalizedScore),
+      bucket,
     };
   }
 
