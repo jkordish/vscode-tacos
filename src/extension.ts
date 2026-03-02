@@ -3510,6 +3510,7 @@ interface CompanionStatusBarSemantic {
 function resolveCompanionStatusBarSemantic(
   mode: CompanionRuntimeMode,
   percolationSuppression: ReturnType<typeof evaluatePercolationSuppression>,
+  quietState: ReturnType<typeof resolveSummaryQuietState>,
   primary: RankedSurfacedItem | undefined,
   summary: ResumeSummary | undefined,
   summaryProvider: SummaryProvider,
@@ -3546,6 +3547,15 @@ function resolveCompanionStatusBarSemantic(
       className: 'active-suppressed',
       headline: 'calm',
       reason: describeSuppressionReason(percolationSuppression.reason),
+      elevation: 'none',
+    };
+  }
+
+  if (quietState.active) {
+    return {
+      className: 'active-suppressed',
+      headline: 'calm',
+      reason: 'quiet window',
       elevation: 'none',
     };
   }
@@ -3666,15 +3676,13 @@ function updateCompanionStatusBar(): void {
   const semantic = resolveCompanionStatusBarSemantic(
     mode,
     percolationSuppression,
+    quietState,
     rankedPrimary,
     summary,
     config.summaryProvider,
   );
   const topStep = summary?.nextSteps[0]?.trim();
-  const statusReason =
-    mode === 'active' && quietState.active && percolationSuppression.reason !== 'quiet-hours'
-      ? 'quiet'
-      : semantic.reason;
+  const statusReason = semantic.reason;
   const reasonSuffix = statusReason ? ` · ${summarizeStatusReason(statusReason)}` : '';
   const trustCue = buildTrustCue(summary);
   state.statusBarClass = semantic.className;
