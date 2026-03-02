@@ -69,6 +69,9 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
   const blockedPrimaryCtaSourceAttr = input.blockedPrimaryCtaSourceClass
     ? ` data-primary-cta-source-class="${escapeHtml(input.blockedPrimaryCtaSourceClass)}"`
     : '';
+  const nextEvidenceTrayActionTrustedHtml = input.hasBlocker
+    ? ''
+    : (input.evidenceTrayActionTrustedHtml ?? '');
   const blockedEvidenceTrayActionTrustedHtml = input.hasBlocker
     ? (input.evidenceTrayActionTrustedHtml ?? '')
     : '';
@@ -118,7 +121,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <div class="status-actions">
             ${input.primaryNextActionTrustedHtml ?? ''}
             ${input.whySurfacedActionTrustedHtml ?? ''}
-            ${input.evidenceTrayActionTrustedHtml ?? ''}
+            ${nextEvidenceTrayActionTrustedHtml}
             <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
             <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
           </div>

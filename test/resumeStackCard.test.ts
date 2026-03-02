@@ -131,6 +131,7 @@ describe('renderResumeStackCard', () => {
     expect(html).toContain('data-primary-next-safe-action="home"');
     expect(html).toContain('data-action="openWhySurfaced"');
     expect(html).toContain('data-action="openEvidenceTray"');
+    expect((html.match(/data-action="openEvidenceTray"/gu) ?? []).length).toBe(1);
     expect(html).toContain('<li>Run focused verify pass</li>');
   });
 });
