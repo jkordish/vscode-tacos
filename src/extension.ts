@@ -2723,7 +2723,13 @@ async function presentSummary(
       recordLowConfidenceClarificationRate(summary, notificationPrimary);
     }
   }
-  if (config.metricsEnabled && !notificationSuppression?.suppressed) {
+  if (
+    config.metricsEnabled &&
+    config.uiSurface === 'notification' &&
+    !notificationSuppression?.suppressed &&
+    !options.autoOpenDetails &&
+    !options.preferBackgroundPresentation
+  ) {
     notificationPrimary = ensureNotificationPrimary();
   }
 
@@ -3761,6 +3767,10 @@ function resolvePercolationUserPriors(
   options: RankPercolationOptions,
 ): PercolationUserPriors | undefined {
   const explicitPriors = options.priors;
+  const explicitCorrectionHints =
+    explicitPriors?.correctionHints && explicitPriors.correctionHints.length > 0
+      ? explicitPriors.correctionHints
+      : undefined;
   const panelContextMatches = state.panelSummary?.contextHash === summary.contextHash;
   const fallbackCheckpoint =
     panelContextMatches && state.panelPrimaryCheckpointNote?.status === 'open'
@@ -3771,16 +3781,24 @@ function resolvePercolationUserPriors(
       ? buildScratchpadPriorExcerptFromPreviewLines(state.panelScratchpadPreviewLines)
       : undefined;
   const correctionHints = Array.isArray(summary.userCorrections) ? summary.userCorrections : [];
+  const selectedCorrectionHints = explicitCorrectionHints ?? correctionHints;
+  const workspaceRoot = options.workspaceRoot?.trim() ?? '';
+  const inferredCorrectionUpdatedAt =
+    explicitPriors?.correctionsUpdatedAt === undefined &&
+    !explicitCorrectionHints &&
+    selectedCorrectionHints.length > 0 &&
+    options.context &&
+    workspaceRoot
+      ? getSummaryCorrectionEntryForContext(options.context, workspaceRoot, summary.contextHash)
+          ?.updatedAt
+      : undefined;
   const resolved: PercolationUserPriors = {
     checkpointNoteText:
       explicitPriors?.checkpointNoteText ??
       (fallbackCheckpoint?.status === 'open' ? fallbackCheckpoint.text : undefined),
     checkpointUpdatedAt: explicitPriors?.checkpointUpdatedAt ?? fallbackCheckpoint?.updatedAt,
-    correctionHints:
-      explicitPriors?.correctionHints && explicitPriors.correctionHints.length > 0
-        ? explicitPriors.correctionHints
-        : correctionHints,
-    correctionsUpdatedAt: explicitPriors?.correctionsUpdatedAt,
+    correctionHints: selectedCorrectionHints,
+    correctionsUpdatedAt: explicitPriors?.correctionsUpdatedAt ?? inferredCorrectionUpdatedAt,
     scratchpadExcerpt: explicitPriors?.scratchpadExcerpt ?? scratchpadExcerptFromState,
     scratchpadHasContent:
       explicitPriors?.scratchpadHasContent ??

@@ -99,6 +99,9 @@ export function buildPercolationExplainabilityPayload(
       if (primary.meta.priorSuppressionCorrections === true) {
         reasons.push('Saved corrections suppressed weaker candidate matches.');
       }
+      if (primary.meta.priorSuppressionCorrectionNegation === true) {
+        reasons.push('Negated correction language suppressed conflicting candidate matches.');
+      }
       if (primary.meta.priorSuppressionCheckpointStale === true) {
         reasons.push('A stale checkpoint prior was down-weighted against current context.');
       }

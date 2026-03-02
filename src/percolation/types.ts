@@ -214,7 +214,6 @@ const PRIOR_TOKEN_STOP_WORDS = new Set([
   'are',
   'was',
   'were',
-  'not',
   'but',
   'then',
   'than',
@@ -223,6 +222,19 @@ const PRIOR_TOKEN_STOP_WORDS = new Set([
   'next',
   'step',
 ]);
+const NEGATION_MARKER_TOKENS = new Set([
+  'not',
+  'never',
+  'without',
+  'avoid',
+  'skip',
+  'prevent',
+  'dont',
+  'don',
+  'cannot',
+  'cant',
+]);
+const NEGATION_CUE_REGEX = /\b(?:do\s+not|don['’]?t|not|never|without|avoid|skip|prevent)\b/iu;
 const PRIOR_FRESHNESS_HALF_LIFE_MS = 12 * 60 * 60 * 1000;
 const PRIOR_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -343,6 +355,35 @@ function normalizeScratchpadExcerptForPrior(value: string | undefined): string |
   return lines.join('\n');
 }
 
+function hasNegationCue(value: string): boolean {
+  return NEGATION_CUE_REGEX.test(value);
+}
+
+function computeNegatedCorrectionMatch(
+  candidateTokens: ReadonlySet<string>,
+  correctionHints: ReadonlyArray<string>,
+): number {
+  if (candidateTokens.size === 0 || correctionHints.length === 0) {
+    return 0;
+  }
+
+  let strongestMatch = 0;
+  for (const hint of correctionHints) {
+    if (!hasNegationCue(hint)) {
+      continue;
+    }
+    const scopedTokens = tokenizePriorText(hint).filter(
+      (token) => !NEGATION_MARKER_TOKENS.has(token),
+    );
+    const overlap = computeTokenOverlap(candidateTokens, scopedTokens);
+    if (overlap > strongestMatch) {
+      strongestMatch = overlap;
+    }
+  }
+
+  return strongestMatch;
+}
+
 function resolvePolicyPriors(
   summary: ResumeSummary,
   priors?: PercolationUserPriors,
@@ -386,6 +427,7 @@ function annotateCandidateWithUserPriors(
   const correctionHints = uniqueNonEmptyStrings(priors.correctionHints ?? []);
   const correctionTokens =
     correctionHints.length > 0 ? tokenizePriorText(correctionHints.join(' ')) : [];
+  const negatedCorrectionMatch = computeNegatedCorrectionMatch(candidateTokens, correctionHints);
   const scratchpadTokens = priors.scratchpadExcerpt
     ? tokenizePriorText(priors.scratchpadExcerpt)
     : [];
@@ -412,7 +454,7 @@ function annotateCandidateWithUserPriors(
     staleCheckpointSuppression = (0.35 - checkpointFreshness) * 0.2;
   }
 
-  const correctionPromotion =
+  let correctionPromotion =
     correctionTokens.length > 0
       ? item.kind === 'clarification'
         ? correctionsFreshness * (0.06 + correctionMatch * 0.08)
@@ -424,6 +466,13 @@ function annotateCandidateWithUserPriors(
       : 0;
   if (item.kind === 'clarification') {
     correctionSuppression *= 0.25;
+  }
+  if (negatedCorrectionMatch > 0) {
+    correctionPromotion = 0;
+    correctionSuppression = Math.max(
+      correctionSuppression,
+      correctionsFreshness * Math.min(0.35, 0.12 + negatedCorrectionMatch * 0.24),
+    );
   }
 
   let scratchpadPromotion = 0;
@@ -485,6 +534,9 @@ function annotateCandidateWithUserPriors(
   }
   if (correctionSuppressionRounded >= 0.03) {
     meta.priorSuppressionCorrections = true;
+  }
+  if (negatedCorrectionMatch >= 0.1 && correctionSuppressionRounded >= 0.03) {
+    meta.priorSuppressionCorrectionNegation = true;
   }
   if (staleCheckpointSuppressionRounded >= 0.03) {
     meta.priorSuppressionCheckpointStale = true;
