@@ -42,6 +42,24 @@ export function describeRerunDebugUnavailableReason(input: {
   return undefined;
 }
 
+export function describeCheckoutPreviousBranchUnavailableReason(input: {
+  trusted: boolean;
+  currentBranch?: string;
+  previousBranch?: string;
+}): string | undefined {
+  if (!input.trusted) {
+    return 'Checkout previous branch is unavailable in Restricted Mode: trust this workspace to enable branch execution.';
+  }
+
+  const currentBranch = input.currentBranch?.trim();
+  const previousBranch = input.previousBranch?.trim();
+  if (!currentBranch || !previousBranch || currentBranch === previousBranch) {
+    return 'Checkout previous branch is unavailable: no previous branch target is known.';
+  }
+
+  return undefined;
+}
+
 export function computeRestoreAvailability(input: RestoreAvailabilityInput): RestoreAvailability {
   if (!input.trusted) {
     return {

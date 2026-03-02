@@ -119,6 +119,7 @@ import {
 import { isRefinementActiveForSummary } from './refinement';
 import {
   computeRestoreAvailability,
+  describeCheckoutPreviousBranchUnavailableReason,
   describeRerunDebugUnavailableReason,
   describeRerunTaskUnavailableReason,
   type RestoreAvailability,
@@ -282,6 +283,8 @@ const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>(
   'restoreOpenDiagnosticFile',
   'restoreCheckoutPreviousBranch',
   'restoreCopyFailingCommand',
+  'openAiPayloadPreview',
+  'revokeAiPayloadConsent',
   'rateHelpfulness',
 ]);
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
@@ -353,6 +356,8 @@ interface RuntimeState {
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
   panelWorkspaceRoot?: string;
+  panelProviderModeSnapshot?: ProviderModeSnapshot;
+  panelAiPayloadConsentSignature?: string;
   panelCheckpointNotes: CheckpointNote[];
   panelPrimaryCheckpointNote?: CheckpointNote;
   panelCheckpointScope?: string;
@@ -404,6 +409,11 @@ interface RuntimeState {
   lastRedactionPatternWarningSignature?: string;
 }
 
+interface ProviderModeSnapshot {
+  requestedProvider: SummaryProvider;
+  activeProvider: SummaryProvider;
+}
+
 let state: RuntimeState;
 let activeExtensionContext: vscode.ExtensionContext | undefined;
 
@@ -450,6 +460,8 @@ interface PresentSummaryOptions {
   checkpointPrimaryNote?: CheckpointNote;
   checkpointNotes?: CheckpointNote[];
   checkpointScope?: string;
+  providerModeSnapshot?: ProviderModeSnapshot;
+  aiPayloadConsentSignature?: string;
   manualPercolationBypass?: boolean;
 }
 
@@ -526,6 +538,8 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBarReason: 'awaiting summary',
     statusBarElevated: false,
     activeNudges: undefined,
+    panelProviderModeSnapshot: undefined,
+    panelAiPayloadConsentSignature: undefined,
     panelCheckpointNotes: [],
     panelPrimaryCheckpointNote: undefined,
     panelCheckpointScope: undefined,
@@ -2168,6 +2182,11 @@ async function triggerSummary(
     preferBackgroundPresentation: reason === 'focus' && deferPromptToBackground,
     focusRegainedAt: reason === 'focus' ? focusRegainedAt : undefined,
     workspaceRoot: root,
+    providerModeSnapshot: {
+      requestedProvider: prepared.providerPlan.requestedProvider,
+      activeProvider: prepared.providerPlan.activeProvider,
+    },
+    aiPayloadConsentSignature: aiPayloadConsentSignature(prepared),
     checkpointPrimaryNote: prepared.checkpointPrimaryNote,
     checkpointNotes: prepared.checkpointNotes,
     checkpointScope: prepared.checkpointScope,
@@ -2210,13 +2229,14 @@ async function applyBranchHistory(
   context: vscode.ExtensionContext,
   root: string,
   summary: ResumeSummary,
+  persistCurrentBranch: boolean,
 ): Promise<ResumeSummary> {
   const previousBranch = context.workspaceState.get<string>(branchStateKey(root));
   if (summary.currentBranch && previousBranch && summary.currentBranch !== previousBranch) {
     summary.previousBranch = previousBranch;
   }
 
-  if (summary.currentBranch) {
+  if (persistCurrentBranch && summary.currentBranch) {
     await context.workspaceState.update(branchStateKey(root), summary.currentBranch);
   }
 
@@ -2227,7 +2247,11 @@ async function prepareTriggerSummary(
   context: vscode.ExtensionContext,
   root: string,
   reason: Exclude<TriggerReason, 'cached'>,
+  options: {
+    persistState?: boolean;
+  } = {},
 ): Promise<PreparedTriggerSummary> {
+  const persistState = options.persistState !== false;
   const config = getConfig();
   const providerPlan = await resolveProviderPlan(context, config, reason);
   const resumeGapMinutes = computeResumeGapMinutes(context, root);
@@ -2237,6 +2261,7 @@ async function prepareTriggerSummary(
     context,
     root,
     buildResumeSummary(signals, { longGapMinutes: config.longGapMinutes }),
+    persistState,
   );
   const intentOverride = readIntentOverrideForContext(context, root, inferredSummary.contextHash);
   const baseSummary = applyIntentOverrideToSummary(inferredSummary, intentOverride);
@@ -2290,7 +2315,7 @@ async function prepareTriggerSummary(
     intentUnchanged &&
     providerCompatibleWithCache;
 
-  if (!contextUnchanged) {
+  if (persistState && !contextUnchanged) {
     await context.workspaceState.update(cacheKey, localSummary);
   }
 
@@ -2557,6 +2582,8 @@ async function presentSummary(
   }
 
   await updateActiveNudges(context, summary, workspaceRoot, config, triggerReason === 'cached');
+  state.panelProviderModeSnapshot = options.providerModeSnapshot;
+  state.panelAiPayloadConsentSignature = options.aiPayloadConsentSignature;
   updateSummaryScratchpad(summary, options.workspaceRoot);
 
   const panelOptions: PresentSummaryOptions = {
@@ -3264,6 +3291,8 @@ function recordMetricCounter(
     | 'snoozeActions'
     | 'summaryQuietActions'
     | 'disableActions'
+    | 'trustTrayOpens'
+    | 'restrictedTrustTrayOpens'
     | 'whySurfacedOpens'
     | 'percolationSuppressedQuietHours'
     | 'percolationSuppressedCooldown'
@@ -4204,6 +4233,8 @@ async function showDetailsPanel(
     | 'checkpointPrimaryNote'
     | 'checkpointNotes'
     | 'checkpointScope'
+    | 'providerModeSnapshot'
+    | 'aiPayloadConsentSignature'
     | 'manualPercolationBypass'
   > = {},
 ): Promise<void> {
@@ -4214,6 +4245,8 @@ async function showDetailsPanel(
   }
   state.panelSummary = summary;
   state.panelWorkspaceRoot = workspaceRoot;
+  state.panelProviderModeSnapshot = options.providerModeSnapshot;
+  state.panelAiPayloadConsentSignature = options.aiPayloadConsentSignature;
   state.panelCheckpointNotes = sortCheckpointNotes(options.checkpointNotes ?? []);
   state.panelPrimaryCheckpointNote = options.checkpointPrimaryNote;
   state.panelCheckpointScope = options.checkpointScope;
@@ -4223,6 +4256,8 @@ async function showDetailsPanel(
     state.panelPrimaryCheckpointNote = undefined;
     state.panelCheckpointScope = undefined;
     state.panelManualPercolationBypass = false;
+    state.panelProviderModeSnapshot = undefined;
+    state.panelAiPayloadConsentSignature = undefined;
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
@@ -4245,6 +4280,8 @@ async function showDetailsPanel(
       state.panel = undefined;
       state.panelSummary = undefined;
       state.panelWorkspaceRoot = undefined;
+      state.panelProviderModeSnapshot = undefined;
+      state.panelAiPayloadConsentSignature = undefined;
       state.detailsMarkdownCache = undefined;
       state.panelCheckpointNotes = [];
       state.panelPrimaryCheckpointNote = undefined;
@@ -4294,6 +4331,12 @@ async function showDetailsPanel(
         }
 
         await setPanelSectionExpanded(context, workspaceRoot, message.sectionId, message.expanded);
+        if (message.sectionId === 'trustCenter' && message.expanded) {
+          recordMetricCounter('trustTrayOpens');
+          if (resolveCompanionRuntimeMode(getConfig()) === 'restricted') {
+            recordMetricCounter('restrictedTrustTrayOpens');
+          }
+        }
         return;
       }
 
@@ -4483,6 +4526,24 @@ async function showDetailsPanel(
       if (message.type === 'openPrivacySafety') {
         recordCompanionQuickAction();
         await openPrivacySafetyDoc(context);
+        return;
+      }
+
+      if (message.type === 'openAiPayloadPreview') {
+        recordCompanionQuickAction();
+        await openAiPayloadPreviewFromPanel(context);
+        return;
+      }
+
+      if (message.type === 'revokeAiPayloadConsent') {
+        recordCompanionQuickAction();
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!workspaceRoot) {
+          void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+          return;
+        }
+        await revokeAiPayloadConsent(context, workspaceRoot);
+        rerenderPanel();
         return;
       }
 
@@ -5208,10 +5269,16 @@ function renderWebview(
   const blockerMetaHtml = blockerMetaBadges
     ? `<div class="step-evidence">${blockerMetaBadges}</div>`
     : '';
+  const blockerSuppressionHintHtml =
+    blockerDecision.kind === 'restricted'
+      ? '<p class="muted blocker-disabled-reason"><strong>SUPPRESSED:</strong> Restricted Mode filtered task/debug rerun and branch checkout actions until workspace trust is granted.</p>'
+      : '';
   const blockerDisabledReasonHtml =
     blockerDecision.hasBlocker && blockerAction?.disabled && blockerAction.disabledReason
-      ? `<p class="muted blocker-disabled-reason">Unavailable: ${escapeHtml(blockerAction.disabledReason)}</p>`
-      : '';
+      ? `${blockerSuppressionHintHtml}<p class="muted blocker-disabled-reason">Unavailable: ${escapeHtml(
+          blockerAction.disabledReason,
+        )}</p>`
+      : blockerSuppressionHintHtml;
   const companionSlotSources = resolveCompanionSlotSourceClasses(
     summary,
     primaryNextAction,
@@ -5304,6 +5371,16 @@ function renderWebview(
   }
   if (!demoMode && !availability.canRerunDebug) {
     const reason = describeRerunDebugUnavailableReason({ trusted, hasLastDebug });
+    if (reason) {
+      restoreUnavailableReasons.push(reason);
+    }
+  }
+  if (!demoMode && !availability.canCheckoutPreviousBranch) {
+    const reason = describeCheckoutPreviousBranchUnavailableReason({
+      trusted,
+      currentBranch: summary.currentBranch,
+      previousBranch: summary.previousBranch,
+    });
     if (reason) {
       restoreUnavailableReasons.push(reason);
     }
@@ -5413,11 +5490,50 @@ function renderWebview(
     : config.summaryProvider === 'local'
       ? 'Nothing (local-only mode).'
       : companionRuntimeMode === 'restricted'
-        ? 'Nothing while Restricted Mode is active.'
+        ? 'Nothing while Restricted Mode is active (AI refinement disabled).'
         : 'Redacted summary context, evidence, and your checkpoint notes when AI refinement runs.';
+  const collectionPolicyLabel = demoMode
+    ? 'Sample mode'
+    : companionRuntimeMode === 'restricted'
+      ? 'Restricted Mode filters git execution signals and terminal command collection.'
+      : companionRuntimeMode === 'paused'
+        ? 'Local signal collection stays on while companion surfacing is paused.'
+        : companionRuntimeMode === 'disabled'
+          ? 'Companion surfacing is disabled until tacos.enabled is re-enabled.'
+          : 'Local signal collection is active; quiet/cooldown/no-change policy can still suppress surfacing.';
   const storedLocallyLabel = demoMode
     ? 'Sample card is generated in memory and not mixed with workspace snapshots.'
     : 'Redacted activity snapshots, summary cache, checkpoint notes, scratchpad files, and local metrics.';
+  const privacyPresetLabel = demoMode ? 'Sample mode' : PRIVACY_PRESET_LABELS[config.privacyPreset];
+  const retentionPolicyLabel = demoMode
+    ? 'Sample mode'
+    : RETENTION_POLICY_LABELS[config.retentionPolicy];
+  const providerModeSnapshot = demoMode ? undefined : state.panelProviderModeSnapshot;
+  const activeAiProviderForConsent: SummaryProvider =
+    companionRuntimeMode === 'restricted' || companionRuntimeMode === 'disabled'
+      ? 'local'
+      : (providerModeSnapshot?.activeProvider ?? config.summaryProvider);
+  const aiProviderModeLabel = demoMode
+    ? 'Demo mode (no provider sends).'
+    : resolveAiProviderModeLabel(config, companionRuntimeMode, providerModeSnapshot);
+  const aiConsentStatusLabel = demoMode
+    ? 'Not required in sample mode.'
+    : resolveAiConsentStatusLabel(
+        activeExtensionContext,
+        panelWorkspaceRoot,
+        companionRuntimeMode,
+        activeAiProviderForConsent,
+        state.panelAiPayloadConsentSignature,
+      );
+  const storedAiConsentSignature =
+    !demoMode && activeExtensionContext && panelWorkspaceRoot
+      ? activeExtensionContext.workspaceState
+          .get<string>(aiPayloadConsentKey(panelWorkspaceRoot), '')
+          .trim()
+      : '';
+  const aiPayloadPreviewDisabledAttr = demoMode ? 'disabled aria-disabled="true"' : '';
+  const revokeAiConsentDisabledAttr =
+    demoMode || !storedAiConsentSignature ? 'disabled aria-disabled="true"' : '';
   const trustCueDetails = trustCue.details.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const autoSummaryStatusLabel = autoSummariesDisabled
     ? 'Auto summaries disabled'
@@ -5496,11 +5612,18 @@ function renderWebview(
     trustTrackingLabel,
     storedLocallyLabel,
     sentToAiLabel,
+    collectionPolicyLabel,
+    privacyPresetLabel,
+    retentionPolicyLabel,
+    aiProviderModeLabel,
+    aiConsentStatusLabel,
     trustBasedOn: trustCue.headline.replace('Based on: ', ''),
     trustCueDetailsTrustedHtml: trustCueDetails,
     percolationExplainabilityTrustedHtml,
     autoSummaryToggleDisabledAttr,
     autoSummaryToggleLabel,
+    aiPayloadPreviewDisabledAttr,
+    revokeAiConsentDisabledAttr,
     expanded: expandedSections.has('trustCenter'),
     emphasis: panelSectionEmphasis.trustCenter,
   });
@@ -8121,6 +8244,96 @@ function aiPayloadConsentKey(workspaceRoot: string): string {
   return `${KEY_AI_PAYLOAD_CONSENT_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
 }
 
+function summaryProviderLabel(provider: SummaryProvider): string {
+  if (provider === 'local') {
+    return 'Local';
+  }
+  if (provider === 'openai') {
+    return 'OpenAI';
+  }
+  return 'VS Code LM';
+}
+
+function resolveAiProviderModeLabel(
+  config: ExtensionConfig,
+  runtimeMode: CompanionRuntimeMode,
+  providerModeSnapshot?: ProviderModeSnapshot,
+): string {
+  const requestedProvider = providerModeSnapshot?.requestedProvider ?? config.summaryProvider;
+  const requestedProviderLabel = summaryProviderLabel(requestedProvider);
+
+  if (runtimeMode === 'restricted') {
+    return `${requestedProviderLabel} requested; Restricted Mode enforces local-only behavior.`;
+  }
+
+  if (runtimeMode === 'disabled') {
+    return `${requestedProviderLabel} requested; summaries are disabled, so no provider sends run.`;
+  }
+
+  const activeProvider = providerModeSnapshot?.activeProvider ?? requestedProvider;
+  const activeProviderLabel = summaryProviderLabel(activeProvider);
+  if (activeProvider === requestedProvider) {
+    if (activeProvider === 'local') {
+      return 'Local-only mode.';
+    }
+    return `${activeProviderLabel} with explicit per-workspace consent.`;
+  }
+
+  if (requestedProvider === 'openai' && activeProvider === 'local') {
+    return 'OpenAI requested; local fallback is active because no OpenAI API key is available.';
+  }
+
+  if (requestedProvider === 'vscode-lm' && activeProvider === 'local') {
+    return 'VS Code LM requested; local fallback is active because no VS Code LM model is available.';
+  }
+
+  if (activeProvider === 'local') {
+    return 'Local-only mode.';
+  }
+
+  return `${requestedProviderLabel} requested; ${activeProviderLabel} currently active.`;
+}
+
+function resolveAiConsentStatusLabel(
+  context: vscode.ExtensionContext | undefined,
+  workspaceRoot: string | undefined,
+  runtimeMode: CompanionRuntimeMode,
+  activeProvider: SummaryProvider,
+  expectedSignature?: string,
+): string {
+  if (runtimeMode === 'restricted') {
+    return 'Not required while Restricted Mode is active.';
+  }
+
+  if (runtimeMode === 'disabled') {
+    return 'Not required while summaries are disabled.';
+  }
+
+  if (activeProvider === 'local') {
+    return 'Not required in local-only mode.';
+  }
+
+  if (!context || !workspaceRoot) {
+    return 'Unavailable: open a workspace folder to evaluate consent status.';
+  }
+
+  const storedSignature = context.workspaceState
+    .get<string>(aiPayloadConsentKey(workspaceRoot), '')
+    .trim();
+  if (storedSignature && expectedSignature) {
+    if (storedSignature === expectedSignature) {
+      return 'Saved for this workspace (provider/inclusion scoped).';
+    }
+    return 'Saved for a previous provider/payload scope; TaCoS will ask again before AI send.';
+  }
+
+  if (storedSignature) {
+    return 'Saved for this workspace; TaCoS may ask again if provider or payload scope changes.';
+  }
+
+  return 'Not saved; TaCoS will ask before AI send.';
+}
+
 function aiPayloadConsentSignature(prepared: PreparedTriggerSummary): string {
   const includeCheckpointNotes = prepared.aiPayloadCheckpointNotes.length > 0;
   const includeScratchpad = Boolean(prepared.aiPayloadScratchpadExcerpt);
@@ -8155,8 +8368,65 @@ async function setAiPayloadConsent(
   );
 }
 
-async function revokeAiPayloadConsent(context: vscode.ExtensionContext): Promise<void> {
-  const workspaceRoot = pickWorkspaceRoot();
+async function openAiPayloadPreviewFromPanel(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const prepared = await prepareTriggerSummary(context, workspaceRoot, 'focus', {
+    persistState: false,
+  });
+  const strictContext = buildStrictSanitizedSummaryContext(
+    prepared.signals,
+    prepared.aiPayloadSummary,
+    prepared.config.redactionPatterns,
+  );
+  const includeCheckpointNotes = prepared.aiPayloadCheckpointNotes.length > 0;
+  const includeScratchpad = Boolean(prepared.aiPayloadScratchpadExcerpt);
+  const previewMarkdown = buildAiPayloadPreviewMarkdown({
+    provider: prepared.providerPlan.activeProvider,
+    workspaceName: path.basename(workspaceRoot),
+    generatedAt: Date.now(),
+    signals: prepared.signals,
+    summary: {
+      intent: prepared.aiPayloadSummary.intent,
+      intentOverridden: prepared.aiPayloadSummary.intentOverridden,
+      nextSteps: prepared.aiPayloadSummary.nextSteps,
+      topFiles: prepared.aiPayloadSummary.topFiles,
+      links: prepared.aiPayloadSummary.links,
+      evidenceCatalog: prepared.aiPayloadSummary.evidenceCatalog,
+    },
+    checkpointNotes: prepared.aiPayloadCheckpointNotes,
+    includeCheckpointNotes,
+    includeScratchpad,
+    scratchpadExcerpt: prepared.aiPayloadScratchpadExcerpt,
+    redactionReport: strictContext.report,
+  });
+  state.panelProviderModeSnapshot = {
+    requestedProvider: prepared.providerPlan.requestedProvider,
+    activeProvider: prepared.providerPlan.activeProvider,
+  };
+  state.panelAiPayloadConsentSignature = aiPayloadConsentSignature(prepared);
+  rerenderPanel();
+  const doc = await vscode.workspace.openTextDocument({
+    language: 'markdown',
+    content: previewMarkdown,
+  });
+  await vscode.window.showTextDocument(doc, {
+    preview: false,
+    viewColumn: vscode.ViewColumn.Beside,
+    preserveFocus: false,
+  });
+  postPanelStatus('TaCoS: AI payload preview opened.');
+}
+
+async function revokeAiPayloadConsent(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
   if (!workspaceRoot) {
     void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
     return;
@@ -8866,6 +9136,8 @@ function resetRuntimeWorkspaceState(): void {
   state.lastMeaningfulActivityAt = 0;
   state.snoozeUntil = 0;
   state.summaryQuietUntil = 0;
+  state.panelProviderModeSnapshot = undefined;
+  state.panelAiPayloadConsentSignature = undefined;
   state.panelCheckpointNotes = [];
   state.panelPrimaryCheckpointNote = undefined;
   state.panelCheckpointScope = undefined;

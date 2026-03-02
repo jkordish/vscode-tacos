@@ -26,6 +26,8 @@ export function renderPanelClientScript(
         'acknowledgeNudge',
         'dismissNudge',
         'openPrivacySafety',
+        'openAiPayloadPreview',
+        'revokeAiPayloadConsent',
         'rateHelpfulness',
         'dismissDemoResume',
         'runNextStepAction',

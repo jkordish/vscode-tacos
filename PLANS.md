@@ -122,24 +122,28 @@ Status vocabulary used in this file:
 
 - status: `doing`
 - why: preserve trust by making surfaced-decision rationale available immediately from Companion Home.
-- scope: Epic `#227`, currently DP-302 / issue `#243` (grouped evidence tray and one-click tray open path from surfaced top-card context).
+- scope: Epic `#227`, currently DP-304 / issue `#245` (Restricted Mode rendering + explicit suppression/explainability copy pass).
 - dependencies: P3, P4.
 - recent progress:
   - completed DP-301 / `#242` (`Why am I seeing this?` one-click top-card path) and marked epic checklist progress.
-  - confirmed current `Evidence` card behavior and safe open/static affordance semantics to preserve during grouping.
+  - completed DP-302 / `#243` (grouped evidence tray with one-click Companion Home open path, safe affordance semantics, and hidden-group regression hardening).
+  - completed DP-303 / `#244` (privacy/trust tray posture rows + payload preview + consent revoke controls + trust-tray open metric hook) in PR `#272`.
 - immediate next actions:
-  - land DP-302 grouped evidence tray rendering (`surfaced decision`/`other openable`/`context-only`).
-  - add one-click Companion Home action to expand `More Context` -> `Evidence`.
-  - run unit/integration checks and close issue `#243` once merged.
+  - land DP-304 restricted-mode copy pass (`filtered signals`, explicit `SUPPRESSED` execution guidance, and restore disable-reason completeness).
+  - add restricted-mode drill-down proxy metric for trust-tray opens.
+  - run verify gates and close issue `#245` once merged.
 - risks/rollback:
-  - risk: grouping can hide lower-priority evidence if ordering is not obvious.
-  - rollback: keep one-click tray open path and revert to flat list rendering while preserving safe affordances.
+  - risk: restricted-mode copy can become too verbose and overpower primary resume guidance.
+  - rollback: keep suppression semantics/guards intact and revert to shorter copy strings only.
 - links:
   - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
   - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
   - https://github.com/jkordish/vscode-tacos/issues/227
   - https://github.com/jkordish/vscode-tacos/issues/242
   - https://github.com/jkordish/vscode-tacos/issues/243
+  - https://github.com/jkordish/vscode-tacos/issues/244
+  - https://github.com/jkordish/vscode-tacos/issues/245
+  - https://github.com/jkordish/vscode-tacos/pull/272
 
 ## Blockers
 

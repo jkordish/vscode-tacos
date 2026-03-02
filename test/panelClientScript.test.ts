@@ -8,6 +8,8 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain("'setIntentOverride'");
     expect(script).toContain("'clearIntentOverride'");
     expect(script).toContain("'dismissDemoResume'");
+    expect(script).toContain("'openAiPayloadPreview'");
+    expect(script).toContain("'revokeAiPayloadConsent'");
     expect(script).toContain("'trustCenter'");
     expect(script).toContain("'moreContext'");
     expect(script).toContain("type: 'setPanelSectionExpanded'");

@@ -26,11 +26,18 @@ describe('panelCards', () => {
       trustTrackingLabel: 'on',
       storedLocallyLabel: 'Redacted local data only',
       sentToAiLabel: 'Nothing (local-only mode).',
+      collectionPolicyLabel: 'Local signal collection is active.',
+      privacyPresetLabel: 'Balanced',
+      retentionPolicyLabel: '7 days',
+      aiProviderModeLabel: 'Local-only mode.',
+      aiConsentStatusLabel: 'Not required in local-only mode.',
       trustBasedOn: 'Evidence from local signals',
       trustCueDetailsTrustedHtml: '<li>Recent files: 2</li>',
       percolationExplainabilityTrustedHtml: '<li>Reason: deterministic ranking.</li>',
       autoSummaryToggleDisabledAttr: '',
       autoSummaryToggleLabel: 'Pause auto summaries',
+      aiPayloadPreviewDisabledAttr: '',
+      revokeAiConsentDisabledAttr: 'disabled aria-disabled="true"',
       expanded: false,
       emphasis: {
         level: 'elevated',
@@ -50,6 +57,13 @@ describe('panelCards', () => {
     expect(trust).toContain('data-panel-emphasis-badge="true"');
     expect(trust).toContain('>Trust</span></summary>');
     expect(trust).toContain('data-action="openPrivacySafety"');
+    expect(trust).toContain('data-action="openAiPayloadPreview"');
+    expect(trust).toContain('data-action="revokeAiPayloadConsent"');
+    expect(trust).toContain('Collection changes:</span> Local signal collection is active.');
+    expect(trust).toContain('Privacy preset:</span> Balanced');
+    expect(trust).toContain('Retention:</span> 7 days');
+    expect(trust).toContain('AI provider:</span> Local-only mode.');
+    expect(trust).toContain('Consent:</span> Not required in local-only mode.');
     expect(trust).toContain('<li>Recent files: 2</li>');
     expect(trust).toContain('data-why-surfaced-details="true"');
     expect(trust).toContain('<li>Reason: deterministic ranking.</li>');

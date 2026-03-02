@@ -29,6 +29,8 @@ All notable changes to this project are documented in this file.
 - Companion `Next`/`Blocked` status captions now include explicit emphasis tokens (`PRIMARY`/`ADVISORY`/`SUPPRESSED`) with reduced-motion-safe transitions and forced-colors safeguards.
 - Companion Home now exposes a one-click `Why am I seeing this?` action that opens the Trust Center explainability trail (`More Context` → `Trust Center` → nested decision details).
 - Evidence tray now supports one-click opening from Companion Home and groups entries into surfaced-decision evidence, other openable evidence, and context-only evidence while preserving safe open/static affordances.
+- Trust Center now includes a concise privacy/trust tray with privacy preset, retention, provider mode, consent status, and one-click actions for AI payload preview and consent revocation.
+- Restricted Mode panel copy now explicitly calls out filtered signal classes, adds suppressed-execution guidance in Blocked/restore affordances, and records restricted trust-tray drill-down opens in local metrics.
 
 ## [0.7.0] - 2026-03-01
 

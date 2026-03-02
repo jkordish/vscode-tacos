@@ -58,6 +58,12 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'openPrivacySafety' })).toEqual({
       type: 'openPrivacySafety',
     });
+    expect(parseWebviewMessage({ type: 'openAiPayloadPreview' })).toEqual({
+      type: 'openAiPayloadPreview',
+    });
+    expect(parseWebviewMessage({ type: 'revokeAiPayloadConsent' })).toEqual({
+      type: 'revokeAiPayloadConsent',
+    });
     expect(parseWebviewMessage({ type: 'rateHelpfulness' })).toEqual({
       type: 'rateHelpfulness',
     });

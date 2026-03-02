@@ -95,6 +95,17 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
+
+  it('treats restricted trust tray opens as recorded metric activity', () => {
+    const metric = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'other',
+      restrictedTrustTrayOpens: 1,
+    } as unknown as MetricRecord;
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -146,6 +157,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('companionPrimaryCtaSourceClass');
     expect(lines[0]).toContain('companionPrimaryCtaClicks');
     expect(lines[0]).toContain('companionPrimaryCtaCompletions');
+    expect(lines[0]).toContain('restrictedTrustTrayOpens');
     expect(lines[0]).toContain('resumePathCompletions');
     expect(lines[0]).toContain('companionPrimaryCtaClickThroughRate');
     expect(lines[0]).toContain('companionPrimaryCtaCompletionRate');
