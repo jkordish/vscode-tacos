@@ -7,6 +7,11 @@ function blockerDecision(overrides: Partial<BlockerDecision> = {}): BlockerDecis
     hasBlocker: false,
     title: 'No active blocker',
     detail: 'Continue with the first suggested next step.',
+    confidenceLabel: 'high',
+    severityLabel: 'none',
+    severityScore: 0,
+    confidenceScore: 1,
+    actionabilityScore: 0,
     ...overrides,
   };
 }

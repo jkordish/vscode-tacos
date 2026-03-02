@@ -47,6 +47,10 @@ describe('decidePrimaryBlocker', () => {
 
     expect(decision.kind).toBe('taskFailure');
     expect(decision.action?.type).toBe('restoreRerunTask');
+    expect(decision.severityLabel).toBe('critical');
+    expect(decision.severityScore).toBeGreaterThan(0.9);
+    expect(decision.confidenceScore).toBeGreaterThan(0.9);
+    expect(decision.actionabilityScore).toBeGreaterThan(0.8);
   });
 
   it('prioritizes command failure over diagnostics and branch blockers', () => {
@@ -59,6 +63,8 @@ describe('decidePrimaryBlocker', () => {
 
     expect(decision.kind).toBe('commandFailure');
     expect(decision.action?.type).toBe('restoreRerunTask');
+    expect(['high', 'critical']).toContain(decision.severityLabel);
+    expect(decision.confidenceLabel).toBe('high');
   });
 
   it('prioritizes diagnostics over branch-context blockers', () => {
@@ -72,6 +78,8 @@ describe('decidePrimaryBlocker', () => {
 
     expect(decision.kind).toBe('diagnostics');
     expect(decision.action?.type).toBe('restoreOpenProblems');
+    expect(['medium', 'high', 'critical']).toContain(decision.severityLabel);
+    expect(decision.actionabilityScore).toBeGreaterThan(0.7);
   });
 
   it('prefers opening the diagnostic file when top diagnostic target is available', () => {
@@ -135,6 +143,8 @@ describe('decidePrimaryBlocker', () => {
     expect(decision.kind).toBe('lowConfidence');
     expect(decision.action?.type).toBe('sessionAddCheckpoint');
     expect(decision.action?.disabled).toBe(false);
+    expect(decision.severityLabel).toBe('low');
+    expect(decision.confidenceLabel).toBe('low');
   });
 
   it('returns no-next-steps fallback with refresh action', () => {
@@ -151,6 +161,7 @@ describe('decidePrimaryBlocker', () => {
     expect(decision.kind).toBe('noNextSteps');
     expect(decision.action?.type).toBe('refreshSummary');
     expect(decision.action?.disabled).toBe(false);
+    expect(decision.severityLabel).toBe('low');
   });
 
   it('provides disabled branch-context action reason when checkout target is unavailable', () => {
@@ -196,5 +207,74 @@ describe('decidePrimaryBlocker', () => {
     expect(decision.action?.type).toBe('restoreRerunTask');
     expect(decision.action?.disabled).toBe(true);
     expect(decision.action?.disabledReason).toContain('Long-gap reorientation');
+    expect(decision.actionabilityScore).toBeLessThan(0.4);
+  });
+
+  it('keeps low-confidence checkpoint guidance ahead of no-next-steps fallback', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      lowConfidence: true,
+      hasCheckpointNote: false,
+      hasNextSteps: false,
+      hasFailingTask: false,
+      lastFailingCommand: undefined,
+      diagnosticsErrorCount: 0,
+      switchedBranches: false,
+    });
+
+    expect(decision.kind).toBe('lowConfidence');
+    expect(decision.action?.type).toBe('sessionAddCheckpoint');
+  });
+
+  it('keeps task-failure blocker ahead of command-failure blocker when both exist', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      hasFailingTask: true,
+      lastTaskName: 'npm run verify',
+      lastTaskExitCode: 1,
+      lastFailingCommand: 'npm run verify',
+      availability: availability({
+        canRerunTask: false,
+        canCopyFailingCommand: true,
+      }),
+      diagnosticsErrorCount: 0,
+      switchedBranches: false,
+    });
+
+    expect(decision.kind).toBe('taskFailure');
+  });
+
+  it('keeps actionable command recovery above high-count diagnostics', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      lastFailingCommand: 'npm run verify:quick',
+      diagnosticsErrorCount: 12,
+      diagnosticsTopPath: 'src/extension.ts',
+      diagnosticsTopLine: 42,
+      canOpenDiagnosticFile: true,
+      availability: availability({ canRerunTask: true }),
+    });
+
+    expect(decision.kind).toBe('commandFailure');
+    expect(decision.action?.type).toBe('restoreRerunTask');
+    expect(decision.severityScore).toBeGreaterThan(0.8);
+  });
+
+  it('returns score metadata even when no blocker exists', () => {
+    const decision = decidePrimaryBlocker({
+      ...baseInput(),
+      hasFailingTask: false,
+      lastFailingCommand: undefined,
+      diagnosticsErrorCount: 0,
+      switchedBranches: false,
+      lowConfidence: false,
+      hasNextSteps: true,
+    });
+
+    expect(decision.kind).toBe('none');
+    expect(decision.hasBlocker).toBe(false);
+    expect(decision.severityLabel).toBe('none');
+    expect(decision.severityScore).toBe(0);
+    expect(decision.actionabilityScore).toBe(0);
   });
 });

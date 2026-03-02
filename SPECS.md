@@ -317,6 +317,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Primary CTA precedence is deterministic (`blocked` actionable > `next` actionable > none).
 - Demoted/non-primary actions remain visible as secondary/advisory controls.
 - Advisory-only labeling is explicit when no safe primary action is available.
+- Blocker selection uses a deterministic cross-source arbitration pass (`task failure`, `failing command`, `diagnostics`, `branch context`, `low confidence`, `restricted mode`, `no next steps`) and surfaces `severity`, `confidence`, and `actionability` metadata for the selected blocker.
 - Top-card `Why am I seeing this?` action opens `More Context` and expands `Trust Center` explainability in one click.
 - Top-card `Open evidence tray` action opens `More Context` and expands the `Evidence` tray in one click.
 - Evidence tray groups items by relevance: surfaced-decision evidence, other openable evidence, then context-only evidence.
@@ -327,8 +328,10 @@ Companion Home top-card content and CTA priority were previously composed from s
 ### Technical shape / architecture notes
 
 - Central arbitration utility in `src/companionPrimaryCta.ts`.
+- Blocker model v2 in `src/blockerModel.ts` scores candidate blockers before choosing the primary blocked state (`severityScore`, `confidenceScore`, `actionabilityScore`).
 - `renderWebview` in `src/extension.ts` resolves one `CompanionPrimaryCtaDecision` and passes slot source classes + emphasis tokens into `renderResumeStackCard`.
 - Primary CTA impression metric remains single-count per context and stores policy source class.
+- Metrics capture one blocker-promotion source counter per session (`taskFailure`, `commandFailure`, `diagnostics`, `branchContext`, `lowConfidence`, `restricted`, `noNextSteps`) for post-hoc blocker mix analysis.
 - `openWhySurfaced` is handled in `src/webview/panelClientScript.ts` and expands `moreContext`, `trustCenter`, and nested why-surfaced disclosures without bypassing trust/privacy guards.
 - `openEvidenceTray` is handled in `src/webview/panelClientScript.ts` and expands `moreContext` + `evidence` disclosures while preserving existing click-time evidence target validation.
 - `openAiPayloadPreview` and `revokeAiPayloadConsent` are handled via webview message routing in `src/extension.ts`, and Trust Center expansion increments `trustTrayOpens` plus `restrictedTrustTrayOpens` (restricted runtime only) local metric counters.

@@ -170,6 +170,13 @@ export interface MetricRecord {
   companionPrimaryCtaSourceClass?: string;
   companionPrimaryCtaClicks?: number;
   companionPrimaryCtaCompletions?: number;
+  blockerPromotionTaskFailure?: number;
+  blockerPromotionCommandFailure?: number;
+  blockerPromotionDiagnostics?: number;
+  blockerPromotionBranchContext?: number;
+  blockerPromotionLowConfidence?: number;
+  blockerPromotionRestricted?: number;
+  blockerPromotionNoNextSteps?: number;
   trustTrayOpens?: number;
   restrictedTrustTrayOpens?: number;
   whySurfacedOpens?: number;

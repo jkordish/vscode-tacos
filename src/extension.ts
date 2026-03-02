@@ -3336,6 +3336,51 @@ function recordCompanionPrimaryCtaCompletionForSession(
     (metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
 }
 
+type BlockerPromotionMetricField =
+  | 'blockerPromotionTaskFailure'
+  | 'blockerPromotionCommandFailure'
+  | 'blockerPromotionDiagnostics'
+  | 'blockerPromotionBranchContext'
+  | 'blockerPromotionLowConfidence'
+  | 'blockerPromotionRestricted'
+  | 'blockerPromotionNoNextSteps';
+
+const BLOCKER_PROMOTION_METRIC_FIELD_BY_KIND: Partial<
+  Record<BlockerDecision['kind'], BlockerPromotionMetricField>
+> = {
+  taskFailure: 'blockerPromotionTaskFailure',
+  commandFailure: 'blockerPromotionCommandFailure',
+  diagnostics: 'blockerPromotionDiagnostics',
+  branchContext: 'blockerPromotionBranchContext',
+  lowConfidence: 'blockerPromotionLowConfidence',
+  restricted: 'blockerPromotionRestricted',
+  noNextSteps: 'blockerPromotionNoNextSteps',
+};
+
+const BLOCKER_PROMOTION_METRIC_FIELDS: BlockerPromotionMetricField[] = Object.values(
+  BLOCKER_PROMOTION_METRIC_FIELD_BY_KIND,
+).filter((fieldName): fieldName is BlockerPromotionMetricField => typeof fieldName === 'string');
+
+function recordBlockerPromotionSource(blockerDecision: BlockerDecision): void {
+  if (!state.metricSession || !blockerDecision.hasBlocker) {
+    return;
+  }
+
+  const alreadyRecorded = BLOCKER_PROMOTION_METRIC_FIELDS.some(
+    (fieldName) => (state.metricSession?.[fieldName] ?? 0) > 0,
+  );
+  if (alreadyRecorded) {
+    return;
+  }
+
+  const metricFieldName = BLOCKER_PROMOTION_METRIC_FIELD_BY_KIND[blockerDecision.kind];
+  if (!metricFieldName) {
+    return;
+  }
+
+  state.metricSession[metricFieldName] = 1;
+}
+
 function recordLowConfidenceClarificationRate(
   summary: ResumeSummary,
   primary: RankedSurfacedItem | undefined,
@@ -5348,6 +5393,9 @@ function renderWebview(
     canOpenDiagnosticFile,
     availability,
   });
+  if (!demoMode) {
+    recordBlockerPromotionSource(blockerDecision);
+  }
   const primaryCtaDecision = resolveCompanionPrimaryCtaDecision({
     primaryNextAction,
     blockerDecision,
@@ -5475,9 +5523,9 @@ function renderWebview(
         blockerDecision.evidenceLabel
           ? `<span class="badge">Evidence: ${escapeHtml(blockerDecision.evidenceLabel)}</span>`
           : '',
-        blockerDecision.confidenceLabel
-          ? `<span class="badge">Confidence: ${escapeHtml(blockerDecision.confidenceLabel)}</span>`
-          : '',
+        `<span class="badge">Severity: ${escapeHtml(blockerDecision.severityLabel)}</span>`,
+        `<span class="badge">Confidence: ${escapeHtml(blockerDecision.confidenceLabel)}</span>`,
+        `<span class="badge">Actionability: ${escapeHtml(blockerDecision.actionabilityScore.toFixed(2))}</span>`,
       ]
         .filter(Boolean)
         .join('')
