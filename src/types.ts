@@ -47,6 +47,7 @@ export interface GitSnapshot {
   diff: string;
   log: string;
   headCommit?: string;
+  /** Most recent HEAD commit committer timestamp in epoch milliseconds. */
   headCommitAt?: number;
   upstreamAhead?: number;
   upstreamBehind?: number;
@@ -64,6 +65,7 @@ export interface ResumeSignals {
   gitDiff: string;
   gitLog: string;
   recentCommitHash?: string;
+  /** Most recent commit committer timestamp in epoch milliseconds. */
   recentCommitAt?: number;
   divergenceAhead?: number;
   divergenceBehind?: number;

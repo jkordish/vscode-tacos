@@ -37,12 +37,12 @@ describe('parsePorcelainPaths', () => {
 });
 
 describe('parseLatestCommitOutput', () => {
-  it('parses latest commit hash and authored timestamp from git output', () => {
+  it('parses latest commit hash and committer timestamp from git output', () => {
     const parsed = parseLatestCommitOutput('abc123def4567890\t1710000000');
 
     expect(parsed).toEqual({
       hash: 'abc123def4567890',
-      authoredAt: 1_710_000_000_000,
+      committedAt: 1_710_000_000_000,
     });
   });
 
@@ -52,7 +52,7 @@ describe('parseLatestCommitOutput', () => {
 
     expect(parsed).toEqual({
       hash: sha256Hash,
-      authoredAt: 1_710_000_000_000,
+      committedAt: 1_710_000_000_000,
     });
   });
 
@@ -66,6 +66,10 @@ describe('parseCommitHashToken', () => {
     expect(parseCommitHashToken('AbCdEf123 feat: parse summary')).toBe('abcdef123');
   });
 
+  it('accepts short git abbreviations configured via core.abbrev', () => {
+    expect(parseCommitHashToken('AbCd feat: parse summary')).toBe('abcd');
+  });
+
   it('accepts full SHA-256 hashes', () => {
     const sha256Hash = '0123456789abcdef'.repeat(4);
     expect(parseCommitHashToken(sha256Hash)).toBe(sha256Hash);
@@ -73,7 +77,7 @@ describe('parseCommitHashToken', () => {
 
   it('returns undefined for invalid hash tokens', () => {
     expect(parseCommitHashToken(undefined)).toBeUndefined();
-    expect(parseCommitHashToken('abc12')).toBeUndefined();
+    expect(parseCommitHashToken('abc')).toBeUndefined();
     expect(parseCommitHashToken('not-a-hash value')).toBeUndefined();
   });
 });

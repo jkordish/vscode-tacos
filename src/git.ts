@@ -5,7 +5,7 @@ import type { ExtensionConfig, GitSnapshot } from './types';
 const execFileAsync = promisify(execFile);
 const GIT_CACHE_TTL_MS = 20_000;
 const GIT_COMMAND_TIMEOUT_MS = 2_000;
-const COMMIT_HASH_PATTERN = /^[0-9a-f]{7,}$/iu;
+const COMMIT_HASH_PATTERN = /^[0-9a-f]{4,}$/iu;
 
 interface GitCacheEntry {
   snapshot: GitSnapshot;
@@ -79,7 +79,7 @@ export function parseCommitHashToken(value: string | undefined): string | undefi
 
 export function parseLatestCommitOutput(
   output: string,
-): { hash: string; authoredAt?: number } | undefined {
+): { hash: string; committedAt?: number } | undefined {
   const firstLine = output
     .split(/\r?\n/u)
     .map((line) => line.trim())
@@ -88,20 +88,20 @@ export function parseLatestCommitOutput(
     return undefined;
   }
 
-  const [hashCandidate = '', authoredAtCandidate = ''] = firstLine.split(/\s+/u);
+  const [hashCandidate = '', committedAtCandidate = ''] = firstLine.split(/\s+/u);
   const hash = parseCommitHashToken(hashCandidate);
   if (!hash) {
     return undefined;
   }
 
-  const authoredAtSeconds = Number(authoredAtCandidate);
-  const authoredAt =
-    Number.isFinite(authoredAtSeconds) && authoredAtSeconds > 0
-      ? Math.floor(authoredAtSeconds * 1000)
+  const committedAtSeconds = Number(committedAtCandidate);
+  const committedAt =
+    Number.isFinite(committedAtSeconds) && committedAtSeconds > 0
+      ? Math.floor(committedAtSeconds * 1000)
       : undefined;
   return {
     hash,
-    authoredAt,
+    committedAt,
   };
 }
 
@@ -204,7 +204,7 @@ async function collectGitUncached(root: string, config: ExtensionConfig): Promis
     config.includeDiff && config.maxDiffChars > 0
       ? runGit(root, ['diff', '--unified=0', '--no-color']).catch(() => '')
       : Promise.resolve(''),
-    runGit(root, ['log', '-n', '1', '--format=%H%x09%at']).catch(() => ''),
+    runGit(root, ['log', '-n', '1', '--format=%H%x09%ct']).catch(() => ''),
     runGit(root, ['rev-list', '--left-right', '--count', '@{upstream}...HEAD']).catch(() => ''),
   ]);
 
@@ -217,7 +217,7 @@ async function collectGitUncached(root: string, config: ExtensionConfig): Promis
   const latestCommit = parseLatestCommitOutput(latestCommitOutput);
   if (latestCommit?.hash) {
     snapshot.headCommit = latestCommit.hash;
-    snapshot.headCommitAt = latestCommit.authoredAt;
+    snapshot.headCommitAt = latestCommit.committedAt;
   } else {
     const firstCommitLine = log
       .split(/\r?\n/u)
