@@ -31,6 +31,7 @@
 
 - [ ] `SPECS.md` updated (or N/A with reason)
 - [ ] `PLANS.md` updated (or N/A with reason)
+- [ ] `AGENTS.md` updated if operator contract/process/commands/release expectations changed
 - [ ] `README.md` updated for user-visible behavior/settings changes
 - [ ] `docs/DESIGN_AND_IMPLEMENTATION.md` updated if architecture/runtime behavior changed
 - [ ] `docs/PRIVACY_AND_SAFETY.md` updated if trust/privacy/provider boundaries changed

@@ -38,7 +38,8 @@ npm ci
 1. If behavior changes, update/add relevant `SPECS.md` section first.
 2. Ensure work is tracked in `PLANS.md` (`queued`/`doing`/`blocked`/`done`).
 3. Implement code changes with tests.
-4. Update docs and changelog in the same PR.
+4. Update docs in the same PR (`README.md`, `docs/*`, and `AGENTS.md` when operator rules/process change).
+5. Update `CHANGELOG.md` for user-visible behavior changes.
 
 ## Required Updates by Change Type
 
@@ -46,6 +47,7 @@ npm ci
 - setting changes: update docs and config behavior tests.
 - trust/privacy/AI boundary changes: update `docs/PRIVACY_AND_SAFETY.md`, `SPECS.md`, and tests.
 - packaging/release changes: update workflows/docs and run `npm run package:vsix`.
+- operator contract/process changes: update `AGENTS.md` and keep `CONTRIBUTING.md` + PR template aligned.
 
 ## Pull Requests
 
