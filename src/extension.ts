@@ -339,6 +339,13 @@ class RingBuffer {
   }
 }
 
+interface ScratchSummaryPriorSnapshot {
+  contextHash: string;
+  scratchpadExcerpt?: string;
+  scratchpadHasContent?: boolean;
+  scratchpadUpdatedAt?: number;
+}
+
 interface RuntimeState {
   output: vscode.OutputChannel;
   recentFiles: RingBuffer;
@@ -350,6 +357,7 @@ interface RuntimeState {
   lastFailingCommand?: string;
   lastFailingCommandRaw?: string;
   scratchSummary?: ResumeSummary;
+  scratchSummaryPriorSnapshot?: ScratchSummaryPriorSnapshot;
   statusBar?: vscode.StatusBarItem;
   statusBarClass: CompanionStatusBarClass;
   statusBarReason: string;
@@ -543,6 +551,7 @@ export function activate(context: vscode.ExtensionContext): void {
     lastFailingCommand: persistedActivity.sanitized.lastFailingCommand,
     lastFailingCommandRaw: undefined,
     scratchSummary: undefined,
+    scratchSummaryPriorSnapshot: undefined,
     statusBarClass: 'active-idle',
     statusBarReason: 'awaiting summary',
     statusBarElevated: false,
@@ -2489,7 +2498,7 @@ async function refineSummaryInBackground(
   await context.workspaceState.update(prepared.cacheKey, refined);
 
   if (state.scratchSummary?.contextHash === prepared.localSummary.contextHash) {
-    updateSummaryScratchpad(refined, prepared.root);
+    updateSummaryScratchpad(refined, prepared.root, prepared.rankingPriors);
     return;
   }
 
@@ -2685,7 +2694,7 @@ async function presentSummary(
   await updateActiveNudges(context, summary, workspaceRoot, config, triggerReason === 'cached');
   state.panelProviderModeSnapshot = options.providerModeSnapshot;
   state.panelAiPayloadConsentSignature = options.aiPayloadConsentSignature;
-  updateSummaryScratchpad(summary, options.workspaceRoot);
+  updateSummaryScratchpad(summary, options.workspaceRoot, options.percolationPriors);
 
   const panelOptions: PresentSummaryOptions = {
     ...options,
@@ -3777,6 +3786,12 @@ function resolvePercolationUserPriors(
     ? (explicitPriors?.correctionHints ?? [])
     : undefined;
   const panelContextMatches = state.panelSummary?.contextHash === summary.contextHash;
+  const scratchSummaryContextMatches = state.scratchSummary?.contextHash === summary.contextHash;
+  const scratchSummaryPriorSnapshot =
+    scratchSummaryContextMatches &&
+    state.scratchSummaryPriorSnapshot?.contextHash === summary.contextHash
+      ? state.scratchSummaryPriorSnapshot
+      : undefined;
   const fallbackCheckpoint =
     panelContextMatches && state.panelPrimaryCheckpointNote?.status === 'open'
       ? state.panelPrimaryCheckpointNote
@@ -3786,7 +3801,7 @@ function resolvePercolationUserPriors(
       (state.panelScratchpadPreviewLines.length > 0
         ? buildScratchpadPriorExcerptFromPreviewLines(state.panelScratchpadPreviewLines)
         : undefined))
-    : undefined;
+    : scratchSummaryPriorSnapshot?.scratchpadExcerpt;
   const correctionHints = Array.isArray(summary.userCorrections) ? summary.userCorrections : [];
   const selectedCorrectionHints = explicitCorrectionHints ?? correctionHints;
   const workspaceRoot = options.workspaceRoot?.trim() ?? '';
@@ -3809,10 +3824,14 @@ function resolvePercolationUserPriors(
     scratchpadExcerpt: explicitPriors?.scratchpadExcerpt ?? scratchpadExcerptFromState,
     scratchpadHasContent:
       explicitPriors?.scratchpadHasContent ??
-      (panelContextMatches ? state.panelScratchpadHasContent : undefined),
+      (panelContextMatches
+        ? state.panelScratchpadHasContent
+        : scratchSummaryPriorSnapshot?.scratchpadHasContent),
     scratchpadUpdatedAt:
       explicitPriors?.scratchpadUpdatedAt ??
-      (panelContextMatches ? state.panelScratchpadUpdatedAt : undefined),
+      (panelContextMatches
+        ? state.panelScratchpadUpdatedAt
+        : scratchSummaryPriorSnapshot?.scratchpadUpdatedAt),
   };
   const checkpointText = resolved.checkpointNoteText?.trim() ?? '';
   const correctionCount = (resolved.correctionHints ?? []).filter(
@@ -4670,7 +4689,7 @@ async function showDetailsPanel(
   const demoMode = isDemoResumeSummary(summary);
   const workspaceRoot = demoMode ? undefined : pickWorkspaceRoot(options.workspaceRoot);
   if (!demoMode) {
-    updateSummaryScratchpad(summary, workspaceRoot);
+    updateSummaryScratchpad(summary, workspaceRoot, options.percolationPriors);
   }
   state.panelSummary = summary;
   state.panelWorkspaceRoot = workspaceRoot;
@@ -5334,8 +5353,22 @@ async function showDetailsPanel(
   state.panel.reveal(vscode.ViewColumn.Beside, true);
 }
 
-function updateSummaryScratchpad(summary: ResumeSummary, workspaceRoot?: string): void {
+function updateSummaryScratchpad(
+  summary: ResumeSummary,
+  workspaceRoot?: string,
+  percolationPriors?: PercolationUserPriors,
+): void {
   state.scratchSummary = summary;
+  if (percolationPriors) {
+    state.scratchSummaryPriorSnapshot = {
+      contextHash: summary.contextHash,
+      scratchpadExcerpt: percolationPriors.scratchpadExcerpt,
+      scratchpadHasContent: percolationPriors.scratchpadHasContent,
+      scratchpadUpdatedAt: percolationPriors.scratchpadUpdatedAt,
+    };
+  } else if (state.scratchSummaryPriorSnapshot?.contextHash !== summary.contextHash) {
+    state.scratchSummaryPriorSnapshot = undefined;
+  }
   updateCompanionStatusBar();
 
   if (!state.panel) {
@@ -6683,6 +6716,7 @@ async function applyTaskPartitionSwitch(
   state.lastBoundarySignalAt = 0;
   state.lastMeaningfulActivityAt = 0;
   state.scratchSummary = undefined;
+  state.scratchSummaryPriorSnapshot = undefined;
   state.detailsMarkdownCache = undefined;
   if (state.panel) {
     state.panel.dispose();
@@ -7489,6 +7523,7 @@ async function runActionSafetyNoopChecks(
   const original = {
     panelSummary: state.panelSummary,
     scratchSummary: state.scratchSummary,
+    scratchSummaryPriorSnapshot: state.scratchSummaryPriorSnapshot,
     lastTaskName: state.lastTaskName,
     lastTaskWorkspaceRoot: state.lastTaskWorkspaceRoot,
     lastDebugConfigName: state.lastDebugConfigName,
@@ -7517,6 +7552,7 @@ async function runActionSafetyNoopChecks(
   try {
     state.panelSummary = undefined;
     state.scratchSummary = undefined;
+    state.scratchSummaryPriorSnapshot = undefined;
     if (root) {
       await context.workspaceState.update(summaryCacheKey(context, root), undefined);
     }
@@ -7563,6 +7599,7 @@ async function runActionSafetyNoopChecks(
   } finally {
     state.panelSummary = original.panelSummary;
     state.scratchSummary = original.scratchSummary;
+    state.scratchSummaryPriorSnapshot = original.scratchSummaryPriorSnapshot;
     state.lastTaskName = original.lastTaskName;
     state.lastTaskWorkspaceRoot = original.lastTaskWorkspaceRoot;
     state.lastDebugConfigName = original.lastDebugConfigName;
@@ -9640,6 +9677,7 @@ function resetRuntimeWorkspaceState(): void {
   state.activeNudges = undefined;
   state.percolationSignalsByContextHash.clear();
   state.scratchSummary = undefined;
+  state.scratchSummaryPriorSnapshot = undefined;
   state.detailsMarkdownCache = undefined;
   if (state.panel) {
     state.panel.dispose();
@@ -9796,6 +9834,7 @@ async function applyRetentionPolicy(
   }
   if (clearedActiveSummary && pickWorkspaceRoot(state.panelWorkspaceRoot) === workspaceRoot) {
     state.scratchSummary = undefined;
+    state.scratchSummaryPriorSnapshot = undefined;
   }
 
   await pruneCheckpointNotesForWorkspace(context, workspaceRoot, cutoffAt);
