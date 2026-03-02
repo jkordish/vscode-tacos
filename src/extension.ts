@@ -2410,6 +2410,35 @@ async function presentSummary(
     manualPercolationBypass: triggerReason === 'manual',
   };
 
+  const percolationMode = resolveCompanionRuntimeMode(config);
+  const notificationNow = Date.now();
+  const notificationSuppression =
+    triggerReason !== 'manual'
+      ? evaluatePercolationSuppression({
+          enabled: config.enabled,
+          mode: percolationMode,
+          now: notificationNow,
+          lowConfidence: Boolean(summary.lowConfidence),
+          suppressLowConfidence: true,
+          quietHours: config.summaryQuietHours,
+          contextUnchanged: triggerReason === 'cached',
+        })
+      : undefined;
+  let notificationPrimary: RankedSurfacedItem | undefined;
+
+  // Keep low-confidence clarification telemetry populated even when notifications are suppressed.
+  if (summary.lowConfidence) {
+    if (notificationSuppression?.suppressed) {
+      recordLowConfidenceClarificationRate(summary, undefined);
+    } else {
+      notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
+        context,
+        workspaceRoot,
+      }).primary;
+      recordLowConfidenceClarificationRate(summary, notificationPrimary);
+    }
+  }
+
   if (presentationMode === 'auto-open-details') {
     await showDetailsPanel(context, summary, panelOptions);
     return;
@@ -2423,27 +2452,21 @@ async function presentSummary(
     return;
   }
 
-  const percolationMode = resolveCompanionRuntimeMode(config);
-  if (triggerReason !== 'manual') {
-    const notificationSuppression = evaluatePercolationSuppression({
-      enabled: config.enabled,
-      mode: percolationMode,
-      now: Date.now(),
-      quietHours: config.summaryQuietHours,
-      contextUnchanged: triggerReason === 'cached',
-    });
-    if (notificationSuppression.suppressed) {
-      recordPercolationSuppressionMetric(notificationSuppression.reason);
-      return;
-    }
+  if (notificationSuppression?.suppressed) {
+    recordPercolationSuppressionMetric(notificationSuppression.reason);
+    return;
   }
+
+  if (!notificationPrimary) {
+    notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
+      context,
+      workspaceRoot,
+    }).primary;
+  }
+
   if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
-    await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', Date.now());
+    await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', notificationNow);
   }
-  const notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
-    context,
-    workspaceRoot,
-  }).primary;
   const notificationHeadline = selectNotificationHeadline(summary, notificationPrimary);
   const actionPauseLabel = config.pauseSummaries ? 'Resume auto summaries' : 'Pause auto summaries';
   recordCompanionPromptImpression();
@@ -3007,6 +3030,17 @@ function recordCompanionPrimaryCtaCompletion(): void {
     (state.metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
 }
 
+function recordLowConfidenceClarificationRate(
+  summary: ResumeSummary,
+  primary: RankedSurfacedItem | undefined,
+): void {
+  if (!state.metricSession || !summary.lowConfidence) {
+    return;
+  }
+
+  state.metricSession.lowConfidenceClarificationRate = primary?.kind === 'clarification' ? 1 : 0;
+}
+
 function recordMetricCounter(
   field:
     | 'pauseActions'
@@ -3018,6 +3052,7 @@ function recordMetricCounter(
     | 'percolationSuppressedCooldown'
     | 'percolationSuppressedNoChange'
     | 'percolationSuppressedNoiseBudget'
+    | 'percolationSuppressedLowConfidence'
     | 'percolationDismissActions'
     | 'percolationSnoozeActions'
     | 'noteCreated'
@@ -3193,6 +3228,11 @@ function recordPercolationSuppressionMetric(reason: string | undefined): void {
 
   if (reason === 'noise-budget') {
     recordMetricCounter('percolationSuppressedNoiseBudget');
+    return;
+  }
+
+  if (reason === 'low-confidence') {
+    recordMetricCounter('percolationSuppressedLowConfidence');
   }
 }
 

@@ -14,6 +14,7 @@ export type CompanionNudgeSuppressedReason =
   | 'disabled'
   | 'paused'
   | 'restricted'
+  | 'low-confidence'
   | 'cooldown'
   | 'quiet-hours'
   | 'no-change'
@@ -126,6 +127,8 @@ export function chooseCompanionNudges(input: CompanionNudgeInput): CompanionNudg
     enabled: input.enabled,
     mode: input.mode,
     now: input.now,
+    lowConfidence: Boolean(input.summary.lowConfidence),
+    suppressLowConfidence: true,
     quietHours: input.quietHours,
     cooldownMinutes: input.cooldownMinutes,
     lastShownAt: input.lastShownAt,
@@ -204,6 +207,10 @@ export function describeCompanionNudgeSuppression(
 
   if (decision.suppressedReason === 'restricted') {
     return 'Nudges are hidden while workspace trust is restricted.';
+  }
+
+  if (decision.suppressedReason === 'low-confidence') {
+    return 'Nudges are deferred while TaCoS rebuilds confidence for this context.';
   }
 
   if (decision.suppressedReason === 'quiet-hours') {

@@ -17,6 +17,7 @@ pnpm-debug.log*
 
 # Extension packaging artifacts
 *.vsix
+docs/roadmap/.issue-body-staging/
 
 # Caches
 .nyc_output/

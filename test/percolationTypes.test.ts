@@ -192,6 +192,24 @@ describe('createPercolationPolicyInput', () => {
     ]);
   });
 
+  it('adds a clarification fallback candidate when summary confidence is low', () => {
+    const summary = buildSummary({
+      lowConfidence: true,
+      nextSteps: ['Add a checkpoint note before risky reruns'],
+      nextStepEvidenceIds: [['ev-1']],
+    });
+
+    const input = createPercolationPolicyInput(summary, { now: summary.generatedAt });
+
+    expect(input.candidates[0]).toMatchObject({
+      id: 'candidate:clarification',
+      kind: 'clarification',
+      title: 'Clarify next safe step',
+      actionId: 'sessionAddCheckpoint',
+      evidenceIds: ['ev-1'],
+    });
+  });
+
   it('uses explicit signals and candidates when provided', () => {
     const summary = buildSummary();
     const input = createPercolationPolicyInput(summary, {
