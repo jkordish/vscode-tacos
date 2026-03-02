@@ -78,6 +78,7 @@ TaCoS is desktop-first today. It runs in the Node-hosted VS Code extension runti
 - `Next` and `Blocked` state captions render explicit emphasis tokens (`PRIMARY`, `ADVISORY`, `SUPPRESSED`) with reduced-motion-safe transitions.
 - Companion Home includes a one-click `Why am I seeing this?` action that opens `More Context` → `Trust Center` → `Why am I seeing this?` explainability details.
 - Companion Home includes a one-click `Open evidence tray` action that opens `More Context` → `Evidence`, where evidence is grouped by surfaced-decision relevance.
+- Trust Center now includes a concise privacy/trust tray for `privacy preset`, `retention`, `AI provider mode`, `consent status`, plus one-click `Review AI payload preview` and `Revoke AI payload consent` controls.
 
 ## Status Bar Behavior
 

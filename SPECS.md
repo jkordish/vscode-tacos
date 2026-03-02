@@ -320,6 +320,8 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Top-card `Why am I seeing this?` action opens `More Context` and expands `Trust Center` explainability in one click.
 - Top-card `Open evidence tray` action opens `More Context` and expands the `Evidence` tray in one click.
 - Evidence tray groups items by relevance: surfaced-decision evidence, other openable evidence, then context-only evidence.
+- Trust Center exposes a concise privacy/trust tray including `privacy preset`, `retention policy`, `AI provider mode`, and consent status for current workspace context.
+- Trust Center actions include `Review AI payload preview`, `Revoke AI payload consent`, and `Open Privacy & Safety`.
 
 ### Technical shape / architecture notes
 
@@ -328,6 +330,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Primary CTA impression metric remains single-count per context and stores policy source class.
 - `openWhySurfaced` is handled in `src/webview/panelClientScript.ts` and expands `moreContext`, `trustCenter`, and nested why-surfaced disclosures without bypassing trust/privacy guards.
 - `openEvidenceTray` is handled in `src/webview/panelClientScript.ts` and expands `moreContext` + `evidence` disclosures while preserving existing click-time evidence target validation.
+- `openAiPayloadPreview` and `revokeAiPayloadConsent` are handled via webview message routing in `src/extension.ts`, and Trust Center expansion increments `trustTrayOpens` local metric counter.
 
 ### Settings and commands affected
 

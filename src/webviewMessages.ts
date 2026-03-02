@@ -18,6 +18,8 @@ const SIMPLE_MESSAGE_TYPES = [
   'dismissNudge',
   'whySurfacedOpened',
   'openPrivacySafety',
+  'openAiPayloadPreview',
+  'revokeAiPayloadConsent',
   'rateHelpfulness',
   'sessionAddCheckpoint',
   'clearIntentOverride',

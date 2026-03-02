@@ -56,11 +56,17 @@ export interface TrustCenterCardInput {
   trustTrackingLabel: string;
   storedLocallyLabel: string;
   sentToAiLabel: string;
+  privacyPresetLabel: string;
+  retentionPolicyLabel: string;
+  aiProviderModeLabel: string;
+  aiConsentStatusLabel: string;
   trustBasedOn: string;
   trustCueDetailsTrustedHtml: string;
   percolationExplainabilityTrustedHtml: string;
   autoSummaryToggleDisabledAttr: string;
   autoSummaryToggleLabel: string;
+  aiPayloadPreviewDisabledAttr: string;
+  revokeAiConsentDisabledAttr: string;
   expanded: boolean;
   emphasis?: PanelSectionEmphasis;
 }
@@ -75,6 +81,10 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
           <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(input.trustTrackingLabel)}</div>
           <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
           <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(input.sentToAiLabel)}</div>
+          <div class="trust-row"><span class="trust-key">Privacy preset:</span> ${escapeHtml(input.privacyPresetLabel)}</div>
+          <div class="trust-row"><span class="trust-key">Retention:</span> ${escapeHtml(input.retentionPolicyLabel)}</div>
+          <div class="trust-row"><span class="trust-key">AI provider:</span> ${escapeHtml(input.aiProviderModeLabel)}</div>
+          <div class="trust-row"><span class="trust-key">Consent:</span> ${escapeHtml(input.aiConsentStatusLabel)}</div>
           <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(input.trustBasedOn)}</div>
           <details data-why-surfaced-details="true">
             <summary><strong>Why am I seeing this?</strong></summary>
@@ -89,6 +99,12 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
             <button type="button" class="secondary" data-action="toggleAutoSummaries" ${
               input.autoSummaryToggleDisabledAttr
             }>${escapeHtml(input.autoSummaryToggleLabel)}</button>
+            <button type="button" class="secondary" data-action="openAiPayloadPreview" ${
+              input.aiPayloadPreviewDisabledAttr
+            }>Review AI payload preview</button>
+            <button type="button" class="secondary" data-action="revokeAiPayloadConsent" ${
+              input.revokeAiConsentDisabledAttr
+            }>Revoke AI payload consent</button>
             <button type="button" class="secondary" data-action="openPrivacySafety">Open Privacy & Safety</button>
           </div>
         </div>
