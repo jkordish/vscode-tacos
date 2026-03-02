@@ -211,6 +211,19 @@ async function run() {
       'notification-suppressed',
       'Expected explicit suppressed reason class for downgraded notification path.',
     );
+    let invalidSuppressionError;
+    try {
+      await vscode.commands.executeCommand('tacos.__test.getFocusSurfaceDecision', {
+        suppressionReason: 'unexpected-value',
+      });
+    } catch (error) {
+      invalidSuppressionError = error;
+    }
+    assert.equal(
+      Boolean(invalidSuppressionError),
+      true,
+      'Expected invalid suppression reason override to fail fast in test probe command.',
+    );
 
     await config.update(
       'percolationNotificationBrokerEnabled',

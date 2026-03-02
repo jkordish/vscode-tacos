@@ -309,6 +309,17 @@ const SCRATCHPAD_PREVIEW_MAX_BYTES = 256 * 1024;
 const AI_SCRATCHPAD_MAX_LINES = 80;
 const AI_SCRATCHPAD_MAX_CHARS = 4_000;
 const AI_SCRATCHPAD_MAX_READ_BYTES = 512 * 1024;
+const TEST_PERCOLATION_SUPPRESSION_REASONS = new Set<PercolationSuppressionReason>([
+  'disabled',
+  'paused',
+  'restricted',
+  'low-confidence',
+  'cooldown',
+  'quiet-hours',
+  'no-change',
+  'noise-budget',
+  'no-candidate',
+]);
 const execFileAsync = promisify(execFile);
 const markdownRenderer = new MarkdownIt({
   html: false,
@@ -667,13 +678,22 @@ export function activate(context: vscode.ExtensionContext): void {
               ? payload.percolationNotificationBrokerEnabled
               : config.percolationNotificationBrokerEnabled,
         };
-        const suppression =
-          typeof payload.suppressionReason === 'string' && payload.suppressionReason.trim()
-            ? {
-                suppressed: true as const,
-                reason: payload.suppressionReason.trim() as PercolationSuppressionReason,
-              }
-            : undefined;
+        const suppressionReason =
+          typeof payload.suppressionReason === 'string' ? payload.suppressionReason.trim() : '';
+        if (
+          suppressionReason &&
+          !TEST_PERCOLATION_SUPPRESSION_REASONS.has(
+            suppressionReason as PercolationSuppressionReason,
+          )
+        ) {
+          throw new Error(`Invalid suppressionReason test override: ${suppressionReason}`);
+        }
+        const suppression = suppressionReason
+          ? {
+              suppressed: true as const,
+              reason: suppressionReason as PercolationSuppressionReason,
+            }
+          : undefined;
         const primaryInput =
           payload.primary && typeof payload.primary === 'object'
             ? (payload.primary as Record<string, unknown>)
@@ -3821,7 +3841,6 @@ function recordMetricCounter(
 }
 
 const PANEL_EMPHASIS_REASONS = new Set<SummaryPresentationReason>([
-  'manual-auto-open-details',
   'notification-suppressed',
   'notification-advisory-only',
 ]);
