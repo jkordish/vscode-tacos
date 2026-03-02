@@ -5392,7 +5392,9 @@ function renderWebview(
     canOpenDiagnosticFile,
     availability,
   });
-  recordBlockerPromotionSource(blockerDecision);
+  if (!demoMode) {
+    recordBlockerPromotionSource(blockerDecision);
+  }
   const primaryCtaDecision = resolveCompanionPrimaryCtaDecision({
     primaryNextAction,
     blockerDecision,
