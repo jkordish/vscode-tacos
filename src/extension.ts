@@ -10741,25 +10741,34 @@ async function loadCappedScratchpadExcerptFromFile(
   uri: vscode.Uri,
   maxBytes = AI_SCRATCHPAD_MAX_READ_BYTES,
 ): Promise<string | undefined> {
-  if (uri.scheme !== 'file' || !uri.fsPath) {
-    return undefined;
+  if (uri.scheme === 'file' && uri.fsPath) {
+    let handle: fs.FileHandle | undefined;
+    try {
+      handle = await fs.open(uri.fsPath, 'r');
+      const buffer = Buffer.alloc(maxBytes);
+      const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
+      if (bytesRead <= 0) {
+        return undefined;
+      }
+      return buildAiScratchpadExcerpt(buffer.subarray(0, bytesRead).toString('utf8'));
+    } catch {
+      return undefined;
+    } finally {
+      if (handle) {
+        await handle.close();
+      }
+    }
   }
 
-  let handle: fs.FileHandle | undefined;
   try {
-    handle = await fs.open(uri.fsPath, 'r');
-    const buffer = Buffer.alloc(maxBytes);
-    const { bytesRead } = await handle.read(buffer, 0, maxBytes, 0);
-    if (bytesRead <= 0) {
+    const bytes = await vscode.workspace.fs.readFile(uri);
+    if (!bytes || bytes.byteLength <= 0) {
       return undefined;
     }
-    return buildAiScratchpadExcerpt(buffer.subarray(0, bytesRead).toString('utf8'));
+    const capped = bytes.byteLength > maxBytes ? bytes.subarray(0, maxBytes) : bytes;
+    return buildAiScratchpadExcerpt(Buffer.from(capped).toString('utf8'));
   } catch {
     return undefined;
-  } finally {
-    if (handle) {
-      await handle.close();
-    }
   }
 }
 
@@ -10869,7 +10878,11 @@ async function refreshPanelScratchpadState(
   }
 
   state.panelScratchpadExists = exists;
-  state.panelScratchpadHasContent = exists ? sizeBytes > 0 : content.trim().length > 0;
+  state.panelScratchpadHasContent = exists
+    ? sizeBytes > SCRATCHPAD_PREVIEW_MAX_BYTES
+      ? sizeBytes > 0
+      : content.trim().length > 0
+    : false;
   state.panelScratchpadPriorExcerpt = panelScratchpadPriorExcerpt;
   state.panelScratchpadUpdatedAt = updatedAt;
   state.panelScratchpadPreviewLines =
