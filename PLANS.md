@@ -122,18 +122,19 @@ Status vocabulary used in this file:
 
 - status: `doing`
 - why: preserve trust by making surfaced-decision rationale available immediately from Companion Home.
-- scope: Epic `#227`, currently DP-303 / issue `#244` (privacy/trust tray posture summary + payload preview and consent entrypoints).
+- scope: Epic `#227`, currently DP-304 / issue `#245` (Restricted Mode rendering + explicit suppression/explainability copy pass).
 - dependencies: P3, P4.
 - recent progress:
   - completed DP-301 / `#242` (`Why am I seeing this?` one-click top-card path) and marked epic checklist progress.
   - completed DP-302 / `#243` (grouped evidence tray with one-click Companion Home open path, safe affordance semantics, and hidden-group regression hardening).
+  - completed DP-303 / `#244` (privacy/trust tray posture rows + payload preview + consent revoke controls + trust-tray open metric hook) in PR `#272`.
 - immediate next actions:
-  - land DP-303 trust/privacy tray rows (`privacy preset`, `retention`, `provider mode`, `consent status`) in Trust Center.
-  - add Trust Center actions for AI payload preview entrypoint and consent revoke path.
-  - add trust-tray open metric hook and close issue `#244` once merged.
+  - land DP-304 restricted-mode copy pass (`filtered signals`, explicit `SUPPRESSED` execution guidance, and restore disable-reason completeness).
+  - add restricted-mode drill-down proxy metric for trust-tray opens.
+  - run verify gates and close issue `#245` once merged.
 - risks/rollback:
-  - risk: consent status copy can drift from effective runtime provider posture.
-  - rollback: keep preview/revoke entrypoints but revert tray copy to simpler existing labels.
+  - risk: restricted-mode copy can become too verbose and overpower primary resume guidance.
+  - rollback: keep suppression semantics/guards intact and revert to shorter copy strings only.
 - links:
   - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
   - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
@@ -141,6 +142,8 @@ Status vocabulary used in this file:
   - https://github.com/jkordish/vscode-tacos/issues/242
   - https://github.com/jkordish/vscode-tacos/issues/243
   - https://github.com/jkordish/vscode-tacos/issues/244
+  - https://github.com/jkordish/vscode-tacos/issues/245
+  - https://github.com/jkordish/vscode-tacos/pull/272
 
 ## Blockers
 

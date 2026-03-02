@@ -161,6 +161,7 @@ export interface MetricRecord {
   companionPrimaryCtaClicks?: number;
   companionPrimaryCtaCompletions?: number;
   trustTrayOpens?: number;
+  restrictedTrustTrayOpens?: number;
   whySurfacedOpens?: number;
   percolationSuppressedQuietHours?: number;
   percolationSuppressedCooldown?: number;

@@ -1,5 +1,6 @@
 import {
   computeRestoreAvailability,
+  describeCheckoutPreviousBranchUnavailableReason,
   describeRerunDebugUnavailableReason,
   describeRerunTaskUnavailableReason,
 } from '../src/restoreSafety';
@@ -91,6 +92,13 @@ describe('restore unavailable reasons', () => {
         hasLastDebug: false,
       }),
     ).toContain('no previous debug session is known');
+    expect(
+      describeCheckoutPreviousBranchUnavailableReason({
+        trusted: true,
+        currentBranch: 'main',
+        previousBranch: 'main',
+      }),
+    ).toContain('no previous branch target is known');
   });
 
   it('returns undefined when action should be available', () => {
@@ -106,5 +114,22 @@ describe('restore unavailable reasons', () => {
         hasLastDebug: true,
       }),
     ).toBeUndefined();
+    expect(
+      describeCheckoutPreviousBranchUnavailableReason({
+        trusted: true,
+        currentBranch: 'feature/a',
+        previousBranch: 'main',
+      }),
+    ).toBeUndefined();
+  });
+
+  it('reports restricted-mode reason for checkout previous branch', () => {
+    expect(
+      describeCheckoutPreviousBranchUnavailableReason({
+        trusted: false,
+        currentBranch: 'feature/a',
+        previousBranch: 'main',
+      }),
+    ).toContain('Restricted Mode');
   });
 });

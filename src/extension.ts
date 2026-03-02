@@ -119,6 +119,7 @@ import {
 import { isRefinementActiveForSummary } from './refinement';
 import {
   computeRestoreAvailability,
+  describeCheckoutPreviousBranchUnavailableReason,
   describeRerunDebugUnavailableReason,
   describeRerunTaskUnavailableReason,
   type RestoreAvailability,
@@ -3267,6 +3268,7 @@ function recordMetricCounter(
     | 'summaryQuietActions'
     | 'disableActions'
     | 'trustTrayOpens'
+    | 'restrictedTrustTrayOpens'
     | 'whySurfacedOpens'
     | 'percolationSuppressedQuietHours'
     | 'percolationSuppressedCooldown'
@@ -4299,6 +4301,9 @@ async function showDetailsPanel(
         await setPanelSectionExpanded(context, workspaceRoot, message.sectionId, message.expanded);
         if (message.sectionId === 'trustCenter' && message.expanded) {
           recordMetricCounter('trustTrayOpens');
+          if (resolveCompanionRuntimeMode(getConfig()) === 'restricted') {
+            recordMetricCounter('restrictedTrustTrayOpens');
+          }
         }
         return;
       }
@@ -5227,10 +5232,16 @@ function renderWebview(
   const blockerMetaHtml = blockerMetaBadges
     ? `<div class="step-evidence">${blockerMetaBadges}</div>`
     : '';
+  const blockerSuppressionHintHtml =
+    blockerDecision.kind === 'restricted'
+      ? '<p class="muted blocker-disabled-reason"><strong>SUPPRESSED:</strong> Restricted Mode filtered task/debug rerun and branch checkout actions until workspace trust is granted.</p>'
+      : '';
   const blockerDisabledReasonHtml =
     blockerDecision.hasBlocker && blockerAction?.disabled && blockerAction.disabledReason
-      ? `<p class="muted blocker-disabled-reason">Unavailable: ${escapeHtml(blockerAction.disabledReason)}</p>`
-      : '';
+      ? `${blockerSuppressionHintHtml}<p class="muted blocker-disabled-reason">Unavailable: ${escapeHtml(
+          blockerAction.disabledReason,
+        )}</p>`
+      : blockerSuppressionHintHtml;
   const companionSlotSources = resolveCompanionSlotSourceClasses(
     summary,
     primaryNextAction,
@@ -5323,6 +5334,16 @@ function renderWebview(
   }
   if (!demoMode && !availability.canRerunDebug) {
     const reason = describeRerunDebugUnavailableReason({ trusted, hasLastDebug });
+    if (reason) {
+      restoreUnavailableReasons.push(reason);
+    }
+  }
+  if (!demoMode && !availability.canCheckoutPreviousBranch) {
+    const reason = describeCheckoutPreviousBranchUnavailableReason({
+      trusted,
+      currentBranch: summary.currentBranch,
+      previousBranch: summary.previousBranch,
+    });
     if (reason) {
       restoreUnavailableReasons.push(reason);
     }
@@ -5432,8 +5453,17 @@ function renderWebview(
     : config.summaryProvider === 'local'
       ? 'Nothing (local-only mode).'
       : companionRuntimeMode === 'restricted'
-        ? 'Nothing while Restricted Mode is active.'
+        ? 'Nothing while Restricted Mode is active (AI refinement disabled).'
         : 'Redacted summary context, evidence, and your checkpoint notes when AI refinement runs.';
+  const collectionPolicyLabel = demoMode
+    ? 'Sample mode'
+    : companionRuntimeMode === 'restricted'
+      ? 'Restricted Mode filters git execution signals and terminal command collection.'
+      : companionRuntimeMode === 'paused'
+        ? 'Local signal collection stays on while companion surfacing is paused.'
+        : companionRuntimeMode === 'disabled'
+          ? 'Companion surfacing is disabled until tacos.enabled is re-enabled.'
+          : 'Local signal collection is active; quiet/cooldown/no-change policy can still suppress surfacing.';
   const storedLocallyLabel = demoMode
     ? 'Sample card is generated in memory and not mixed with workspace snapshots.'
     : 'Redacted activity snapshots, summary cache, checkpoint notes, scratchpad files, and local metrics.';
@@ -5539,6 +5569,7 @@ function renderWebview(
     trustTrackingLabel,
     storedLocallyLabel,
     sentToAiLabel,
+    collectionPolicyLabel,
     privacyPresetLabel,
     retentionPolicyLabel,
     aiProviderModeLabel,
@@ -8288,8 +8319,7 @@ async function openAiPayloadPreviewFromPanel(context: vscode.ExtensionContext): 
     true,
   );
   const primaryNote = checkpointContext.primaryNote;
-  const includeCheckpointNotes =
-    config.aiIncludeCheckpointNotes && primaryNote?.status === 'open';
+  const includeCheckpointNotes = config.aiIncludeCheckpointNotes && primaryNote?.status === 'open';
   const checkpointNotes = includeCheckpointNotes && primaryNote ? [primaryNote.text] : [];
   const scratchpadExcerpt = config.aiIncludeScratchpad
     ? await loadScratchpadExcerptForAi(context, workspaceRoot, summary.currentBranch)

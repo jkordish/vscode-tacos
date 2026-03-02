@@ -61,6 +61,17 @@ describe('percolation explainability payload', () => {
     ]);
   });
 
+  it('uses restricted-mode suppression language that calls out filtered candidates', () => {
+    const payload = buildPercolationExplainabilityPayload({
+      summary: buildSummary(),
+      suppressionReason: 'restricted',
+    });
+
+    expect(payload.reasons).toContain(
+      'Restricted Mode filtered execution-oriented candidates from surfacing until workspace trust is granted.',
+    );
+  });
+
   it('formats stable human-readable explainability lines', () => {
     const summary = buildSummary();
     const ranking = rankCandidates(

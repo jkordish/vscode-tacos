@@ -56,6 +56,7 @@ export interface TrustCenterCardInput {
   trustTrackingLabel: string;
   storedLocallyLabel: string;
   sentToAiLabel: string;
+  collectionPolicyLabel: string;
   privacyPresetLabel: string;
   retentionPolicyLabel: string;
   aiProviderModeLabel: string;
@@ -81,6 +82,7 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
           <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(input.trustTrackingLabel)}</div>
           <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
           <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(input.sentToAiLabel)}</div>
+          <div class="trust-row"><span class="trust-key">Collection changes:</span> ${escapeHtml(input.collectionPolicyLabel)}</div>
           <div class="trust-row"><span class="trust-key">Privacy preset:</span> ${escapeHtml(input.privacyPresetLabel)}</div>
           <div class="trust-row"><span class="trust-key">Retention:</span> ${escapeHtml(input.retentionPolicyLabel)}</div>
           <div class="trust-row"><span class="trust-key">AI provider:</span> ${escapeHtml(input.aiProviderModeLabel)}</div>

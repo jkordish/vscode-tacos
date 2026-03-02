@@ -26,6 +26,7 @@ describe('panelCards', () => {
       trustTrackingLabel: 'on',
       storedLocallyLabel: 'Redacted local data only',
       sentToAiLabel: 'Nothing (local-only mode).',
+      collectionPolicyLabel: 'Local signal collection is active.',
       privacyPresetLabel: 'Balanced',
       retentionPolicyLabel: '7 days',
       aiProviderModeLabel: 'Local-only mode.',
@@ -58,6 +59,7 @@ describe('panelCards', () => {
     expect(trust).toContain('data-action="openPrivacySafety"');
     expect(trust).toContain('data-action="openAiPayloadPreview"');
     expect(trust).toContain('data-action="revokeAiPayloadConsent"');
+    expect(trust).toContain('Collection changes:</span> Local signal collection is active.');
     expect(trust).toContain('Privacy preset:</span> Balanced');
     expect(trust).toContain('Retention:</span> 7 days');
     expect(trust).toContain('AI provider:</span> Local-only mode.');

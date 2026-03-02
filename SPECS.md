@@ -322,6 +322,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Evidence tray groups items by relevance: surfaced-decision evidence, other openable evidence, then context-only evidence.
 - Trust Center exposes a concise privacy/trust tray including `privacy preset`, `retention policy`, `AI provider mode`, and consent status for current workspace context.
 - Trust Center actions include `Review AI payload preview`, `Revoke AI payload consent`, and `Open Privacy & Safety`.
+- Restricted Mode rendering explicitly marks filtered execution affordances as `SUPPRESSED` and calls out filtered signal classes (`git execution`, `terminal command collection`) in Trust Center/explainability copy.
 
 ### Technical shape / architecture notes
 
@@ -330,7 +331,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Primary CTA impression metric remains single-count per context and stores policy source class.
 - `openWhySurfaced` is handled in `src/webview/panelClientScript.ts` and expands `moreContext`, `trustCenter`, and nested why-surfaced disclosures without bypassing trust/privacy guards.
 - `openEvidenceTray` is handled in `src/webview/panelClientScript.ts` and expands `moreContext` + `evidence` disclosures while preserving existing click-time evidence target validation.
-- `openAiPayloadPreview` and `revokeAiPayloadConsent` are handled via webview message routing in `src/extension.ts`, and Trust Center expansion increments `trustTrayOpens` local metric counter.
+- `openAiPayloadPreview` and `revokeAiPayloadConsent` are handled via webview message routing in `src/extension.ts`, and Trust Center expansion increments `trustTrayOpens` plus `restrictedTrustTrayOpens` (restricted runtime only) local metric counters.
 
 ### Settings and commands affected
 
