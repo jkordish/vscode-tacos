@@ -37,6 +37,7 @@ export interface RenderResumeStackCardInput {
   nextPrimaryCtaSourceClass?: string;
   nextEmphasisToken?: CompanionSlotToken;
   primaryNextActionTrustedHtml?: TrustedHtml;
+  whySurfacedActionTrustedHtml?: TrustedHtml;
   nextStepRationaleTrustedHtml?: TrustedHtml;
   nextStepsListTrustedHtml: TrustedHtml;
   hasBlocker: boolean;
@@ -112,6 +113,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           }</ul>
           <div class="status-actions">
             ${input.primaryNextActionTrustedHtml ?? ''}
+            ${input.whySurfacedActionTrustedHtml ?? ''}
             <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
             <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
           </div>

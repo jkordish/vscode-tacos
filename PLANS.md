@@ -91,7 +91,7 @@ Status vocabulary used in this file:
 
 ### P6. First recommended feature slice after stabilization
 
-- status: `doing`
+- status: `done`
 - why: deliver user-facing improvement without destabilizing trust/privacy boundaries.
 - scope: adaptive-surface dynamic-percolation slice for Epic `#226` (status semantics, surface broker, Companion slot policy, single-primary CTA arbitration, and emphasis tokens).
 - dependencies: P3, P4.
@@ -103,9 +103,7 @@ Status vocabulary used in this file:
   - completed DP-236 Companion Home slot policy wiring with deterministic source classes mapped into fixed `Now/Next/Blocked/Restore` slots.
   - completed DP-240 central single-primary CTA arbitration (`Next` vs `Blocked`) with advisory demotion and single-count primary CTA impression semantics.
   - completed DP-241 adaptive emphasis tokens (`PRIMARY`/`ADVISORY`/`SUPPRESSED`) with reduced-motion and forced-colors-safe presentation.
-- immediate next actions:
-  - land one PR that closes remaining Epic `#226` child issues (`#236`, `#238`, `#239`, `#240`, `#241`).
-  - update Epic `#226` checklist/status after merge and move to next open epic slice.
+  - merged final Epic `#226` PR and closed Epic `#226` with completed child issues.
 - risks/rollback:
   - risk: over-aggressive suppression hides useful cues.
   - rollback: revert to previous ranking/suppression default behavior.
@@ -119,6 +117,27 @@ Status vocabulary used in this file:
   - https://github.com/jkordish/vscode-tacos/issues/240
   - https://github.com/jkordish/vscode-tacos/issues/241
   - https://github.com/jkordish/vscode-tacos/pull/267
+
+### P7. Trust/privacy explainability drill-down
+
+- status: `doing`
+- why: preserve trust by making surfaced-decision rationale available immediately from Companion Home.
+- scope: Epic `#227`, starting with DP-301 / issue `#242` (one-click `Why am I seeing this?` path from top card plus Trust Center explainability parity).
+- dependencies: P3, P4.
+- recent progress:
+  - identified existing explainability payload + Trust Center nested disclosure plumbing (`evidence IDs`, suppression reason when present, why-surfaced open counter hook).
+  - confirmed gap is top-card one-click affordance and fast expansion path to Trust Center explainability.
+- immediate next actions:
+  - land DP-301 top-card `Why am I seeing this?` action and one-click expansion behavior.
+  - run unit/integration checks and close issue `#242` once merged.
+- risks/rollback:
+  - risk: explainability copy could become overly verbose.
+  - rollback: keep top-card affordance while tightening detail copy and disclosure defaults.
+- links:
+  - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
+  - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
+  - https://github.com/jkordish/vscode-tacos/issues/227
+  - https://github.com/jkordish/vscode-tacos/issues/242
 
 ## Blockers
 

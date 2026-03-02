@@ -5579,6 +5579,8 @@ function renderWebview(
       nextPrimaryCtaSourceClass: hasPrimaryNextAction ? companionSlotSources.primaryCta : undefined,
       nextEmphasisToken: primaryCtaDecision.nextToken,
       primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
+      whySurfacedActionTrustedHtml:
+        '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>',
       nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
       nextStepsListTrustedHtml: companionNextSteps,
       hasBlocker: blockerDecision.hasBlocker,
