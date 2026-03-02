@@ -16,6 +16,41 @@ async function run() {
 
     const baseline = await vscode.commands.executeCommand('tacos.__test.getResumeFlowSnapshot');
     assert.ok(baseline, 'Expected resume flow snapshot payload.');
+    assert.ok(
+      Array.isArray(baseline?.panelSectionOrder),
+      'Expected panel section order list in resume flow snapshot.',
+    );
+    const sectionOrder = baseline?.panelSectionOrder ?? [];
+    const moreContextIndex = sectionOrder.indexOf('moreContext');
+    const trustCenterIndex = sectionOrder.indexOf('trustCenter');
+    const evidenceIndex = sectionOrder.indexOf('evidence');
+    const detailsIndex = sectionOrder.indexOf('details');
+    assert.ok(
+      moreContextIndex >= 0 && trustCenterIndex > moreContextIndex,
+      'Expected More Context section wrapper to stay ahead of nested policy sections.',
+    );
+    assert.ok(
+      evidenceIndex > trustCenterIndex,
+      'Expected Evidence section to stay after Trust Center in stable order.',
+    );
+    assert.ok(
+      detailsIndex > evidenceIndex,
+      'Expected Details section to stay after Evidence in stable order.',
+    );
+    assert.ok(
+      (baseline?.panelEmphasisBadgeCount ?? 0) > 0,
+      'Expected policy-driven section emphasis badges without reordering sections.',
+    );
+    assert.equal(
+      baseline?.hasMoreContextEmphasis,
+      true,
+      'Expected More Context disclosure to carry policy emphasis metadata.',
+    );
+    assert.equal(
+      baseline?.moreContextExpanded,
+      false,
+      'Expected More Context to remain collapsed by default even when policy emphasis is present.',
+    );
 
     if (baseline?.hasTimelineSection) {
       assert.equal(
@@ -71,6 +106,11 @@ async function run() {
     const afterRerender = await vscode.commands.executeCommand(
       'tacos.__test.getResumeFlowSnapshot',
     );
+    assert.equal(
+      afterRerender?.moreContextExpanded,
+      false,
+      'Expected policy emphasis to avoid auto-expanding More Context after rerender.',
+    );
     if (afterRerender?.hasTimelineSection) {
       assert.equal(
         afterRerender?.timelineExpanded,
@@ -92,6 +132,11 @@ async function run() {
     await wait(150);
 
     const afterReopen = await vscode.commands.executeCommand('tacos.__test.getResumeFlowSnapshot');
+    assert.equal(
+      afterReopen?.moreContextExpanded,
+      false,
+      'Expected policy emphasis to avoid auto-expanding More Context after panel reopen.',
+    );
     if (afterReopen?.hasTimelineSection) {
       assert.equal(
         afterReopen?.timelineExpanded,

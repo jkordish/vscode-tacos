@@ -13,6 +13,7 @@ All notable changes to this project are documented in this file.
 - Docs-driven GitHub issue forms (`01-bug`, `02-feature`, `03-spec`) and stricter PR template contract.
 - Bundled build script (`scripts/build.mjs`) using `esbuild`.
 - Explicit manifest runtime posture via `extensionKind: [\"workspace\"]`.
+- Policy-driven panel section emphasis hints (badge + accent only) for collapsed sections, with stable layout and persisted expansion behavior.
 
 ### Changed
 
