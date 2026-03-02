@@ -98,7 +98,9 @@ import { evaluatePercolationSuppression } from './percolation/suppression';
 import {
   resolveSummarySurfaceDecision,
   type SummaryPresentationMode,
+  type SummaryPresentationReason,
   type SummaryPresentationSurface,
+  type SummarySurfaceDecision,
 } from './percolation/surfaceBroker';
 import {
   createPercolationPolicyInput,
@@ -198,6 +200,7 @@ import type {
   ResumeSummary,
   SummaryProvider,
   TriggerReason,
+  UiSurface,
   VscodeLmModelSelector,
 } from './types';
 import { tryGenerateVscodeLmSummary, type VscodeLmModelLike } from './vscodeLm';
@@ -641,12 +644,28 @@ export function activate(context: vscode.ExtensionContext): void {
         const payload =
           input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
         const config = getConfig();
-        const configuredUiSurface =
+        const configuredUiSurface: UiSurface =
           payload.uiSurface === 'statusbar' ||
           payload.uiSurface === 'notification' ||
           payload.uiSurface === 'silent'
             ? payload.uiSurface
             : config.uiSurface;
+        const configForDecision: ExtensionConfig = {
+          ...config,
+          uiSurface: configuredUiSurface,
+          percolationPolicyEnabled:
+            typeof payload.percolationPolicyEnabled === 'boolean'
+              ? payload.percolationPolicyEnabled
+              : config.percolationPolicyEnabled,
+          percolationExplainabilityEnabled:
+            typeof payload.percolationExplainabilityEnabled === 'boolean'
+              ? payload.percolationExplainabilityEnabled
+              : config.percolationExplainabilityEnabled,
+          percolationNotificationBrokerEnabled:
+            typeof payload.percolationNotificationBrokerEnabled === 'boolean'
+              ? payload.percolationNotificationBrokerEnabled
+              : config.percolationNotificationBrokerEnabled,
+        };
         const suppression =
           typeof payload.suppressionReason === 'string' && payload.suppressionReason.trim()
             ? {
@@ -671,13 +690,16 @@ export function activate(context: vscode.ExtensionContext): void {
               score: typeof primaryInput.score === 'number' ? primaryInput.score : 0,
             }
           : undefined;
-        return resolveSummarySurfaceDecision({
-          configuredUiSurface,
-          autoOpenDetails: payload.autoOpenDetails === true,
-          preferBackgroundPresentation: payload.preferBackgroundPresentation === true,
-          suppression,
-          primary,
-        });
+        return resolveConfiguredSummarySurfaceDecision(
+          configForDecision,
+          resolvePercolationRolloutFlags(configForDecision),
+          {
+            autoOpenDetails: payload.autoOpenDetails === true,
+            preferBackgroundPresentation: payload.preferBackgroundPresentation === true,
+            suppression,
+            primary,
+          },
+        );
       },
     ),
     vscode.commands.registerCommand('tacos.__test.getStatusBarSnapshot', async () => {
@@ -917,6 +939,10 @@ export function activate(context: vscode.ExtensionContext): void {
         /<div class="card(?: [^"]*)?">\s*<h3>([^<]+)<\/h3>/u,
       );
       const firstCardTitle = firstCardTitleMatch?.[1] ?? '';
+      const hasWhySurfacedAction = /<button[^>]*data-action="openWhySurfaced"/u.test(panelHtml);
+      const hasWhySurfacedDetails = /<details[^>]*data-why-surfaced-details="true"/u.test(
+        panelHtml,
+      );
       const hasTrustCenterSection = panelHtml.includes('data-panel-section="trustCenter"');
       const hasTimelineSection = panelHtml.includes('data-panel-section="timeline"');
       const hasEvidenceSection = panelHtml.includes('data-panel-section="evidence"');
@@ -1040,6 +1066,8 @@ export function activate(context: vscode.ExtensionContext): void {
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
         hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
         isCompanionHomeFirstCard: firstCardTitle === 'Companion Home',
+        hasWhySurfacedAction,
+        hasWhySurfacedDetails,
         hasIntentEditor: panelHtml.includes('data-action="setIntentOverride"'),
         hasIntentSourceLabel: panelHtml.includes('Intent source:'),
         hasLastActionCue: panelHtml.includes('data-last-action-cue="true"'),
@@ -1866,7 +1894,9 @@ export function activate(context: vscode.ExtensionContext): void {
       const affectsPanel =
         event.affectsConfiguration('tacos.enabled') ||
         event.affectsConfiguration('tacos.pauseSummaries') ||
-        event.affectsConfiguration('tacos.showTimeline');
+        event.affectsConfiguration('tacos.showTimeline') ||
+        event.affectsConfiguration('tacos.percolationPolicyEnabled') ||
+        event.affectsConfiguration('tacos.percolationExplainabilityEnabled');
       const affectsNudges =
         event.affectsConfiguration('tacos.companionNudgesEnabled') ||
         event.affectsConfiguration('tacos.companionNudgeAggressiveness') ||
@@ -1881,6 +1911,8 @@ export function activate(context: vscode.ExtensionContext): void {
         event.affectsConfiguration('tacos.uiSurface') ||
         event.affectsConfiguration('tacos.summaryQuietHours') ||
         event.affectsConfiguration('tacos.autoRefreshInBackground') ||
+        event.affectsConfiguration('tacos.percolationPolicyEnabled') ||
+        event.affectsConfiguration('tacos.percolationNotificationBrokerEnabled') ||
         affectsNudges;
 
       if (affectsPrivacyPreset && !state.applyingPrivacyPreset) {
@@ -2797,9 +2829,10 @@ async function presentSummary(
   };
 
   const percolationMode = resolveCompanionRuntimeMode(config);
+  const rolloutFlags = resolvePercolationRolloutFlags(config);
   const notificationNow = Date.now();
   const notificationSuppression =
-    triggerReason !== 'manual'
+    rolloutFlags.notificationBrokerEnabled && triggerReason !== 'manual'
       ? evaluatePercolationSuppression({
           enabled: config.enabled,
           mode: percolationMode,
@@ -2812,6 +2845,10 @@ async function presentSummary(
       : undefined;
   let notificationPrimary: RankedSurfacedItem | undefined;
   const ensureNotificationPrimary = (): RankedSurfacedItem | undefined => {
+    if (!rolloutFlags.policyEngineEnabled) {
+      return undefined;
+    }
+
     if (!notificationPrimary) {
       notificationPrimary = rankPercolationForSummary(summary, percolationMode, {
         context,
@@ -2824,7 +2861,7 @@ async function presentSummary(
 
   // Keep low-confidence clarification telemetry populated even when notifications are suppressed.
   if (summary.lowConfidence) {
-    if (notificationSuppression?.suppressed) {
+    if (!rolloutFlags.policyEngineEnabled || notificationSuppression?.suppressed) {
       recordLowConfidenceClarificationRate(summary, undefined);
     } else {
       notificationPrimary = ensureNotificationPrimary();
@@ -2833,6 +2870,7 @@ async function presentSummary(
   }
   if (
     config.metricsEnabled &&
+    rolloutFlags.policyEngineEnabled &&
     config.uiSurface === 'notification' &&
     !notificationSuppression?.suppressed &&
     !options.autoOpenDetails &&
@@ -2840,17 +2878,17 @@ async function presentSummary(
   ) {
     notificationPrimary = ensureNotificationPrimary();
   }
-  if (config.metricsEnabled) {
+  if (config.metricsEnabled && rolloutFlags.policyEngineEnabled) {
     notificationPrimary = ensureNotificationPrimary();
     recordNoveltyScoreDistribution(notificationPrimary);
   }
 
-  const surfaceDecision = resolveSummarySurfaceDecision({
-    configuredUiSurface: config.uiSurface,
+  const surfaceDecision = resolveConfiguredSummarySurfaceDecision(config, rolloutFlags, {
     autoOpenDetails: options.autoOpenDetails === true,
     preferBackgroundPresentation: options.preferBackgroundPresentation === true,
     suppression: notificationSuppression,
     primary:
+      rolloutFlags.policyEngineEnabled &&
       config.uiSurface === 'notification' &&
       !notificationSuppression?.suppressed &&
       !options.autoOpenDetails &&
@@ -2860,15 +2898,19 @@ async function presentSummary(
   });
   const presentationMode = surfaceDecision.presentationMode;
 
-  if (notificationSuppression?.suppressed) {
+  if (rolloutFlags.policyEngineEnabled && notificationSuppression?.suppressed) {
     recordPercolationSuppressionMetric(notificationSuppression.reason);
   }
-  recordSurfaceSelectionMetric(surfaceDecision.surface);
+  if (rolloutFlags.policyEngineEnabled) {
+    recordPercolationDecisionMetrics(surfaceDecision, notificationPrimary);
+  } else {
+    recordSurfaceSelectionMetric(surfaceDecision);
+  }
   if (state.metricSession) {
     state.metricSession.interruptionEvent =
       triggerReason === 'focus' && presentationMode === 'prompt' ? 1 : 0;
   }
-  if (presentationMode !== 'silent') {
+  if (rolloutFlags.policyEngineEnabled && presentationMode !== 'silent') {
     recordPriorDrivenPromotion(notificationPrimary);
   }
 
@@ -2885,18 +2927,22 @@ async function presentSummary(
     return;
   }
 
-  if (!notificationPrimary) {
-    notificationPrimary = ensureNotificationPrimary();
-  }
+  if (rolloutFlags.policyEngineEnabled) {
+    if (!notificationPrimary) {
+      notificationPrimary = ensureNotificationPrimary();
+    }
 
-  if (!notificationPrimary) {
-    return;
+    if (!notificationPrimary) {
+      return;
+    }
   }
 
   if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
     await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', notificationNow);
   }
-  const notificationHeadline = selectNotificationHeadline(summary, notificationPrimary);
+  const notificationHeadline = rolloutFlags.policyEngineEnabled
+    ? selectNotificationHeadline(summary, notificationPrimary)
+    : summary.intent;
   const actionPauseLabel = config.pauseSummaries ? 'Resume auto summaries' : 'Pause auto summaries';
   recordCompanionPromptImpression();
   const choice = await vscode.window.showInformationMessage(
@@ -3140,6 +3186,10 @@ async function rememberPercolationPrimaryForSummary(
   status: PercolationMemoryStatus,
   until: number,
 ): Promise<boolean> {
+  if (!getConfig().percolationPolicyEnabled) {
+    return false;
+  }
+
   const now = Date.now();
   if (!Number.isFinite(until) || until <= now) {
     return false;
@@ -3327,6 +3377,91 @@ function resolveSummaryPresentationMode(
   }
 
   return 'background';
+}
+
+interface PercolationRolloutFlags {
+  policyEngineEnabled: boolean;
+  explainabilityEnabled: boolean;
+  notificationBrokerEnabled: boolean;
+}
+
+function resolvePercolationRolloutFlags(config: ExtensionConfig): PercolationRolloutFlags {
+  const policyEngineEnabled = config.percolationPolicyEnabled;
+  return {
+    policyEngineEnabled,
+    explainabilityEnabled: policyEngineEnabled && config.percolationExplainabilityEnabled,
+    notificationBrokerEnabled: policyEngineEnabled && config.percolationNotificationBrokerEnabled,
+  };
+}
+
+function resolveLegacySummarySurfaceDecision(
+  config: ExtensionConfig,
+  options: Pick<PresentSummaryOptions, 'autoOpenDetails' | 'preferBackgroundPresentation'>,
+): SummarySurfaceDecision {
+  const mode = resolveSummaryPresentationMode(config, options);
+  if (mode === 'auto-open-details') {
+    return {
+      surface: 'panel',
+      presentationMode: mode,
+      reason: 'manual-auto-open-details',
+    };
+  }
+
+  if (mode === 'silent') {
+    return {
+      surface: 'none',
+      presentationMode: mode,
+      reason: 'ui-surface-silent',
+    };
+  }
+
+  if (mode === 'prompt') {
+    return {
+      surface: 'notification',
+      presentationMode: mode,
+      reason: 'notification-high-value-actionable',
+    };
+  }
+
+  if (config.uiSurface === 'statusbar') {
+    return {
+      surface: 'statusbar',
+      presentationMode: mode,
+      reason: 'ui-surface-statusbar-cap',
+    };
+  }
+
+  return {
+    surface: 'panel',
+    presentationMode: mode,
+    reason: 'prefer-background',
+  };
+}
+
+function resolveConfiguredSummarySurfaceDecision(
+  config: ExtensionConfig,
+  rolloutFlags: PercolationRolloutFlags,
+  input: {
+    autoOpenDetails: boolean;
+    preferBackgroundPresentation: boolean;
+    suppression?: ReturnType<typeof evaluatePercolationSuppression>;
+    primary?: Pick<RankedSurfacedItem, 'kind' | 'actionId' | 'urgency' | 'confidence' | 'score'>;
+  },
+): SummarySurfaceDecision {
+  if (!rolloutFlags.notificationBrokerEnabled) {
+    return resolveLegacySummarySurfaceDecision(config, {
+      autoOpenDetails: input.autoOpenDetails,
+      preferBackgroundPresentation: input.preferBackgroundPresentation,
+    });
+  }
+
+  return resolveSummarySurfaceDecision({
+    configuredUiSurface: config.uiSurface,
+    autoOpenDetails: input.autoOpenDetails,
+    preferBackgroundPresentation: input.preferBackgroundPresentation,
+    suppression: input.suppression,
+    primary: input.primary,
+  });
 }
 
 function resolveCompanionRuntimeMode(config: ExtensionConfig): CompanionRuntimeMode {
@@ -3634,10 +3769,16 @@ function recordNoveltyScoreDistribution(primary: RankedSurfacedItem | undefined)
 
 function recordMetricCounter(
   field:
+    | 'percolationDecisionCount'
     | 'surfaceSelectionNone'
     | 'surfaceSelectionStatusbar'
     | 'surfaceSelectionPanel'
+    | 'surfaceSelectionPanelSilent'
+    | 'surfaceSelectionPanelEmphasis'
     | 'surfaceSelectionNotification'
+    | 'percolationConfidenceBandLow'
+    | 'percolationConfidenceBandMedium'
+    | 'percolationConfidenceBandHigh'
     | 'pauseActions'
     | 'snoozeActions'
     | 'summaryQuietActions'
@@ -3674,7 +3815,28 @@ function recordMetricCounter(
   state.metricSession[field] = (state.metricSession[field] ?? 0) + amount;
 }
 
-function recordSurfaceSelectionMetric(surface: SummaryPresentationSurface): void {
+const PANEL_EMPHASIS_REASONS = new Set<SummaryPresentationReason>([
+  'manual-auto-open-details',
+  'notification-suppressed',
+  'notification-advisory-only',
+]);
+
+function recordPercolationDecisionMetrics(
+  decision: SummarySurfaceDecision,
+  primary: RankedSurfacedItem | undefined,
+): void {
+  if (!state.metricSession) {
+    return;
+  }
+
+  recordMetricCounter('percolationDecisionCount');
+  recordSurfaceSelectionMetric(decision);
+  recordPercolationConfidenceBandMetric(primary);
+}
+
+function recordSurfaceSelectionMetric(decision: SummarySurfaceDecision): void {
+  const surface: SummaryPresentationSurface = decision.surface;
+
   if (surface === 'none') {
     recordMetricCounter('surfaceSelectionNone');
     return;
@@ -3687,10 +3849,42 @@ function recordSurfaceSelectionMetric(surface: SummaryPresentationSurface): void
 
   if (surface === 'panel') {
     recordMetricCounter('surfaceSelectionPanel');
+    const isEmphasizedPanel =
+      decision.presentationMode === 'auto-open-details' ||
+      PANEL_EMPHASIS_REASONS.has(decision.reason);
+    recordMetricCounter(
+      isEmphasizedPanel ? 'surfaceSelectionPanelEmphasis' : 'surfaceSelectionPanelSilent',
+    );
     return;
   }
 
   recordMetricCounter('surfaceSelectionNotification');
+}
+
+function recordPercolationConfidenceBandMetric(primary: RankedSurfacedItem | undefined): void {
+  if (!primary) {
+    return;
+  }
+
+  const confidence =
+    typeof primary.confidence === 'number' && Number.isFinite(primary.confidence)
+      ? Math.max(0, Math.min(1, primary.confidence))
+      : undefined;
+  if (confidence === undefined) {
+    return;
+  }
+
+  if (confidence >= 0.75) {
+    recordMetricCounter('percolationConfidenceBandHigh');
+    return;
+  }
+
+  if (confidence >= 0.45) {
+    recordMetricCounter('percolationConfidenceBandMedium');
+    return;
+  }
+
+  recordMetricCounter('percolationConfidenceBandLow');
 }
 
 function recordRedactionMetrics(totalReplacements: number, highRiskDetected: boolean): void {
@@ -4432,21 +4626,28 @@ function updateCompanionStatusBar(): void {
   }
 
   const config = getConfig();
+  const rolloutFlags = resolvePercolationRolloutFlags(config);
   const workspaceRoot = pickWorkspaceRoot();
   const mode = resolveCompanionRuntimeMode(config);
   const now = Date.now();
   const quietState = resolveSummaryQuietState(now, config.summaryQuietHours);
   const pausedReason = resolveCompanionPausedReason(config, now);
   const summary = state.scratchSummary;
-  const percolationSuppression = evaluatePercolationSuppression({
-    enabled: config.enabled,
-    mode,
-    now,
-    quietHours: config.summaryQuietHours,
-    contextUnchanged: state.lastSummaryContextUnchanged,
-  });
+  const percolationSuppression = rolloutFlags.policyEngineEnabled
+    ? evaluatePercolationSuppression({
+        enabled: config.enabled,
+        mode,
+        now,
+        quietHours: config.summaryQuietHours,
+        contextUnchanged: state.lastSummaryContextUnchanged,
+      })
+    : { suppressed: false as const, reason: undefined, nextEligibleAt: undefined };
   const rankedPrimary =
-    mode === 'active' && summary && !quietState.active && !percolationSuppression.suppressed
+    rolloutFlags.policyEngineEnabled &&
+    mode === 'active' &&
+    summary &&
+    !quietState.active &&
+    !percolationSuppression.suppressed
       ? rankPercolationForSummary(summary, mode, {
           context: activeExtensionContext,
           workspaceRoot,
@@ -5597,6 +5798,7 @@ function renderWebview(
   const nonce = createNonce();
   const cspMetaTag = buildWebviewCspMetaTag(webview.cspSource, nonce);
   const config = getConfig();
+  const rolloutFlags = resolvePercolationRolloutFlags(config);
   const demoMode = isDemoResumeSummary(summary);
   const evidenceById = new Map(
     (summary.evidenceCatalog ?? []).map((item) => [item.id, item] as const),
@@ -5687,7 +5889,7 @@ function renderWebview(
     (state.lastTaskExitCode ?? 0) !== 0;
   const percolationMode = resolveCompanionRuntimeMode(config);
   const panelPercolationSuppression =
-    !demoMode && state.panelManualPercolationBypass
+    !demoMode && (state.panelManualPercolationBypass || !rolloutFlags.policyEngineEnabled)
       ? { suppressed: false, reason: undefined, nextEligibleAt: undefined }
       : evaluatePercolationSuppression({
           enabled: config.enabled,
@@ -5705,7 +5907,7 @@ function renderWebview(
         )?.updatedAt
       : undefined;
   const rankedPrimaryCandidate =
-    panelPercolationSuppression.suppressed || demoMode
+    !rolloutFlags.policyEngineEnabled || panelPercolationSuppression.suppressed || demoMode
       ? undefined
       : rankPercolationForSummary(summary, percolationMode, {
           context: activeExtensionContext,
@@ -5759,7 +5961,7 @@ function renderWebview(
     canOpenDiagnosticFile,
     availability,
   });
-  if (!demoMode) {
+  if (!demoMode && rolloutFlags.policyEngineEnabled) {
     recordPriorDrivenPromotion(rankedPrimaryCandidate);
     recordBlockerPromotionSource(blockerDecision);
   }
@@ -5864,11 +6066,11 @@ function renderWebview(
     primary: rankedPrimaryCandidate,
     suppressionReason: panelPercolationSuppression.reason,
   });
-  const percolationExplainabilityTrustedHtml = formatPercolationExplainabilityLines(
-    explainabilityPayload,
-  )
-    .map((line) => `<li>${escapeHtml(line)}</li>`)
-    .join('');
+  const percolationExplainabilityTrustedHtml = rolloutFlags.explainabilityEnabled
+    ? formatPercolationExplainabilityLines(explainabilityPayload)
+        .map((line) => `<li>${escapeHtml(line)}</li>`)
+        .join('')
+    : '';
   const blockerTitle = blockerDecision.title;
   const blockerDetail = blockerDecision.detail;
   const blockerAction = blockerDecision.action;
@@ -6195,15 +6397,17 @@ function renderWebview(
     autoSummariesDisabled || demoMode ? 'disabled aria-disabled="true"' : '';
   const panelSectionEmphasis: Partial<Record<PanelSectionId, PanelSectionEmphasis>> = demoMode
     ? {}
-    : resolvePanelSectionEmphasis(
-        summary,
-        rankedPrimaryCandidate,
-        blockerDecision,
-        companionRuntimeMode,
-        config.showTimeline,
-        timelineGroups.length,
-        config.summaryProvider,
-      );
+    : rolloutFlags.policyEngineEnabled
+      ? resolvePanelSectionEmphasis(
+          summary,
+          rankedPrimaryCandidate,
+          blockerDecision,
+          companionRuntimeMode,
+          config.showTimeline,
+          timelineGroups.length,
+          config.summaryProvider,
+        )
+      : {};
   const timelineGroupsHtml = renderTimelineGroupsHtml({ timelineGroups });
   const timelineCard = renderTimelineCard({
     showTimeline: config.showTimeline,
@@ -6255,6 +6459,7 @@ function renderWebview(
     autoSummaryToggleLabel,
     aiPayloadPreviewDisabledAttr,
     revokeAiConsentDisabledAttr,
+    showWhySurfacedDetails: rolloutFlags.explainabilityEnabled,
     expanded: expandedSections.has('trustCenter'),
     emphasis: panelSectionEmphasis.trustCenter,
   });
@@ -6343,8 +6548,9 @@ function renderWebview(
       nextPrimaryCtaSourceClass: hasPrimaryNextAction ? companionSlotSources.primaryCta : undefined,
       nextEmphasisToken: primaryCtaDecision.nextToken,
       primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
-      whySurfacedActionTrustedHtml:
-        '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>',
+      whySurfacedActionTrustedHtml: rolloutFlags.explainabilityEnabled
+        ? '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>'
+        : '',
       evidenceTrayActionTrustedHtml: evidenceTrayActionHtml,
       nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
       nextStepsListTrustedHtml: companionNextSteps,
@@ -9212,6 +9418,12 @@ function getConfig(): ExtensionConfig {
     metricsEnabled: config.get<boolean>('metricsEnabled', true),
     uiSurface: resolveUiSurfaceConfig(config),
     autoRefreshInBackground: config.get<boolean>('autoRefreshInBackground', true),
+    percolationPolicyEnabled: config.get<boolean>('percolationPolicyEnabled', true),
+    percolationExplainabilityEnabled: config.get<boolean>('percolationExplainabilityEnabled', true),
+    percolationNotificationBrokerEnabled: config.get<boolean>(
+      'percolationNotificationBrokerEnabled',
+      true,
+    ),
     companionNudgesEnabled: config.get<boolean>('companionNudgesEnabled', true),
     companionNudgeAggressiveness: config.get<ExtensionConfig['companionNudgeAggressiveness']>(
       'companionNudgeAggressiveness',
@@ -11836,6 +12048,7 @@ function extensionVersion(): string {
 
 async function copyDiagnosticsBundle(context: vscode.ExtensionContext): Promise<void> {
   const config = getConfig();
+  const rolloutFlags = resolvePercolationRolloutFlags(config);
   const metrics = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
   const diagnostics = buildDiagnosticsText({
     generatedAt: Date.now(),
@@ -11846,6 +12059,11 @@ async function copyDiagnosticsBundle(context: vscode.ExtensionContext): Promise<
     uiSurface: config.uiSurface,
     companionRuntimeMode: resolveCompanionRuntimeMode(config),
     metricsEnabled: config.metricsEnabled,
+    percolationPolicyEnabled: config.percolationPolicyEnabled,
+    percolationExplainabilityEnabled: config.percolationExplainabilityEnabled,
+    percolationExplainabilityActive: rolloutFlags.explainabilityEnabled,
+    percolationNotificationBrokerEnabled: config.percolationNotificationBrokerEnabled,
+    percolationNotificationBrokerActive: rolloutFlags.notificationBrokerEnabled,
     recentMetrics: metrics,
     performanceCounters: {
       focusHandling: summarizePerformanceCounter(state.perfFocusHandling),

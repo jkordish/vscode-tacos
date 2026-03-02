@@ -427,6 +427,21 @@
           "default": true,
           "description": "Legacy compatibility toggle for focus presentation mode. Prefer `tacos.uiSurface` for new setups."
         },
+        "tacos.percolationPolicyEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable dynamic percolation policy ranking/suppression behavior. Disable to fall back to simpler v0.7-style summary presentation semantics."
+        },
+        "tacos.percolationExplainabilityEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable percolation explainability affordances (`Why am I seeing this?` actions and Trust Center explainability details)."
+        },
+        "tacos.percolationNotificationBrokerEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable deterministic notification broker arbitration for focus-triggered summaries. Disable to use legacy uiSurface-driven prompt/background behavior."
+        },
         "tacos.companionNudgesEnabled": {
           "type": "boolean",
           "default": true,

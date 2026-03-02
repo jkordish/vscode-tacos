@@ -68,6 +68,7 @@ export interface TrustCenterCardInput {
   autoSummaryToggleLabel: string;
   aiPayloadPreviewDisabledAttr: string;
   revokeAiConsentDisabledAttr: string;
+  showWhySurfacedDetails?: boolean;
   expanded: boolean;
   emphasis?: PanelSectionEmphasis;
 }
@@ -75,6 +76,7 @@ export interface TrustCenterCardInput {
 export function renderTrustCenterCard(input: TrustCenterCardInput): string {
   const emphasisAttrs = renderPanelSectionEmphasisAttrs(input.emphasis);
   const emphasisBadge = renderPanelSectionEmphasisBadge(input.emphasis);
+  const showWhySurfacedDetails = input.showWhySurfacedDetails !== false;
   return `<div class="card">
       <details data-panel-section="trustCenter" ${emphasisAttrs ? `${emphasisAttrs} ` : ''}${input.expanded ? 'open' : ''}>
         <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Trust Center</span>${emphasisBadge}</summary>
@@ -88,7 +90,9 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
           <div class="trust-row"><span class="trust-key">AI provider:</span> ${escapeHtml(input.aiProviderModeLabel)}</div>
           <div class="trust-row"><span class="trust-key">Consent:</span> ${escapeHtml(input.aiConsentStatusLabel)}</div>
           <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(input.trustBasedOn)}</div>
-          <details data-why-surfaced-details="true">
+          ${
+            showWhySurfacedDetails
+              ? `<details data-why-surfaced-details="true">
             <summary><strong>Why am I seeing this?</strong></summary>
             <ul class="compact-list">${input.trustCueDetailsTrustedHtml || '<li>No evidence counts yet.</li>'}</ul>
             ${
@@ -96,7 +100,9 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
                 ? `<ul class="compact-list" data-why-surfaced-list="true">${input.percolationExplainabilityTrustedHtml}</ul>`
                 : ''
             }
-          </details>
+          </details>`
+              : ''
+          }
           <div class="status-actions">
             <button type="button" class="secondary" data-action="toggleAutoSummaries" ${
               input.autoSummaryToggleDisabledAttr

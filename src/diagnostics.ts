@@ -11,6 +11,11 @@ export interface DiagnosticsInput {
   uiSurface: UiSurface;
   companionRuntimeMode: CompanionRuntimeMode;
   metricsEnabled: boolean;
+  percolationPolicyEnabled: boolean;
+  percolationExplainabilityEnabled: boolean;
+  percolationExplainabilityActive: boolean;
+  percolationNotificationBrokerEnabled: boolean;
+  percolationNotificationBrokerActive: boolean;
   recentMetrics: MetricRecord[];
   performanceCounters?: {
     focusHandling?: PerformanceCounterSnapshot;
@@ -146,6 +151,11 @@ export function buildDiagnosticsText(input: DiagnosticsInput): string {
     `uiSurface: ${input.uiSurface}`,
     `companionRuntimeMode: ${input.companionRuntimeMode}`,
     `metricsEnabled: ${input.metricsEnabled ? 'true' : 'false'}`,
+    `percolationPolicyEnabled: ${input.percolationPolicyEnabled ? 'true' : 'false'}`,
+    `percolationExplainabilityEnabled: ${input.percolationExplainabilityEnabled ? 'true' : 'false'}`,
+    `percolationExplainabilityActive: ${input.percolationExplainabilityActive ? 'true' : 'false'}`,
+    `percolationNotificationBrokerEnabled: ${input.percolationNotificationBrokerEnabled ? 'true' : 'false'}`,
+    `percolationNotificationBrokerActive: ${input.percolationNotificationBrokerActive ? 'true' : 'false'}`,
     '',
     'recentMetrics(last10):',
     `sessions: ${metricSummary.sessions}`,

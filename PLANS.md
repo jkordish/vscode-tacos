@@ -172,6 +172,45 @@ Status vocabulary used in this file:
   - https://github.com/jkordish/vscode-tacos/issues/252
   - https://github.com/jkordish/vscode-tacos/issues/253
 
+### P9. Percolation metrics schema and segmentation alignment
+
+- status: `done`
+- why: Epic `#229` needs decision-chain metrics parity (`DP-501`) and segmented surface counters that distinguish ambient panel updates from emphasized panel paths.
+- scope: add percolation decision-count and confidence-band fields, split panel surface selection into `panel-silent` vs `panel-emphasis`, wire runtime metric recording, and align dictionary/baseline docs/tests.
+- dependencies: P6, P8.
+- recent progress:
+  - added new per-session metric fields (`percolationDecisionCount`, `surfaceSelectionPanelSilent`, `surfaceSelectionPanelEmphasis`, `percolationConfidenceBandLow|Medium|High`) in runtime record types and CSV export.
+  - updated summary-presentation metric wiring to record decision count, segmented panel surface class, and per-decision confidence bands.
+  - expanded baseline snapshot output to report percolation decision totals, segmented surface totals, and confidence-band distribution.
+  - refreshed docs/contracts (`README`, `SPECS`, `docs/metrics.md`, `docs/DESIGN_AND_IMPLEMENTATION.md`, `CHANGELOG`) and unit tests for the schema additions.
+- risks/rollback:
+  - risk: downstream dashboards/scripts may assume the old fixed column layout.
+  - rollback: keep legacy `surfaceSelectionPanel` as compatibility field and remove new columns behind a schema rollback patch if needed.
+- links:
+  - https://github.com/jkordish/vscode-tacos/issues/229
+  - https://github.com/jkordish/vscode-tacos/issues/254
+  - https://github.com/jkordish/vscode-tacos/issues/255
+
+### P10. Percolation rollout flags and fallback controls
+
+- status: `done`
+- why: Child issue `#258` requires independently switchable percolation stages with a safe rollback path and diagnostic visibility.
+- scope: add rollout settings (`policy`, `explainability`, `notification broker`), gate surface/panel/status behavior, preserve legacy `uiSurface` fallback semantics when policy/broker is disabled, and add diagnostics + integration coverage for key flag combinations.
+- dependencies: P6, P7, P8, P9.
+- recent progress:
+  - added manifest/config plumbing for `tacos.percolationPolicyEnabled`, `tacos.percolationExplainabilityEnabled`, and `tacos.percolationNotificationBrokerEnabled`.
+  - wired runtime rollout gating in focus presentation, status-bar semantics, percolation memory persistence, and webview explainability affordances.
+  - updated diagnostics bundle output to include configured/active rollout state and expanded diagnostics unit coverage.
+  - expanded integration matrix assertions for broker-disabled fallback, policy-disabled legacy fallback, and explainability on/off rendering.
+  - refreshed behavior docs (`README`, `SPECS`, `docs/DESIGN_AND_IMPLEMENTATION.md`) and release notes (`CHANGELOG`).
+- risks/rollback:
+  - risk: flag-combination drift can reintroduce inconsistent behavior between panel/status/prompt surfaces.
+  - rollback: keep `percolationPolicyEnabled=false` as the single kill-switch path to restore legacy `uiSurface` behavior while iterating.
+- links:
+  - https://github.com/jkordish/vscode-tacos/issues/229
+  - https://github.com/jkordish/vscode-tacos/issues/258
+  - https://github.com/jkordish/vscode-tacos/issues/256
+
 ## Blockers
 
 - none currently.

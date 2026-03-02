@@ -28,6 +28,11 @@ describe('buildDiagnosticsText', () => {
       uiSurface: 'statusbar',
       companionRuntimeMode: 'active',
       metricsEnabled: true,
+      percolationPolicyEnabled: true,
+      percolationExplainabilityEnabled: true,
+      percolationExplainabilityActive: true,
+      percolationNotificationBrokerEnabled: true,
+      percolationNotificationBrokerActive: true,
       recentMetrics: [
         buildMetric({
           firstMeaningfulEditLagMs: 120_000,
@@ -52,6 +57,9 @@ describe('buildDiagnosticsText', () => {
     expect(diagnostics).toContain('vscodeVersion: 1.99.0');
     expect(diagnostics).toContain('workspaceTrust: trusted');
     expect(diagnostics).toContain('summaryProvider: local');
+    expect(diagnostics).toContain('percolationPolicyEnabled: true');
+    expect(diagnostics).toContain('percolationExplainabilityActive: true');
+    expect(diagnostics).toContain('percolationNotificationBrokerActive: true');
     expect(diagnostics).toContain('sessions: 2');
     expect(diagnostics).toContain('companionPromptImpressions.total: 2');
     expect(diagnostics).toContain('companionForcedOpenDetailsClicks.total: 1');
@@ -69,12 +77,20 @@ describe('buildDiagnosticsText', () => {
       uiSurface: 'notification',
       companionRuntimeMode: 'restricted',
       metricsEnabled: true,
+      percolationPolicyEnabled: false,
+      percolationExplainabilityEnabled: true,
+      percolationExplainabilityActive: false,
+      percolationNotificationBrokerEnabled: true,
+      percolationNotificationBrokerActive: false,
       recentMetrics: [buildMetric({ workspaceRoot: '/Users/real/secret-workspace' })],
     });
 
     expect(diagnostics).not.toContain('/Users/real/secret-workspace');
     expect(diagnostics).toContain('workspaceTrust: restricted');
     expect(diagnostics).toContain('summaryProvider: openai');
+    expect(diagnostics).toContain('percolationPolicyEnabled: false');
+    expect(diagnostics).toContain('percolationExplainabilityActive: false');
+    expect(diagnostics).toContain('percolationNotificationBrokerActive: false');
   });
 
   it('includes runtime performance counters when provided', () => {
@@ -87,6 +103,11 @@ describe('buildDiagnosticsText', () => {
       uiSurface: 'statusbar',
       companionRuntimeMode: 'active',
       metricsEnabled: true,
+      percolationPolicyEnabled: true,
+      percolationExplainabilityEnabled: false,
+      percolationExplainabilityActive: false,
+      percolationNotificationBrokerEnabled: false,
+      percolationNotificationBrokerActive: false,
       recentMetrics: [buildMetric()],
       performanceCounters: {
         focusHandling: {
