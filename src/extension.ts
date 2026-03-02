@@ -3336,48 +3336,49 @@ function recordCompanionPrimaryCtaCompletionForSession(
     (metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
 }
 
+type BlockerPromotionMetricField =
+  | 'blockerPromotionTaskFailure'
+  | 'blockerPromotionCommandFailure'
+  | 'blockerPromotionDiagnostics'
+  | 'blockerPromotionBranchContext'
+  | 'blockerPromotionLowConfidence'
+  | 'blockerPromotionRestricted'
+  | 'blockerPromotionNoNextSteps';
+
+const BLOCKER_PROMOTION_METRIC_FIELD_BY_KIND: Partial<
+  Record<BlockerDecision['kind'], BlockerPromotionMetricField>
+> = {
+  taskFailure: 'blockerPromotionTaskFailure',
+  commandFailure: 'blockerPromotionCommandFailure',
+  diagnostics: 'blockerPromotionDiagnostics',
+  branchContext: 'blockerPromotionBranchContext',
+  lowConfidence: 'blockerPromotionLowConfidence',
+  restricted: 'blockerPromotionRestricted',
+  noNextSteps: 'blockerPromotionNoNextSteps',
+};
+
+const BLOCKER_PROMOTION_METRIC_FIELDS: BlockerPromotionMetricField[] = Object.values(
+  BLOCKER_PROMOTION_METRIC_FIELD_BY_KIND,
+).filter((fieldName): fieldName is BlockerPromotionMetricField => typeof fieldName === 'string');
+
 function recordBlockerPromotionSource(blockerDecision: BlockerDecision): void {
   if (!state.metricSession || !blockerDecision.hasBlocker) {
     return;
   }
 
-  const alreadyRecorded =
-    (state.metricSession.blockerPromotionTaskFailure ?? 0) > 0 ||
-    (state.metricSession.blockerPromotionCommandFailure ?? 0) > 0 ||
-    (state.metricSession.blockerPromotionDiagnostics ?? 0) > 0 ||
-    (state.metricSession.blockerPromotionBranchContext ?? 0) > 0 ||
-    (state.metricSession.blockerPromotionLowConfidence ?? 0) > 0 ||
-    (state.metricSession.blockerPromotionRestricted ?? 0) > 0 ||
-    (state.metricSession.blockerPromotionNoNextSteps ?? 0) > 0;
+  const alreadyRecorded = BLOCKER_PROMOTION_METRIC_FIELDS.some(
+    (fieldName) => (state.metricSession?.[fieldName] ?? 0) > 0,
+  );
   if (alreadyRecorded) {
     return;
   }
 
-  switch (blockerDecision.kind) {
-    case 'taskFailure':
-      state.metricSession.blockerPromotionTaskFailure = 1;
-      break;
-    case 'commandFailure':
-      state.metricSession.blockerPromotionCommandFailure = 1;
-      break;
-    case 'diagnostics':
-      state.metricSession.blockerPromotionDiagnostics = 1;
-      break;
-    case 'branchContext':
-      state.metricSession.blockerPromotionBranchContext = 1;
-      break;
-    case 'lowConfidence':
-      state.metricSession.blockerPromotionLowConfidence = 1;
-      break;
-    case 'restricted':
-      state.metricSession.blockerPromotionRestricted = 1;
-      break;
-    case 'noNextSteps':
-      state.metricSession.blockerPromotionNoNextSteps = 1;
-      break;
-    default:
-      break;
+  const metricFieldName = BLOCKER_PROMOTION_METRIC_FIELD_BY_KIND[blockerDecision.kind];
+  if (!metricFieldName) {
+    return;
   }
+
+  state.metricSession[metricFieldName] = 1;
 }
 
 function recordLowConfidenceClarificationRate(

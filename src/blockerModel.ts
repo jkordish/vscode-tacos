@@ -21,6 +21,16 @@ export type BlockerKind =
 
 export type BlockerSeverityLabel = 'critical' | 'high' | 'medium' | 'low' | 'none';
 
+const BLOCKER_PRECEDENCE_RANK: Record<Exclude<BlockerKind, 'none'>, number> = {
+  taskFailure: 1,
+  commandFailure: 2,
+  diagnostics: 3,
+  branchContext: 4,
+  lowConfidence: 5,
+  restricted: 6,
+  noNextSteps: 7,
+};
+
 export interface BlockerModelInput {
   trusted: boolean;
   longGap: boolean;
@@ -231,7 +241,7 @@ function buildTaskFailureCandidate(input: BlockerModelInput): BlockerCandidate |
       detail: `${input.lastTaskName ?? 'Last task'} exited with code ${input.lastTaskExitCode ?? 'unknown'}. Review context before rerunning.`,
       evidenceLabel: 'task failure',
       action,
-      precedenceRank: 1,
+      precedenceRank: BLOCKER_PRECEDENCE_RANK.taskFailure,
       severityScore: 0.96,
       confidenceScore: Number.isInteger(input.lastTaskExitCode) ? 0.95 : 0.86,
     });
@@ -247,7 +257,7 @@ function buildTaskFailureCandidate(input: BlockerModelInput): BlockerCandidate |
     detail: `${input.lastTaskName ?? 'Last task'} exited with code ${input.lastTaskExitCode ?? 'unknown'}.`,
     evidenceLabel: 'task failure',
     action,
-    precedenceRank: 1,
+    precedenceRank: BLOCKER_PRECEDENCE_RANK.taskFailure,
     severityScore: 0.97,
     confidenceScore: Number.isInteger(input.lastTaskExitCode) ? 0.97 : 0.88,
   });
@@ -271,7 +281,7 @@ function buildCommandFailureCandidate(input: BlockerModelInput): BlockerCandidat
       detail: `${input.lastFailingCommand}. Review context before rerunning.`,
       evidenceLabel: 'failing command',
       action,
-      precedenceRank: 2,
+      precedenceRank: BLOCKER_PRECEDENCE_RANK.commandFailure,
       severityScore: 0.9,
       confidenceScore: 0.86,
     });
@@ -293,7 +303,7 @@ function buildCommandFailureCandidate(input: BlockerModelInput): BlockerCandidat
     detail: input.lastFailingCommand,
     evidenceLabel: 'failing command',
     action,
-    precedenceRank: 2,
+    precedenceRank: BLOCKER_PRECEDENCE_RANK.commandFailure,
     severityScore: 0.91,
     confidenceScore: 0.84,
   });
@@ -325,7 +335,7 @@ function buildDiagnosticsCandidate(input: BlockerModelInput): BlockerCandidate |
       : `${input.diagnosticsErrorCount} error(s) in Problems view.`,
     evidenceLabel: 'workspace diagnostics',
     action,
-    precedenceRank: 3,
+    precedenceRank: BLOCKER_PRECEDENCE_RANK.diagnostics,
     severityScore,
     confidenceScore: input.diagnosticsTopPath ? 0.84 : 0.74,
   });
@@ -351,7 +361,7 @@ function buildBranchContextCandidate(input: BlockerModelInput): BlockerCandidate
     detail: `You moved from ${input.previousBranch} to ${input.currentBranch}.`,
     evidenceLabel: 'branch switch',
     action,
-    precedenceRank: 4,
+    precedenceRank: BLOCKER_PRECEDENCE_RANK.branchContext,
     severityScore: 0.57,
     confidenceScore: 0.74,
   });
@@ -369,7 +379,7 @@ function buildLowConfidenceCandidate(input: BlockerModelInput): BlockerCandidate
     detail: 'Evidence is sparse. Add a one-line checkpoint before taking risky actions.',
     evidenceLabel: 'sparse evidence',
     action: enabledAction('Add checkpoint', 'sessionAddCheckpoint'),
-    precedenceRank: 5,
+    precedenceRank: BLOCKER_PRECEDENCE_RANK.lowConfidence,
     severityScore: 0.49,
     confidenceScore: 0.48,
   });
@@ -391,7 +401,7 @@ function buildRestrictedCandidate(input: BlockerModelInput): BlockerCandidate | 
       'restoreRerunTask',
       trustRestrictedReason('Rerun last task'),
     ),
-    precedenceRank: 6,
+    precedenceRank: BLOCKER_PRECEDENCE_RANK.restricted,
     severityScore: 0.54,
     confidenceScore: 0.97,
   });
@@ -409,7 +419,7 @@ function buildNoNextStepsCandidate(input: BlockerModelInput): BlockerCandidate |
     detail: 'Refresh summary to regenerate guidance.',
     evidenceLabel: 'summary freshness',
     action: enabledAction('Refresh summary', 'refreshSummary'),
-    precedenceRank: 7,
+    precedenceRank: BLOCKER_PRECEDENCE_RANK.noNextSteps,
     severityScore: 0.43,
     confidenceScore: 0.67,
   });
