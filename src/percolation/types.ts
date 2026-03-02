@@ -327,6 +327,22 @@ function uniqueNonEmptyStrings(values: ReadonlyArray<string>): string[] {
   return [...unique];
 }
 
+function normalizeScratchpadExcerptForPrior(value: string | undefined): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  const lines = value
+    .split(/\r?\n/gu)
+    .map((line) => line.trim())
+    .filter(
+      (line) => line.length > 0 && !/^Preview unavailable for large scratchpad\s*\(/iu.test(line),
+    );
+  if (lines.length === 0) {
+    return undefined;
+  }
+  return lines.join('\n');
+}
+
 function resolvePolicyPriors(
   summary: ResumeSummary,
   priors?: PercolationUserPriors,
@@ -337,7 +353,7 @@ function resolvePolicyPriors(
     ...summaryCorrections,
   ]);
   const checkpointNoteText = priors?.checkpointNoteText?.trim() ?? '';
-  const scratchpadExcerpt = priors?.scratchpadExcerpt?.trim() ?? '';
+  const scratchpadExcerpt = normalizeScratchpadExcerptForPrior(priors?.scratchpadExcerpt);
   const hasScratchpadContent = priors?.scratchpadHasContent === true;
   if (
     !checkpointNoteText &&
@@ -449,6 +465,8 @@ function annotateCandidateWithUserPriors(
   const checkpointPromotionRounded = roundMeta(checkpointPromotion);
   const correctionPromotionRounded = roundMeta(correctionPromotion);
   const scratchpadPromotionRounded = roundMeta(scratchpadPromotion);
+  const correctionSuppressionRounded = roundMeta(correctionSuppression);
+  const staleCheckpointSuppressionRounded = roundMeta(staleCheckpointSuppression);
   const priorSuppressionRounded = roundMeta(priorSuppression);
   const meta: Record<string, string | number | boolean> = {
     ...item.meta,
@@ -465,8 +483,11 @@ function annotateCandidateWithUserPriors(
   if (scratchpadPromotionRounded >= 0.03) {
     meta.priorPromotionScratchpad = true;
   }
-  if (priorSuppressionRounded >= 0.03) {
+  if (correctionSuppressionRounded >= 0.03) {
     meta.priorSuppressionCorrections = true;
+  }
+  if (staleCheckpointSuppressionRounded >= 0.03) {
+    meta.priorSuppressionCheckpointStale = true;
   }
   if (resolvedConflict) {
     meta.priorConflictResolution = 'corrections-precedence';

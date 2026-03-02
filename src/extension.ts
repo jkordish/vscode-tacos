@@ -3742,21 +3742,36 @@ function resolveAdaptedSignalsForRanking(
   return adapted;
 }
 
+function isSyntheticScratchpadPreviewLine(line: string): boolean {
+  const normalized = line.trim();
+  return /^Preview unavailable for large scratchpad\s*\(/i.test(normalized);
+}
+
+function buildScratchpadPriorExcerptFromPreviewLines(
+  lines: ReadonlyArray<string>,
+): string | undefined {
+  const excerptLines = lines
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !isSyntheticScratchpadPreviewLine(line));
+  if (excerptLines.length === 0) {
+    return undefined;
+  }
+  return excerptLines.join('\n');
+}
+
 function resolvePercolationUserPriors(
   summary: ResumeSummary,
   options: RankPercolationOptions,
 ): PercolationUserPriors | undefined {
   const explicitPriors = options.priors;
-  const panelContextMatches =
-    state.panelSummary?.contextHash === summary.contextHash ||
-    state.scratchSummary?.contextHash === summary.contextHash;
+  const panelContextMatches = state.panelSummary?.contextHash === summary.contextHash;
   const fallbackCheckpoint =
     panelContextMatches && state.panelPrimaryCheckpointNote?.status === 'open'
       ? state.panelPrimaryCheckpointNote
       : undefined;
   const scratchpadExcerptFromState =
     panelContextMatches && state.panelScratchpadPreviewLines.length > 0
-      ? state.panelScratchpadPreviewLines.join('\n')
+      ? buildScratchpadPriorExcerptFromPreviewLines(state.panelScratchpadPreviewLines)
       : undefined;
   const correctionHints = Array.isArray(summary.userCorrections) ? summary.userCorrections : [];
   const resolved: PercolationUserPriors = {
@@ -5493,8 +5508,7 @@ function renderWebview(
                 ? currentCheckpointNote.updatedAt
                 : undefined,
             correctionHints: summary.userCorrections,
-            scratchpadExcerpt:
-              scratchpadPreviewLines.length > 0 ? scratchpadPreviewLines.join('\n') : undefined,
+            scratchpadExcerpt: buildScratchpadPriorExcerptFromPreviewLines(scratchpadPreviewLines),
             scratchpadHasContent: state.panelScratchpadHasContent,
           },
         }).primary;

@@ -296,4 +296,92 @@ describe('createPercolationPolicyInput', () => {
     });
     expect(((input.candidates[0]?.meta.priorPromotion as number) ?? 0) > 0).toBe(true);
   });
+
+  it('does not attribute suppression to corrections when only stale checkpoint suppression applies', () => {
+    const now = Date.UTC(2026, 2, 2, 12, 0, 0);
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+      userCorrections: [],
+    });
+    const input = createPercolationPolicyInput(summary, {
+      now,
+      priors: {
+        checkpointNoteText: 'legacy release handoff',
+        checkpointUpdatedAt: now - 10 * 24 * 60 * 60 * 1000,
+      },
+      candidates: [
+        {
+          id: 'candidate:parser-stabilization',
+          kind: 'next-step',
+          title: 'Stabilize parser tests',
+          detail: 'Fix parser regression failures',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    expect(input.candidates[0]?.meta.priorSuppression).toBeDefined();
+    expect(input.candidates[0]?.meta.priorSuppressionCheckpointStale).toBe(true);
+    expect(input.candidates[0]?.meta.priorSuppressionCorrections).toBeUndefined();
+  });
+
+  it('ignores synthetic large-scratchpad preview placeholder text as prior excerpt', () => {
+    const summary = buildSummary({
+      nextSteps: [],
+      recommendedFirstAction: undefined,
+      pendingBlocked: undefined,
+      evidenceCatalog: undefined,
+    });
+    const placeholderInput = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        scratchpadExcerpt:
+          'Preview unavailable for large scratchpad (120 KB). Open Scratchpad to view.',
+        scratchpadHasContent: true,
+      },
+      candidates: [
+        {
+          id: 'candidate:auth-tests',
+          kind: 'next-step',
+          title: 'Run auth tests',
+          detail: 'Stabilize token refresh before release',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+    const baselineInput = createPercolationPolicyInput(summary, {
+      now: summary.generatedAt,
+      priors: {
+        scratchpadHasContent: true,
+      },
+      candidates: [
+        {
+          id: 'candidate:auth-tests',
+          kind: 'next-step',
+          title: 'Run auth tests',
+          detail: 'Stabilize token refresh before release',
+          confidence: 0.7,
+          urgency: 0.7,
+          novelty: 0.4,
+          interruptCost: 0.3,
+        },
+      ],
+    });
+
+    expect(placeholderInput.candidates[0]?.meta).toMatchObject({
+      priorPromotionScratchpad: true,
+    });
+    expect(placeholderInput.candidates[0]?.meta.priorPromotion).toEqual(
+      baselineInput.candidates[0]?.meta.priorPromotion,
+    );
+  });
 });
