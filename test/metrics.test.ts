@@ -106,6 +106,17 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
+
+  it('treats blocker-promotion counters as recorded metric activity', () => {
+    const metric = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'focus',
+      blockerPromotionTaskFailure: 1,
+    } as unknown as MetricRecord;
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -128,6 +139,7 @@ describe('buildMetricsCsv', () => {
         companionPrimaryCtaSourceClass: 'next-step-action:openFile',
         companionPrimaryCtaClicks: 1,
         companionPrimaryCtaCompletions: 1,
+        blockerPromotionCommandFailure: 1,
         helpfulnessRating: 4,
         pauseActions: 1,
         snoozeActions: 0,
@@ -157,6 +169,9 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('companionPrimaryCtaSourceClass');
     expect(lines[0]).toContain('companionPrimaryCtaClicks');
     expect(lines[0]).toContain('companionPrimaryCtaCompletions');
+    expect(lines[0]).toContain('blockerPromotionTaskFailure');
+    expect(lines[0]).toContain('blockerPromotionCommandFailure');
+    expect(lines[0]).toContain('blockerPromotionDiagnostics');
     expect(lines[0]).toContain('restrictedTrustTrayOpens');
     expect(lines[0]).toContain('resumePathCompletions');
     expect(lines[0]).toContain('companionPrimaryCtaClickThroughRate');
@@ -173,6 +188,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[1]).toContain('"/workspace/repo,feature"');
     expect(lines[1]).toContain(',statusbar,,,,,0,unknown,');
     expect(lines[1]).toContain(',2,next-step-action:openFile,1,1,');
+    expect(lines[1]).toContain(',1,,,,,,');
     expect(lines[1]).toContain(',0.7500,0.2500,0.5000,1.0000');
   });
 });
@@ -239,6 +255,7 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
           companionPrimaryCtaImpressions: 1,
           companionPrimaryCtaClicks: 1,
           companionPrimaryCtaCompletions: 1,
+          blockerPromotionTaskFailure: 1,
           interruptionTimingClass: 'boundary',
           scratchpadOpened: 1,
         },
@@ -255,6 +272,7 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
           companionPrimaryCtaImpressions: 2,
           companionPrimaryCtaClicks: 1,
           companionPrimaryCtaCompletions: 1,
+          blockerPromotionDiagnostics: 1,
           interruptionTimingClass: 'mid-activity',
           scratchpadAppended: 2,
         },
@@ -295,6 +313,8 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
       '| Primary CTA click-through rate (`clicks/impressions`) | 0.6667 |',
     );
     expect(markdown).toContain('| Primary CTA completion rate (`completions/clicks`) | 1.0000 |');
+    expect(markdown).toContain('| blockerPromotionTaskFailure (total) | 1 |');
+    expect(markdown).toContain('| blockerPromotionDiagnostics (total) | 1 |');
     expect(markdown).toContain('| boundary | 1 | 0.3333 |');
     expect(markdown).toContain('| mid-activity | 1 | 0.3333 |');
     expect(markdown).toContain('| unknown | 1 | 0.3333 |');

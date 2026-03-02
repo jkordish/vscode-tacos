@@ -25,6 +25,13 @@ const CSV_HEADERS = [
   'companionPrimaryCtaSourceClass',
   'companionPrimaryCtaClicks',
   'companionPrimaryCtaCompletions',
+  'blockerPromotionTaskFailure',
+  'blockerPromotionCommandFailure',
+  'blockerPromotionDiagnostics',
+  'blockerPromotionBranchContext',
+  'blockerPromotionLowConfidence',
+  'blockerPromotionRestricted',
+  'blockerPromotionNoNextSteps',
   'trustTrayOpens',
   'restrictedTrustTrayOpens',
   'whySurfacedOpens',
@@ -326,6 +333,13 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const primaryCtaImpressions = summarizeTotal(metrics, 'companionPrimaryCtaImpressions');
   const primaryCtaClicks = summarizeTotal(metrics, 'companionPrimaryCtaClicks');
   const primaryCtaCompletions = summarizeTotal(metrics, 'companionPrimaryCtaCompletions');
+  const blockerPromotionTaskFailure = summarizeTotal(metrics, 'blockerPromotionTaskFailure');
+  const blockerPromotionCommandFailure = summarizeTotal(metrics, 'blockerPromotionCommandFailure');
+  const blockerPromotionDiagnostics = summarizeTotal(metrics, 'blockerPromotionDiagnostics');
+  const blockerPromotionBranchContext = summarizeTotal(metrics, 'blockerPromotionBranchContext');
+  const blockerPromotionLowConfidence = summarizeTotal(metrics, 'blockerPromotionLowConfidence');
+  const blockerPromotionRestricted = summarizeTotal(metrics, 'blockerPromotionRestricted');
+  const blockerPromotionNoNextSteps = summarizeTotal(metrics, 'blockerPromotionNoNextSteps');
   const notesCreated = summarizeTotal(metrics, 'noteCreated');
   const notesMarkedDone = summarizeTotal(metrics, 'noteMarkedDone');
   const notesPinned = summarizeTotal(metrics, 'notePinned');
@@ -409,6 +423,13 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| Primary CTA completions (total) | ${primaryCtaCompletions} |`,
     `| Primary CTA click-through rate (\`clicks/impressions\`) | ${formatNumber(primaryCtaClickThroughRate, 4)} |`,
     `| Primary CTA completion rate (\`completions/clicks\`) | ${formatNumber(primaryCtaCompletionRate, 4)} |`,
+    `| blockerPromotionTaskFailure (total) | ${blockerPromotionTaskFailure} |`,
+    `| blockerPromotionCommandFailure (total) | ${blockerPromotionCommandFailure} |`,
+    `| blockerPromotionDiagnostics (total) | ${blockerPromotionDiagnostics} |`,
+    `| blockerPromotionBranchContext (total) | ${blockerPromotionBranchContext} |`,
+    `| blockerPromotionLowConfidence (total) | ${blockerPromotionLowConfidence} |`,
+    `| blockerPromotionRestricted (total) | ${blockerPromotionRestricted} |`,
+    `| blockerPromotionNoNextSteps (total) | ${blockerPromotionNoNextSteps} |`,
     `| noteCreated (total) | ${notesCreated} |`,
     `| noteMarkedDone (total) | ${notesMarkedDone} |`,
     `| notePinned (total) | ${notesPinned} |`,
@@ -485,6 +506,13 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.companionPrimaryCtaImpressions ?? 0) > 0 ||
     (metric.companionPrimaryCtaClicks ?? 0) > 0 ||
     (metric.companionPrimaryCtaCompletions ?? 0) > 0 ||
+    (metric.blockerPromotionTaskFailure ?? 0) > 0 ||
+    (metric.blockerPromotionCommandFailure ?? 0) > 0 ||
+    (metric.blockerPromotionDiagnostics ?? 0) > 0 ||
+    (metric.blockerPromotionBranchContext ?? 0) > 0 ||
+    (metric.blockerPromotionLowConfidence ?? 0) > 0 ||
+    (metric.blockerPromotionRestricted ?? 0) > 0 ||
+    (metric.blockerPromotionNoNextSteps ?? 0) > 0 ||
     (metric.trustTrayOpens ?? 0) > 0 ||
     (metric.restrictedTrustTrayOpens ?? 0) > 0 ||
     (metric.whySurfacedOpens ?? 0) > 0 ||
@@ -551,6 +579,13 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       metric.companionPrimaryCtaSourceClass ?? '',
       toOptionalNumber(metric.companionPrimaryCtaClicks),
       toOptionalNumber(metric.companionPrimaryCtaCompletions),
+      toOptionalNumber(metric.blockerPromotionTaskFailure),
+      toOptionalNumber(metric.blockerPromotionCommandFailure),
+      toOptionalNumber(metric.blockerPromotionDiagnostics),
+      toOptionalNumber(metric.blockerPromotionBranchContext),
+      toOptionalNumber(metric.blockerPromotionLowConfidence),
+      toOptionalNumber(metric.blockerPromotionRestricted),
+      toOptionalNumber(metric.blockerPromotionNoNextSteps),
       toOptionalNumber(metric.trustTrayOpens),
       toOptionalNumber(metric.restrictedTrustTrayOpens),
       toOptionalNumber(metric.whySurfacedOpens),

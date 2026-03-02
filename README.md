@@ -18,6 +18,7 @@ TaCoS generates local-first resume briefs, highlights safe next actions, and sup
 - stable disclosure layout with policy-driven emphasis badges (no auto-expand/reorder churn),
 - normalized percolation signal adapters feeding ranking decisions on each summary trigger (trust-aware in Restricted Mode),
 - git semantic enrichment for percolation ranking inputs (`branch switch`, `recent commit`, `upstream divergence`),
+- blocker detection v2 with deterministic cross-source arbitration (`task`, `command`, `diagnostics`, `branch`, `confidence`) and explicit severity/confidence/actionability scoring,
 - long-gap orientation hints and low-confidence clarification behavior,
 - checkpoint notes and scoped scratchpad,
 - restore working set actions with trust-sensitive guards,
@@ -78,6 +79,7 @@ TaCoS is desktop-first today. It runs in the Node-hosted VS Code extension runti
 - Companion Home keeps fixed `Now`, `Next`, `Blocked`, and `Restore` slot order for scan stability.
 - Exactly one primary CTA is marked per context across `Next` and `Blocked`; non-primary actions remain available as advisory/secondary controls.
 - `Next` and `Blocked` state captions render explicit emphasis tokens (`PRIMARY`, `ADVISORY`, `SUPPRESSED`) with reduced-motion-safe transitions.
+- `Blocked` metadata badges include evidence source, severity, confidence, and actionability score so unblock rationale is glanceable.
 - Companion Home includes a one-click `Why am I seeing this?` action that opens `More Context` → `Trust Center` → `Why am I seeing this?` explainability details.
 - Companion Home includes a one-click `Open evidence tray` action that opens `More Context` → `Evidence`, where evidence is grouped by surfaced-decision relevance.
 - Trust Center now includes a concise privacy/trust tray for `privacy preset`, `retention`, `AI provider mode`, `consent status`, plus one-click `Review AI payload preview` and `Revoke AI payload consent` controls.

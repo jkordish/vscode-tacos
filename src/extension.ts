@@ -3336,6 +3336,50 @@ function recordCompanionPrimaryCtaCompletionForSession(
     (metricSession.companionPrimaryCtaCompletions ?? 0) + 1;
 }
 
+function recordBlockerPromotionSource(blockerDecision: BlockerDecision): void {
+  if (!state.metricSession || !blockerDecision.hasBlocker) {
+    return;
+  }
+
+  const alreadyRecorded =
+    (state.metricSession.blockerPromotionTaskFailure ?? 0) > 0 ||
+    (state.metricSession.blockerPromotionCommandFailure ?? 0) > 0 ||
+    (state.metricSession.blockerPromotionDiagnostics ?? 0) > 0 ||
+    (state.metricSession.blockerPromotionBranchContext ?? 0) > 0 ||
+    (state.metricSession.blockerPromotionLowConfidence ?? 0) > 0 ||
+    (state.metricSession.blockerPromotionRestricted ?? 0) > 0 ||
+    (state.metricSession.blockerPromotionNoNextSteps ?? 0) > 0;
+  if (alreadyRecorded) {
+    return;
+  }
+
+  switch (blockerDecision.kind) {
+    case 'taskFailure':
+      state.metricSession.blockerPromotionTaskFailure = 1;
+      break;
+    case 'commandFailure':
+      state.metricSession.blockerPromotionCommandFailure = 1;
+      break;
+    case 'diagnostics':
+      state.metricSession.blockerPromotionDiagnostics = 1;
+      break;
+    case 'branchContext':
+      state.metricSession.blockerPromotionBranchContext = 1;
+      break;
+    case 'lowConfidence':
+      state.metricSession.blockerPromotionLowConfidence = 1;
+      break;
+    case 'restricted':
+      state.metricSession.blockerPromotionRestricted = 1;
+      break;
+    case 'noNextSteps':
+      state.metricSession.blockerPromotionNoNextSteps = 1;
+      break;
+    default:
+      break;
+  }
+}
+
 function recordLowConfidenceClarificationRate(
   summary: ResumeSummary,
   primary: RankedSurfacedItem | undefined,
@@ -5348,6 +5392,7 @@ function renderWebview(
     canOpenDiagnosticFile,
     availability,
   });
+  recordBlockerPromotionSource(blockerDecision);
   const primaryCtaDecision = resolveCompanionPrimaryCtaDecision({
     primaryNextAction,
     blockerDecision,
@@ -5475,9 +5520,9 @@ function renderWebview(
         blockerDecision.evidenceLabel
           ? `<span class="badge">Evidence: ${escapeHtml(blockerDecision.evidenceLabel)}</span>`
           : '',
-        blockerDecision.confidenceLabel
-          ? `<span class="badge">Confidence: ${escapeHtml(blockerDecision.confidenceLabel)}</span>`
-          : '',
+        `<span class="badge">Severity: ${escapeHtml(blockerDecision.severityLabel)}</span>`,
+        `<span class="badge">Confidence: ${escapeHtml(blockerDecision.confidenceLabel)}</span>`,
+        `<span class="badge">Actionability: ${escapeHtml(blockerDecision.actionabilityScore.toFixed(2))}</span>`,
       ]
         .filter(Boolean)
         .join('')
