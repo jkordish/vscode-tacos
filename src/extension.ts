@@ -769,6 +769,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const lastSummaryAt =
         activeExtensionContext?.workspaceState.get<number>(KEY_LAST_SUMMARY_AT, 0) ?? 0;
       return {
+        hasMetricSession: Boolean(state.metricSession),
         panelOpen: Boolean(state.panel),
         panelTitle: state.panel?.title,
         panelWorkspaceRoot: state.panelWorkspaceRoot,
@@ -786,6 +787,9 @@ export function activate(context: vscode.ExtensionContext): void {
         scopedNudgeShownAt,
         scopedNoiseBudgetEventCount,
         lastSummaryAt,
+        metricPriorPromotionCheckpoint: state.metricSession?.priorPromotionCheckpoint ?? 0,
+        metricPriorPromotionCorrections: state.metricSession?.priorPromotionCorrections ?? 0,
+        metricPriorPromotionScratchpad: state.metricSession?.priorPromotionScratchpad ?? 0,
       };
     }),
     vscode.commands.registerCommand(
@@ -2864,6 +2868,9 @@ async function presentSummary(
     state.metricSession.interruptionEvent =
       triggerReason === 'focus' && presentationMode === 'prompt' ? 1 : 0;
   }
+  if (presentationMode !== 'silent') {
+    recordPriorDrivenPromotion(notificationPrimary);
+  }
 
   if (presentationMode === 'auto-open-details') {
     await showDetailsPanel(context, summary, panelOptions);
@@ -2885,7 +2892,6 @@ async function presentSummary(
   if (!notificationPrimary) {
     return;
   }
-  recordPriorDrivenPromotion(notificationPrimary);
 
   if (triggerReason === 'focus' && presentationMode === 'prompt' && workspaceRoot) {
     await consumeNoiseBudgetSignal(context, workspaceRoot, 'summary-prompt', notificationNow);

@@ -202,6 +202,22 @@ describe('buildResumeSummary', () => {
     expect(summary.noveltyProfile?.changedFilesCount).toBe(3);
   });
 
+  it('normalizes diffstat rename paths before changed-file union counting', () => {
+    const signals = sampleSignals();
+    signals.changedFiles = ['src/new-name.ts'];
+    signals.gitDiffStat = [
+      ' src/{old-name.ts => new-name.ts} | 6 +++---',
+      ' 1 file changed, 3 insertions(+), 3 deletions(-)',
+    ].join('\n');
+
+    const summary = buildResumeSummary(signals);
+    const codeLine =
+      summary.changesSinceLastResume?.find((line) => line.startsWith('Code:'))?.trim() ?? '';
+
+    expect(codeLine).toContain('Code: 1 file changed');
+    expect(summary.noveltyProfile?.changedFilesCount).toBe(1);
+  });
+
   it('marks low-confidence summaries explicitly when evidence is sparse', () => {
     const signals = sampleSignals();
     signals.changedFiles = [];

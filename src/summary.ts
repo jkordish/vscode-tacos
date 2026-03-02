@@ -338,6 +338,29 @@ function pluralize(count: number, singular: string, pluralSuffix = 's'): string 
   return `${count} ${singular}${count === 1 ? '' : pluralSuffix}`;
 }
 
+function normalizeChangedPathForCounting(pathValue: string): string {
+  const trimmed = pathValue.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  // Normalize git diffstat rename segments like `src/{old.ts => new.ts}`.
+  const braceNormalized = trimmed.replace(/\{([^{}]*?)\s*=>\s*([^{}]*?)\}/gu, '$2');
+  if (!braceNormalized.includes('=>')) {
+    return braceNormalized;
+  }
+
+  // Normalize full-path rename entries like `old.ts => new.ts`.
+  const renamedSegments = braceNormalized
+    .split(/\s*=>\s*/u)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (renamedSegments.length === 0) {
+    return braceNormalized;
+  }
+  return renamedSegments[renamedSegments.length - 1] ?? braceNormalized;
+}
+
 function buildRunPrecisionLine(summary: RunPrecisionSummary): string | undefined {
   if (summary.total <= 0) {
     return undefined;
@@ -395,7 +418,7 @@ function buildChangesSinceLastResume(
   const diffStatPrecision = parseDiffStatPrecision(signals.gitDiffStat);
   const changedFileSet = new Set(
     [...signals.changedFiles, ...parseDiffStatFiles(signals.gitDiffStat)]
-      .map((value) => value.trim())
+      .map((value) => normalizeChangedPathForCounting(value))
       .filter(Boolean),
   );
   const changedFilesCount = Math.max(changedFileSet.size, diffStatPrecision.filesChanged ?? 0);

@@ -10,15 +10,31 @@ async function run() {
   assert.ok(extension, 'Expected extension jkordish.vscode-tacos to be installed in test host.');
   await extension.activate();
 
+  const config = vscode.workspace.getConfiguration('tacos');
+  await config.update('metricsEnabled', true, vscode.ConfigurationTarget.Global);
+  await vscode.env.clipboard.writeText('Run auth tests before shipping this patch.');
+  await vscode.commands.executeCommand('tacos.clearCheckpointNote');
+  await vscode.commands.executeCommand('tacos.addQuickCheckpointNote');
+  await vscode.commands.executeCommand('tacos.appendToScratchpad');
   await vscode.commands.executeCommand('tacos.showNow');
   await wait(150);
 
   const runtime = await vscode.commands.executeCommand('tacos.__test.getRuntimeStateSnapshot');
+  assert.equal(runtime?.hasMetricSession, true, 'Expected metrics session during summary presentation.');
   assert.equal(runtime?.panelOpen, true, 'Expected details panel to open after tacos.showNow.');
   assert.equal(
     runtime?.hasScratchSummary,
     true,
     'Expected scratch summary to be populated in critical resume flow.',
+  );
+  const priorPromotionTotal =
+    (runtime?.metricPriorPromotionCheckpoint ?? 0) +
+    (runtime?.metricPriorPromotionCorrections ?? 0) +
+    (runtime?.metricPriorPromotionScratchpad ?? 0);
+  assert.equal(
+    priorPromotionTotal > 0,
+    true,
+    'Expected prior-promotion attribution to be recorded for non-prompt summary presentation paths.',
   );
 
   const resumeFlow = await vscode.commands.executeCommand('tacos.__test.getResumeFlowSnapshot');
