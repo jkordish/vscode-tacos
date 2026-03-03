@@ -45,7 +45,3 @@ jobs:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           files: ${{ env.VSIX_FILE }}
-
-      - name: Publish to VS Code Marketplace (optional)
-        if: ${{ secrets.VSCE_PAT != '' }}
-        run: npx @vscode/vsce publish -p "${{ secrets.VSCE_PAT }}"

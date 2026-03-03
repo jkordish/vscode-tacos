@@ -271,6 +271,26 @@ Status vocabulary used in this file:
   - https://github.com/jkordish/vscode-tacos/issues/227
   - https://github.com/jkordish/vscode-tacos/issues/229
 
+### P14. Release workflow policy hardening (`v0.8.x`)
+
+- status: `done`
+- why: keep tag-based VSIX releases reliable while deferring Marketplace automation until `v1.0`.
+- scope: remove Marketplace publish step from release workflow, and align operator/release docs to explicit pre-`v1.0` no-Marketplace policy.
+- dependencies: P1, P5.
+- recent progress:
+  - removed Marketplace publish step from `.github/workflows/release-vsix.yml` so tag workflow only builds/packages and attaches VSIX to GitHub release.
+  - updated operator/release docs (`AGENTS.md`, `CONTRIBUTING.md`, `docs/DESIGN_AND_IMPLEMENTATION.md`) to codify “no Marketplace automation before `v1.0`”.
+  - refreshed `CHANGELOG.md` wording to match current release automation posture.
+- risks/rollback:
+  - risk: future maintainers may reintroduce publish steps without updating policy docs.
+  - rollback: reintroduce a publish step only when `v1.0` policy is explicitly approved and docs/contracts are updated in the same PR.
+- links:
+  - `.github/workflows/release-vsix.yml`
+  - `AGENTS.md`
+  - `CONTRIBUTING.md`
+  - `docs/DESIGN_AND_IMPLEMENTATION.md`
+  - `CHANGELOG.md`
+
 ## Blockers
 
 - none currently.

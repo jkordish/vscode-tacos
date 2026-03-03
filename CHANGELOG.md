@@ -20,7 +20,7 @@ All notable changes to this project are documented in this file.
 
 - Build pipeline now separates bundling (`npm run build`) from static type checks (`npm run typecheck`).
 - Verification and CI workflows now run format/lint/typecheck/unit gates before integration/package checks.
-- Release workflow now supports optional VS Code Marketplace publish when `VSCE_PAT` is configured.
+- Release workflow now focuses on tag-based VSIX artifact + GitHub release creation; Marketplace publish automation is disabled before `v1.0`.
 - README is now a concise landing page; detailed behavior/contracts are linked to focused docs in `docs/*`.
 - README/operator docs now align with current Trust/Privacy/provider boundaries and troubleshooting flow.
 - Panel-emphasis policy now avoids targeting hidden `Timeline` sections when `tacos.showTimeline` is disabled, and integration snapshot section-order parsing now reads rendered disclosure markup only.

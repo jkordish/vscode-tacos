@@ -192,4 +192,4 @@ Quality gates:
 - `npm run package:vsix` produces VSIX using `vsce`.
 - CI validates formatting/lint/typecheck/unit/integration/package smoke.
 - Tag workflow attaches VSIX artifacts.
-- Marketplace publish is credential-gated and documented as optional (`VSCE_PAT`).
+- Marketplace publish automation is intentionally disabled before `v1.0`; release flow remains VSIX artifact + GitHub release.

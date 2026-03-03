@@ -101,7 +101,7 @@ Run `npm run package:vsix` when touching packaging, manifest metadata, workflow/
 
 - `main` must remain verify-clean and packageable.
 - Tag workflow must produce a VSIX artifact.
-- Marketplace publish is optional and credential-gated (`VSCE_PAT`), with explicit docs for missing config.
+- Marketplace publish is intentionally disabled before `v1.0`; do not add workflow publish steps or `VSCE_PAT` requirements in this phase.
 
 ## Guardrails For Humans and AI Agents
 
