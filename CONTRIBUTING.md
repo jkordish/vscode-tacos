@@ -65,4 +65,4 @@ Use `.github/PULL_REQUEST_TEMPLATE.md` (or equivalent template path in this repo
 
 - keep `main` verify-clean and packageable,
 - keep tag workflow artifact generation working,
-- direct marketplace publish requires maintainers to configure `VSCE_PAT`.
+- do not wire Marketplace publish automation before `v1.0`; release flow is VSIX artifact + GitHub release only in this phase.
