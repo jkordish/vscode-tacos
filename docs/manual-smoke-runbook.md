@@ -1,371 +1,293 @@
-# Manual Smoke Runbook (v0.6.0 Trusted + Restricted)
+# Manual Smoke Runbook (v0.8.x Dynamic Percolation)
 
-Use this runbook for v0.6.0 sign-off and release gating.
+Use this runbook for v0.8.x sign-off and release gating of dynamic percolation behavior.
 
 Related:
 
-- Epic: [#134](https://github.com/jkordish/vscode-tacos/issues/134) (Proof, Metrics, and Release Discipline)
-- Epic acceptance anchors: [#131](https://github.com/jkordish/vscode-tacos/issues/131), [#132](https://github.com/jkordish/vscode-tacos/issues/132), [#133](https://github.com/jkordish/vscode-tacos/issues/133)
-- Release checklist tracking: [#161](https://github.com/jkordish/vscode-tacos/issues/161)
-- Release checklist doc: `docs/release-0.6.0-checklist.md`
-- Metrics contract: `docs/metrics-baseline.md`
-- Local metrics dictionary: `docs/metrics.md`
+- Epic: [#229](https://github.com/jkordish/vscode-tacos/issues/229) Metrics, Experimentation, and Release Validation
+- Child issue: [#257](https://github.com/jkordish/vscode-tacos/issues/257) Expand manual smoke runbook and acceptance report for percolation UX
+- Percolation behavior contract: `docs/ux/dynamic-percolation-v0.8.0-spec.md`
+- Integration matrix anchor: `test/integration/suite/percolationDecisionMatrix.js`
+- Metrics dictionary: `docs/metrics.md`
+- Acceptance report: `docs/acceptance-report.md`
 
-Date: `__________`  
-Tester: `__________`  
-VS Code version: `__________`  
-OS: `__________`  
-Branch/commit: `__________`
+- Date: `__________`
+- Tester: `__________`
+- VS Code version: `__________`
+- OS: `__________`
+- Branch/commit: `__________`
 
 ## 1) Preconditions
 
 1. Install extension VSIX from the candidate branch.
-2. Open a git-backed workspace with at least one npm task/test flow.
+2. Open a git-backed workspace with at least one runnable task/test/debug flow.
 3. Ensure integrated terminal shell integration is enabled.
-4. Confirm:
+4. Confirm baseline settings:
    - `tacos.enabled=true`
    - `tacos.showOnFocus=true`
-   - `tacos.autoRefreshInBackground=true` (default path; only applies when `tacos.uiSurface` is not explicitly set)
-   - `tacos.uiSurface` is left unset/default when validating background vs prompt behavior with `tacos.autoRefreshInBackground=true/false`
-5. Keep Output panel available (`TaCoS`) for troubleshooting.
+   - `tacos.autoRefreshInBackground=true`
+   - `tacos.percolationPolicyEnabled=true`
+   - `tacos.percolationExplainabilityEnabled=true`
+   - `tacos.percolationNotificationBrokerEnabled=true`
+   - `tacos.uiSurface` unset/default (unless explicitly testing fallback caps)
+5. Keep Output panel (`TaCoS`) available for troubleshooting.
 
-## 2) Must-Pass v0.6.0 Scenarios (Trusted Workspace)
+## 2) Trusted Workspace Percolation Scenarios
 
-These scenarios are release-blocking for v0.6.0.
-
-### T1. Return after short idle (1-5 min)
+### P1. Ambient resume path (status bar or silent panel update)
 
 Steps:
 
-1. Make a small edit and run one command/task.
-2. Leave workspace idle for 1-5 minutes, then refocus VS Code.
-3. Open or observe Resume Brief.
+1. Make a small edit, then return after a short idle window.
+2. Trigger a focus-based summary refresh.
+3. Observe whether TaCoS remains ambient (status bar or silent panel refresh).
 
 Expected:
 
-- Companion Home answers Now/Next/Blocked/Restore quickly.
-- One clear primary next safe action is shown.
-- Last action cue is present when evidence exists.
-- No forced extra click is needed in background-refresh mode.
+- No unnecessary prompt interruption when confidence/urgency are moderate.
+- Status bar text remains compact and policy-reasoned.
+- Companion Home preserves fixed `Now`/`Next`/`Blocked`/`Restore` slot order.
 
-Result: `PASS / FAIL`  
+Result: `PASS / FAIL`
 Notes: `__________`
 
-### T2. Return after long gap (30+ min)
+### P2. Blocked/high-risk escalation path
 
 Steps:
 
-1. Capture activity (edit + run/test), then leave for at least 30 minutes.
-2. Refocus VS Code and trigger `TaCoS: Show Resume Brief Now`.
-
-Expected:
-
-- Resume copy favors reorientation (retrieval cue + safe assistant cue).
-- Safe primary CTA remains available or clearly unavailable with reason.
-- Resume Path remains 3 steps and still actionable.
-
-Result: `PASS / FAIL`  
-Notes: `__________`
-
-### T3. Active typing deferral
-
-Steps:
-
-1. Trigger a focus regain opportunity.
-2. Immediately start typing in an editor for several seconds.
-
-Expected:
-
-- TaCoS does not steal focus or interrupt typing.
-- Notification/prompt is deferred/suppressed while active typing is detected.
-- Status updates remain calm and non-intrusive.
-
-Result: `PASS / FAIL`  
-Notes: `__________`
-
-### T4. Quiet now + quiet hours suppression
-
-Steps:
-
-1. Activate `Quiet now` (or temporary quiet) and create a focus-trigger chance.
-2. Configure quiet hours and test within active quiet window.
-3. Trigger `TaCoS: Show Resume Brief Now` manually.
-
-Expected:
-
-- Auto focus-trigger surfacing is suppressed during quiet periods.
-- Manual `Show Resume Brief Now` still works.
-- Status shows quiet/snoozed state clearly.
-
-Result: `PASS / FAIL`  
-Notes: `__________`
-
-### T5. Blocker-present workflow
-
-Steps:
-
-1. Create a blocker (failing task, diagnostics error, or failing command).
+1. Introduce a blocker (failing task, failing command, or diagnostics error).
 2. Trigger summary refresh.
+3. Observe selected surface and top-card treatment.
 
 Expected:
 
-- Blocked card is active and shows one primary unblock action.
-- Blocker action is safe and trust-aware (disabled when unavailable).
-- Evidence badges/cues align with blocker claim.
+- High-risk blocked state may elevate surface class (`panel-emphasis` or `notification`) when justified.
+- `Blocked` card shows actionable, trust-aware guidance.
+- Exactly one primary CTA remains highlighted across `Next` and `Blocked`.
 
-Result: `PASS / FAIL`  
+Result: `PASS / FAIL`
 Notes: `__________`
 
-### T6. Empty/low-confidence workflow
+### P3. Suppression gates (quiet, cooldown, no-change)
 
 Steps:
 
-1. Open a sparse workspace (minimal recent evidence) or clear activity context.
-2. Trigger summary generation.
+1. Trigger one accepted surfacing event.
+2. Re-trigger within cooldown window.
+3. Enable temporary quiet and trigger again.
+4. Trigger without meaningful changes to exercise no-change suppression.
 
 Expected:
 
-- Intent/next-step copy clearly indicates low confidence.
-- TaCoS suggests safe evidence-building action(s) without inventing unsafe links.
-- No noisy prompt spam while evidence is sparse.
+- Cooldown and quiet suppressions prevent repeated interruptions.
+- No-change suppression avoids low-value re-surfacing.
+- Status remains calm and does not spam prompts.
 
-Result: `PASS / FAIL`  
+Result: `PASS / FAIL`
 Notes: `__________`
 
-## 3) v0.6.0 UX and Safety Detail Checks (Trusted Workspace)
-
-### T7. Timeline + evidence affordance clarity
+### P4. Explainability and evidence one-click paths
 
 Steps:
 
-1. Open Timeline and Evidence sections.
-2. Inspect mixed clickable (`file`/`url`) and non-clickable rows.
-3. Expand/collapse Evidence `Show more` if present.
+1. Open Companion Home on a surfaced decision.
+2. Click `Why am I seeing this?`.
+3. Click `Open evidence tray`.
 
 Expected:
 
-- Clickable rows are visually distinct and labeled `Open`.
-- Informational rows are labeled `Not clickable`.
-- Show-more behavior is stable across rerenders.
+- `Why am I seeing this?` opens `More Context` -> `Trust Center` explainability in one click.
+- `Open evidence tray` opens `More Context` -> `Evidence` in one click.
+- Evidence rows keep safe open/static affordances.
 
-Result: `PASS / FAIL`  
+Result: `PASS / FAIL`
 Notes: `__________`
 
-### T8. Evidence and link safety
+### P5. Trust & Privacy tray controls
 
 Steps:
 
-1. Click a file evidence action.
-2. Click a URL evidence action.
-3. Attempt unsupported/invalid action paths if available.
+1. Expand `Trust Center`.
+2. Validate tray rows (`privacy preset`, `retention`, `AI provider`, `consent`, collection posture).
+3. Trigger `Review AI payload preview` and `Revoke AI payload consent` controls.
 
 Expected:
 
-- File opens only within workspace-safe boundaries.
-- URL opens only normalized `http/https`.
-- Unsupported/unsafe paths are blocked with warning.
+- Trust Center copy uses consistent Trust/Privacy/Restricted Mode terminology.
+- Payload preview and consent actions are reachable in one click.
+- Consent revoke state updates are reflected on subsequent refresh.
 
-Result: `PASS / FAIL`  
+Result: `PASS / FAIL / N/A`
 Notes: `__________`
 
-### T9. Prompt friction and interruption timing sanity
+### P6. Surface arbitration sanity under focus cycles
 
 Steps:
 
-1. Run 3+ focus cycles at likely boundary moments.
-2. Run 3+ focus cycles mid-activity (including active typing).
-3. Compare behavior with `tacos.autoRefreshInBackground=true` and `false`.
+1. Run at least 5 focus regain cycles across boundary and mid-activity moments.
+2. Observe surface choices and prompt frequency.
+3. Record notable surfacing decisions.
 
 Expected:
 
-- Boundary moments are more likely to surface useful prompt/updates.
-- Mid-activity surfacing is reduced and non-intrusive.
-- Forced `Open details` clicks trend near zero in background mode.
+- Boundary moments are favored when interruption is justified.
+- Mid-activity prompt interruptions remain rare.
+- Surface choices appear deterministic for similar conditions.
 
-Record:
-
-- Background mode forced-open count: `__________`
-- Prompt mode forced-open count: `__________`
-- Interruption score (1 calm - 5 disruptive): `__________`
-- Notes: `__________`
-
-### T10. Optional AI refinement safety (N/A if local-only)
-
-Steps:
-
-1. Run `TaCoS: Configure AI Provider` and select `vscode-lm` or `openai`.
-2. Trigger summary and inspect payload preview/consent flow.
-
-Expected:
-
-- Local summary appears first.
-- Optional refinement updates in place.
-- Redaction and consent boundaries remain explicit.
-
-Result: `PASS / FAIL / N/A`  
+Result: `PASS / FAIL`
 Notes: `__________`
 
-## 4) Restricted Mode Scenarios
+## 3) Restricted Mode Scenarios
 
-### R1. Restricted mode baseline behavior
+### R1. Restricted baseline rendering
 
 Steps:
 
-1. Open workspace in Restricted Mode (untrusted).
+1. Open workspace in Restricted Mode.
 2. Trigger `TaCoS: Show Resume Brief Now`.
+3. Inspect Companion Home, Trust Center, and Restore sections.
 
 Expected:
 
-- Local summary still works.
-- Risky collection/actions stay disabled.
-- Trust state is clearly communicated.
+- Local summary remains available.
+- Trust-sensitive execution actions remain disabled.
+- Restricted Mode rationale is explicit in panel copy.
 
-Result: `PASS / FAIL`  
+Result: `PASS / FAIL`
 Notes: `__________`
 
-### R2. Collection restrictions
+### R2. Restricted explainability semantics
 
 Steps:
 
-1. Trigger summaries while untrusted.
-2. Observe output channel and panel behavior.
+1. In Restricted Mode, open `Why am I seeing this?`.
+2. Inspect suppression/explainability detail.
 
 Expected:
 
-- No execution-dependent git collection.
-- No raw terminal command persistence/scraping regressions.
+- Explainability mentions filtered signal classes and suppressed execution-oriented candidates.
+- Copy remains clear without hiding safety rationale.
 
-Result: `PASS / FAIL`  
+Result: `PASS / FAIL`
 Notes: `__________`
 
-### R3. Restore action restrictions
+### R3. Restricted evidence and trust drill-down continuity
 
 Steps:
 
-1. Open Restore sections.
-2. Inspect task/debug/branch-sensitive actions.
+1. Open `Open evidence tray`.
+2. Expand Trust Center and verify tray rows.
 
 Expected:
 
-- Risky actions remain disabled in Restricted Mode.
-- Safe local navigation remains available.
+- Evidence drill-down remains available.
+- Trust & Privacy tray remains available and clearly marked for restricted posture.
+- No restricted path bypasses trust guards.
 
-Result: `PASS / FAIL`  
+Result: `PASS / FAIL`
 Notes: `__________`
 
-## 5) Local Metrics Capture (Required for v0.6.0 Sign-off)
+## 4) Rollout Flag Matrix
 
-After running scenarios above:
+Run each scenario below and confirm expected fallback behavior.
 
-1. Run `TaCoS: Copy Metrics Baseline Snapshot` and paste into `docs/metrics-baseline.md`.
-2. Run `TaCoS: Export Local Metrics` and inspect `.tacos/metrics.csv` (required) and `.tacos/metrics.json` (optional structured view).
-3. Record key v0.6.0 metrics:
-   - `firstActionLagMs` (p50/p95)
+### F1. Policy disabled fallback
+
+Settings:
+
+- `tacos.percolationPolicyEnabled=false`
+
+Expected:
+
+- Legacy `uiSurface` behavior governs surface selection.
+- No percolation policy emphasis badges or broker-specific reasoning are required.
+
+Result: `PASS / FAIL`
+Notes: `__________`
+
+### F2. Explainability disabled fallback
+
+Settings:
+
+- `tacos.percolationPolicyEnabled=true`
+- `tacos.percolationExplainabilityEnabled=false`
+
+Expected:
+
+- `Why am I seeing this?` affordances are hidden.
+- Core resume guidance remains available.
+
+Result: `PASS / FAIL`
+Notes: `__________`
+
+### F3. Notification broker disabled fallback
+
+Settings:
+
+- `tacos.percolationPolicyEnabled=true`
+- `tacos.percolationNotificationBrokerEnabled=false`
+
+Expected:
+
+- Surface selection falls back safely without broker escalation logic.
+- No crash/regression in focus-triggered presentation.
+
+Result: `PASS / FAIL`
+Notes: `__________`
+
+## 5) Local Metrics Capture (Required)
+
+After executing sections above:
+
+1. Run `TaCoS: Copy Metrics Baseline Snapshot`.
+2. Paste into `docs/metrics-baseline.md` (or issue comment for release PR).
+3. Run `TaCoS: Export Local Metrics` and inspect `.tacos/metrics.csv`.
+4. Record percolation-specific fields:
+   - `percolationDecisionCount`
+   - `surfaceSelectionStatusbar`
+   - `surfaceSelectionPanelSilent`
+   - `surfaceSelectionPanelEmphasis`
+   - `surfaceSelectionNotification`
+   - `percolationConfidenceBandLow`
+   - `percolationConfidenceBandMedium`
+   - `percolationConfidenceBandHigh`
+   - `percolationSuppressedQuietHours`
+   - `percolationSuppressedCooldown`
+   - `percolationSuppressedNoChange`
+   - `percolationSuppressedNoiseBudget`
+   - `percolationSuppressedLowConfidence`
+   - `trustTrayOpens`
+   - `restrictedTrustTrayOpens`
+   - `whySurfacedOpens`
+   - `companionPrimaryCtaImpressions`
+   - `companionPrimaryCtaClicks`
+   - `companionPrimaryCtaCompletions`
    - `companionForcedOpenRate`
    - `companionActionFollowThroughRate`
-   - `companionPrimaryCtaClickThroughRate`
-   - `companionPrimaryCtaCompletionRate`
-   - `interruptionTimingClass` distribution (`boundary` vs `mid-activity` vs `unknown`; PASS if `unknown` is rare/expected and reviewed, FAIL if `unknown` is common or unexplained)
 
-Snapshot/date reference: `__________`  
+Snapshot/date reference: `__________`
 Metric notes: `__________`
 
 ## 6) Final Sign-off
 
-Must-pass scenario status:
+Scenario status:
 
-- T1 short-idle return: `PASS / FAIL`
-- T2 long-gap return: `PASS / FAIL`
-- T3 active typing deferral: `PASS / FAIL`
-- T4 quiet suppression behavior: `PASS / FAIL`
-- T5 blocker-present flow: `PASS / FAIL`
-- T6 low-confidence flow: `PASS / FAIL`
-- R1 restricted baseline: `PASS / FAIL`
-- R2 restricted collection limits: `PASS / FAIL`
-- R3 restricted action limits: `PASS / FAIL`
+- P1 ambient resume path: `PASS / FAIL`
+- P2 blocked/high-risk escalation: `PASS / FAIL`
+- P3 suppression gates: `PASS / FAIL`
+- P4 explainability + evidence one-click paths: `PASS / FAIL`
+- P5 Trust & Privacy tray controls: `PASS / FAIL / N/A`
+- P6 surface arbitration sanity: `PASS / FAIL`
+- R1 restricted baseline rendering: `PASS / FAIL`
+- R2 restricted explainability semantics: `PASS / FAIL`
+- R3 restricted drill-down continuity: `PASS / FAIL`
+- F1 policy disabled fallback: `PASS / FAIL`
+- F2 explainability disabled fallback: `PASS / FAIL`
+- F3 broker disabled fallback: `PASS / FAIL`
 
-Overall trusted workspace sign-off: `PASS / FAIL`  
-Overall restricted workspace sign-off: `PASS / FAIL`  
-Ready for release checklist gate (#161): `YES / NO`
+Overall trusted workspace sign-off: `PASS / FAIL`
+Overall restricted workspace sign-off: `PASS / FAIL`
+Overall rollout fallback sign-off: `PASS / FAIL`
+Ready for release checklist gate: `YES / NO`
 
 Final notes: `__________`
-
-## 7) v0.7.0 UI, Accessibility, and Reflow Matrix
-
-Use this matrix for v0.7.0 details-panel sign-off (epics: #190, #191, #192, #193).
-
-### 7.1 Required view modes
-
-Run each scenario below in:
-
-1. Narrow pane (`~320 CSS px` equivalent)
-2. Standard split pane (`~600-900 CSS px`)
-3. Wide pane (`~1100+ CSS px`)
-4. Forced-colors active
-5. Keyboard-only navigation
-6. 400% zoom reflow check
-
-### 7.2 Scenarios
-
-#### U1. Semantic shell + landmark navigation
-
-Expected:
-
-- Skip link appears on keyboard focus.
-- Main content is reachable via skip link target.
-- Section disclosure labels remain readable.
-
-Result: `PASS / FAIL`  
-Notes: `__________`
-
-#### U2. Reflow and horizontal scroll audit
-
-Expected:
-
-- No horizontal scrolling for primary details-panel content at narrow pane widths.
-- Companion Home and Quick Actions reflow to single-column ergonomically on narrow panes.
-- Long paths/IDs/code do not break layout.
-
-Result: `PASS / FAIL`  
-Notes: `__________`
-
-#### U3. Keyboard-only flow
-
-Expected:
-
-- Full resume workflow is operable without mouse.
-- Focus indicator is always visible on actionable controls.
-- Shortcuts in Quick Actions help (`Alt+Shift+R`, `Alt+Shift+N`, `Alt+Shift+I`) behave as documented.
-
-Result: `PASS / FAIL`  
-Notes: `__________`
-
-#### U4. Disclosure consistency and progressive context
-
-Expected:
-
-- Expand/collapse affordance is visible for all panel sections.
-- “More Context” disclosure persists expansion state across rerender/reopen.
-- Nested disclosure behavior remains consistent.
-
-Result: `PASS / FAIL`  
-Notes: `__________`
-
-#### U5. Status feedback and disabled-action explainability
-
-Expected:
-
-- Copy/blocked actions produce accessible status feedback.
-- Disabled restore actions expose understandable reason hints.
-- Blocked/advisory/safe states remain understandable without relying on color alone.
-
-Result: `PASS / FAIL`  
-Notes: `__________`
-
-### 7.3 v0.7.0 Sign-off checklist
-
-- [ ] `npm run compile` passes
-- [ ] `npm test` passes
-- [ ] Unit coverage includes shell semantics and interaction script updates
-- [ ] Automated a11y checks (axe) pass
-- [ ] U1-U5 pass in matrix

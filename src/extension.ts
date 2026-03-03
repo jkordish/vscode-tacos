@@ -4352,7 +4352,7 @@ function resolveCompanionSlotSourceClasses(
 type PanelSectionPolicyTarget = Exclude<PanelSectionId, 'moreContext'>;
 
 const PANEL_SECTION_FOCUS_LABELS: Record<PanelSectionPolicyTarget, string> = {
-  trustCenter: 'Trust',
+  trustCenter: 'Trust & Privacy',
   timeline: 'Timeline',
   evidence: 'Evidence',
   details: 'Details',
@@ -4386,7 +4386,7 @@ function resolvePanelSectionEmphasis(
     focusSourceClass = `provider:${summaryProvider}`;
   } else if (primary?.kind === 'trust-privacy') {
     focusSection = 'trustCenter';
-    focusBadge = 'Trust';
+    focusBadge = 'Trust & Privacy';
     focusSourceClass = 'policy:trust-privacy';
   } else if (primary?.kind === 'evidence' || hasEvidenceLinks) {
     focusSection = 'evidence';
@@ -4609,7 +4609,7 @@ function resolveCompanionStatusBarSemantic(
   if (primary.kind === 'trust-privacy') {
     return {
       className: 'active-trust',
-      headline: 'trust',
+      headline: 'trust/privacy',
       reason: summaryProvider === 'local' ? 'local-first' : 'ai path',
       elevation: 'none',
     };
@@ -4751,6 +4751,7 @@ function updateCompanionStatusBar(): void {
     percolationSuppression.suppressed && percolationSuppression.reason
       ? `Percolation suppression: ${percolationSuppression.reason}`
       : 'Percolation suppression: none',
+    'Trust & Privacy tray: open Trust Center for one-click details.',
     rankedPrimary
       ? `Percolation primary: ${summarizeForStatusBar(summarizeRankedPrimary(rankedPrimary), 120)}`
       : 'Percolation primary: (none)',

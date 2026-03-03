@@ -81,6 +81,7 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
       <details data-panel-section="trustCenter" ${emphasisAttrs ? `${emphasisAttrs} ` : ''}${input.expanded ? 'open' : ''}>
         <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Trust Center</span>${emphasisBadge}</summary>
         <div class="panel-section-body">
+          <div class="muted trust-tray-label"><strong>Trust &amp; Privacy tray</strong></div>
           <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(input.trustTrackingLabel)}</div>
           <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
           <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(input.sentToAiLabel)}</div>

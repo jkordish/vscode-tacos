@@ -229,6 +229,27 @@ Status vocabulary used in this file:
   - https://github.com/jkordish/vscode-tacos/issues/229
   - https://github.com/jkordish/vscode-tacos/issues/256
 
+### P12. Percolation docs and terminology alignment
+
+- status: `done`
+- why: keep v0.8.x validation docs aligned with shipped percolation behavior and reduce trust/privacy/evidence terminology drift across UI + docs.
+- scope: child issues `#257` (runbook + acceptance reporting updates) and `#247` (terminology harmonization for Trust/Privacy/Evidence/Restricted Mode language).
+- dependencies: P7, P10, P11.
+- recent progress:
+  - rewrote `docs/manual-smoke-runbook.md` for v0.8.x dynamic percolation coverage (ambient vs escalation paths, suppression checks, restricted explainability, rollout-flag matrix, and required percolation metrics capture fields).
+  - refreshed `docs/smoke-report.md` template to mirror the new P/R/F scenario groups and percolation metric gates.
+  - appended a `v0.8.x Dynamic Percolation Acceptance Addendum` to `docs/acceptance-report.md` with implemented anchors, acceptance checklist, and manual verification gates.
+  - standardized Trust & Privacy tray terminology in key docs (`README`, `SPECS`, `docs/DESIGN_AND_IMPLEMENTATION.md`, `docs/metrics.md`, `CHANGELOG`) and aligned panel/status semantics with updated copy.
+  - added/updated string assertions in `test/panelCards.test.ts` for Trust & Privacy tray and emphasis badge copy.
+- risks/rollback:
+  - risk: operator workflows may still reference historical v0.6/v0.7 smoke expectations.
+  - rollback: restore prior runbook/report templates from git history while keeping v0.8 addendum content in a separate doc.
+- links:
+  - https://github.com/jkordish/vscode-tacos/issues/257
+  - https://github.com/jkordish/vscode-tacos/issues/247
+  - https://github.com/jkordish/vscode-tacos/issues/229
+  - https://github.com/jkordish/vscode-tacos/issues/227
+
 ## Blockers
 
 - none currently.
