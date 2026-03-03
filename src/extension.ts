@@ -9292,7 +9292,7 @@ function describeAiPayloadPreviewEntrypoint(entrypoint: AiPayloadPreviewEntrypoi
     return 'Companion Home';
   }
   if (entrypoint === 'why-surfaced') {
-    return 'Why am I seeing this?';
+    return 'Why am I seeing this';
   }
   return 'Trust Center';
 }
