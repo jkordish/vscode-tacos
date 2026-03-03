@@ -12,8 +12,9 @@ This guide gets you from install to first useful resume summary quickly, while k
 
 What to expect:
 
-- You get an instant local summary (`Now`, `Next`, `Blocked`, `Restore`).
+- You get an instant local summary (`Now`, `Next`, `Blocked`, `Restore`) with calm status-bar support.
 - `Companion Home` includes `Intent (editable)` with inline `Save` and `Reset to inferred`.
+- Deeper Trust/Evidence details stay collapsed until you open them.
 - No AI payload is sent in local mode.
 
 ## Demo Resume Card (Optional, 20 Seconds)
@@ -49,6 +50,7 @@ Default safety posture:
 - `tacos.aiIncludeCheckpointNotes = false`
 - `tacos.aiIncludeScratchpad = false`
 - AI payload preview shows inclusion flags and redaction summary before send.
+- You can open the same payload preview from surfaced guidance (`Companion Home`, `Why am I seeing this?`, and `Trust Center`).
 
 Control later:
 

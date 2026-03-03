@@ -206,6 +206,9 @@ export interface MetricRecord {
   trustTrayOpens?: number;
   restrictedTrustTrayOpens?: number;
   whySurfacedOpens?: number;
+  aiPayloadPreviewOpensTrustCenter?: number;
+  aiPayloadPreviewOpensWhySurfaced?: number;
+  aiPayloadPreviewOpensCompanionHome?: number;
   percolationSuppressedQuietHours?: number;
   percolationSuppressedCooldown?: number;
   percolationSuppressedNoChange?: number;

@@ -101,6 +101,11 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
                 ? `<ul class="compact-list" data-why-surfaced-list="true">${input.percolationExplainabilityTrustedHtml}</ul>`
                 : ''
             }
+            <div class="status-actions">
+              <button type="button" class="secondary" data-action="openAiPayloadPreview" data-ai-payload-entrypoint="why-surfaced" ${
+                input.aiPayloadPreviewDisabledAttr
+              }>Review AI payload for this decision</button>
+            </div>
           </details>`
               : ''
           }
@@ -108,7 +113,7 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
             <button type="button" class="secondary" data-action="toggleAutoSummaries" ${
               input.autoSummaryToggleDisabledAttr
             }>${escapeHtml(input.autoSummaryToggleLabel)}</button>
-            <button type="button" class="secondary" data-action="openAiPayloadPreview" ${
+            <button type="button" class="secondary" data-action="openAiPayloadPreview" data-ai-payload-entrypoint="trust-center" ${
               input.aiPayloadPreviewDisabledAttr
             }>Review AI payload preview</button>
             <button type="button" class="secondary" data-action="revokeAiPayloadConsent" ${

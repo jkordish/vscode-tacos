@@ -61,6 +61,33 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'openAiPayloadPreview' })).toEqual({
       type: 'openAiPayloadPreview',
     });
+    expect(
+      parseWebviewMessage({ type: 'openAiPayloadPreview', entrypoint: 'trust-center' }),
+    ).toEqual({
+      type: 'openAiPayloadPreview',
+      entrypoint: 'trust-center',
+    });
+    expect(
+      parseWebviewMessage({ type: 'openAiPayloadPreview', entrypoint: 'why-surfaced' }),
+    ).toEqual({
+      type: 'openAiPayloadPreview',
+      entrypoint: 'why-surfaced',
+    });
+    expect(
+      parseWebviewMessage({ type: 'openAiPayloadPreview', entrypoint: 'companion-home' }),
+    ).toEqual({
+      type: 'openAiPayloadPreview',
+      entrypoint: 'companion-home',
+    });
+    expect(
+      parseWebviewMessage({ type: 'openAiPayloadPreview', entrypoint: 'unknown-entrypoint' }),
+    ).toBeUndefined();
+    expect(
+      parseWebviewMessage({
+        type: 'openAiPayloadPreview',
+        primarySurface: 'blocked',
+      }),
+    ).toBeUndefined();
     expect(parseWebviewMessage({ type: 'revokeAiPayloadConsent' })).toEqual({
       type: 'revokeAiPayloadConsent',
     });

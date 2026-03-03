@@ -8,6 +8,7 @@ TaCoS is a desktop-first VS Code extension that reduces interruption recovery co
 
 - Automatic and manual resume brief generation.
 - Evidence-backed companion surfaces and restore actions.
+- Ambient-to-deep UX layering (status bar ambient cues, glanceable Companion Home, one-click deep trust/evidence drill-down).
 - Privacy and trust controls (redaction, consent, retention, Restricted Mode behavior).
 - Optional provider refinement (`local`, `vscode-lm`, `openai`).
 - Checkpoint notes, scoped scratchpad, task partitions, standup generation.
@@ -320,10 +321,11 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Advisory-only labeling is explicit when no safe primary action is available.
 - Blocker selection uses a deterministic cross-source arbitration pass (`task failure`, `failing command`, `diagnostics`, `branch context`, `low confidence`, `restricted mode`, `no next steps`) and surfaces `severity`, `confidence`, and `actionability` metadata for the selected blocker.
 - Top-card `Why am I seeing this?` action opens `More Context` and expands `Trust Center` explainability in one click.
+- Top-card actions include `Review AI payload preview` so the current surfaced decision can deep-link into consent context in one click.
 - Top-card `Open evidence tray` action opens `More Context` and expands the `Evidence` tray in one click.
 - Evidence tray groups items by relevance: surfaced-decision evidence, other openable evidence, then context-only evidence.
 - Trust Center exposes a concise Trust & Privacy tray including `privacy preset`, `retention policy`, `AI provider mode`, and consent status for current workspace context.
-- Trust Center actions include `Review AI payload preview`, `Revoke AI payload consent`, and `Open Privacy & Safety`.
+- Trust Center actions include `Review AI payload preview`, `Revoke AI payload consent`, and `Open Privacy & Safety`; the nested `Why am I seeing this?` panel also includes a direct payload-preview deep-link for that decision context.
 - Restricted Mode rendering explicitly marks filtered execution affordances as `SUPPRESSED` and calls out filtered signal classes (`git execution`, `terminal command collection`) in Trust Center/explainability copy.
 
 ### Technical shape / architecture notes
@@ -336,6 +338,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 - `openWhySurfaced` is handled in `src/webview/panelClientScript.ts` and expands `moreContext`, `trustCenter`, and nested why-surfaced disclosures without bypassing Trust & Privacy guards.
 - `openEvidenceTray` is handled in `src/webview/panelClientScript.ts` and expands `moreContext` + `evidence` disclosures while preserving existing click-time evidence target validation.
 - `openAiPayloadPreview` and `revokeAiPayloadConsent` are handled via webview message routing in `src/extension.ts`, and Trust Center expansion increments `trustTrayOpens` plus `restrictedTrustTrayOpens` (restricted runtime only) local metric counters.
+- AI payload preview opens are locally counted by entrypoint (`trust-center`, `why-surfaced`, `companion-home`) to validate drill-down adoption without adding remote telemetry.
 
 ### Settings and commands affected
 

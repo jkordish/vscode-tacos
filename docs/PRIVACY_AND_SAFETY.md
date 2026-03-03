@@ -51,7 +51,7 @@ Data can leave the machine only in provider modes that require model calls (`vsc
 Provider-bound payloads are:
 
 - redacted/sanitized,
-- previewed for user review,
+- previewed for user review (with one-click deep-links from surfaced Companion guidance, Why Surfaced details, and the Trust & Privacy tray),
 - gated by consent and trust status,
 - blocked when strict sanitizer detects high-risk patterns.
 

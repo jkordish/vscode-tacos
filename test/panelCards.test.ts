@@ -59,6 +59,9 @@ describe('panelCards', () => {
     expect(trust).toContain('<strong>Trust &amp; Privacy tray</strong>');
     expect(trust).toContain('data-action="openPrivacySafety"');
     expect(trust).toContain('data-action="openAiPayloadPreview"');
+    expect(trust).toContain('data-ai-payload-entrypoint="trust-center"');
+    expect(trust).toContain('Review AI payload for this decision');
+    expect(trust).toContain('data-ai-payload-entrypoint="why-surfaced"');
     expect(trust).toContain('data-action="revokeAiPayloadConsent"');
     expect(trust).toContain('Collection changes:</span> Local signal collection is active.');
     expect(trust).toContain('Privacy preset:</span> Balanced');

@@ -391,6 +391,26 @@ async function run() {
       true,
       'Expected explainability-enabled mode to render Trust Center explainability disclosure.',
     );
+    assert.equal(
+      explainabilityEnabledSnapshot?.hasAiPayloadPreviewAction,
+      true,
+      'Expected explainability-enabled mode to render AI payload preview deep-links.',
+    );
+    assert.equal(
+      explainabilityEnabledSnapshot?.aiPayloadPreviewCompanionHomeCount,
+      1,
+      'Expected Companion Home surfaced-item row to include one payload-preview deep-link.',
+    );
+    assert.equal(
+      explainabilityEnabledSnapshot?.aiPayloadPreviewTrustCenterCount,
+      1,
+      'Expected Trust Center tray to include one payload-preview deep-link.',
+    );
+    assert.equal(
+      explainabilityEnabledSnapshot?.aiPayloadPreviewWhySurfacedCount,
+      1,
+      'Expected Why Surfaced details to include one payload-preview deep-link.',
+    );
 
     await config.update(
       'percolationExplainabilityEnabled',

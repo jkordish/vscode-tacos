@@ -38,6 +38,7 @@ export interface RenderResumeStackCardInput {
   nextEmphasisToken?: CompanionSlotToken;
   primaryNextActionTrustedHtml?: TrustedHtml;
   whySurfacedActionTrustedHtml?: TrustedHtml;
+  aiPayloadPreviewActionTrustedHtml?: TrustedHtml;
   evidenceTrayActionTrustedHtml?: TrustedHtml;
   nextStepRationaleTrustedHtml?: TrustedHtml;
   nextStepsListTrustedHtml: TrustedHtml;
@@ -121,6 +122,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <div class="status-actions">
             ${input.primaryNextActionTrustedHtml ?? ''}
             ${input.whySurfacedActionTrustedHtml ?? ''}
+            ${input.aiPayloadPreviewActionTrustedHtml ?? ''}
             ${nextEvidenceTrayActionTrustedHtml}
             <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
             <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>

@@ -33,6 +33,12 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain("actionElement.dataset.blockerPrimaryAction === 'true'");
     expect(script).toContain("vscode.postMessage({ type: action, primarySurface: 'blocked' });");
     expect(script).toContain("if (action === 'openWhySurfaced')");
+    expect(script).toContain("if (action === 'openAiPayloadPreview')");
+    expect(script).toContain('actionElement.dataset.aiPayloadEntrypoint');
+    expect(script).toContain("entrypoint === 'trust-center'");
+    expect(script).toContain("entrypoint === 'why-surfaced'");
+    expect(script).toContain("entrypoint === 'companion-home'");
+    expect(script).toContain("vscode.postMessage({ type: 'openAiPayloadPreview', entrypoint });");
     expect(script).toContain("if (action === 'openEvidenceTray')");
     expect(script).toContain('details[data-panel-section="moreContext"]');
     expect(script).toContain('details[data-panel-section="trustCenter"]');
