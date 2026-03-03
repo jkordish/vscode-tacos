@@ -15,6 +15,12 @@ TaCoS helps by saying:
 
 It tries to stay quiet unless something important needs attention.
 
+TaCoS follows an ambient-vs-deep flow:
+
+- `Ambient`: status bar keeps calm, low-noise cues visible.
+- `Glanceable`: Companion Home answers `Now / Next / Blocked / Restore` in ~5 seconds.
+- `Deep`: Trust, privacy, evidence, and AI payload details are one click away.
+
 ## Start in 60 Seconds
 
 1. Install the extension.
@@ -30,7 +36,7 @@ For a fast guided setup:
 
 - Local-first by default.
 - AI is optional.
-- AI payload review and consent are explicit.
+- AI payload review and consent are explicit, with one-click deep-links from surfaced guidance.
 - Restricted Mode blocks trust-sensitive collection and execution actions.
 - Metrics and diagnostics stay local unless you explicitly share exports.
 

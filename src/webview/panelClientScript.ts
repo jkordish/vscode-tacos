@@ -659,6 +659,20 @@ export function renderPanelClientScript(
             return;
           }
 
+          if (action === 'openAiPayloadPreview') {
+            const entrypoint = actionElement.dataset.aiPayloadEntrypoint;
+            if (
+              entrypoint === 'trust-center' ||
+              entrypoint === 'why-surfaced' ||
+              entrypoint === 'companion-home'
+            ) {
+              vscode.postMessage({ type: 'openAiPayloadPreview', entrypoint });
+              return;
+            }
+            vscode.postMessage({ type: 'openAiPayloadPreview' });
+            return;
+          }
+
           if (hostActions.has(action)) {
             if (actionElement.dataset.blockerPrimaryAction === 'true') {
               vscode.postMessage({ type: action, primarySurface: 'blocked' });

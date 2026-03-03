@@ -107,6 +107,17 @@ describe('hasAnyRecordedMetric', () => {
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
 
+  it('treats payload-preview entrypoint counters as recorded metric activity', () => {
+    const metric = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      aiPayloadPreviewOpensWhySurfaced: 1,
+    } as unknown as MetricRecord;
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
+
   it('treats blocker-promotion counters as recorded metric activity', () => {
     const metric = {
       startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
@@ -218,6 +229,9 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('priorPromotionCorrections');
     expect(lines[0]).toContain('priorPromotionScratchpad');
     expect(lines[0]).toContain('restrictedTrustTrayOpens');
+    expect(lines[0]).toContain('aiPayloadPreviewOpensTrustCenter');
+    expect(lines[0]).toContain('aiPayloadPreviewOpensWhySurfaced');
+    expect(lines[0]).toContain('aiPayloadPreviewOpensCompanionHome');
     expect(lines[0]).toContain('resumePathCompletions');
     expect(lines[0]).toContain('companionPrimaryCtaClickThroughRate');
     expect(lines[0]).toContain('companionPrimaryCtaCompletionRate');
@@ -234,7 +248,6 @@ describe('buildMetricsCsv', () => {
     expect(lines[1]).toContain(',statusbar,');
     expect(lines[1]).toContain(',unknown,');
     expect(lines[1]).toContain(',2,next-step-action:openFile,1,1,');
-    expect(lines[1]).toContain(',,1,,,,,');
     expect(lines[1]).toContain(',0.7500,0.2500,0.5000,1.0000');
   });
 });

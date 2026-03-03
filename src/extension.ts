@@ -205,7 +205,11 @@ import type {
   VscodeLmModelSelector,
 } from './types';
 import { tryGenerateVscodeLmSummary, type VscodeLmModelLike } from './vscodeLm';
-import { parseWebviewMessage, type WebviewMessage } from './webviewMessages';
+import {
+  parseWebviewMessage,
+  type AiPayloadPreviewEntrypoint,
+  type WebviewMessage,
+} from './webviewMessages';
 import { buildWebviewCspMetaTag, escapeHtml } from './webviewSecurity';
 
 const KEY_LAST_BLUR_AT = 'tacos.lastBlurAt';
@@ -320,6 +324,7 @@ const TEST_PERCOLATION_SUPPRESSION_REASONS = new Set<PercolationSuppressionReaso
   'noise-budget',
   'no-candidate',
 ]);
+const AI_PAYLOAD_PREVIEW_DEFAULT_ENTRYPOINT: AiPayloadPreviewEntrypoint = 'trust-center';
 const execFileAsync = promisify(execFile);
 const markdownRenderer = new MarkdownIt({
   html: false,
@@ -964,6 +969,21 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasWhySurfacedDetails = /<details[^>]*data-why-surfaced-details="true"/u.test(
         panelHtml,
       );
+      const hasAiPayloadPreviewAction = /<button[^>]*data-action="openAiPayloadPreview"/u.test(
+        panelHtml,
+      );
+      const aiPayloadPreviewEntrypoints = [
+        ...panelHtml.matchAll(/data-ai-payload-entrypoint="([^"]+)"/gu),
+      ].map((match) => match[1]);
+      const aiPayloadPreviewCompanionHomeCount = aiPayloadPreviewEntrypoints.filter(
+        (entrypoint) => entrypoint === 'companion-home',
+      ).length;
+      const aiPayloadPreviewTrustCenterCount = aiPayloadPreviewEntrypoints.filter(
+        (entrypoint) => entrypoint === 'trust-center',
+      ).length;
+      const aiPayloadPreviewWhySurfacedCount = aiPayloadPreviewEntrypoints.filter(
+        (entrypoint) => entrypoint === 'why-surfaced',
+      ).length;
       const hasTrustCenterSection = panelHtml.includes('data-panel-section="trustCenter"');
       const hasTimelineSection = panelHtml.includes('data-panel-section="timeline"');
       const hasEvidenceSection = panelHtml.includes('data-panel-section="evidence"');
@@ -1089,6 +1109,10 @@ export function activate(context: vscode.ExtensionContext): void {
         isCompanionHomeFirstCard: firstCardTitle === 'Companion Home',
         hasWhySurfacedAction,
         hasWhySurfacedDetails,
+        hasAiPayloadPreviewAction,
+        aiPayloadPreviewCompanionHomeCount,
+        aiPayloadPreviewTrustCenterCount,
+        aiPayloadPreviewWhySurfacedCount,
         hasIntentEditor: panelHtml.includes('data-action="setIntentOverride"'),
         hasIntentSourceLabel: panelHtml.includes('Intent source:'),
         hasLastActionCue: panelHtml.includes('data-last-action-cue="true"'),
@@ -3811,6 +3835,9 @@ function recordMetricCounter(
     | 'trustTrayOpens'
     | 'restrictedTrustTrayOpens'
     | 'whySurfacedOpens'
+    | 'aiPayloadPreviewOpensTrustCenter'
+    | 'aiPayloadPreviewOpensWhySurfaced'
+    | 'aiPayloadPreviewOpensCompanionHome'
     | 'percolationSuppressedQuietHours'
     | 'percolationSuppressedCooldown'
     | 'percolationSuppressedNoChange'
@@ -5357,7 +5384,10 @@ async function showDetailsPanel(
 
       if (message.type === 'openAiPayloadPreview') {
         recordCompanionQuickAction();
-        await openAiPayloadPreviewFromPanel(context);
+        await openAiPayloadPreviewFromPanel(
+          context,
+          message.entrypoint ?? AI_PAYLOAD_PREVIEW_DEFAULT_ENTRYPOINT,
+        );
         return;
       }
 
@@ -6405,6 +6435,7 @@ function renderWebview(
   const aiPayloadPreviewDisabledAttr = demoMode ? 'disabled aria-disabled="true"' : '';
   const revokeAiConsentDisabledAttr =
     demoMode || !storedAiConsentSignature ? 'disabled aria-disabled="true"' : '';
+  const companionHomeAiPayloadPreviewAction = `<button type="button" class="secondary" data-action="openAiPayloadPreview" data-ai-payload-entrypoint="companion-home" ${aiPayloadPreviewDisabledAttr}>Review AI payload preview</button>`;
   const trustCueDetails = trustCue.details.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const autoSummaryStatusLabel = autoSummariesDisabled
     ? 'Auto summaries disabled'
@@ -6589,6 +6620,7 @@ function renderWebview(
       whySurfacedActionTrustedHtml: rolloutFlags.explainabilityEnabled
         ? '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>'
         : '',
+      aiPayloadPreviewActionTrustedHtml: companionHomeAiPayloadPreviewAction,
       evidenceTrayActionTrustedHtml: evidenceTrayActionHtml,
       nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
       nextStepsListTrustedHtml: companionNextSteps,
@@ -9255,7 +9287,32 @@ async function setAiPayloadConsent(
   );
 }
 
-async function openAiPayloadPreviewFromPanel(context: vscode.ExtensionContext): Promise<void> {
+function describeAiPayloadPreviewEntrypoint(entrypoint: AiPayloadPreviewEntrypoint): string {
+  if (entrypoint === 'companion-home') {
+    return 'Companion Home';
+  }
+  if (entrypoint === 'why-surfaced') {
+    return 'Why am I seeing this?';
+  }
+  return 'Trust Center';
+}
+
+function recordAiPayloadPreviewEntrypointMetric(entrypoint: AiPayloadPreviewEntrypoint): void {
+  if (entrypoint === 'companion-home') {
+    recordMetricCounter('aiPayloadPreviewOpensCompanionHome');
+    return;
+  }
+  if (entrypoint === 'why-surfaced') {
+    recordMetricCounter('aiPayloadPreviewOpensWhySurfaced');
+    return;
+  }
+  recordMetricCounter('aiPayloadPreviewOpensTrustCenter');
+}
+
+async function openAiPayloadPreviewFromPanel(
+  context: vscode.ExtensionContext,
+  entrypoint: AiPayloadPreviewEntrypoint = AI_PAYLOAD_PREVIEW_DEFAULT_ENTRYPOINT,
+): Promise<void> {
   const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
   if (!workspaceRoot) {
     void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
@@ -9306,7 +9363,10 @@ async function openAiPayloadPreviewFromPanel(context: vscode.ExtensionContext): 
     viewColumn: vscode.ViewColumn.Beside,
     preserveFocus: false,
   });
-  postPanelStatus('TaCoS: AI payload preview opened.');
+  recordAiPayloadPreviewEntrypointMetric(entrypoint);
+  postPanelStatus(
+    `TaCoS: AI payload preview opened from ${describeAiPayloadPreviewEntrypoint(entrypoint)}.`,
+  );
 }
 
 async function revokeAiPayloadConsent(
@@ -11707,7 +11767,7 @@ async function showDemoResumeCard(context: vscode.ExtensionContext): Promise<voi
 
 async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void> {
   const start = await vscode.window.showInformationMessage(
-    'TaCoS helps you resume in ~5 seconds with local-first cues. Setup covers privacy defaults, optional AI, and trust controls.',
+    'TaCoS uses an ambient-to-deep model: calm status bar by default, glanceable Companion Home next, then Trust/Evidence details in one click. Setup covers privacy defaults, optional AI, and trust controls.',
     'Start setup',
     'Show demo card',
   );
@@ -11786,12 +11846,12 @@ async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void
       {
         id: 'local',
         label: 'Keep Local-Only Provider (Recommended)',
-        detail: 'Fastest and private by default. No AI payload send.',
+        detail: 'Ambient and private by default. No AI payload send.',
       },
       {
         id: 'configure',
         label: 'Configure AI Provider',
-        detail: 'Optional. Choose VS Code LM or OpenAI with explicit payload consent.',
+        detail: 'Optional. Keep the same calm flow with explicit payload preview + consent gates.',
       },
       {
         id: 'skip',
@@ -11815,7 +11875,7 @@ async function runSetupChecklist(context: vscode.ExtensionContext): Promise<void
   }
 
   const trustAction = await vscode.window.showInformationMessage(
-    'Trust behavior: Restricted Mode disables risky collection/actions. You can pause auto summaries or disable TaCoS at any time.',
+    'Trust behavior: Companion Home keeps glanceable guidance, while Trust & Privacy plus Why Surfaced let you drill into details and AI payload preview in one click. Restricted Mode still disables risky collection/actions.',
     'Open Privacy & Safety',
     'Continue',
   );
@@ -11836,7 +11896,7 @@ async function maybeShowOnboardingNotice(context: vscode.ExtensionContext): Prom
 
   await context.globalState.update(KEY_ONBOARDING_NOTICE_SHOWN, true);
   const action = await vscode.window.showInformationMessage(
-    'TaCoS gives a 5-second resume brief from local context by default. AI sends happen only when enabled with consent, and you can pause anytime.',
+    'TaCoS stays ambient first: status bar for calm cues, Companion Home for a 5-second glance, and deeper Trust/Evidence details only when you open them. AI sends happen only when enabled with explicit consent.',
     'Run Setup Checklist',
     'Show Demo Resume Card',
     'Open Privacy & Safety',

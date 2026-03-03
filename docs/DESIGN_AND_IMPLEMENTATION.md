@@ -61,8 +61,9 @@ Principles:
 - Companion Home keeps fixed `Now/Next/Blocked/Restore` slot order while a central CTA arbiter enforces one primary action across `Next` and `Blocked`; emphasis tokens (`PRIMARY`/`ADVISORY`/`SUPPRESSED`) are motion-safe and a11y-aware.
 - Blocker detection uses a scored v2 arbitration pass (`src/blockerModel.ts`) across task/command/diagnostic/branch/confidence/trust signals and returns explicit severity/confidence/actionability metadata.
 - Companion Home includes a one-click `Why am I seeing this?` action that expands `More Context` and the nested Trust Center explainability disclosure.
+- Companion Home includes a one-click `Review AI payload preview` deep-link for the currently surfaced context.
 - Companion Home includes a one-click `Open evidence tray` action; Evidence now groups rows by surfaced-decision relevance while retaining the existing safe open/static affordance semantics.
-- Trust Center includes a compact Trust & Privacy tray (preset, retention, provider mode, consent status) with one-click payload preview and consent-revoke entrypoints.
+- Trust Center includes a compact Trust & Privacy tray (preset, retention, provider mode, consent status) with one-click payload preview and consent-revoke entrypoints; nested `Why am I seeing this?` details include the same payload-preview deep-link for decision-specific auditability.
 - Restricted Mode copy explicitly calls out filtered signal classes and marks execution-style affordances as suppressed with clear trust-enable reasons.
 - Command palette and keybinding surfaces.
 - Collapsible panel sections keep stable order and persisted expansion state; policy emphasis is conveyed via summary badges/accent instead of auto-expansion or reordering, and only targets sections currently rendered by settings/trust mode.
@@ -124,6 +125,7 @@ Primary stores:
 - Metrics schema also includes prior-driven promotion counters (`priorPromotionCheckpoint`, `priorPromotionCorrections`, `priorPromotionScratchpad`) for ranking-prior attribution.
 - Metrics schema includes novelty bucket distribution counters (`noveltyScoreBucketLow`, `noveltyScoreBucketMedium`, `noveltyScoreBucketHigh`) for per-session percolation novelty analysis.
 - Metrics schema includes percolation decision-chain counters (`percolationDecisionCount`, segmented surface selections including `panel-silent`/`panel-emphasis`, and confidence-band counters) for policy-outcome analysis.
+- Metrics schema includes AI payload-preview entrypoint counters (`aiPayloadPreviewOpensTrustCenter`, `aiPayloadPreviewOpensWhySurfaced`, `aiPayloadPreviewOpensCompanionHome`) so trust-drill-down adoption can be measured locally.
 - Suppression memory for nudge cooldown windows and noise-budget windows is partition-scoped; explicit task-partition switches clear destination-scope suppression memory.
 - extension storage scratchpad files scoped by workspace/partition context.
 

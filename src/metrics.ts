@@ -44,6 +44,9 @@ const CSV_HEADERS = [
   'trustTrayOpens',
   'restrictedTrustTrayOpens',
   'whySurfacedOpens',
+  'aiPayloadPreviewOpensTrustCenter',
+  'aiPayloadPreviewOpensWhySurfaced',
+  'aiPayloadPreviewOpensCompanionHome',
   'percolationSuppressedQuietHours',
   'percolationSuppressedCooldown',
   'percolationSuppressedNoChange',
@@ -379,6 +382,18 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const redactionHighRiskDetectedTotal = summarizeTotal(metrics, 'redactionHighRiskDetectedTotal');
   const aiSendBlockedBySanitizerTotal = summarizeTotal(metrics, 'aiSendBlockedBySanitizerTotal');
   const aiSendAllowedAfterReviewTotal = summarizeTotal(metrics, 'aiSendAllowedAfterReviewTotal');
+  const aiPayloadPreviewOpensTrustCenter = summarizeTotal(
+    metrics,
+    'aiPayloadPreviewOpensTrustCenter',
+  );
+  const aiPayloadPreviewOpensWhySurfaced = summarizeTotal(
+    metrics,
+    'aiPayloadPreviewOpensWhySurfaced',
+  );
+  const aiPayloadPreviewOpensCompanionHome = summarizeTotal(
+    metrics,
+    'aiPayloadPreviewOpensCompanionHome',
+  );
   const sessionsWithNote = metrics.filter((metric) => metric.resumeWithNote === 1).length;
   const lagActionWithNote = summarizeLag(
     metrics.filter((metric) => metric.resumeWithNote === 1),
@@ -483,6 +498,9 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| redactionHighRiskDetectedTotal (total) | ${redactionHighRiskDetectedTotal} |`,
     `| aiSendBlockedBySanitizerTotal (total) | ${aiSendBlockedBySanitizerTotal} |`,
     `| aiSendAllowedAfterReviewTotal (total) | ${aiSendAllowedAfterReviewTotal} |`,
+    `| aiPayloadPreviewOpensTrustCenter (total) | ${aiPayloadPreviewOpensTrustCenter} |`,
+    `| aiPayloadPreviewOpensWhySurfaced (total) | ${aiPayloadPreviewOpensWhySurfaced} |`,
+    `| aiPayloadPreviewOpensCompanionHome (total) | ${aiPayloadPreviewOpensCompanionHome} |`,
     `| summaryQuietActions (total) | ${summarizeTotal(metrics, 'summaryQuietActions')} |`,
     '',
     'Interruption timing class:',
@@ -568,6 +586,9 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.trustTrayOpens ?? 0) > 0 ||
     (metric.restrictedTrustTrayOpens ?? 0) > 0 ||
     (metric.whySurfacedOpens ?? 0) > 0 ||
+    (metric.aiPayloadPreviewOpensTrustCenter ?? 0) > 0 ||
+    (metric.aiPayloadPreviewOpensWhySurfaced ?? 0) > 0 ||
+    (metric.aiPayloadPreviewOpensCompanionHome ?? 0) > 0 ||
     (metric.percolationSuppressedQuietHours ?? 0) > 0 ||
     (metric.percolationSuppressedCooldown ?? 0) > 0 ||
     (metric.percolationSuppressedNoChange ?? 0) > 0 ||
@@ -653,6 +674,9 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.trustTrayOpens),
       toOptionalNumber(metric.restrictedTrustTrayOpens),
       toOptionalNumber(metric.whySurfacedOpens),
+      toOptionalNumber(metric.aiPayloadPreviewOpensTrustCenter),
+      toOptionalNumber(metric.aiPayloadPreviewOpensWhySurfaced),
+      toOptionalNumber(metric.aiPayloadPreviewOpensCompanionHome),
       toOptionalNumber(metric.percolationSuppressedQuietHours),
       toOptionalNumber(metric.percolationSuppressedCooldown),
       toOptionalNumber(metric.percolationSuppressedNoChange),

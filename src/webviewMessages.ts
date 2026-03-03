@@ -18,7 +18,6 @@ const SIMPLE_MESSAGE_TYPES = [
   'dismissNudge',
   'whySurfacedOpened',
   'openPrivacySafety',
-  'openAiPayloadPreview',
   'revokeAiPayloadConsent',
   'rateHelpfulness',
   'sessionAddCheckpoint',
@@ -55,9 +54,11 @@ type BlockedPrimaryActionSurface = 'blocked';
 type PrimaryNextSafeActionSurface = 'home';
 type ResumePathStepId = 'confirmIntent' | 'runNextSafeAction' | 'clearBlocker';
 type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details' | 'moreContext';
+export type AiPayloadPreviewEntrypoint = 'trust-center' | 'why-surfaced' | 'companion-home';
 
 export type WebviewMessage =
   | { type: SimpleWebviewMessageType }
+  | { type: 'openAiPayloadPreview'; entrypoint?: AiPayloadPreviewEntrypoint }
   | { type: RestoreWebviewMessageType }
   | { type: BlockerPrimaryMessageType; primarySurface?: BlockedPrimaryActionSurface }
   | { type: 'runNextStepAction'; stepIndex: number; primarySurface?: PrimaryNextSafeActionSurface }
@@ -75,6 +76,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
   if (!isRecord(raw) || typeof raw.type !== 'string') {
     return undefined;
+  }
+
+  if (raw.type === 'openAiPayloadPreview') {
+    if (typeof raw.primarySurface !== 'undefined') {
+      return undefined;
+    }
+
+    const entrypoint = raw.entrypoint;
+    if (typeof entrypoint === 'undefined') {
+      return { type: 'openAiPayloadPreview' };
+    }
+
+    if (
+      entrypoint !== 'trust-center' &&
+      entrypoint !== 'why-surfaced' &&
+      entrypoint !== 'companion-home'
+    ) {
+      return undefined;
+    }
+
+    return { type: 'openAiPayloadPreview', entrypoint };
   }
 
   if (SIMPLE_MESSAGE_TYPES.includes(raw.type as SimpleWebviewMessageType)) {

@@ -1,7 +1,7 @@
 {
   "name": "vscode-tacos",
   "displayName": "TaCoS Resume Brief",
-  "description": "Auto task-context summaries when you resume work in VS Code.",
+  "description": "Calm ambient resume cues with deep trust/evidence drill-down when you need it.",
   "license": "MIT",
   "version": "0.7.0",
   "publisher": "jkordish",

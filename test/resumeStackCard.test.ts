@@ -17,6 +17,8 @@ describe('renderResumeStackCard', () => {
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open file</button>',
       whySurfacedActionTrustedHtml:
         '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>',
+      aiPayloadPreviewActionTrustedHtml:
+        '<button type="button" class="secondary" data-action="openAiPayloadPreview" data-ai-payload-entrypoint="companion-home">Review AI payload preview</button>',
       evidenceTrayActionTrustedHtml:
         '<button type="button" class="secondary" data-action="openEvidenceTray">Open evidence tray</button>',
       nextStepRationaleTrustedHtml:
@@ -59,6 +61,7 @@ describe('renderResumeStackCard', () => {
                <div class="status-actions">
                  <button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open file</button>
                  <button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>
+                 <button type="button" class="secondary" data-action="openAiPayloadPreview" data-ai-payload-entrypoint="companion-home">Review AI payload preview</button>
                  <button type="button" class="secondary" data-action="openEvidenceTray">Open evidence tray</button>
                  <button type="button" class="secondary" data-action="copyNextSteps">Copy next steps</button>
                  <button type="button" class="secondary" data-action="copyPromptAndOpenCodex">Copy prompt + open Codex</button>
@@ -100,6 +103,8 @@ describe('renderResumeStackCard', () => {
         '<button type="button" data-primary-next-safe-action="home" data-action="runNextStepAction" data-step-index="0">Open Problems</button>',
       whySurfacedActionTrustedHtml:
         '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>',
+      aiPayloadPreviewActionTrustedHtml:
+        '<button type="button" class="secondary" data-action="openAiPayloadPreview" data-ai-payload-entrypoint="companion-home">Review AI payload preview</button>',
       evidenceTrayActionTrustedHtml:
         '<button type="button" class="secondary" data-action="openEvidenceTray">Open evidence tray</button>',
       nextStepRationaleTrustedHtml: '',
@@ -130,6 +135,8 @@ describe('renderResumeStackCard', () => {
     expect(html).toContain('data-blocker-primary-action="true"');
     expect(html).toContain('data-primary-next-safe-action="home"');
     expect(html).toContain('data-action="openWhySurfaced"');
+    expect(html).toContain('data-action="openAiPayloadPreview"');
+    expect(html).toContain('data-ai-payload-entrypoint="companion-home"');
     expect(html).toContain('data-action="openEvidenceTray"');
     expect((html.match(/data-action="openEvidenceTray"/gu) ?? []).length).toBe(1);
     expect(html).toContain('<li>Run focused verify pass</li>');

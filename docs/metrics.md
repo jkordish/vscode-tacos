@@ -75,6 +75,9 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `trustTrayOpens`                      | integer | Count of Trust & Privacy tray disclosure opens in trusted mode.                 |
 | `restrictedTrustTrayOpens`            | integer | Count of Trust & Privacy tray disclosure opens in Restricted Mode.              |
 | `whySurfacedOpens`                    | integer | Count of one-click `Why am I seeing this?` drill-down opens.                    |
+| `aiPayloadPreviewOpensTrustCenter`    | integer | Count of AI payload preview opens from Trust Center controls.                    |
+| `aiPayloadPreviewOpensWhySurfaced`    | integer | Count of AI payload preview opens from nested `Why am I seeing this?` details.   |
+| `aiPayloadPreviewOpensCompanionHome`  | integer | Count of AI payload preview opens from Companion Home surfaced-item controls.     |
 | `percolationSuppressedQuietHours`     | integer | Count of percolation suppressions attributed to configured quiet hours.          |
 | `percolationSuppressedCooldown`       | integer | Count of percolation suppressions attributed to cooldown gating.                 |
 | `percolationSuppressedNoChange`       | integer | Count of percolation suppressions attributed to no-change fingerprint checks.    |
@@ -142,6 +145,9 @@ Track these explicitly for stabilization/adoption gating:
 - `redactionHighRiskDetectedTotal`
 - `aiSendBlockedBySanitizerTotal`
 - `aiSendAllowedAfterReviewTotal`
+- `aiPayloadPreviewOpensTrustCenter`
+- `aiPayloadPreviewOpensWhySurfaced`
+- `aiPayloadPreviewOpensCompanionHome`
 
 ## Notes
 

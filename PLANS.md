@@ -130,7 +130,7 @@ Status vocabulary used in this file:
   - completed DP-303 / `#244` (privacy/trust tray posture rows + payload preview + consent revoke controls + trust-tray open metric hook) in PR `#272`.
   - completed DP-304 / `#245` (Restricted Mode rendering + explicit suppression/explainability copy pass) and merged follow-up fixes.
 - immediate next actions:
-  - track DP-305 (`#246`, post-`v0.8`) and DP-306 (`#247`, `v0.8.x`) as follow-on trust/privacy polish.
+  - monitor follow-on trust/privacy polish after DP-305 (`#246`) closure and keep restricted/trust copy concise.
 - risks/rollback:
   - risk: restricted-mode copy can become too verbose and overpower primary resume guidance.
   - rollback: keep suppression semantics/guards intact and revert to shorter copy strings only.
@@ -249,6 +249,27 @@ Status vocabulary used in this file:
   - https://github.com/jkordish/vscode-tacos/issues/247
   - https://github.com/jkordish/vscode-tacos/issues/229
   - https://github.com/jkordish/vscode-tacos/issues/227
+
+### P13. Remaining open-epic closure sweep (`#246`, `#259`)
+
+- status: `done`
+- why: finish the final open child issues under Epics `#227` and `#229` with code, docs, onboarding, and metrics parity.
+- scope: DP-305 / `#246` (entrypoint-aware AI payload preview deep-links + counters) and DP-506 / `#259` (ambient-vs-deep onboarding and marketplace/readme narrative refresh).
+- dependencies: P7, P9, P12.
+- recent progress:
+  - added one-click AI payload preview deep-links from Companion Home surfaced actions, nested `Why am I seeing this?` details, and Trust Center controls.
+  - added strict webview-message parsing for payload-preview entrypoint metadata and routed entrypoint-aware panel status messaging.
+  - extended local metrics schema/CSV/baseline/docs with `aiPayloadPreviewOpensTrustCenter`, `aiPayloadPreviewOpensWhySurfaced`, and `aiPayloadPreviewOpensCompanionHome`.
+  - refreshed onboarding/setup copy, README/quickstart narrative, and marketplace-facing package description around the ambient -> glanceable -> deep mental model.
+  - updated integration + unit coverage for action wiring, payload entrypoint parsing, and metrics schema checks.
+- risks/rollback:
+  - risk: additional Companion Home action density could increase button noise.
+  - rollback: keep Trust Center/Why deep-links and remove Companion Home payload-preview button if usage data shows low value.
+- links:
+  - https://github.com/jkordish/vscode-tacos/issues/246
+  - https://github.com/jkordish/vscode-tacos/issues/259
+  - https://github.com/jkordish/vscode-tacos/issues/227
+  - https://github.com/jkordish/vscode-tacos/issues/229
 
 ## Blockers
 
