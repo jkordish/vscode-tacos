@@ -11,11 +11,11 @@ Related:
 - Metrics dictionary: `docs/metrics.md`
 - Acceptance report: `docs/acceptance-report.md`
 
-Date: `__________`
-Tester: `__________`
-VS Code version: `__________`
-OS: `__________`
-Branch/commit: `__________`
+- Date: `__________`
+- Tester: `__________`
+- VS Code version: `__________`
+- OS: `__________`
+- Branch/commit: `__________`
 
 ## 1) Preconditions
 

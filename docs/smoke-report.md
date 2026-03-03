@@ -2,9 +2,9 @@
 
 Use this template to record final manual and automated smoke outcomes for release prep.
 
-Date: `__________`
-Tester: `__________`
-Branch/commit: `__________`
+- Date: `__________`
+- Tester: `__________`
+- Branch/commit: `__________`
 
 ## 1) Automated Gates (Local)
 
