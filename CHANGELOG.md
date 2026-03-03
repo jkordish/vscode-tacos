@@ -32,7 +32,7 @@ All notable changes to this project are documented in this file.
 - Companion Home now exposes a one-click `Why am I seeing this?` action that opens the Trust Center explainability trail (`More Context` → `Trust Center` → nested decision details).
 - Evidence tray now supports one-click opening from Companion Home and groups entries into surfaced-decision evidence, other openable evidence, and context-only evidence while preserving safe open/static affordances.
 - Trust Center now includes a concise Trust & Privacy tray with privacy preset, retention, provider mode, consent status, and one-click actions for AI payload preview and consent revocation.
-- AI payload preview deep-links are now entrypoint-aware from surfaced guidance (`Companion Home`, nested `Why am I seeing this?`, and `Trust Center`) with local metrics counters by entrypoint.
+- Completed DP-305 / `#246`: AI payload preview deep-links are now entrypoint-aware from surfaced guidance (`Companion Home`, nested `Why am I seeing this?`, and `Trust Center`), with local-only counters by entrypoint.
 - Restricted Mode panel copy now explicitly calls out filtered signal classes, adds suppressed-execution guidance in Blocked/restore affordances, and records restricted trust-tray drill-down opens in local metrics.
 - Percolation ranking now consumes a trigger-time normalized signal bundle (new adapter layer) with explicit trusted-vs-restricted signal filtering and deterministic adapter tests.
 - Percolation signal adapters now include explicit git semantics (`branch-switch`, `git-commit`, `git-divergence`) using trusted branch/commit/divergence metadata, with deterministic parser coverage and cache-reset integration checks.
@@ -42,7 +42,7 @@ All notable changes to this project are documented in this file.
 - Auto-trigger no-change fingerprinting now uses a partition-aware `v2` payload, and task-partition switches reset destination-scope suppression memory (`no-change`, nudge cooldown, and noise-budget windows) to avoid stale suppression carryover.
 - Metrics exports now include percolation decision-chain counters (`percolationDecisionCount`, segmented panel surface classes `panel-silent`/`panel-emphasis`, and low/medium/high primary-confidence bands), and the metrics dictionary/baseline snapshot include those fields.
 - Added staged percolation rollout flags (`tacos.percolationPolicyEnabled`, `tacos.percolationExplainabilityEnabled`, `tacos.percolationNotificationBrokerEnabled`) with safe legacy `uiSurface` fallback behavior and diagnostics bundle visibility for configured vs active rollout state.
-- Onboarding and docs copy now teach the ambient-vs-glanceable-vs-deep model explicitly in first-run prompts, quickstart guidance, and README/marketplace-facing metadata.
+- Completed DP-506 / `#259`: onboarding and docs copy now teach the ambient-vs-glanceable-vs-deep model explicitly in first-run prompts, quickstart guidance, and README/marketplace-facing metadata.
 
 ## [0.7.0] - 2026-03-01
 
