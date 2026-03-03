@@ -190,4 +190,71 @@ Tracking epics:
 - Completed: dedicated axe-core test coverage for generated panel HTML in CI gate (#218).
 - Completed: persistence regression coverage including scroll/focus restoration behavior (#219).
 - Completed: smoke report template now references the v0.7.0 matrix in `docs/smoke-report.md` (#221).
-- Remaining: execute and record the v0.7.0 manual matrix run in `docs/manual-smoke-runbook.md` (#221).
+- Remaining: execute and record the v0.7.0 manual matrix run (#221).
+
+## v0.8.x Dynamic Percolation Acceptance Addendum
+
+Status: In progress (manual v0.8.x percolation sign-off pending)
+
+Tracking epics:
+
+- [#226](https://github.com/jkordish/vscode-tacos/issues/226) Adaptive Surface Layering and Calm Interaction Architecture
+- [#227](https://github.com/jkordish/vscode-tacos/issues/227) Trust, Privacy, Evidence, and Explainability UX
+- [#228](https://github.com/jkordish/vscode-tacos/issues/228) Work Signal Ingestion and Resume Semantics
+- [#229](https://github.com/jkordish/vscode-tacos/issues/229) Metrics, Experimentation, and Release Validation
+
+### Implemented baseline in this stream
+
+- Deterministic percolation surface selection and calm interaction controls:
+  - `src/extension.ts`
+  - `src/percolation/*`
+  - `test/percolationSurfaceBroker.test.ts`
+  - `test/integration/suite/percolationDecisionMatrix.js`
+- Companion Home policy slot semantics and one-primary CTA arbitration:
+  - `src/resumeStackCard.ts`
+  - `src/extension.ts`
+  - `test/resumeStackCard.test.ts`
+- One-click explainability and grouped evidence drill-down:
+  - `src/webview/panelCards.ts`
+  - `src/webview/panelClientScript.ts`
+  - `test/panelCards.test.ts`
+  - `test/panelClientScript.state.test.ts`
+- Trust & Privacy tray and restricted-mode explainability copy:
+  - `src/extension.ts`
+  - `src/webview/panelCards.ts`
+  - `docs/PRIVACY_AND_SAFETY.md`
+- Signal normalization, blocker model v2, ranking priors, and no-change partition scoping:
+  - `src/percolation/signals.ts`
+  - `src/blockerModel.ts`
+  - `src/summary.ts`
+  - `test/percolationRanking.test.ts`
+  - `test/blockerModel.test.ts`
+- Metrics and rollout controls for percolation stages:
+  - `src/metrics.ts`
+  - `src/types.ts`
+  - `docs/metrics.md`
+  - `test/integration/suite/focusRefreshPresentation.js`
+
+### v0.8.x acceptance criteria
+
+- [x] Percolation policy engine and surface broker are deterministic and regression-covered.
+- [x] Companion Home preserves stable slot order with one-primary CTA semantics.
+- [x] Explainability and evidence drill-down are available in one click when enabled.
+- [x] Restricted Mode rendering preserves safety boundaries with explicit rationale copy.
+- [x] Local metrics export includes percolation decision and suppression fields.
+- [x] Rollout flags provide safe fallback behavior for staged release controls.
+- [ ] Manual v0.8.x runbook pass recorded (`docs/manual-smoke-runbook.md`).
+- [ ] v0.8.x smoke report sign-off recorded (`docs/smoke-report.md`).
+
+### Manual verification anchors (v0.8.x)
+
+- Runbook: `docs/manual-smoke-runbook.md`
+- Integration matrix anchor: `test/integration/suite/percolationDecisionMatrix.js`
+- Metrics dictionary and required fields: `docs/metrics.md`
+
+### Open gaps / TODOs (v0.8.x)
+
+- Remaining manual sign-off execution and recorded outcomes for trusted, restricted, and rollout-fallback scenarios.
+- Follow-on copy/adoption work tracked in:
+  - [#247](https://github.com/jkordish/vscode-tacos/issues/247)
+  - [#259](https://github.com/jkordish/vscode-tacos/issues/259)

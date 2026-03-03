@@ -72,8 +72,8 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `priorPromotionCheckpoint`            | integer | Count of ranking promotions attributed to checkpoint-note priors.                |
 | `priorPromotionCorrections`           | integer | Count of ranking promotions attributed to saved correction priors.               |
 | `priorPromotionScratchpad`            | integer | Count of ranking promotions attributed to scratchpad priors.                     |
-| `trustTrayOpens`                      | integer | Count of trust/privacy tray disclosure opens in trusted mode.                   |
-| `restrictedTrustTrayOpens`            | integer | Count of trust/privacy tray disclosure opens in Restricted Mode.                |
+| `trustTrayOpens`                      | integer | Count of Trust & Privacy tray disclosure opens in trusted mode.                 |
+| `restrictedTrustTrayOpens`            | integer | Count of Trust & Privacy tray disclosure opens in Restricted Mode.              |
 | `whySurfacedOpens`                    | integer | Count of one-click `Why am I seeing this?` drill-down opens.                    |
 | `percolationSuppressedQuietHours`     | integer | Count of percolation suppressions attributed to configured quiet hours.          |
 | `percolationSuppressedCooldown`       | integer | Count of percolation suppressions attributed to cooldown gating.                 |

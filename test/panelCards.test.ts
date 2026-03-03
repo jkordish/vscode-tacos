@@ -42,7 +42,7 @@ describe('panelCards', () => {
       emphasis: {
         level: 'elevated',
         sourceClass: 'policy:trust-privacy',
-        badgeLabel: 'Trust',
+        badgeLabel: 'Trust & Privacy',
       },
     });
 
@@ -55,7 +55,8 @@ describe('panelCards', () => {
     expect(trust).toContain('data-panel-emphasis-level="elevated"');
     expect(trust).toContain('data-panel-emphasis-source="policy:trust-privacy"');
     expect(trust).toContain('data-panel-emphasis-badge="true"');
-    expect(trust).toContain('>Trust</span></summary>');
+    expect(trust).toContain('>Trust &amp; Privacy</span></summary>');
+    expect(trust).toContain('<strong>Trust &amp; Privacy tray</strong>');
     expect(trust).toContain('data-action="openPrivacySafety"');
     expect(trust).toContain('data-action="openAiPayloadPreview"');
     expect(trust).toContain('data-action="revokeAiPayloadConsent"');

@@ -322,7 +322,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Top-card `Why am I seeing this?` action opens `More Context` and expands `Trust Center` explainability in one click.
 - Top-card `Open evidence tray` action opens `More Context` and expands the `Evidence` tray in one click.
 - Evidence tray groups items by relevance: surfaced-decision evidence, other openable evidence, then context-only evidence.
-- Trust Center exposes a concise privacy/trust tray including `privacy preset`, `retention policy`, `AI provider mode`, and consent status for current workspace context.
+- Trust Center exposes a concise Trust & Privacy tray including `privacy preset`, `retention policy`, `AI provider mode`, and consent status for current workspace context.
 - Trust Center actions include `Review AI payload preview`, `Revoke AI payload consent`, and `Open Privacy & Safety`.
 - Restricted Mode rendering explicitly marks filtered execution affordances as `SUPPRESSED` and calls out filtered signal classes (`git execution`, `terminal command collection`) in Trust Center/explainability copy.
 
@@ -333,7 +333,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 - `renderWebview` in `src/extension.ts` resolves one `CompanionPrimaryCtaDecision` and passes slot source classes + emphasis tokens into `renderResumeStackCard`.
 - Primary CTA impression metric remains single-count per context and stores policy source class.
 - Metrics capture one blocker-promotion source counter per session (`taskFailure`, `commandFailure`, `diagnostics`, `branchContext`, `lowConfidence`, `restricted`, `noNextSteps`) for post-hoc blocker mix analysis.
-- `openWhySurfaced` is handled in `src/webview/panelClientScript.ts` and expands `moreContext`, `trustCenter`, and nested why-surfaced disclosures without bypassing trust/privacy guards.
+- `openWhySurfaced` is handled in `src/webview/panelClientScript.ts` and expands `moreContext`, `trustCenter`, and nested why-surfaced disclosures without bypassing Trust & Privacy guards.
 - `openEvidenceTray` is handled in `src/webview/panelClientScript.ts` and expands `moreContext` + `evidence` disclosures while preserving existing click-time evidence target validation.
 - `openAiPayloadPreview` and `revokeAiPayloadConsent` are handled via webview message routing in `src/extension.ts`, and Trust Center expansion increments `trustTrayOpens` plus `restrictedTrustTrayOpens` (restricted runtime only) local metric counters.
 
@@ -1000,7 +1000,7 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 
 - Percolation ranking decisions are driven by a deterministic signal bundle on each summary trigger.
 - Restricted Mode does not promote trust-sensitive branch/task failure adapters as runtime signals.
-- Trust/privacy mode transitions surface through explicit normalized trust/privacy signals.
+- Trust/Privacy mode transitions surface through explicit normalized trust/privacy signals.
 - Git semantic adapters explicitly capture branch switch, recent commit checkpoint, and upstream divergence signals when trusted git context is available.
 - Ranking includes deterministic user-prior promotion/suppression metadata; saved corrections can suppress conflicting checkpoint/scratchpad promotions.
 - No-change auto-trigger fingerprinting includes partition scope (`v2`) so task-partition transitions do not inherit stale no-change suppression.

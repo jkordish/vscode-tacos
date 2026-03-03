@@ -62,7 +62,7 @@ Principles:
 - Blocker detection uses a scored v2 arbitration pass (`src/blockerModel.ts`) across task/command/diagnostic/branch/confidence/trust signals and returns explicit severity/confidence/actionability metadata.
 - Companion Home includes a one-click `Why am I seeing this?` action that expands `More Context` and the nested Trust Center explainability disclosure.
 - Companion Home includes a one-click `Open evidence tray` action; Evidence now groups rows by surfaced-decision relevance while retaining the existing safe open/static affordance semantics.
-- Trust Center includes a compact privacy/trust tray (preset, retention, provider mode, consent status) with one-click payload preview and consent-revoke entrypoints.
+- Trust Center includes a compact Trust & Privacy tray (preset, retention, provider mode, consent status) with one-click payload preview and consent-revoke entrypoints.
 - Restricted Mode copy explicitly calls out filtered signal classes and marks execution-style affordances as suppressed with clear trust-enable reasons.
 - Command palette and keybinding surfaces.
 - Collapsible panel sections keep stable order and persisted expansion state; policy emphasis is conveyed via summary badges/accent instead of auto-expansion or reordering, and only targets sections currently rendered by settings/trust mode.

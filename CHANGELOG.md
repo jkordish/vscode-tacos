@@ -20,7 +20,7 @@ All notable changes to this project are documented in this file.
 - Build pipeline now separates bundling (`npm run build`) from static type checks (`npm run typecheck`).
 - Verification and CI workflows now run format/lint/typecheck/unit gates before integration/package checks.
 - Release workflow now supports optional VS Code Marketplace publish when `VSCE_PAT` is configured.
-- README/operator docs now align with current trust/privacy/provider boundaries and troubleshooting flow.
+- README/operator docs now align with current Trust/Privacy/provider boundaries and troubleshooting flow.
 - Panel-emphasis policy now avoids targeting hidden `Timeline` sections when `tacos.showTimeline` is disabled, and integration snapshot section-order parsing now reads rendered disclosure markup only.
 - Status bar now uses compact policy-driven class/reason semantics with deterministic quiet-hours suppression labeling and rare active-mode elevation for high-risk blocked states.
 - Status bar quiet-window labeling now takes precedence over generic suppression reasons in active mode (including temporary quiet windows), and paused labels reflect their actual pause source.
@@ -29,7 +29,7 @@ All notable changes to this project are documented in this file.
 - Companion `Next`/`Blocked` status captions now include explicit emphasis tokens (`PRIMARY`/`ADVISORY`/`SUPPRESSED`) with reduced-motion-safe transitions and forced-colors safeguards.
 - Companion Home now exposes a one-click `Why am I seeing this?` action that opens the Trust Center explainability trail (`More Context` → `Trust Center` → nested decision details).
 - Evidence tray now supports one-click opening from Companion Home and groups entries into surfaced-decision evidence, other openable evidence, and context-only evidence while preserving safe open/static affordances.
-- Trust Center now includes a concise privacy/trust tray with privacy preset, retention, provider mode, consent status, and one-click actions for AI payload preview and consent revocation.
+- Trust Center now includes a concise Trust & Privacy tray with privacy preset, retention, provider mode, consent status, and one-click actions for AI payload preview and consent revocation.
 - Restricted Mode panel copy now explicitly calls out filtered signal classes, adds suppressed-execution guidance in Blocked/restore affordances, and records restricted trust-tray drill-down opens in local metrics.
 - Percolation ranking now consumes a trigger-time normalized signal bundle (new adapter layer) with explicit trusted-vs-restricted signal filtering and deterministic adapter tests.
 - Percolation signal adapters now include explicit git semantics (`branch-switch`, `git-commit`, `git-divergence`) using trusted branch/commit/divergence metadata, with deterministic parser coverage and cache-reset integration checks.
