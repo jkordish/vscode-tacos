@@ -4,6 +4,7 @@ Status: Proposed
 Owner: TaCoS maintainers
 Scope: `v0.8.0`, `v0.8.x`, and post-`v0.8` follow-on
 Related modules: `src/extension.ts`, `src/summary.ts`, `src/companionNudges.ts`, `src/noiseControl.ts`, `src/webview/*`, `src/metrics.ts`, `src/restoreSafety.ts`, `src/pathSafety.ts`, `src/activityPersistence.ts`, `src/redaction.ts`, `src/llm.ts`
+Research references: `docs/references.md`
 
 ## 1. Problem Statement
 TaCoS already has strong resume intelligence and strong safety defaults, but the current UX still risks cumulative weight:

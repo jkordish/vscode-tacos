@@ -222,6 +222,7 @@ Marketplace publish note:
 - [PLANS.md](https://github.com/jkordish/vscode-tacos/blob/main/PLANS.md)
 - [DESIGN_AND_IMPLEMENTATION.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/DESIGN_AND_IMPLEMENTATION.md)
 - [PRIVACY_AND_SAFETY.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/PRIVACY_AND_SAFETY.md)
+- [references.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/references.md)
 
 ## License
 

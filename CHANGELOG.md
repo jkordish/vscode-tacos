@@ -9,6 +9,7 @@ All notable changes to this project are documented in this file.
 - Docs-driven operating model docs: `AGENTS.md`, `SPECS.md`, `PLANS.md`.
 - Canonical design/implementation guide: `docs/DESIGN_AND_IMPLEMENTATION.md`.
 - Canonical privacy/safety guide: `docs/PRIVACY_AND_SAFETY.md` with compatibility redirect from `docs/privacy-safety.md`.
+- HCI/UX research reference map for percolation and interruption-design rationale: `docs/references.md`.
 - Repository governance docs: `CONTRIBUTING.md`, `SECURITY.md`, `SUPPORT.md`, `.github/CODEOWNERS`.
 - Docs-driven GitHub issue forms (`01-bug`, `02-feature`, `03-spec`) and stricter PR template contract.
 - Bundled build script (`scripts/build.mjs`) using `esbuild`.
