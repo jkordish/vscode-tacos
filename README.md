@@ -1,228 +1,82 @@
 # vscode-tacos
 
-`vscode-tacos` (`TaCoS Resume Brief`) is a TypeScript VS Code extension that helps developers quickly resume work after interruptions.
+TaCoS ("TaCoS Resume Brief") is a VS Code extension that helps you get back into your work after an interruption.
 
-TaCoS generates local-first resume briefs, highlights safe next actions, and supports optional AI refinement when explicitly enabled.
+## Explain It Like I'm Five
 
-## Why Use TaCoS
+You come back to your code and forget what you were doing.
 
-- recover context quickly after focus switches,
-- keep resume guidance grounded in local evidence,
-- preserve privacy with redaction, retention controls, and trust-aware behavior,
-- keep AI optional (`local`, `vscode-lm`, `openai`) instead of required.
+TaCoS helps by saying:
 
-## Core Features
+- what you were just doing,
+- what you should do next,
+- what is blocked,
+- and what is safe to click.
 
-- focus-triggered and manual resume summaries,
-- companion panel with evidence-backed actions,
-- stable disclosure layout with policy-driven emphasis badges (no auto-expand/reorder churn),
-- normalized percolation signal adapters feeding ranking decisions on each summary trigger (trust-aware in Restricted Mode),
-- git semantic enrichment for percolation ranking inputs (`branch switch`, `recent commit`, `upstream divergence`),
-- blocker detection v2 with deterministic cross-source arbitration (`task`, `command`, `diagnostics`, `branch`, `confidence`) and explicit severity/confidence/actionability scoring,
-- user-authored ranking priors from checkpoint notes, saved corrections, and scratchpad context with deterministic correction-precedence conflict handling,
-- precision `Changes Since Last Time` buckets (`Code`, `Runs`, `Blocker`, `Key files`, `Git`, `References`) with a deterministic novelty profile (`low`/`medium`/`high`) surfaced in recap details,
-- long-gap orientation hints and low-confidence clarification behavior,
-- checkpoint notes and scoped scratchpad,
-- task partition switching with per-partition suppression-memory boundaries (`no-change` fingerprinting, nudge cooldown memory, and noise-budget memory reset on partition switch),
-- local metrics counters for percolation decision chains (decision count, surface selection classes including `panel-silent`/`panel-emphasis`, confidence bands), prior-driven ranking promotions (`checkpoint`, `corrections`, `scratchpad`), and novelty bucket distribution (`low`, `medium`, `high`),
-- staged percolation rollout controls (`percolationPolicyEnabled`, `percolationExplainabilityEnabled`, `percolationNotificationBrokerEnabled`) with safe fallback to legacy `uiSurface` behavior,
-- restore working set actions with trust-sensitive guards,
-- standup update generation,
-- pause/snooze/quiet-hours controls,
-- local metrics export and diagnostics copy,
-- Codex handoff (`Copy Prompt and Open Codex`).
+It tries to stay quiet unless something important needs attention.
 
-## Install and Quick Start
+## Start in 60 Seconds
 
 1. Install the extension.
-2. Open a workspace and run `TaCoS: Show Resume Brief Now`.
-3. Optional: run `TaCoS: Configure AI Provider` if you want provider refinement.
-4. Optional: run `TaCoS: Set Privacy Preset` and `TaCoS: Set Retention Policy`.
+2. Open a project in VS Code.
+3. Run `TaCoS: Show Resume Brief Now` from the Command Palette.
+4. Optional: run `TaCoS: Set Privacy Preset`.
 
-Quickstart guide:
+For a fast guided setup:
 
 - [Quickstart](https://github.com/jkordish/vscode-tacos/blob/main/docs/quickstart.md)
 
-## Privacy and Safety Summary
+## Safety in Plain English
 
-- Local-first baseline summary generation.
-- Redaction before persistence/provider boundaries.
-- Explicit consent boundaries for AI payload send.
-- Restricted Mode blocks trust-sensitive collection/actions.
-- Metrics and diagnostics are local unless user explicitly shares them.
+- Local-first by default.
+- AI is optional.
+- AI payload review and consent are explicit.
+- Restricted Mode blocks trust-sensitive collection and execution actions.
+- Metrics and diagnostics stay local unless you explicitly share exports.
 
-Canonical privacy doc:
+Details:
 
 - [PRIVACY_AND_SAFETY.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/PRIVACY_AND_SAFETY.md)
 
-## Restricted Mode Summary
-
-TaCoS declares `untrustedWorkspaces: limited`.
-
-In Restricted Mode:
-
-- git command collection is disabled,
-- terminal command collection is disabled,
-- AI refinement is disabled,
-- execution-style restore actions are disabled,
-- local summary remains available.
-
-## Runtime Compatibility
+## Runtime Scope
 
 TaCoS is desktop-first today. It runs in the Node-hosted VS Code extension runtime and does not currently declare a browser entrypoint.
 
-## Panel Disclosure Behavior
+## Where To Go Next
 
-- Disclosure section order is stable across refreshes.
-- User-expanded/collapsed state is persisted.
-- Policy emphasis can add badge/accent cues to collapsed sections (`Trust Center`, `Timeline`, `Evidence`, `Details`, `More Context`) without auto-expanding them.
-- Emphasis targets only visible sections under current settings (for example, no timeline focus when `tacos.showTimeline` is disabled).
+Product behavior and UX:
 
-## Companion Home Behavior
+- [SPECS.md](https://github.com/jkordish/vscode-tacos/blob/main/SPECS.md)
+- [docs/DESIGN_AND_IMPLEMENTATION.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/DESIGN_AND_IMPLEMENTATION.md)
+- [docs/ux/dynamic-percolation-v0.8.0-spec.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/ux/dynamic-percolation-v0.8.0-spec.md)
+- [docs/references.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/references.md)
 
-- Companion Home keeps fixed `Now`, `Next`, `Blocked`, and `Restore` slot order for scan stability.
-- Exactly one primary CTA is marked per context across `Next` and `Blocked`; non-primary actions remain available as advisory/secondary controls.
-- `Next` and `Blocked` state captions render explicit emphasis tokens (`PRIMARY`, `ADVISORY`, `SUPPRESSED`) with reduced-motion-safe transitions.
-- `Blocked` metadata badges include evidence source, severity, confidence, and actionability score so unblock rationale is glanceable.
-- Companion Home includes a one-click `Why am I seeing this?` action that opens `More Context` → `Trust Center` → `Why am I seeing this?` explainability details.
-- Companion Home includes a one-click `Open evidence tray` action that opens `More Context` → `Evidence`, where evidence is grouped by surfaced-decision relevance.
-- Trust Center now includes a concise Trust & Privacy tray for `privacy preset`, `retention`, `AI provider mode`, `consent status`, plus one-click `Review AI payload preview` and `Revoke AI payload consent` controls.
-- Restricted Mode now explicitly marks suppressed execution actions and calls out filtered signal classes in Trust Center and explainability copy.
+Privacy and safety:
 
-## Status Bar Behavior
+- [docs/PRIVACY_AND_SAFETY.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/PRIVACY_AND_SAFETY.md)
+- [docs/action-safety-matrix.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/action-safety-matrix.md)
 
-- Status bar uses compact policy-driven semantics for ambient scanning.
-- Active mode shows concise status classes (`next`, `blocked`, `clarify`, `evidence`, `trust`, `restore`, `status`, `calm`) with short reason suffixes.
-- Quiet-hours suppression maps to a calm status instead of long dynamic headline text.
-- Visual elevation in active mode is reserved for high-risk blocked states.
+Metrics and validation:
 
-## Commands Overview
+- [docs/metrics.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/metrics.md)
+- [docs/metrics-baseline.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/metrics-baseline.md)
+- [docs/manual-smoke-runbook.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/manual-smoke-runbook.md)
+- [docs/acceptance-report.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/acceptance-report.md)
 
-### Resume and context
+Contributor/operator docs:
 
-- `TaCoS: Resume Summary Quick`
-- `TaCoS: Show Resume Brief Now`
-- `TaCoS: Show Last Summary`
-- `TaCoS: Copy Prompt and Open Codex`
-- `TaCoS: Jump to Last Edit`
+- [AGENTS.md](https://github.com/jkordish/vscode-tacos/blob/main/AGENTS.md)
+- [PLANS.md](https://github.com/jkordish/vscode-tacos/blob/main/PLANS.md)
+- [CHANGELOG.md](https://github.com/jkordish/vscode-tacos/blob/main/CHANGELOG.md)
 
-### Restore and workflow
-
-- `TaCoS: Restore Working Set`
-- `TaCoS: Set Restore Search Query`
-- `TaCoS: Switch Task Partition`
-- `TaCoS: Generate Standup Update`
-
-### Notes and scratchpad
-
-- `TaCoS: Add Checkpoint Note`
-- `TaCoS: Add Checkpoint Note from Clipboard`
-- `TaCoS: Add Checkpoint from Selection`
-- `TaCoS: Add Quick Checkpoint Note`
-- `TaCoS: List Checkpoint Notes`
-- `TaCoS: Clear Checkpoint Notes in Current Task Scope`
-- `TaCoS: Open Scratchpad`
-- `TaCoS: Append to Scratchpad`
-- `TaCoS: Set Scratchpad Scope`
-
-### Controls and privacy
-
-- `TaCoS: Pause Auto Summaries`
-- `TaCoS: Resume Auto Summaries`
-- `TaCoS: Snooze Auto Summaries`
-- `TaCoS: Quiet Now (1 hour)`
-- `TaCoS: Configure Summary Quiet Hours`
-- `TaCoS: Toggle Summaries Enabled`
-- `TaCoS: Pause Summaries Until Restart`
-- `TaCoS: Set Privacy Preset`
-- `TaCoS: Set Retention Policy`
-- `TaCoS: Forget This Workspace Now`
-- `TaCoS: Revoke AI Payload Consent`
-- `TaCoS: Privacy & Safety`
-- `TaCoS: Clear Summary Corrections`
-
-### Providers, metrics, diagnostics
-
-- `TaCoS: Configure AI Provider`
-- `TaCoS: Set OpenAI API Key`
-- `TaCoS: Clear OpenAI API Key`
-- `TaCoS: Test Sanitizer`
-- `TaCoS: Export Local Metrics`
-- `TaCoS: Copy Metrics Baseline Snapshot`
-- `TaCoS: Copy Diagnostics`
-
-## Key Settings Overview (`tacos.*`)
-
-- trigger and cadence: `showOnFocus`, `minIdleMinutes`, `longGapMinutes`, `cooldownMinutes`, `summaryQuietHours`
-- context depth: `includeDiff`, `maxDiffChars`, `includeTerminalHistory`, `includeDebugHistory`, `cacheIfContextUnchanged`
-- privacy and retention: `redactionPatterns`, `privacyPreset`, `retentionPolicy`
-- UI behavior: `uiSurface` (hard cap; notification only on high-value actionable decisions), `pauseSummaries`, `showTimeline`
-- percolation rollout controls: `percolationPolicyEnabled`, `percolationExplainabilityEnabled`, `percolationNotificationBrokerEnabled`
-- nudges: `companionNudgesEnabled`, `companionNudgeAggressiveness`, `companionNudgeQuietHours`, `companionNudgeCooldownMinutes`
-- providers: `summaryProvider`, `openaiModel`, `openaiBaseUrl`, `openaiTimeoutMs`, `aiIncludeCheckpointNotes`, `aiIncludeScratchpad`
-- operational: `metricsEnabled`, `codexOpenCommand`
-
-## AI Provider Setup
-
-- `local`: default; no provider network call.
-- `vscode-lm`: uses VS Code LM model selection and falls back safely on failures.
-- `openai`: uses configured endpoint/model with strict payload shaping and validation.
-
-OpenAI API key resolution order:
-
-1. VS Code SecretStorage via `TaCoS: Set OpenAI API Key`.
-2. `OPENAI_API_KEY` environment variable.
-
-## Development Workflow
+## Development Quick Commands
 
 ```bash
 npm ci
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-npm run build
-```
-
-## Test Workflow
-
-```bash
 npm run verify:quick
 npm run test:integration
-```
-
-## Packaging and Release Workflow
-
-```bash
 npm run package:vsix
-npm run verify
 ```
-
-GitHub Actions:
-
-- `ci.yml`: install, format/lint/typecheck/unit, integration, VSIX smoke package.
-- `release-vsix.yml`: tag-triggered VSIX packaging and release artifact attach.
-
-Marketplace publish note:
-
-- repository is publish-ready, but direct publish requires maintainers to configure `VSCE_PAT`.
-
-## Troubleshooting
-
-- no summary appears: confirm extension is enabled and not paused/snoozed; check `tacos.showOnFocus` and idle/cooldown settings.
-- AI refinement missing: check provider mode, trust state, consent status, and API key configuration.
-- restore actions disabled: verify workspace trust and prerequisites (task/debug history/branch context).
-- diagnostics for bug reports: run `TaCoS: Copy Diagnostics`.
-- local metrics export: run `TaCoS: Export Local Metrics`.
-
-## Operator Docs
-
-- [AGENTS.md](https://github.com/jkordish/vscode-tacos/blob/main/AGENTS.md)
-- [SPECS.md](https://github.com/jkordish/vscode-tacos/blob/main/SPECS.md)
-- [PLANS.md](https://github.com/jkordish/vscode-tacos/blob/main/PLANS.md)
-- [DESIGN_AND_IMPLEMENTATION.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/DESIGN_AND_IMPLEMENTATION.md)
-- [PRIVACY_AND_SAFETY.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/PRIVACY_AND_SAFETY.md)
-- [references.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/references.md)
 
 ## License
 
