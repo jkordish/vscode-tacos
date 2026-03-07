@@ -161,6 +161,17 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
+
+  it('treats resume safety counters as recorded metric activity', () => {
+    const metric = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'focus',
+      resumeSafetyShown: 1,
+    } as unknown as MetricRecord;
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -179,6 +190,12 @@ describe('buildMetricsCsv', () => {
         companionPromptImpressions: 4,
         companionForcedOpenDetailsClicks: 1,
         companionQuickActionsTaken: 3,
+        resumeSafetyShown: 1,
+        resumeSafetyDismissed: 1,
+        resumeSafetyActionClicks: 1,
+        resumeSafetyMismatchDetected: 1,
+        resumeSafetyStrictWarnings: 1,
+        resumeSafetyFirstActionLagMs: 900,
         companionPrimaryCtaImpressions: 2,
         companionPrimaryCtaSourceClass: 'next-step-action:openFile',
         companionPrimaryCtaClicks: 1,
@@ -207,6 +224,12 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('lowConfidenceClarificationRate');
     expect(lines[0]).toContain('companionActionFollowThroughRate');
     expect(lines[0]).toContain('summaryQuietActions');
+    expect(lines[0]).toContain('resumeSafetyShown');
+    expect(lines[0]).toContain('resumeSafetyDismissed');
+    expect(lines[0]).toContain('resumeSafetyActionClicks');
+    expect(lines[0]).toContain('resumeSafetyMismatchDetected');
+    expect(lines[0]).toContain('resumeSafetyStrictWarnings');
+    expect(lines[0]).toContain('resumeSafetyFirstActionLagMs');
     expect(lines[0]).toContain('interruptionTimingClass');
     expect(lines[0]).toContain('percolationDecisionCount');
     expect(lines[0]).toContain('surfaceSelectionNone');
@@ -247,7 +270,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[1]).toContain('"/workspace/repo,feature"');
     expect(lines[1]).toContain(',statusbar,');
     expect(lines[1]).toContain(',unknown,');
-    expect(lines[1]).toContain(',2,next-step-action:openFile,1,1,');
+    expect(lines[1]).toContain(',1,1,1,1,1,900,2,next-step-action:openFile,1,1,');
     expect(lines[1]).toContain(',0.7500,0.2500,0.5000,1.0000');
   });
 });
@@ -308,6 +331,8 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
           firstMeaningfulEditLagMs: 1000,
           firstRunLagMs: 2000,
           firstActionLagMs: 1500,
+          resumeSafetyFirstActionLagMs: 1100,
+          resumeSafetyShown: 1,
           companionPromptImpressions: 2,
           companionForcedOpenDetailsClicks: 1,
           companionNudgeImpressions: 1,
@@ -325,6 +350,9 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
           firstMeaningfulEditLagMs: 2000,
           firstRunLagMs: 4000,
           firstActionLagMs: 2500,
+          resumeSafetyFirstActionLagMs: 1900,
+          resumeSafetyShown: 1,
+          resumeSafetyMismatchDetected: 1,
           companionPromptImpressions: 3,
           companionForcedOpenDetailsClicks: 1,
           companionNudgeImpressions: 2,
@@ -341,6 +369,7 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
           trigger: 'cached',
           firstMeaningfulEditLagMs: 3000,
           firstActionLagMs: 3500,
+          resumeSafetyStrictWarnings: 1,
           interruptionTimingClass: 'unknown',
         },
       ],
@@ -355,7 +384,13 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| `firstMeaningfulEditLagMs` | 3 | 2000 (2.0s) | 2900 (2.9s) |');
     expect(markdown).toContain('| `firstRunLagMs` | 2 | 3000 (3.0s) | 3900 (3.9s) |');
     expect(markdown).toContain('| `firstActionLagMs` | 3 | 2500 (2.5s) | 3400 (3.4s) |');
+    expect(markdown).toContain(
+      '| `resumeSafetyFirstActionLagMs` | 2 | 1500 (1.5s) | 1860 (1.9s) |',
+    );
     expect(markdown).toContain('| Prompt impressions (total) | 5 |');
+    expect(markdown).toContain('| resumeSafetyShown (total) | 2 |');
+    expect(markdown).toContain('| resumeSafetyMismatchDetected (total) | 1 |');
+    expect(markdown).toContain('| resumeSafetyStrictWarnings (total) | 1 |');
     expect(markdown).toContain('| Prompt impressions per session | 1.67 |');
     expect(markdown).toContain('| Forced-open details clicks (total) | 2 |');
     expect(markdown).toContain('| Forced-open rate (`forced/prompt`) | 0.4000 |');

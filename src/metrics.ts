@@ -27,6 +27,12 @@ const CSV_HEADERS = [
   'companionForcedOpenDetailsClicks',
   'companionQuickActionsTaken',
   'companionNudgeImpressions',
+  'resumeSafetyShown',
+  'resumeSafetyDismissed',
+  'resumeSafetyActionClicks',
+  'resumeSafetyMismatchDetected',
+  'resumeSafetyStrictWarnings',
+  'resumeSafetyFirstActionLagMs',
   'companionPrimaryCtaImpressions',
   'companionPrimaryCtaSourceClass',
   'companionPrimaryCtaClicks',
@@ -340,6 +346,7 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const lagEdit = summarizeLag(metrics, 'firstMeaningfulEditLagMs');
   const lagRun = summarizeLag(metrics, 'firstRunLagMs');
   const lagAction = summarizeLag(metrics, 'firstActionLagMs');
+  const lagResumeSafetyAction = summarizeLag(metrics, 'resumeSafetyFirstActionLagMs');
 
   const percolationDecisionCount = summarizeTotal(metrics, 'percolationDecisionCount');
   const surfaceSelectionStatusbar = summarizeTotal(metrics, 'surfaceSelectionStatusbar');
@@ -356,6 +363,11 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const forcedOpenClicks = summarizeTotal(metrics, 'companionForcedOpenDetailsClicks');
   const quickActionsTaken = summarizeTotal(metrics, 'companionQuickActionsTaken');
   const nudgeImpressions = summarizeTotal(metrics, 'companionNudgeImpressions');
+  const resumeSafetyShown = summarizeTotal(metrics, 'resumeSafetyShown');
+  const resumeSafetyDismissed = summarizeTotal(metrics, 'resumeSafetyDismissed');
+  const resumeSafetyActionClicks = summarizeTotal(metrics, 'resumeSafetyActionClicks');
+  const resumeSafetyMismatchDetected = summarizeTotal(metrics, 'resumeSafetyMismatchDetected');
+  const resumeSafetyStrictWarnings = summarizeTotal(metrics, 'resumeSafetyStrictWarnings');
   const primaryCtaImpressions = summarizeTotal(metrics, 'companionPrimaryCtaImpressions');
   const primaryCtaClicks = summarizeTotal(metrics, 'companionPrimaryCtaClicks');
   const primaryCtaCompletions = summarizeTotal(metrics, 'companionPrimaryCtaCompletions');
@@ -449,6 +461,7 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| \`firstMeaningfulEditLagMs\` | ${lagEdit.n} | ${formatMs(lagEdit.p50)} | ${formatMs(lagEdit.p95)} |`,
     `| \`firstRunLagMs\` | ${lagRun.n} | ${formatMs(lagRun.p50)} | ${formatMs(lagRun.p95)} |`,
     `| \`firstActionLagMs\` | ${lagAction.n} | ${formatMs(lagAction.p50)} | ${formatMs(lagAction.p95)} |`,
+    `| \`resumeSafetyFirstActionLagMs\` | ${lagResumeSafetyAction.n} | ${formatMs(lagResumeSafetyAction.p50)} | ${formatMs(lagResumeSafetyAction.p95)} |`,
     '',
     'Prompt and nudge rates:',
     '',
@@ -460,6 +473,11 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| Forced-open rate (\`forced/prompt\`) | ${formatNumber(forcedOpenRate, 4)} |`,
     `| Nudge impressions (total) | ${nudgeImpressions} |`,
     `| Nudge impressions per session | ${formatNumber(nudgePerSession)} |`,
+    `| resumeSafetyShown (total) | ${resumeSafetyShown} |`,
+    `| resumeSafetyDismissed (total) | ${resumeSafetyDismissed} |`,
+    `| resumeSafetyActionClicks (total) | ${resumeSafetyActionClicks} |`,
+    `| resumeSafetyMismatchDetected (total) | ${resumeSafetyMismatchDetected} |`,
+    `| resumeSafetyStrictWarnings (total) | ${resumeSafetyStrictWarnings} |`,
     `| Percolation decisions (total) | ${percolationDecisionCount} |`,
     `| surfaceSelectionStatusbar (total) | ${surfaceSelectionStatusbar} |`,
     `| surfaceSelectionPanelSilent (total) | ${surfaceSelectionPanelSilent} |`,
@@ -570,6 +588,12 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.companionForcedOpenDetailsClicks ?? 0) > 0 ||
     (metric.companionQuickActionsTaken ?? 0) > 0 ||
     (metric.companionNudgeImpressions ?? 0) > 0 ||
+    (metric.resumeSafetyShown ?? 0) > 0 ||
+    (metric.resumeSafetyDismissed ?? 0) > 0 ||
+    (metric.resumeSafetyActionClicks ?? 0) > 0 ||
+    (metric.resumeSafetyMismatchDetected ?? 0) > 0 ||
+    (metric.resumeSafetyStrictWarnings ?? 0) > 0 ||
+    metric.resumeSafetyFirstActionLagMs !== undefined ||
     (metric.companionPrimaryCtaImpressions ?? 0) > 0 ||
     (metric.companionPrimaryCtaClicks ?? 0) > 0 ||
     (metric.companionPrimaryCtaCompletions ?? 0) > 0 ||
@@ -657,6 +681,12 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.companionForcedOpenDetailsClicks),
       toOptionalNumber(metric.companionQuickActionsTaken),
       toOptionalNumber(metric.companionNudgeImpressions),
+      toOptionalNumber(metric.resumeSafetyShown),
+      toOptionalNumber(metric.resumeSafetyDismissed),
+      toOptionalNumber(metric.resumeSafetyActionClicks),
+      toOptionalNumber(metric.resumeSafetyMismatchDetected),
+      toOptionalNumber(metric.resumeSafetyStrictWarnings),
+      toOptionalNumber(metric.resumeSafetyFirstActionLagMs),
       toOptionalNumber(metric.companionPrimaryCtaImpressions),
       metric.companionPrimaryCtaSourceClass ?? '',
       toOptionalNumber(metric.companionPrimaryCtaClicks),

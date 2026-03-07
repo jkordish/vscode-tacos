@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-03-07
+
 ### Added
 
 - Docs-driven operating model docs: `AGENTS.md`, `SPECS.md`, `PLANS.md`.
@@ -15,6 +17,7 @@ All notable changes to this project are documented in this file.
 - Bundled build script (`scripts/build.mjs`) using `esbuild`.
 - Explicit manifest runtime posture via `extensionKind: [\"workspace\"]`.
 - Policy-driven panel section emphasis hints (badge + accent only) for collapsed sections, with stable layout and persisted expansion behavior.
+- Resume Safety Check: a 10-second post-resume `State / Risk / Verify` annunciator with a manual command (`TaCoS: Show Resume Safety Check`) and scoped persisted context.
 
 ### Changed
 
@@ -41,6 +44,8 @@ All notable changes to this project are documented in this file.
 - `Changes Since Last Time` now uses precision buckets (`Code`, `Runs`, `Blocker`, `Key files`, `Git`, `References`) plus deterministic novelty profiling, and default percolation candidate novelty now adapts to that profile with new local novelty-bucket metrics counters (`low`, `medium`, `high`).
 - Auto-trigger no-change fingerprinting now uses a partition-aware `v2` payload, and task-partition switches reset destination-scope suppression memory (`no-change`, nudge cooldown, and noise-budget windows) to avoid stale suppression carryover.
 - Metrics exports now include percolation decision-chain counters (`percolationDecisionCount`, segmented panel surface classes `panel-silent`/`panel-emphasis`, and low/medium/high primary-confidence bands), and the metrics dictionary/baseline snapshot include those fields.
+- Resume Safety Check now reuses the existing summary/context pipeline, surfaces deterministic mismatch examples (branch drift, focus drift, scope drift, failing-command recheck), and records local-only counters plus `resumeSafetyFirstActionLagMs` for evaluation.
+- Added narrow strict mode for Resume Safety Check via `tacos.resumeSafety.strict`; it warns before the first risky rerun or mismatched file action when TaCoS sees a strong deterministic mismatch and biases the user toward fixing context first.
 - Added staged percolation rollout flags (`tacos.percolationPolicyEnabled`, `tacos.percolationExplainabilityEnabled`, `tacos.percolationNotificationBrokerEnabled`) with safe legacy `uiSurface` fallback behavior and diagnostics bundle visibility for configured vs active rollout state.
 - Completed DP-506 / `#259`: onboarding and docs copy now teach the ambient-vs-glanceable-vs-deep model explicitly in first-run prompts, quickstart guidance, and README/marketplace-facing metadata.
 

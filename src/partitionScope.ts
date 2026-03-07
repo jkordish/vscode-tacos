@@ -2,7 +2,7 @@ const DEFAULT_SCOPE_BRANCH = 'default';
 const DEFAULT_TASK_PARTITION = 'default';
 
 function normalizeToken(value: string | undefined, fallback: string): string {
-  const normalized = value?.trim() ?? '';
+  const normalized = typeof value === 'string' ? value.trim() : '';
   return normalized || fallback;
 }
 

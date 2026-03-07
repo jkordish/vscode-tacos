@@ -45,13 +45,13 @@ export function readBranchFromGitHead(workspaceRoot: string): string | undefined
 
 export function resolveScopeBranch(input: {
   workspaceRoot: string;
-  persistedBranch?: string;
+  persistedBranch?: unknown;
 }): string {
   const liveBranch = readBranchFromGitHead(input.workspaceRoot);
   if (liveBranch) {
     return liveBranch;
   }
 
-  const persisted = input.persistedBranch?.trim();
+  const persisted = typeof input.persistedBranch === 'string' ? input.persistedBranch.trim() : '';
   return persisted || DEFAULT_SCOPE_BRANCH;
 }

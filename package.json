@@ -3,7 +3,7 @@
   "displayName": "TaCoS Resume Brief",
   "description": "Calm ambient resume cues with deep trust/evidence drill-down when you need it.",
   "license": "MIT",
-  "version": "0.7.0",
+  "version": "0.8.1",
   "publisher": "jkordish",
   "repository": {
     "type": "git",
@@ -51,6 +51,7 @@
     "onStartupFinished",
     "onCommand:tacos.slash",
     "onCommand:tacos.showNow",
+    "onCommand:tacos.showResumeSafetyCheck",
     "onCommand:tacos.copyPromptAndOpenCodex",
     "onCommand:tacos.showLastSummary",
     "onCommand:tacos.jumpToLastEdit",
@@ -103,6 +104,10 @@
       {
         "command": "tacos.showNow",
         "title": "TaCoS: Show Resume Brief Now"
+      },
+      {
+        "command": "tacos.showResumeSafetyCheck",
+        "title": "TaCoS: Show Resume Safety Check"
       },
       {
         "command": "tacos.copyPromptAndOpenCodex",
@@ -318,6 +323,22 @@
           "type": "boolean",
           "default": false,
           "description": "Temporarily disable auto summaries without uninstalling the extension."
+        },
+        "tacos.resumeSafety.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the short post-resume State / Risk / Verify safety check after meaningful resume events."
+        },
+        "tacos.resumeSafety.idleMinutes": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "Minimum idle minutes before TaCoS treats focus return or workspace reopen as a Resume Safety Check event."
+        },
+        "tacos.resumeSafety.strict": {
+          "type": "boolean",
+          "default": false,
+          "description": "Warn before the first risky rerun or mismatched file action when TaCoS detects a strong branch or scope mismatch."
         },
         "tacos.showTimeline": {
           "type": "boolean",

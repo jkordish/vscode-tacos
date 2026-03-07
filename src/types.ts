@@ -9,6 +9,9 @@ export interface ExtensionConfig {
   enabled: boolean;
   showOnFocus: boolean;
   pauseSummaries: boolean;
+  resumeSafetyEnabled: boolean;
+  resumeSafetyIdleMinutes: number;
+  resumeSafetyStrict: boolean;
   showTimeline: boolean;
   promptCheckpointOnBlur: boolean;
   minIdleMinutes: number;
@@ -189,6 +192,12 @@ export interface MetricRecord {
   companionForcedOpenDetailsClicks?: number;
   companionQuickActionsTaken?: number;
   companionNudgeImpressions?: number;
+  resumeSafetyShown?: number;
+  resumeSafetyDismissed?: number;
+  resumeSafetyActionClicks?: number;
+  resumeSafetyMismatchDetected?: number;
+  resumeSafetyStrictWarnings?: number;
+  resumeSafetyFirstActionLagMs?: number;
   companionPrimaryCtaImpressions?: number;
   companionPrimaryCtaSourceClass?: string;
   companionPrimaryCtaClicks?: number;

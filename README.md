@@ -32,6 +32,15 @@ For a fast guided setup:
 
 - [Quickstart](https://github.com/jkordish/vscode-tacos/blob/main/docs/quickstart.md)
 
+## Resume Safety Check
+
+TaCoS now includes a short post-resume safety check that flashes for about 10 seconds after a meaningful resume. It acts like a small cockpit annunciator: `State` says where you are now, `Risk` calls out one likely stale assumption, and `Verify` gives one best next confirmation action. The goal is to reduce wrong first actions without adding another heavy panel or interruptive modal.
+
+- Command: `TaCoS: Show Resume Safety Check`
+- Settings: `tacos.resumeSafety.enabled`, `tacos.resumeSafety.idleMinutes`, `tacos.resumeSafety.strict`
+- Typical mismatch examples: summary branch vs current branch drift, current editor drifting away from the last resume focus file, or current package/service drifting away from the captured task area
+- Strict mode stays narrow: it only warns before the first risky rerun or mismatched file action when TaCoS has a strong deterministic mismatch signal, and the prompt biases toward fixing context first
+
 ## Safety in Plain English
 
 - Local-first by default.
