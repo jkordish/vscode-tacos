@@ -145,6 +145,19 @@ describe('evaluateResumeSafetyStrictWarning', () => {
     });
   });
 
+  it('warns on the first debug rerun when a strong mismatch is active', () => {
+    expect(
+      evaluateResumeSafetyStrictWarning({
+        enabled: true,
+        isFirstAction: true,
+        check: strongCheck,
+        actionKind: 'rerunDebug',
+      }),
+    ).toMatchObject({
+      shouldWarn: true,
+    });
+  });
+
   it('does not warn when the user takes the suggested verification action', () => {
     expect(
       evaluateResumeSafetyStrictWarning({

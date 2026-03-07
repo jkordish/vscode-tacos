@@ -574,6 +574,9 @@ function matchesVerificationAction(
   actionTarget: string | undefined,
   verifyAction: ResumeSafetyVerificationAction,
 ): boolean {
+  if (actionKind === 'rerunDebug') {
+    return false;
+  }
   if (
     (actionKind === 'refreshSummary' && verifyAction.kind !== 'refreshSummary') ||
     (actionKind === 'openFile' && verifyAction.kind !== 'openFile') ||
