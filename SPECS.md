@@ -7,6 +7,7 @@ TaCoS is a desktop-first VS Code extension that reduces interruption recovery co
 ## Current Scope
 
 - Automatic and manual resume brief generation.
+- Resume Safety Check annunciation after meaningful resume events.
 - Evidence-backed companion surfaces and restore actions.
 - Ambient-to-deep UX layering (status bar ambient cues, glanceable Companion Home, one-click deep trust/evidence drill-down).
 - Privacy and trust controls (redaction, consent, retention, Restricted Mode behavior).
@@ -128,6 +129,59 @@ Users lose task context after focus switches and interruptions.
 ### Links to plan items / issues / PRs
 
 - Plan: `PLANS.md` item `P6`.
+
+## Feature: Resume Safety Check
+
+### Problem
+
+Users can take the wrong first action after resuming because the visible editor, branch, or task context no longer matches the last captured resume context.
+
+### Goals
+
+- Add a subtle, low-friction post-resume state check.
+- Reuse existing summary/context signals instead of building a second resume system.
+- Prefer deterministic mismatch signals and show only one stale assumption plus one verification action.
+
+### Non-goals
+
+- Full resume UX redesign.
+- Broad speculative ranking or confidence-scoring theater.
+- Hard-blocking most actions.
+
+### User-facing behavior
+
+- After a meaningful resume event, TaCoS shows a 10-second pilot-style annunciator with `State`, `Risk`, and `Verify`.
+- Focus-return and workspace-reopen checks require `tacos.resumeSafety.idleMinutes` of inactivity; the manual command can force-show the check immediately.
+- `Risk` shows at most one stale assumption or mismatch. When no strong mismatch exists, TaCoS falls back to a short “no obvious mismatch” posture.
+- `Verify` runs one deterministic action such as refreshing the summary, opening the last likely focus file, jumping to the last edit, rerunning the last task, or opening Problems.
+- Strict mode shows `Mismatch detected: fix or proceed?` only for the first risky rerun or mismatched file action when the mismatch signal is strong.
+
+### Technical shape / architecture notes
+
+- Resume safety logic is centralized in `src/resumeSafety.ts`.
+- `src/extension.ts` builds/persists one scoped resume-safety context alongside the existing summary flow and presents it through a temporary status-bar item.
+- Strict-mode warnings reuse existing command/action handlers and verification actions instead of introducing a separate modal workflow engine.
+
+### Settings and commands affected
+
+- Settings: `tacos.resumeSafety.enabled`, `tacos.resumeSafety.idleMinutes`, `tacos.resumeSafety.strict`.
+- Commands: `tacos.showResumeSafetyCheck`.
+
+### Acceptance criteria
+
+- Trigger eligibility, mismatch detection, persistence, and strict-warning decisions are deterministic and test-covered.
+- The surfaced check uses only already-supported local signals (summary, branch, files, task/debug/problem affordances).
+- Strong mismatch warnings stay narrow and default toward fixing context first.
+- Feature removal remains low-risk because the runtime path is isolated from core summary generation.
+
+### Risks / failure modes
+
+- Over-eager mismatch detection could feel naggy if branch/focus heuristics are too broad.
+- Weak or stale signals could surface noisy verification actions if fallbacks are not kept conservative.
+
+### Open questions
+
+- Should future versions add a branch-change-after-idle trigger when it becomes cheap and reliable enough?
 
 ## Feature: Panel Disclosure Emphasis and Stability
 

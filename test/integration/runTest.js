@@ -100,6 +100,13 @@ async function main() {
     );
 
     await runSuite(
+      'resume-safety-check',
+      path.resolve(__dirname, 'suite', 'resumeSafetyCheck.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'percolation-signal-cache-reset',
       path.resolve(__dirname, 'suite', 'percolationSignalCacheReset.js'),
       [fixtureWorkspace, '--disable-extensions'],

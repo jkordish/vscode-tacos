@@ -41,6 +41,25 @@ Status vocabulary used in this file:
   - `package.json`
   - `.github/workflows/ci.yml`
 
+### P2a. Resume Safety Check v1
+
+- status: `done`
+- why: reduce wrong first actions immediately after resumption without expanding TaCoS into a second summary system.
+- scope: add a temporary post-resume `State / Risk / Verify` annunciator, deterministic mismatch detection, a manual command, narrow strict-mode warnings, scoped persistence, and local-only evaluation counters.
+- dependencies: P1, P4.
+- recent progress:
+  - added `src/resumeSafety.ts` for deterministic eligibility, mismatch detection, persistence normalization, and strict-warning decisions.
+  - wired Resume Safety Check into manual/focus/startup resume flows in `src/extension.ts` with a 10-second status-bar surface, one-click verify action, and scoped `workspaceState` persistence.
+  - added settings/manifest wiring for `tacos.resumeSafety.enabled`, `tacos.resumeSafety.idleMinutes`, and `tacos.resumeSafety.strict`, plus the `TaCoS: Show Resume Safety Check` command.
+  - extended local metrics/docs/tests with resume-safety counters and first-action lag capture.
+- risks/rollback:
+  - risk: mismatch heuristics may feel noisy if they expand beyond strong branch/scope drift.
+  - rollback: disable auto surfacing via `tacos.resumeSafety.enabled` or remove the isolated resume-safety runtime path without destabilizing summary generation.
+- links:
+  - `src/resumeSafety.ts`
+  - `src/extension.ts`
+  - `docs/metrics.md`
+
 ### P3. Trust/privacy/AI boundary audit
 
 - status: `queued`

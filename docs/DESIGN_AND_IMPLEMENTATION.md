@@ -56,6 +56,7 @@ Principles:
 
 - Companion webview panel (primary detail/action UI).
 - Status bar and notification prompts.
+- Resume Safety Check uses a second short-lived status-bar annunciator so `State / Risk / Verify` can appear without forcing a new panel or modal flow.
 - Status bar semantics are compact and policy-driven (`class + reason`) so ambient state remains stable; active-mode elevation is reserved for rare high-risk blocked states.
 - Focus-triggered summary presentation now runs through a deterministic surface broker (`none` vs `statusbar` vs `panel` vs `notification`) with explicit reason enums; `tacos.uiSurface` remains a hard cap/user override.
 - Companion Home keeps fixed `Now/Next/Blocked/Restore` slot order while a central CTA arbiter enforces one primary action across `Next` and `Blocked`; emphasis tokens (`PRIMARY`/`ADVISORY`/`SUPPRESSED`) are motion-safe and a11y-aware.
@@ -118,6 +119,7 @@ Settings with trust-sensitive impact are constrained via manifest restricted con
 Primary stores:
 
 - `workspaceState`: scoped activity, summaries, notes, partitions, nudge state, metrics records.
+- `workspaceState`: also stores the latest scoped Resume Safety Check context (`sharedState`, `staleAssumption`, `nextVerificationAction`, plus lightweight provenance).
 - `globalState`: cross-workspace helper state where needed.
 - `SecretStorage`: OpenAI API key.
 - local files: `.tacos/metrics.json` and `.tacos/metrics.csv` exports.
@@ -126,6 +128,7 @@ Primary stores:
 - Metrics schema includes novelty bucket distribution counters (`noveltyScoreBucketLow`, `noveltyScoreBucketMedium`, `noveltyScoreBucketHigh`) for per-session percolation novelty analysis.
 - Metrics schema includes percolation decision-chain counters (`percolationDecisionCount`, segmented surface selections including `panel-silent`/`panel-emphasis`, and confidence-band counters) for policy-outcome analysis.
 - Metrics schema includes AI payload-preview entrypoint counters (`aiPayloadPreviewOpensTrustCenter`, `aiPayloadPreviewOpensWhySurfaced`, `aiPayloadPreviewOpensCompanionHome`) so trust-drill-down adoption can be measured locally.
+- Metrics schema includes Resume Safety Check counters (`resumeSafetyShown`, `resumeSafetyDismissed`, `resumeSafetyActionClicks`, `resumeSafetyMismatchDetected`, `resumeSafetyStrictWarnings`) plus `resumeSafetyFirstActionLagMs`.
 - Suppression memory for nudge cooldown windows and noise-budget windows is partition-scoped; explicit task-partition switches clear destination-scope suppression memory.
 - extension storage scratchpad files scoped by workspace/partition context.
 
@@ -144,6 +147,7 @@ Retention:
 
 - `TaCoS: Copy Diagnostics` emits privacy-safe environment/mode context plus active percolation rollout flag state.
 - `TaCoS: Export Local Metrics` writes local artifacts only.
+- Resume Safety Check evaluation uses local-only counters and lag metrics; no remote telemetry path was added.
 - Metrics are not auto-uploaded by TaCoS.
 
 ## What Is Intentionally Local-Only

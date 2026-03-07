@@ -19,8 +19,9 @@ TaCoS metrics are local-only. No telemetry upload or external analytics pipeline
 
 The copied snapshot includes:
 
-- lag p50/p95 for `firstMeaningfulEditLagMs`, `firstRunLagMs`, and `firstActionLagMs`
+- lag p50/p95 for `firstMeaningfulEditLagMs`, `firstRunLagMs`, `firstActionLagMs`, and `resumeSafetyFirstActionLagMs`
 - prompt/nudge/forced-open totals and rates
+- Resume Safety Check totals (`shown`, `dismissed`, `action clicked`, `mismatch detected`, `strict warning fired`)
 - primary CTA impression/click/completion totals and rates
 - interruption timing class breakdown (`boundary`, `mid-activity`, `unknown`)
 - derived `UX friction score` (`0-100`, lower is better) with component breakdown and formula
@@ -58,6 +59,12 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `companionForcedOpenDetailsClicks`    | integer | Number of "Open details" forced-open clicks from prompt mode.                   |
 | `companionQuickActionsTaken`          | integer | Number of prompt-mode quick actions taken (copy/pause/open flows).              |
 | `companionNudgeImpressions`           | integer | Number of accepted companion nudge impressions in session.                      |
+| `resumeSafetyShown`                   | integer | Count of Resume Safety Check annunciators shown in the session.                 |
+| `resumeSafetyDismissed`               | integer | Count of Resume Safety Check annunciators that timed out/dismissed quietly.     |
+| `resumeSafetyActionClicks`            | integer | Count of Resume Safety Check verify-action clicks.                              |
+| `resumeSafetyMismatchDetected`        | integer | Count of Resume Safety Check surfaces that identified a mismatch/stale assumption. |
+| `resumeSafetyStrictWarnings`          | integer | Count of strict-mode `fix or proceed` warnings shown before the first risky action. |
+| `resumeSafetyFirstActionLagMs`        | integer | Milliseconds from Resume Safety Check surface time to the first inferable action. |
 | `companionPrimaryCtaImpressions`      | integer | Number of sessions where TaCoS rendered a primary next-action CTA.              |
 | `companionPrimaryCtaSourceClass`      | string  | Policy source class for the single primary CTA (for example `policy:next-step-action:openFile` or `policy:blocker:taskFailure`). |
 | `companionPrimaryCtaClicks`           | integer | Number of primary CTA clicks taken by the user.                                 |
@@ -128,6 +135,10 @@ Track these explicitly for stabilization/adoption gating:
 - `percolationConfidenceBandHigh`
 - `companionForcedOpenDetailsClicks`
 - `companionNudgeImpressions`
+- `resumeSafetyShown`
+- `resumeSafetyMismatchDetected`
+- `resumeSafetyStrictWarnings`
+- `resumeSafetyFirstActionLagMs`
 - `companionPrimaryCtaImpressions`
 - `companionPrimaryCtaSourceClass`
 - `companionPrimaryCtaClicks`
@@ -148,6 +159,28 @@ Track these explicitly for stabilization/adoption gating:
 - `aiPayloadPreviewOpensTrustCenter`
 - `aiPayloadPreviewOpensWhySurfaced`
 - `aiPayloadPreviewOpensCompanionHome`
+
+## Resume Safety Check Evaluation
+
+Primary metric:
+
+- `resumeSafetyFirstActionLagMs` compared with the existing `firstActionLagMs` and `firstMeaningfulEditLagMs` cohorts.
+
+Secondary proxy:
+
+- wrong-first-action proxy within 30 seconds: `resumeSafetyStrictWarnings`, interpreted alongside `resumeSafetyMismatchDetected` and `resumeSafetyActionClicks`.
+
+Recommended comparisons:
+
+- feature on vs off: compare cohorts with `tacos.resumeSafety.enabled=true` and `false`
+- strict on vs off: compare `resumeSafetyStrictWarnings`, `resumeSafetyActionClicks`, and follow-on lag changes
+- mismatch-heavy vs mismatch-light sessions: segment by `resumeSafetyMismatchDetected`
+
+What TaCoS cannot reliably measure:
+
+- whether a user mentally chose the correct action without taking a tracked command or editor action
+- correctness of arbitrary terminal commands executed outside VS Code signal coverage
+- whether a later success definitively proves the first action was correct
 
 ## Notes
 
