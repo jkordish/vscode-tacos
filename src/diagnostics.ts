@@ -16,6 +16,15 @@ export interface DiagnosticsInput {
   percolationExplainabilityActive: boolean;
   percolationNotificationBrokerEnabled: boolean;
   percolationNotificationBrokerActive: boolean;
+  taskCheckpointEnabled: boolean;
+  taskCheckpointPromptOnLikelySwitch: boolean;
+  activeStructuredTaskFreshness?: 'fresh' | 'stale' | 'none';
+  activeStructuredTaskSwitchClass?: 'stable' | 'repeated-switch' | 'none';
+  activeStructuredTaskCount?: number;
+  resolvedStructuredTaskCount?: number;
+  lastTaskSwitchSummary?: string;
+  lastTaskSwitchReasonCodes?: string[];
+  lastTaskSwitchSuppressionReason?: string;
   recentMetrics: MetricRecord[];
   performanceCounters?: {
     focusHandling?: PerformanceCounterSnapshot;
@@ -156,6 +165,15 @@ export function buildDiagnosticsText(input: DiagnosticsInput): string {
     `percolationExplainabilityActive: ${input.percolationExplainabilityActive ? 'true' : 'false'}`,
     `percolationNotificationBrokerEnabled: ${input.percolationNotificationBrokerEnabled ? 'true' : 'false'}`,
     `percolationNotificationBrokerActive: ${input.percolationNotificationBrokerActive ? 'true' : 'false'}`,
+    `taskCheckpointEnabled: ${input.taskCheckpointEnabled ? 'true' : 'false'}`,
+    `taskCheckpointPromptOnLikelySwitch: ${input.taskCheckpointPromptOnLikelySwitch ? 'true' : 'false'}`,
+    `activeStructuredTaskFreshness: ${input.activeStructuredTaskFreshness ?? 'none'}`,
+    `activeStructuredTaskSwitchClass: ${input.activeStructuredTaskSwitchClass ?? 'none'}`,
+    `activeStructuredTaskCount: ${input.activeStructuredTaskCount ?? 0}`,
+    `resolvedStructuredTaskCount: ${input.resolvedStructuredTaskCount ?? 0}`,
+    `lastTaskSwitchSummary: ${input.lastTaskSwitchSummary ?? 'n/a'}`,
+    `lastTaskSwitchReasonCodes: ${(input.lastTaskSwitchReasonCodes ?? []).join(', ') || 'none'}`,
+    `lastTaskSwitchSuppressionReason: ${input.lastTaskSwitchSuppressionReason ?? 'none'}`,
     '',
     'recentMetrics(last10):',
     `sessions: ${metricSummary.sessions}`,

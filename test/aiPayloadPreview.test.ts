@@ -43,7 +43,7 @@ describe('buildAiPayloadPreviewMarkdown', () => {
     expect(markdown).toContain('"intent": "Fix tests"');
     expect(markdown).toContain('"intentSource": "inferred"');
     expect(markdown).toContain('Intent source: inferred');
-    expect(markdown).toContain('Includes your checkpoint notes: no');
+    expect(markdown).toContain('Includes checkpoint context in summary: no');
     expect(markdown).toContain('Includes scratchpad content: no');
     expect(markdown).toContain('## Redaction report');
     expect(markdown).toContain('High-risk detected: no');
@@ -89,7 +89,6 @@ describe('buildAiPayloadPreviewMarkdown', () => {
       },
       includeCheckpointNotes: true,
       includeScratchpad: false,
-      checkpointNotes: ['secret removed'],
       redactionReport: {
         categoryCounts: {
           bearer_header: 2,
@@ -108,12 +107,13 @@ describe('buildAiPayloadPreviewMarkdown', () => {
       },
     });
 
-    expect(markdown).toContain('Includes your checkpoint notes: yes');
+    expect(markdown).toContain('Includes checkpoint context in summary: yes');
     expect(markdown).toContain('Includes scratchpad content: no');
     expect(markdown).toContain('Intent source: user-edited');
     expect(markdown).toContain('Total replacements: 3');
     expect(markdown).toContain('High-risk detected: yes');
     expect(markdown).toContain('bearer_header: 2');
     expect(markdown).toContain('private_key_block: 1');
+    expect(markdown).not.toContain('"checkpointNotes"');
   });
 });

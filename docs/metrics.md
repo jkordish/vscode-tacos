@@ -22,9 +22,16 @@ The copied snapshot includes:
 - lag p50/p95 for `firstMeaningfulEditLagMs`, `firstRunLagMs`, `firstActionLagMs`, and `resumeSafetyFirstActionLagMs`
 - prompt/nudge/forced-open totals and rates
 - Resume Safety Check totals (`shown`, `dismissed`, `action clicked`, `mismatch detected`, `strict warning fired`)
+- structured checkpoint totals (`offered`, `completed`, `skipped`, `dismissed`, `edited later`, `field completeness`)
+- structured task-state totals (`created`, `resolved`, `stale`) and switch/debrief totals
+- resume-brief state-recovery totals (`resumeBriefUsesCheckpointState`, `resumeBriefShowsTimelineCue`)
 - primary CTA impression/click/completion totals and rates
 - interruption timing class breakdown (`boundary`, `mid-activity`, `unknown`)
 - derived `UX friction score` (`0-100`, lower is better) with component breakdown and formula
+- cohort comparisons for:
+  - `resumeWithStructuredTaskState`
+  - `taskSwitchSessionClass`
+  - `resumeTaskStateFreshness`
 - dogfooding gate status (`>=30` sessions and `>=3` workspaces)
 
 The snapshot is aggregate-only and excludes raw workspace paths.
@@ -104,8 +111,28 @@ The snapshot is aggregate-only and excludes raw workspace paths.
 | `noteCreated`                         | integer | Count of checkpoint notes created during session.                               |
 | `noteMarkedDone`                      | integer | Count of checkpoint notes marked done during session.                           |
 | `notePinned`                          | integer | Count of checkpoint notes pinned during session.                                |
+| `checkpointOffered`                   | integer | Count of structured checkpoint prompts offered on likely-switch boundaries.      |
+| `checkpointCompleted`                 | integer | Count of structured task checkpoint captures/edits completed.                   |
+| `checkpointSkipped`                   | integer | Count of likely-switch checkpoint prompts explicitly skipped.                    |
+| `checkpointDismissed`                 | integer | Count of likely-switch checkpoint prompts explicitly dismissed.                  |
+| `checkpointEditedLater`               | integer | Count of structured checkpoints edited after initial creation.                   |
+| `checkpointFieldCompleteness`         | integer | Aggregate completeness score (`0-100`) for structured task-state captures.      |
+| `structuredTaskStateCreated`          | integer | Count of structured task-state records created during session.                   |
+| `structuredTaskStateResolved`         | integer | Count of structured task-state records explicitly resolved during session.       |
+| `structuredTaskStateStale`            | integer | Count of resume sessions where the active structured task state was stale.       |
+| `taskSwitchDetected`                  | integer | Count of deterministic likely task-switch detections surfaced for the session.   |
+| `taskSwitchConfirmed`                 | integer | Count of switch detections that led to checkpoint capture.                       |
+| `taskSwitchCorrected`                 | integer | Count of manual switch flows that ended without capture after user review.       |
+| `resumeBriefUsesCheckpointState`      | integer | Count of resume briefs that merged structured task state into the recovery view. |
+| `resumeBriefShowsTimelineCue`         | integer | Count of resume briefs that surfaced timeline/evidence retrieval cues.           |
+| `dailyDebriefOpened`                  | integer | Count of `TaCoS: Show Cognitive Debrief` opens during the session.              |
+| `abandonedThreadSurfaced`             | integer | Number of abandoned-thread items surfaced in the cognitive debrief.              |
+| `unresolvedBlockerSurfaced`           | integer | Number of unresolved-blocker items surfaced in the cognitive debrief.            |
 | `resumePathCompletions`               | integer | Count of completed resume-path checklist steps (when feature is enabled).       |
 | `resumeWithNote`                      | integer | `1` if an open checkpoint note was present in the resume context, else `0`.     |
+| `resumeWithStructuredTaskState`       | integer | `1` if structured task state was present in the resume context, else `0`.       |
+| `taskSwitchSessionClass`              | enum    | Switch cohort for active structured task state: `stable`, `repeated-switch`, `none`. |
+| `resumeTaskStateFreshness`            | enum    | Active structured task freshness: `fresh`, `stale`, or `none`.                  |
 | `scratchpadOpened`                    | integer | Count of `TaCoS: Open Scratchpad` actions during session.                       |
 | `scratchpadAppended`                  | integer | Count of `TaCoS: Append to Scratchpad` actions during session.                  |
 | `redactionEventsTotal`                | integer | Aggregate count of sanitizer replacements performed locally during the session. |
@@ -150,6 +177,20 @@ Track these explicitly for stabilization/adoption gating:
 - `notePinned`
 - `resumePathCompletions`
 - `resumeWithNote`
+- `checkpointOffered`
+- `checkpointCompleted`
+- `structuredTaskStateCreated`
+- `structuredTaskStateResolved`
+- `taskSwitchDetected`
+- `taskSwitchConfirmed`
+- `resumeBriefUsesCheckpointState`
+- `resumeBriefShowsTimelineCue`
+- `dailyDebriefOpened`
+- `abandonedThreadSurfaced`
+- `unresolvedBlockerSurfaced`
+- `resumeWithStructuredTaskState`
+- `taskSwitchSessionClass`
+- `resumeTaskStateFreshness`
 - `scratchpadOpened`
 - `scratchpadAppended`
 - `redactionEventsTotal`
@@ -175,6 +216,31 @@ Recommended comparisons:
 - feature on vs off: compare cohorts with `tacos.resumeSafety.enabled=true` and `false`
 - strict on vs off: compare `resumeSafetyStrictWarnings`, `resumeSafetyActionClicks`, and follow-on lag changes
 - mismatch-heavy vs mismatch-light sessions: segment by `resumeSafetyMismatchDetected`
+
+## Cognitive Observability Evaluation
+
+Primary recovery-support comparisons:
+
+- checkpoint cohort vs non-checkpoint cohort:
+  - compare `firstActionLagMs` for `resumeWithStructuredTaskState = 1` vs `0`
+- repeated-switch tasks vs stable tasks:
+  - compare `firstActionLagMs` for `taskSwitchSessionClass = repeated-switch` vs `stable`
+- stale task-state sessions vs fresh task-state sessions:
+  - compare `firstActionLagMs` for `resumeTaskStateFreshness = stale` vs `fresh`
+
+Useful supporting counters:
+
+- `checkpointOffered`, `checkpointCompleted`, `checkpointSkipped`, `checkpointDismissed`
+- `structuredTaskStateCreated`, `structuredTaskStateResolved`, `structuredTaskStateStale`
+- `taskSwitchDetected`, `taskSwitchConfirmed`, `taskSwitchCorrected`
+- `resumeBriefUsesCheckpointState`, `resumeBriefShowsTimelineCue`
+- `dailyDebriefOpened`, `abandonedThreadSurfaced`, `unresolvedBlockerSurfaced`
+
+Interpretation guardrails:
+
+- Treat these as local product-learning signals, not productivity scores.
+- False negatives are acceptable for switch detection; false-positive prompting is the larger UX risk.
+- Derived comparisons should be read alongside trust state, quiet/snooze controls, and interruption timing classes.
 
 What TaCoS cannot reliably measure:
 

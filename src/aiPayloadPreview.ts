@@ -10,7 +10,6 @@ export interface AiPayloadPreviewInput {
     ResumeSummary,
     'intent' | 'intentOverridden' | 'nextSteps' | 'topFiles' | 'links' | 'evidenceCatalog'
   >;
-  checkpointNotes?: string[];
   includeCheckpointNotes?: boolean;
   includeScratchpad?: boolean;
   scratchpadExcerpt?: string;
@@ -30,8 +29,7 @@ function truncateJson(json: string, maxChars: number): { value: string; truncate
 }
 
 export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): string {
-  const includeCheckpointNotes =
-    input.includeCheckpointNotes ?? (input.checkpointNotes?.length ?? 0) > 0;
+  const includeCheckpointNotes = input.includeCheckpointNotes ?? false;
   const includeScratchpad = input.includeScratchpad ?? false;
   const payload = {
     provider: input.provider,
@@ -46,7 +44,6 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
       links: input.summary.links,
       evidenceCatalog: input.summary.evidenceCatalog ?? [],
     },
-    checkpointNotes: includeCheckpointNotes ? (input.checkpointNotes ?? []) : [],
     scratchpadExcerpt: includeScratchpad ? (input.scratchpadExcerpt ?? '') : undefined,
   };
   const json = JSON.stringify(payload, null, 2);
@@ -74,7 +71,7 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
     `- Workspace: \`${input.workspaceName}\``,
     `- Generated: ${new Date(input.generatedAt).toLocaleString()}`,
     `- Intent source: ${input.summary.intentOverridden ? 'user-edited' : 'inferred'}`,
-    `- Includes your checkpoint notes: ${includeCheckpointNotes ? 'yes' : 'no'}`,
+    `- Includes checkpoint context in summary: ${includeCheckpointNotes ? 'yes' : 'no'}`,
     `- Includes scratchpad content: ${includeScratchpad ? 'yes' : 'no'}`,
     '',
     '## Redaction report',

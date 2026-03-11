@@ -8,6 +8,7 @@ This document describes TaCoS privacy boundaries and safety behavior as implemen
 - AI refinement is optional and explicit.
 - Trust mode matters: Restricted Mode disables trust-sensitive behavior.
 - Metrics and diagnostics are local artifacts unless the user explicitly shares them.
+- Cognitive Observability is about state recovery, not surveillance.
 
 ## Context TaCoS Can Collect
 
@@ -18,10 +19,30 @@ Potential sources include:
 - terminal shell-integration events (trusted workspaces only),
 - debug/task activity,
 - user-added URLs,
-- checkpoint notes,
+- structured task checkpoints and legacy checkpoint notes,
 - scoped scratchpad content.
 
+Structured task checkpoints can include:
+
+- objective
+- working set
+- assumptions
+- blockers
+- next action
+- confidence
+- optional stale boundary
+- last known safe breakpoint
+
 Collection depth is influenced by settings such as privacy preset and include flags.
+
+TaCoS may also derive deterministic switch candidates from:
+
+- focus return after idle threshold,
+- workspace root changes,
+- task partition changes,
+- trusted branch changes,
+- manual task-switch confirmation,
+- file-cluster drift as supporting evidence only.
 
 ## Defaults and Opt-in Behavior
 
@@ -29,6 +50,8 @@ Default posture is conservative:
 
 - `tacos.summaryProvider = local`
 - `tacos.privacyPreset = minimal`
+- `tacos.taskCheckpoint.enabled = true`
+- `tacos.taskCheckpoint.promptOnLikelySwitch = true`
 - checkpoint/scratchpad AI inclusion flags disabled by default
 - trust-sensitive features gated in Restricted Mode.
 
@@ -37,6 +60,7 @@ Default posture is conservative:
 By default and design:
 
 - summary generation in local mode,
+- structured task-state storage and cognitive debrief derivation,
 - workspace/global extension state,
 - checkpoint/scratchpad storage,
 - metrics records and diagnostics generation,
@@ -56,6 +80,8 @@ Provider-bound payloads are:
 - blocked when strict sanitizer detects high-risk patterns.
 
 Checkpoint note and scratchpad inclusion are separately controlled and default-off for AI payloads.
+
+When AI checkpoint inclusion is enabled, TaCoS may include the active structured task checkpoint as redacted, reviewable context. This payload remains optional, consented, and untrusted.
 
 ## Redaction and Sanitization
 
@@ -81,8 +107,24 @@ In Restricted Mode:
 - terminal command collection is disabled,
 - AI refinement is disabled,
 - execution-style restore actions are disabled.
+- trusted branch/debug/task signals used for richer switch explanations may be unavailable or degraded,
+- local structured task checkpoints still work, but trust-sensitive context enrichment stays off.
 
 Local summary and basic orientation remain available.
+
+## What TaCoS Does Not Do
+
+TaCoS does not implement:
+
+- hidden telemetry
+- cloud sync or hosted backend state
+- keystroke logging
+- desktop surveillance
+- biometrics or psycho-physiological sensing
+- emotion detection
+- calendar ingestion
+- productivity scoring
+- manager dashboards or reporting
 
 ## Diagnostics and Metrics Boundaries
 
@@ -90,6 +132,7 @@ Local summary and basic orientation remain available.
 
 - kept in extension state and local export artifacts.
 - used for local analysis and manual sharing when user chooses.
+- include checkpoint, switch-detection, resume-state, and debrief counters for local evaluation only.
 
 ### Remote telemetry
 

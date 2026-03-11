@@ -34,6 +34,9 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'checkpointOpenList' })).toEqual({
       type: 'checkpointOpenList',
     });
+    expect(parseWebviewMessage({ type: 'taskStateResolve' })).toEqual({
+      type: 'taskStateResolve',
+    });
     expect(parseWebviewMessage({ type: 'openScratchpad' })).toEqual({
       type: 'openScratchpad',
     });
@@ -96,6 +99,15 @@ describe('parseWebviewMessage', () => {
     });
     expect(parseWebviewMessage({ type: 'sessionAddCheckpoint' })).toEqual({
       type: 'sessionAddCheckpoint',
+    });
+    expect(parseWebviewMessage({ type: 'captureStructuredCheckpoint' })).toEqual({
+      type: 'captureStructuredCheckpoint',
+    });
+    expect(parseWebviewMessage({ type: 'confirmTaskSwitch' })).toEqual({
+      type: 'confirmTaskSwitch',
+    });
+    expect(parseWebviewMessage({ type: 'showCognitiveDebrief' })).toEqual({
+      type: 'showCognitiveDebrief',
     });
     expect(parseWebviewMessage({ type: 'clearIntentOverride' })).toEqual({
       type: 'clearIntentOverride',

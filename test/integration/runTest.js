@@ -100,6 +100,13 @@ async function main() {
     );
 
     await runSuite(
+      'cognitive-observability',
+      path.resolve(__dirname, 'suite', 'cognitiveObservability.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
+
+    await runSuite(
       'resume-safety-check',
       path.resolve(__dirname, 'suite', 'resumeSafetyCheck.js'),
       [fixtureWorkspace, '--disable-extensions'],
