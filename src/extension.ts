@@ -326,6 +326,9 @@ const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>(
   'toggleAutoSummaries',
   'sessionAddCheckpoint',
   'captureStructuredCheckpoint',
+  'taskStateResolve',
+  'confirmTaskSwitch',
+  'showCognitiveDebrief',
   'checkpointOpenList',
   'openScratchpad',
   'appendScratchpad',
@@ -6202,7 +6205,7 @@ async function showDetailsPanel(
           state.panelSummary?.nextLikelySafeMove?.trim() ||
           state.panelSummary?.recommendedFirstAction?.trim();
         await captureTaskCheckpointCommand(context, workspaceRoot, {
-          title: 'TaCoS: Capture Session Checkpoint',
+          title: 'TaCoS: Capture Task Checkpoint',
           initialNextAction: firstAction || undefined,
         });
         await refreshPanelCheckpointState(context, workspaceRoot);
@@ -7393,7 +7396,11 @@ function renderWebview(
       {
         label: 'Notes & Feedback',
         buttonsTrustedHtml: [
-          `<button type="button" class="secondary" data-action="captureStructuredCheckpoint" ${demoDisabledAttr}>Capture checkpoint</button>`,
+          `<button type="button" class="secondary" data-action="${
+            config.taskCheckpointEnabled ? 'captureStructuredCheckpoint' : 'sessionAddCheckpoint'
+          }" ${demoDisabledAttr}>${
+            config.taskCheckpointEnabled ? 'Capture checkpoint' : 'Add note'
+          }</button>`,
           `<button type="button" class="secondary" data-action="checkpointOpenList" ${demoDisabledAttr}>List notes</button>`,
           `<button type="button" class="secondary" data-action="showCognitiveDebrief" ${demoDisabledAttr}>Show debrief</button>`,
           `<button type="button" data-action="rateHelpfulness" ${demoDisabledAttr}>Rate helpfulness</button>`,
@@ -12061,12 +12068,7 @@ async function refreshPanelCheckpointState(
     return;
   }
 
-  const resolved = await resolveCheckpointContext(
-    context,
-    root,
-    state.panelSummary?.currentBranch,
-    true,
-  );
+  const resolved = await resolveCheckpointContext(context, root, undefined, true);
   const previousOpenNoteText =
     state.panelPrimaryCheckpointNote?.status === 'open'
       ? state.panelPrimaryCheckpointNote.text
@@ -12074,11 +12076,7 @@ async function refreshPanelCheckpointState(
   state.panelCheckpointNotes = resolved.notes;
   state.panelPrimaryCheckpointNote = resolved.primaryNote;
   state.panelCheckpointScope = resolved.scope;
-  state.panelTaskState = resolveActiveStructuredTaskState(
-    context,
-    root,
-    state.panelSummary?.currentBranch,
-  );
+  state.panelTaskState = resolveActiveStructuredTaskState(context, root, undefined);
   const store = readStructuredTaskStateStore(context, root);
   state.panelCognitiveDebrief = buildCognitiveDebrief({
     tasks: listStructuredTasksForWorkspace(store, root),
@@ -12292,11 +12290,7 @@ async function captureTaskCheckpointCommand(
     return undefined;
   }
 
-  const scope = resolveStructuredTaskScopeState(
-    context,
-    workspaceRoot,
-    state.panelSummary?.currentBranch,
-  );
+  const scope = resolveStructuredTaskScopeState(context, workspaceRoot, undefined);
   const existingStore = readStructuredTaskStateStore(context, workspaceRoot);
   const existing =
     (options.preferredTaskId
@@ -12523,7 +12517,7 @@ async function markTaskResolvedCommand(
   const store = readStructuredTaskStateStore(context, workspaceRoot);
   const current =
     (preferredTaskId ? findStructuredTaskStateById(store, preferredTaskId) : undefined) ??
-    resolveActiveStructuredTaskState(context, workspaceRoot, state.panelSummary?.currentBranch);
+    resolveActiveStructuredTaskState(context, workspaceRoot);
   if (!current) {
     void vscode.window.showInformationMessage(
       'TaCoS: no active structured task checkpoint to resolve.',
@@ -12535,11 +12529,7 @@ async function markTaskResolvedCommand(
   const nextStore = upsertStructuredTaskState(store, markStructuredTaskStateResolved(current));
   await writeStructuredTaskStateStore(context, workspaceRoot, nextStore);
   recordMetricCounter('structuredTaskStateResolved');
-  state.panelTaskState = resolveActiveStructuredTaskState(
-    context,
-    workspaceRoot,
-    state.panelSummary?.currentBranch,
-  );
+  state.panelTaskState = resolveActiveStructuredTaskState(context, workspaceRoot, undefined);
   state.panelCognitiveDebrief = buildCognitiveDebrief({
     tasks: listStructuredTasksForWorkspace(nextStore, workspaceRoot),
     activeTaskId: state.panelTaskState?.taskId,
@@ -12581,11 +12571,7 @@ async function resumeStructuredTaskFromDebrief(
   workspaceRoot: string,
   task: StructuredTaskState,
 ): Promise<void> {
-  const currentScope = resolveStructuredTaskScopeState(
-    context,
-    workspaceRoot,
-    state.panelSummary?.currentBranch,
-  );
+  const currentScope = resolveStructuredTaskScopeState(context, workspaceRoot, undefined);
   if (currentScope.taskPartition !== task.taskPartition) {
     await applyTaskPartitionSwitch(context, workspaceRoot, task.taskPartition);
   }
@@ -12618,11 +12604,7 @@ async function showCognitiveDebriefCommand(
     readStructuredTaskStateStore(context, workspaceRoot),
     workspaceRoot,
   );
-  const activeTask = resolveActiveStructuredTaskState(
-    context,
-    workspaceRoot,
-    state.panelSummary?.currentBranch,
-  );
+  const activeTask = resolveActiveStructuredTaskState(context, workspaceRoot, undefined);
   const debrief = buildCognitiveDebrief({
     tasks,
     activeTaskId: activeTask?.taskId,
