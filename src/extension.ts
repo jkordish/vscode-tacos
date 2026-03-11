@@ -12443,6 +12443,14 @@ async function captureTaskCheckpointCommand(
   }
 
   const now = Date.now();
+  const safeBreakpointScope: StructuredTaskScopeState = existing
+    ? {
+        workspaceRoot,
+        repo: existing.repo,
+        branch: existing.branch,
+        taskPartition: existing.taskPartition,
+      }
+    : scope;
   const nextTask = existing
     ? updateStructuredTaskState(
         existing,
@@ -12454,7 +12462,10 @@ async function captureTaskCheckpointCommand(
           assumptions: parseStructuredListInput(assumptionsRaw),
           blockers: parseStructuredListInput(blockersRaw),
           workingSet: buildStructuredTaskWorkingSet(workspaceRoot, now),
-          lastKnownSafeBreakpoint: captureLastKnownSafeBreakpoint(workspaceRoot, scope),
+          lastKnownSafeBreakpoint: captureLastKnownSafeBreakpoint(
+            workspaceRoot,
+            safeBreakpointScope,
+          ),
           staleAfter: staleAfterFromPreset(stalePick.value, now),
           switchCount: options.incrementSwitchCount
             ? existing.switchCount + 1
@@ -12476,7 +12487,7 @@ async function captureTaskCheckpointCommand(
         assumptions: parseStructuredListInput(assumptionsRaw),
         blockers: parseStructuredListInput(blockersRaw),
         workingSet: buildStructuredTaskWorkingSet(workspaceRoot, now),
-        lastKnownSafeBreakpoint: captureLastKnownSafeBreakpoint(workspaceRoot, scope),
+        lastKnownSafeBreakpoint: captureLastKnownSafeBreakpoint(workspaceRoot, safeBreakpointScope),
         staleAfter: staleAfterFromPreset(stalePick.value, now),
         switchCount: options.incrementSwitchCount ? 1 : 0,
       });
