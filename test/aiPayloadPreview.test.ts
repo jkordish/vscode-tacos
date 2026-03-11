@@ -89,7 +89,6 @@ describe('buildAiPayloadPreviewMarkdown', () => {
       },
       includeCheckpointNotes: true,
       includeScratchpad: false,
-      checkpointNotes: ['secret removed'],
       redactionReport: {
         categoryCounts: {
           bearer_header: 2,

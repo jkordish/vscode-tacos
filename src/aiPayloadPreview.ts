@@ -10,7 +10,6 @@ export interface AiPayloadPreviewInput {
     ResumeSummary,
     'intent' | 'intentOverridden' | 'nextSteps' | 'topFiles' | 'links' | 'evidenceCatalog'
   >;
-  checkpointNotes?: string[];
   includeCheckpointNotes?: boolean;
   includeScratchpad?: boolean;
   scratchpadExcerpt?: string;
@@ -30,8 +29,7 @@ function truncateJson(json: string, maxChars: number): { value: string; truncate
 }
 
 export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): string {
-  const includeCheckpointNotes =
-    input.includeCheckpointNotes ?? (input.checkpointNotes?.length ?? 0) > 0;
+  const includeCheckpointNotes = input.includeCheckpointNotes ?? false;
   const includeScratchpad = input.includeScratchpad ?? false;
   const payload = {
     provider: input.provider,
