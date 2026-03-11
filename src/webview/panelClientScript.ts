@@ -17,6 +17,7 @@ export function renderPanelClientScript(
         'appendScratchpad',
         'setScratchpadScope',
         'sessionAddCheckpoint',
+        'captureStructuredCheckpoint',
         'confirmTaskSwitch',
         'showCognitiveDebrief',
         'setIntentOverride',

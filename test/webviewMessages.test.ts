@@ -100,6 +100,9 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'sessionAddCheckpoint' })).toEqual({
       type: 'sessionAddCheckpoint',
     });
+    expect(parseWebviewMessage({ type: 'captureStructuredCheckpoint' })).toEqual({
+      type: 'captureStructuredCheckpoint',
+    });
     expect(parseWebviewMessage({ type: 'confirmTaskSwitch' })).toEqual({
       type: 'confirmTaskSwitch',
     });

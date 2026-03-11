@@ -142,7 +142,7 @@ export function renderTaskStateCard(input: TaskStateCardInput | undefined): stri
         ${assumptionsHtml}
       </details>
       <div class="note-actions">
-        <button type="button" data-action="sessionAddCheckpoint">Edit checkpoint</button>
+        <button type="button" data-action="captureStructuredCheckpoint">Edit checkpoint</button>
         <button type="button" class="secondary" data-action="taskStateResolve">Mark resolved</button>
         <button type="button" class="secondary" data-action="confirmTaskSwitch">Confirm switch</button>
       </div>

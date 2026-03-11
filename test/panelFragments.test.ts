@@ -76,7 +76,9 @@ describe('panelFragments', () => {
 
     expect(checkpoint).toContain('<h3>Notes (2)</h3>');
     expect(checkpoint).toContain('data-action="checkpointMarkDone"');
+    expect(checkpoint).toContain('data-action="sessionAddCheckpoint"');
     expect(taskState).toContain('<h3>Task State</h3>');
+    expect(taskState).toContain('data-action="captureStructuredCheckpoint"');
     expect(taskState).toContain('data-action="taskStateResolve"');
     expect(taskState).toContain('data-action="confirmTaskSwitch"');
     expect(debrief).toContain('<h3>Cognitive Debrief</h3>');
@@ -85,6 +87,7 @@ describe('panelFragments', () => {
     expect(scratchpad).toContain('Scope: task partition ABC-148');
     expect(confidence).toContain('<h3>Welcome back</h3>');
     expect(confidence).toContain('Retrieval cue');
+    expect(confidence).toContain('data-action="sessionAddCheckpoint"');
     expect(intentEditor).toContain('Intent (editable)');
     expect(intentEditor).toContain('data-action="setIntentOverride"');
     expect(intentEditor).toContain('data-action="clearIntentOverride" disabled');

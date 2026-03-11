@@ -322,6 +322,7 @@ const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>(
   'setPanelSectionExpanded',
   'toggleAutoSummaries',
   'sessionAddCheckpoint',
+  'captureStructuredCheckpoint',
   'checkpointOpenList',
   'openScratchpad',
   'appendScratchpad',
@@ -613,6 +614,15 @@ interface PanelSectionState {
   expandedSectionIds: PanelSectionId[];
 }
 
+type TaskCheckpointPromptOutcome =
+  | 'captured'
+  | 'skipped'
+  | 'dismissed'
+  | 'ignored'
+  | 'snoozed'
+  | 'suppressed'
+  | 'capture-cancelled';
+
 const PANEL_SECTION_IDS: PanelSectionId[] = [
   'trustCenter',
   'timeline',
@@ -620,6 +630,15 @@ const PANEL_SECTION_IDS: PanelSectionId[] = [
   'details',
   'moreContext',
 ];
+
+function shouldRecordTaskSwitchCorrection(outcome: TaskCheckpointPromptOutcome): boolean {
+  return (
+    outcome === 'skipped' ||
+    outcome === 'dismissed' ||
+    outcome === 'ignored' ||
+    outcome === 'capture-cancelled'
+  );
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   activeExtensionContext = context;
@@ -1298,9 +1317,9 @@ export function activate(context: vscode.ExtensionContext): void {
       const hasDisabledRestoreRerunDebug = /data-action="restoreRerunDebug"[^>]*disabled/u.test(
         panelHtml,
       );
-      const hasDisabledAddNoteAction = /data-action="sessionAddCheckpoint"[^>]*disabled/u.test(
-        panelHtml,
-      );
+      const hasDisabledAddNoteAction =
+        /data-action="sessionAddCheckpoint"[^>]*disabled/u.test(panelHtml) ||
+        /data-action="captureStructuredCheckpoint"[^>]*disabled/u.test(panelHtml);
       const hasDisabledListNotesAction = /data-action="checkpointOpenList"[^>]*disabled/u.test(
         panelHtml,
       );
@@ -1935,8 +1954,8 @@ export function activate(context: vscode.ExtensionContext): void {
         summary: 'Manual task switch confirmation',
         explainability: ['Manual switch confirmation requested.'],
       };
-      const captured = await maybeOfferTaskCheckpointPrompt(context, workspaceRoot, candidate);
-      if (!captured) {
+      const promptOutcome = await maybeOfferTaskCheckpointPrompt(context, workspaceRoot, candidate);
+      if (shouldRecordTaskSwitchCorrection(promptOutcome)) {
         recordMetricCounter('taskSwitchCorrected');
       }
       state.lastTaskSwitchSnapshot = snapshot;
@@ -3679,7 +3698,7 @@ async function presentSummary(
       uiSurface: config.uiSurface,
       interruptionEvent: 0,
       interruptionTimingClass: classifyInterruptionTiming(triggerReason, options.focusRegainedAt),
-      resumeWithNote: options.checkpointPrimaryNote || options.structuredTaskState ? 1 : 0,
+      resumeWithNote: options.checkpointPrimaryNote ? 1 : 0,
       resumeWithStructuredTaskState: options.structuredTaskState ? 1 : 0,
       resumeTaskStateFreshness: options.structuredTaskState
         ? describeStructuredTaskStateFreshness(options.structuredTaskState)
@@ -6123,11 +6142,32 @@ async function showDetailsPanel(
           state.panelSummary?.nextLikelySafeMove?.trim() ||
           state.panelSummary?.recommendedFirstAction?.trim();
         recordBlockedPrimaryClick();
-        const saved = await captureTaskCheckpointCommand(context, workspaceRoot, {
+        const saved = await promptAndSaveCheckpointNote(context, workspaceRoot, {
+          title: 'TaCoS: Add Checkpoint Note',
+          prompt: 'One-line retrieval cue for future you',
+          placeHolder: 'Example: Reopen the failing diff and verify the rollout guard.',
+          initialValue: firstAction || undefined,
+        });
+        recordBlockedPrimaryCompletion(Boolean(saved));
+        await refreshPanelCheckpointState(context, workspaceRoot);
+        rerenderPanel();
+        return;
+      }
+
+      if (message.type === 'captureStructuredCheckpoint') {
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!workspaceRoot) {
+          void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+          return;
+        }
+
+        const firstAction =
+          state.panelSummary?.nextLikelySafeMove?.trim() ||
+          state.panelSummary?.recommendedFirstAction?.trim();
+        await captureTaskCheckpointCommand(context, workspaceRoot, {
           title: 'TaCoS: Capture Session Checkpoint',
           initialNextAction: firstAction || undefined,
         });
-        recordBlockedPrimaryCompletion(Boolean(saved));
         await refreshPanelCheckpointState(context, workspaceRoot);
         rerenderPanel();
         return;
@@ -6158,8 +6198,12 @@ async function showDetailsPanel(
           summary: 'Manual task switch confirmation',
           explainability: ['Manual switch confirmation requested.'],
         };
-        const captured = await maybeOfferTaskCheckpointPrompt(context, workspaceRoot, candidate);
-        if (!captured) {
+        const promptOutcome = await maybeOfferTaskCheckpointPrompt(
+          context,
+          workspaceRoot,
+          candidate,
+        );
+        if (shouldRecordTaskSwitchCorrection(promptOutcome)) {
           recordMetricCounter('taskSwitchCorrected');
         }
         state.lastTaskSwitchSnapshot = snapshot;
@@ -7300,7 +7344,7 @@ function renderWebview(
       {
         label: 'Notes & Feedback',
         buttonsTrustedHtml: [
-          `<button type="button" class="secondary" data-action="sessionAddCheckpoint" ${demoDisabledAttr}>Capture checkpoint</button>`,
+          `<button type="button" class="secondary" data-action="captureStructuredCheckpoint" ${demoDisabledAttr}>Capture checkpoint</button>`,
           `<button type="button" class="secondary" data-action="checkpointOpenList" ${demoDisabledAttr}>List notes</button>`,
           `<button type="button" class="secondary" data-action="showCognitiveDebrief" ${demoDisabledAttr}>Show debrief</button>`,
           `<button type="button" data-action="rateHelpfulness" ${demoDisabledAttr}>Rate helpfulness</button>`,
@@ -12637,7 +12681,7 @@ async function maybeOfferTaskCheckpointPrompt(
   context: vscode.ExtensionContext,
   workspaceRoot: string,
   candidate: TaskSwitchCandidate,
-): Promise<boolean> {
+): Promise<TaskCheckpointPromptOutcome> {
   const config = getConfig();
   const now = Date.now();
   state.lastTaskSwitchCandidate = candidate;
@@ -12645,20 +12689,20 @@ async function maybeOfferTaskCheckpointPrompt(
 
   if (!config.taskCheckpointEnabled || !config.taskCheckpointPromptOnLikelySwitch) {
     state.lastTaskSwitchSuppressionReason = 'disabled-by-setting';
-    return false;
+    return 'suppressed';
   }
   if (!config.enabled || config.pauseSummaries || state.pauseUntilRestart) {
     state.lastTaskSwitchSuppressionReason = 'paused';
-    return false;
+    return 'suppressed';
   }
   if (state.snoozeUntil > now) {
     state.lastTaskSwitchSuppressionReason = 'summary-snoozed';
-    return false;
+    return 'suppressed';
   }
   const quietState = resolveSummaryQuietState(now, config.summaryQuietHours);
   if (quietState.active) {
     state.lastTaskSwitchSuppressionReason = 'quiet-hours';
-    return false;
+    return 'suppressed';
   }
 
   const promptSnoozeUntil = context.workspaceState.get<number>(
@@ -12667,7 +12711,7 @@ async function maybeOfferTaskCheckpointPrompt(
   );
   if (promptSnoozeUntil > now) {
     state.lastTaskSwitchSuppressionReason = 'checkpoint-snoozed';
-    return false;
+    return 'suppressed';
   }
 
   const candidateHash = createTaskSwitchCandidateHash(candidate);
@@ -12678,7 +12722,7 @@ async function maybeOfferTaskCheckpointPrompt(
   );
   if (dismissedHash && dismissedHash === candidateHash) {
     state.lastTaskSwitchSuppressionReason = 'candidate-dismissed';
-    return false;
+    return 'suppressed';
   }
 
   const budgetDecision = await consumeNoiseBudgetSignal(
@@ -12689,7 +12733,7 @@ async function maybeOfferTaskCheckpointPrompt(
   );
   if (!budgetDecision.allowed) {
     state.lastTaskSwitchSuppressionReason = 'noise-budget';
-    return false;
+    return 'suppressed';
   }
 
   const ephemeralMetricSession = beginEphemeralMetricSession(workspaceRoot);
@@ -12707,7 +12751,7 @@ async function maybeOfferTaskCheckpointPrompt(
     recordMetricCounter('checkpointSkipped');
     state.lastTaskSwitchSuppressionReason = 'skipped';
     await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
-    return false;
+    return 'skipped';
   }
   if (action === 'Snooze') {
     await context.workspaceState.update(
@@ -12716,19 +12760,19 @@ async function maybeOfferTaskCheckpointPrompt(
     );
     state.lastTaskSwitchSuppressionReason = 'user-snoozed';
     await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
-    return false;
+    return 'snoozed';
   }
   if (action === 'Dismiss') {
     await context.workspaceState.update(taskSwitchDismissedHashKey(workspaceRoot), candidateHash);
     recordMetricCounter('checkpointDismissed');
     state.lastTaskSwitchSuppressionReason = 'user-dismissed';
     await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
-    return false;
+    return 'dismissed';
   }
   if (action !== 'Capture') {
     state.lastTaskSwitchSuppressionReason = 'ignored';
     await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
-    return false;
+    return 'ignored';
   }
 
   await context.workspaceState.update(taskSwitchDismissedHashKey(workspaceRoot), undefined);
@@ -12738,12 +12782,13 @@ async function maybeOfferTaskCheckpointPrompt(
     incrementSwitchCount: true,
   });
   if (!task) {
+    state.lastTaskSwitchSuppressionReason = 'capture-cancelled';
     await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
-    return false;
+    return 'capture-cancelled';
   }
   recordMetricCounter('taskSwitchConfirmed');
   await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
-  return true;
+  return 'captured';
 }
 
 async function addCheckpointFromSelectionCommand(context: vscode.ExtensionContext): Promise<void> {

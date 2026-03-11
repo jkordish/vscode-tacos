@@ -22,6 +22,7 @@ const SIMPLE_MESSAGE_TYPES = [
   'revokeAiPayloadConsent',
   'rateHelpfulness',
   'sessionAddCheckpoint',
+  'captureStructuredCheckpoint',
   'confirmTaskSwitch',
   'showCognitiveDebrief',
   'clearIntentOverride',

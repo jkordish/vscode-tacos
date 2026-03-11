@@ -6,6 +6,7 @@ import {
   findActiveStructuredTaskForScope,
   markStructuredTaskStateResolved,
   parseStructuredTaskStateStore,
+  updateStructuredTaskState,
   upsertStructuredTaskState,
 } from '../src/taskState';
 
@@ -68,5 +69,42 @@ describe('taskState helpers', () => {
     expect(describeStructuredTaskSwitchClass(task)).toBe('repeated-switch');
     expect(resolved.resolutionState).toBe('resolved');
     expect(resolved.resolvedAt).toBe(now);
+  });
+
+  it('allows edit patches to clear optional fields', () => {
+    const now = Date.UTC(2026, 2, 10, 16, 0, 0);
+    const task = createStructuredTaskState({
+      workspaceRoot: '/workspace/repo',
+      repo: 'repo',
+      branch: 'feature/INC-44',
+      taskPartition: 'INC-44',
+      objective: 'Validate config rollback',
+      nextAction: 'Compare the current and previous manifests',
+      confidence: 'medium',
+      currentHypothesis: 'The new manifest dropped a required default.',
+      staleAfter: now + 4 * 60 * 60_000,
+      lastKnownSafeBreakpoint: { capturedAt: now, label: 'config.ts:88' },
+      lastResumedAt: now,
+      resolvedAt: now + 1_000,
+      resolutionState: 'dismissed',
+    });
+
+    const updated = updateStructuredTaskState(
+      task,
+      {
+        currentHypothesis: undefined,
+        staleAfter: undefined,
+        lastResumedAt: undefined,
+        resolvedAt: undefined,
+        resolutionState: 'active',
+      },
+      now + 2_000,
+    );
+
+    expect(updated.currentHypothesis).toBeUndefined();
+    expect(updated.staleAfter).toBeUndefined();
+    expect(updated.lastResumedAt).toBeUndefined();
+    expect(updated.resolvedAt).toBeUndefined();
+    expect(updated.resolutionState).toBe('active');
   });
 });

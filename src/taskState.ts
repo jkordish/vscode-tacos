@@ -95,6 +95,10 @@ function normalizePositiveInteger(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
+function patchHasOwn<T extends object>(patch: T, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(patch, key);
+}
+
 function normalizeText(value: unknown, maxChars = MAX_TEXT_CHARS): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
@@ -396,6 +400,15 @@ export function updateStructuredTaskState(
   patch: Partial<StructuredTaskState>,
   updatedAt = Date.now(),
 ): StructuredTaskState {
+  const currentHypothesis = patchHasOwn(patch, 'currentHypothesis')
+    ? patch.currentHypothesis
+    : task.currentHypothesis;
+  const staleAfter = patchHasOwn(patch, 'staleAfter') ? patch.staleAfter : task.staleAfter;
+  const lastResumedAt = patchHasOwn(patch, 'lastResumedAt')
+    ? patch.lastResumedAt
+    : task.lastResumedAt;
+  const resolvedAt = patchHasOwn(patch, 'resolvedAt') ? patch.resolvedAt : task.resolvedAt;
+
   return createStructuredTaskState({
     ...task,
     ...patch,
@@ -406,18 +419,18 @@ export function updateStructuredTaskState(
     taskPartition: patch.taskPartition ?? task.taskPartition,
     objective: patch.objective ?? task.objective,
     workingSet: patch.workingSet ?? task.workingSet,
-    currentHypothesis: patch.currentHypothesis ?? task.currentHypothesis,
+    currentHypothesis,
     assumptions: patch.assumptions ?? task.assumptions,
     blockers: patch.blockers ?? task.blockers,
     nextAction: patch.nextAction ?? task.nextAction,
     confidence: patch.confidence ?? task.confidence,
     lastKnownSafeBreakpoint: patch.lastKnownSafeBreakpoint ?? task.lastKnownSafeBreakpoint,
-    staleAfter: patch.staleAfter ?? task.staleAfter,
+    staleAfter,
     createdAt: task.createdAt,
     updatedAt,
-    lastResumedAt: patch.lastResumedAt ?? task.lastResumedAt,
+    lastResumedAt,
     switchCount: patch.switchCount ?? task.switchCount,
-    resolvedAt: patch.resolvedAt ?? task.resolvedAt,
+    resolvedAt,
     resolutionState: patch.resolutionState ?? task.resolutionState,
   });
 }
