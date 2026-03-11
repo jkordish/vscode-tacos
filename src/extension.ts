@@ -12565,7 +12565,7 @@ async function openStructuredTaskSafeBreakpoint(
     return;
   }
 
-  const target = resolveFileTargetInWorkspace(workspaceRoot, file);
+  const target = resolveFileTargetInWorkspace(file, workspaceRoot);
   if (!target) {
     return;
   }
