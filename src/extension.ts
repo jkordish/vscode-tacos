@@ -11776,10 +11776,14 @@ async function buildTaskSwitchSnapshot(
     }
   }
 
+  const taskPartition =
+    options.taskPartitionOverride?.trim() ||
+    resolveTaskPartitionKey(context, workspaceRoot, branch);
+
   return {
     workspaceRoot,
     branch,
-    taskPartition: options.taskPartitionOverride?.trim() || scope.taskPartition,
+    taskPartition,
     fileCluster: deriveMeaningfulFileCluster([
       ...state.recentFiles.values().slice(0, 6),
       ...(state.panelSummary?.recentFilesSnapshot ?? []).slice(0, 4),
