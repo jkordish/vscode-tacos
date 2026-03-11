@@ -1,6 +1,7 @@
 import type { CompanionNudge } from '../companionNudges';
 import type { CheckpointNote } from '../checkpoint';
 import type { NextStepAction } from '../nextStepActions';
+import type { TaskStateFreshness } from '../taskState';
 import type { EvidenceRelevanceGroup, TimelineGroup } from '../timeline';
 import type { SummaryEvidenceItem, SummaryLink } from '../types';
 import { escapeHtml } from '../webviewSecurity';
@@ -58,6 +59,131 @@ export function renderCheckpointCard(input: CheckpointCardInput): string {
         <button type="button" class="secondary" data-action="checkpointDismiss">Dismiss</button>
         <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>
         <button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>
+      </div>
+    </div>`;
+}
+
+export interface TaskStateCardInput {
+  objective: string;
+  nextLikelySafeMove?: string;
+  confidence: string;
+  blockers: string[];
+  assumptions: string[];
+  workingSet: string[];
+  freshness: TaskStateFreshness;
+  staleLabel?: string;
+  safeBreakpoint?: string;
+  switchCount: number;
+}
+
+export function renderTaskStateCard(input: TaskStateCardInput | undefined): string {
+  if (!input || !input.objective.trim()) {
+    return '';
+  }
+
+  const freshnessLabel =
+    input.freshness === 'stale'
+      ? 'Stale'
+      : input.freshness === 'fresh'
+        ? 'Fresh'
+        : 'No freshness signal';
+  const workingSetHtml =
+    input.workingSet.length > 0
+      ? `<ul class="compact-list">${input.workingSet
+          .map((item) => `<li>${escapeHtml(item)}</li>`)
+          .join('')}</ul>`
+      : '<p class="muted">No working set captured yet.</p>';
+  const blockersHtml =
+    input.blockers.length > 0
+      ? `<ul class="compact-list">${input.blockers
+          .map((item) => `<li>${escapeHtml(item)}</li>`)
+          .join('')}</ul>`
+      : '<p class="muted">No blockers captured.</p>';
+  const assumptionsHtml =
+    input.assumptions.length > 0
+      ? `<ul class="compact-list">${input.assumptions
+          .map((item) => `<li>${escapeHtml(item)}</li>`)
+          .join('')}</ul>`
+      : '<p class="muted">No open assumptions captured.</p>';
+
+  return `<div class="card">
+      <h3>Task State</h3>
+      <p class="companion-primary">${escapeHtml(input.objective)}</p>
+      ${
+        input.nextLikelySafeMove
+          ? `<p class="muted"><strong>Next likely safe move:</strong> ${escapeHtml(
+              input.nextLikelySafeMove,
+            )}</p>`
+          : ''
+      }
+      <div class="step-evidence">
+        <span class="badge">Confidence: ${escapeHtml(input.confidence)}</span>
+        <span class="badge">Freshness: ${escapeHtml(freshnessLabel)}</span>
+        <span class="badge">Switch count: ${escapeHtml(String(input.switchCount))}</span>
+      </div>
+      ${
+        input.safeBreakpoint
+          ? `<p class="muted"><strong>Last known safe breakpoint:</strong> ${escapeHtml(
+              input.safeBreakpoint,
+            )}</p>`
+          : ''
+      }
+      ${input.staleLabel ? `<p class="muted">${escapeHtml(input.staleLabel)}</p>` : ''}
+      <details>
+        <summary><strong>Working set</strong></summary>
+        ${workingSetHtml}
+      </details>
+      <details>
+        <summary><strong>Blockers (${input.blockers.length})</strong></summary>
+        ${blockersHtml}
+      </details>
+      <details>
+        <summary><strong>Assumptions (${input.assumptions.length})</strong></summary>
+        ${assumptionsHtml}
+      </details>
+      <div class="note-actions">
+        <button type="button" data-action="sessionAddCheckpoint">Edit checkpoint</button>
+        <button type="button" class="secondary" data-action="taskStateResolve">Mark resolved</button>
+        <button type="button" class="secondary" data-action="confirmTaskSwitch">Confirm switch</button>
+      </div>
+    </div>`;
+}
+
+export interface CognitiveDebriefCardInput {
+  abandonedThreadCount: number;
+  unresolvedBlockerCount: number;
+  repeatedSwitchCount: number;
+  staleTaskStateCount: number;
+  openAssumptionCount: number;
+}
+
+export function renderCognitiveDebriefCard(input: CognitiveDebriefCardInput | undefined): string {
+  if (!input) {
+    return '';
+  }
+
+  const total =
+    input.abandonedThreadCount +
+    input.unresolvedBlockerCount +
+    input.repeatedSwitchCount +
+    input.staleTaskStateCount +
+    input.openAssumptionCount;
+  if (total <= 0) {
+    return '';
+  }
+
+  return `<div class="card">
+      <h3>Cognitive Debrief</h3>
+      <p class="muted">On-demand local review of threads that may still be taxing your attention.</p>
+      <ul class="compact-list">
+        <li>Abandoned threads: ${escapeHtml(String(input.abandonedThreadCount))}</li>
+        <li>Unresolved blockers: ${escapeHtml(String(input.unresolvedBlockerCount))}</li>
+        <li>Repeated-switch tasks: ${escapeHtml(String(input.repeatedSwitchCount))}</li>
+        <li>Stale task states: ${escapeHtml(String(input.staleTaskStateCount))}</li>
+        <li>Open assumptions: ${escapeHtml(String(input.openAssumptionCount))}</li>
+      </ul>
+      <div class="status-actions">
+        <button type="button" data-action="showCognitiveDebrief">Show cognitive debrief</button>
       </div>
     </div>`;
 }

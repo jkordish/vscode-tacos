@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Cognitive Observability v1:
+  - structured task checkpoints with typed local task-state storage
+  - deterministic likely-switch detection with explainable `Capture / Skip / Snooze / Dismiss` prompting
+  - `TaCoS: Capture Task Checkpoint`, `TaCoS: Mark Task Resolved`, `TaCoS: Confirm Task Switch`, and `TaCoS: Show Cognitive Debrief`
+  - Resume Brief v2 recovery sections (`what you were doing`, `what changed`, `next likely safe move`, `open questions`, `timeline/evidence cues`)
+  - on-demand local Cognitive Debrief for abandoned threads, stale task state, unresolved blockers, repeated-switch tasks, and open assumptions
+  - local-only metrics and diagnostics for checkpoint adoption, switch detection, structured-state usage, and debrief surfacing
+
+### Changed
+
+- TaCoS is now documented and surfaced as a state-recovery tool for interruption-heavy engineers rather than a generic productivity assistant.
+- Companion panel now prefers a `Task State` card when structured task state exists and keeps legacy checkpoint notes as compatibility behavior.
+- Legacy `tacos.promptCheckpointOnBlur` is now documented as a separate note-only flow from structured task checkpoints.
+
 ## [0.8.1] - 2026-03-07
 
 ### Added

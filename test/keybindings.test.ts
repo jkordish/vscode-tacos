@@ -36,7 +36,7 @@ describe('package keybinding contributions', () => {
       mac: 'cmd+alt+t cmd+alt+p',
       when: 'workbenchState != empty',
     });
-    expect(byCommand.get('tacos.addQuickCheckpointNote')).toMatchObject({
+    expect(byCommand.get('tacos.captureTaskCheckpoint')).toMatchObject({
       key: 'ctrl+alt+t ctrl+alt+k',
       mac: 'cmd+alt+t cmd+alt+k',
       when: 'workbenchState != empty',
@@ -58,7 +58,7 @@ describe('package keybinding contributions', () => {
       [
         'tacos.showNow',
         'tacos.copyPromptAndOpenCodex',
-        'tacos.addQuickCheckpointNote',
+        'tacos.captureTaskCheckpoint',
         'tacos.jumpToLastEdit',
         'tacos.restoreWorkingSet',
       ].includes(binding.command),

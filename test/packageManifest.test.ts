@@ -58,5 +58,37 @@ describe('package manifest resume safety contributions', () => {
       type: 'boolean',
       default: false,
     });
+    expect(properties['tacos.taskCheckpoint.enabled']).toMatchObject({
+      type: 'boolean',
+      default: true,
+    });
+    expect(properties['tacos.taskCheckpoint.promptOnLikelySwitch']).toMatchObject({
+      type: 'boolean',
+      default: true,
+    });
+  });
+
+  it('declares the cognitive observability commands and activation events', () => {
+    const manifest = readPackageJson();
+    const commands = new Map(
+      (manifest.contributes?.commands ?? []).map((entry) => [entry.command, entry]),
+    );
+
+    expect(commands.get('tacos.captureTaskCheckpoint')).toMatchObject({
+      title: 'TaCoS: Capture Task Checkpoint',
+    });
+    expect(commands.get('tacos.markTaskResolved')).toMatchObject({
+      title: 'TaCoS: Mark Task Resolved',
+    });
+    expect(commands.get('tacos.confirmTaskSwitch')).toMatchObject({
+      title: 'TaCoS: Confirm Task Switch',
+    });
+    expect(commands.get('tacos.showCognitiveDebrief')).toMatchObject({
+      title: 'TaCoS: Show Cognitive Debrief',
+    });
+    expect(manifest.activationEvents ?? []).toContain('onCommand:tacos.captureTaskCheckpoint');
+    expect(manifest.activationEvents ?? []).toContain('onCommand:tacos.markTaskResolved');
+    expect(manifest.activationEvents ?? []).toContain('onCommand:tacos.confirmTaskSwitch');
+    expect(manifest.activationEvents ?? []).toContain('onCommand:tacos.showCognitiveDebrief');
   });
 });

@@ -3,6 +3,7 @@ import type { NextStepAction } from '../src/nextStepActions';
 import type { EvidenceRelevanceGroup, TimelineGroup } from '../src/timeline';
 import {
   renderCheckpointCard,
+  renderCognitiveDebriefCard,
   renderCompanionNextSteps,
   renderCompanionNudgeCard,
   renderConfidenceCard,
@@ -13,6 +14,7 @@ import {
   renderResumePathCard,
   renderScratchpadCard,
   renderStepEvidenceBadge,
+  renderTaskStateCard,
   renderTimelineGroupsHtml,
   renderTopFilesListItems,
   renderTopLinksListItems,
@@ -20,7 +22,7 @@ import {
 } from '../src/webview/panelFragments';
 
 describe('panelFragments', () => {
-  it('renders checkpoint, scratchpad, confidence, and intent editor fragments', () => {
+  it('renders checkpoint, task-state, scratchpad, confidence, and intent editor fragments', () => {
     const checkpoint = renderCheckpointCard({
       openCheckpointCount: 2,
       currentCheckpointNote: {
@@ -31,6 +33,26 @@ describe('panelFragments', () => {
         partition: 'ABC-148',
         pinned: true,
       },
+    });
+    const taskState = renderTaskStateCard({
+      objective: 'Stabilize rollout verification',
+      nextLikelySafeMove:
+        'Suggested next move: reopen the failing rollout check and verify against middleware.ts:92.',
+      confidence: 'medium',
+      blockers: ['Need latest canary logs'],
+      assumptions: ['Rollback branch still matches prod'],
+      workingSet: ['src/middleware.ts', 'docs/runbook.md'],
+      freshness: 'fresh',
+      staleLabel: 'Stale after tomorrow morning',
+      safeBreakpoint: 'src/middleware.ts:92',
+      switchCount: 2,
+    });
+    const debrief = renderCognitiveDebriefCard({
+      abandonedThreadCount: 1,
+      unresolvedBlockerCount: 1,
+      repeatedSwitchCount: 1,
+      staleTaskStateCount: 0,
+      openAssumptionCount: 2,
     });
     const scratchpad = renderScratchpadCard({
       showScratchpadCard: true,
@@ -54,6 +76,11 @@ describe('panelFragments', () => {
 
     expect(checkpoint).toContain('<h3>Notes (2)</h3>');
     expect(checkpoint).toContain('data-action="checkpointMarkDone"');
+    expect(taskState).toContain('<h3>Task State</h3>');
+    expect(taskState).toContain('data-action="taskStateResolve"');
+    expect(taskState).toContain('data-action="confirmTaskSwitch"');
+    expect(debrief).toContain('<h3>Cognitive Debrief</h3>');
+    expect(debrief).toContain('data-action="showCognitiveDebrief"');
     expect(scratchpad).toContain('data-action="openScratchpad"');
     expect(scratchpad).toContain('Scope: task partition ABC-148');
     expect(confidence).toContain('<h3>Welcome back</h3>');

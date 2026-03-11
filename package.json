@@ -79,6 +79,10 @@
     "onCommand:tacos.copyDiagnostics",
     "onCommand:tacos.testSanitizer",
     "onCommand:tacos.addVisitedUrl",
+    "onCommand:tacos.captureTaskCheckpoint",
+    "onCommand:tacos.markTaskResolved",
+    "onCommand:tacos.confirmTaskSwitch",
+    "onCommand:tacos.showCognitiveDebrief",
     "onCommand:tacos.addCheckpointNote",
     "onCommand:tacos.addCheckpointNoteFromClipboard",
     "onCommand:tacos.addCheckpointFromSelection",
@@ -218,6 +222,22 @@
         "title": "TaCoS: Add Recent URL"
       },
       {
+        "command": "tacos.captureTaskCheckpoint",
+        "title": "TaCoS: Capture Task Checkpoint"
+      },
+      {
+        "command": "tacos.markTaskResolved",
+        "title": "TaCoS: Mark Task Resolved"
+      },
+      {
+        "command": "tacos.confirmTaskSwitch",
+        "title": "TaCoS: Confirm Task Switch"
+      },
+      {
+        "command": "tacos.showCognitiveDebrief",
+        "title": "TaCoS: Show Cognitive Debrief"
+      },
+      {
         "command": "tacos.addCheckpointNote",
         "title": "TaCoS: Add Checkpoint Note"
       },
@@ -288,7 +308,7 @@
         "when": "workbenchState != empty"
       },
       {
-        "command": "tacos.addQuickCheckpointNote",
+        "command": "tacos.captureTaskCheckpoint",
         "key": "ctrl+alt+t ctrl+alt+k",
         "mac": "cmd+alt+t cmd+alt+k",
         "when": "workbenchState != empty"
@@ -340,6 +360,16 @@
           "default": false,
           "description": "Warn before the first risky rerun or mismatched file action when TaCoS detects a strong branch or scope mismatch."
         },
+        "tacos.taskCheckpoint.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable structured task checkpoints for interruption recovery and state restoration."
+        },
+        "tacos.taskCheckpoint.promptOnLikelySwitch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Offer a lightweight structured checkpoint prompt at conservative, explainable task-switch boundaries."
+        },
         "tacos.showTimeline": {
           "type": "boolean",
           "default": true,
@@ -348,7 +378,7 @@
         "tacos.promptCheckpointOnBlur": {
           "type": "boolean",
           "default": false,
-          "description": "Prompt for an optional one-line Future Me checkpoint note when VS Code loses focus after meaningful activity."
+          "description": "Legacy one-line blur prompt for a Future You note. Structured task checkpoints are configured separately."
         },
         "tacos.minIdleMinutes": {
           "type": "number",

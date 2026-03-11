@@ -33,6 +33,15 @@ describe('buildDiagnosticsText', () => {
       percolationExplainabilityActive: true,
       percolationNotificationBrokerEnabled: true,
       percolationNotificationBrokerActive: true,
+      taskCheckpointEnabled: true,
+      taskCheckpointPromptOnLikelySwitch: true,
+      activeStructuredTaskFreshness: 'fresh',
+      activeStructuredTaskSwitchClass: 'stable',
+      activeStructuredTaskCount: 1,
+      resolvedStructuredTaskCount: 2,
+      lastTaskSwitchSummary: 'Capture a checkpoint before switching partitions.',
+      lastTaskSwitchReasonCodes: ['task-partition-changed', 'file-cluster-drift'],
+      lastTaskSwitchSuppressionReason: 'noise-budget',
       recentMetrics: [
         buildMetric({
           firstMeaningfulEditLagMs: 120_000,
@@ -60,6 +69,19 @@ describe('buildDiagnosticsText', () => {
     expect(diagnostics).toContain('percolationPolicyEnabled: true');
     expect(diagnostics).toContain('percolationExplainabilityActive: true');
     expect(diagnostics).toContain('percolationNotificationBrokerActive: true');
+    expect(diagnostics).toContain('taskCheckpointEnabled: true');
+    expect(diagnostics).toContain('taskCheckpointPromptOnLikelySwitch: true');
+    expect(diagnostics).toContain('activeStructuredTaskFreshness: fresh');
+    expect(diagnostics).toContain('activeStructuredTaskSwitchClass: stable');
+    expect(diagnostics).toContain('activeStructuredTaskCount: 1');
+    expect(diagnostics).toContain('resolvedStructuredTaskCount: 2');
+    expect(diagnostics).toContain(
+      'lastTaskSwitchSummary: Capture a checkpoint before switching partitions.',
+    );
+    expect(diagnostics).toContain(
+      'lastTaskSwitchReasonCodes: task-partition-changed, file-cluster-drift',
+    );
+    expect(diagnostics).toContain('lastTaskSwitchSuppressionReason: noise-budget');
     expect(diagnostics).toContain('sessions: 2');
     expect(diagnostics).toContain('companionPromptImpressions.total: 2');
     expect(diagnostics).toContain('companionForcedOpenDetailsClicks.total: 1');
@@ -82,6 +104,8 @@ describe('buildDiagnosticsText', () => {
       percolationExplainabilityActive: false,
       percolationNotificationBrokerEnabled: true,
       percolationNotificationBrokerActive: false,
+      taskCheckpointEnabled: false,
+      taskCheckpointPromptOnLikelySwitch: false,
       recentMetrics: [buildMetric({ workspaceRoot: '/Users/real/secret-workspace' })],
     });
 
@@ -91,6 +115,8 @@ describe('buildDiagnosticsText', () => {
     expect(diagnostics).toContain('percolationPolicyEnabled: false');
     expect(diagnostics).toContain('percolationExplainabilityActive: false');
     expect(diagnostics).toContain('percolationNotificationBrokerActive: false');
+    expect(diagnostics).toContain('taskCheckpointEnabled: false');
+    expect(diagnostics).toContain('taskCheckpointPromptOnLikelySwitch: false');
   });
 
   it('includes runtime performance counters when provided', () => {
@@ -108,6 +134,8 @@ describe('buildDiagnosticsText', () => {
       percolationExplainabilityActive: false,
       percolationNotificationBrokerEnabled: false,
       percolationNotificationBrokerActive: false,
+      taskCheckpointEnabled: true,
+      taskCheckpointPromptOnLikelySwitch: true,
       recentMetrics: [buildMetric()],
       performanceCounters: {
         focusHandling: {

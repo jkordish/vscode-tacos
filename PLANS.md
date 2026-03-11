@@ -258,18 +258,43 @@ Status vocabulary used in this file:
   - rewrote `docs/manual-smoke-runbook.md` for v0.8.x dynamic percolation coverage (ambient vs escalation paths, suppression checks, restricted explainability, rollout-flag matrix, and required percolation metrics capture fields).
   - refreshed `docs/smoke-report.md` template to mirror the new P/R/F scenario groups and percolation metric gates.
   - appended a `v0.8.x Dynamic Percolation Acceptance Addendum` to `docs/acceptance-report.md` with implemented anchors, acceptance checklist, and manual verification gates.
-  - standardized Trust & Privacy tray terminology in key docs (`README`, `SPECS`, `docs/DESIGN_AND_IMPLEMENTATION.md`, `docs/metrics.md`, `CHANGELOG`) and aligned panel/status semantics with updated copy.
-  - added/updated string assertions in `test/panelCards.test.ts` for Trust & Privacy tray and emphasis badge copy.
-- risks/rollback:
-  - risk: operator workflows may still reference historical v0.6/v0.7 smoke expectations.
-  - rollback: restore prior runbook/report templates from git history while keeping v0.8 addendum content in a separate doc.
-- links:
-  - https://github.com/jkordish/vscode-tacos/issues/257
-  - https://github.com/jkordish/vscode-tacos/issues/247
-  - https://github.com/jkordish/vscode-tacos/issues/229
-  - https://github.com/jkordish/vscode-tacos/issues/227
 
-### P13. Remaining open-epic closure sweep (`#246`, `#259`)
+### P13. Cognitive Observability v1
+
+- status: `done`
+- why: turn TaCoS into a serious state-recovery tool for interruption-heavy engineers without breaking its calm, local-first, explainable posture.
+- scope: structured task checkpoints, deterministic task-switch detection, resume brief v2 state recovery, on-demand cognitive debrief, local-only evaluation metrics, diagnostics, and required docs/spec/research parity.
+- dependencies: P1, P3, P4.
+- sub-slices:
+  - `P13a` typed task-state schema and local store evolution
+  - `P13b` manual structured checkpoint capture/edit/resolve flows
+  - `P13c` conservative switch detection + likely-boundary prompting
+  - `P13d` resume brief v2 integration with structured task state
+  - `P13e` on-demand cognitive debrief
+  - `P13f` metrics + diagnostics
+  - `P13g` docs/spec/changelog/research updates
+  - `P13h` verify/package regression pass
+- recent progress:
+  - added versioned structured task-state storage (`src/taskState.ts`) keyed to existing workspace/branch/task-partition scope with typed fields for objective, working set, assumptions, blockers, next action, confidence, stale boundary, and last known safe breakpoint.
+  - wired `TaCoS: Capture Task Checkpoint`, `TaCoS: Mark Task Resolved`, `TaCoS: Confirm Task Switch`, and `TaCoS: Show Cognitive Debrief`, while keeping legacy checkpoint-note flows as compatibility entrypoints.
+  - implemented deterministic switch detection (`src/taskSwitch.ts`) using conservative, explainable signals with `Capture / Skip / Snooze / Dismiss` prompt handling and diagnostics visibility.
+  - upgraded Resume Brief v2 with structured recovery sections and added local-only cognitive debrief derivation/rendering.
+  - extended metrics, diagnostics, unit coverage, integration coverage, docs/specs, and packaging verification for the new slice.
+- risks/rollback:
+  - risk: overlapping note/task-state systems could create confusing duplicate sources of truth if compatibility paths are too broad.
+  - rollback: keep legacy checkpoint-note flows intact and disable structured prompting while retaining manual structured capture.
+- links:
+  - `src/taskState.ts`
+  - `src/taskSwitch.ts`
+  - `src/structuredRecovery.ts`
+  - `src/cognitiveDebrief.ts`
+  - `src/extension.ts`
+  - `README.md`
+  - `SPECS.md`
+  - `docs/DESIGN_AND_IMPLEMENTATION.md`
+  - `docs/references.md`
+
+### P13x. Remaining open-epic closure sweep (`#246`, `#259`)
 
 - status: `done`
 - why: finish the final open child issues under Epics `#227` and `#229` with code, docs, onboarding, and metrics parity.

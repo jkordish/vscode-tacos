@@ -7,6 +7,7 @@ import * as vscode from 'vscode';
 import MarkdownIt from 'markdown-it';
 import { buildAiPayloadPreviewMarkdown } from './aiPayloadPreview';
 import { decidePrimaryBlocker, type BlockerDecision } from './blockerModel';
+import { buildCognitiveDebrief, type CognitiveDebrief } from './cognitiveDebrief';
 import {
   applyCompanionNudgeFeedback,
   chooseCompanionNudges,
@@ -154,6 +155,36 @@ import {
   type ResumeSafetyTrigger,
   type ResumeSafetyVerificationAction,
 } from './resumeSafety';
+import { applyStructuredTaskStateToSummary } from './structuredRecovery';
+import {
+  computeCheckpointFieldCompleteness,
+  createStructuredTaskState,
+  createTaskWorkingSetEntry,
+  describeStructuredTaskStateFreshness,
+  describeStructuredTaskSwitchClass,
+  findActiveStructuredTaskForScope,
+  findStructuredTaskStateById,
+  formatStructuredTaskStateForPrompt,
+  isStructuredTaskStateStale,
+  listStructuredTasksForWorkspace,
+  markStructuredTaskStateResolved,
+  markStructuredTaskStateResumed,
+  parseStructuredTaskStateStore,
+  taskStateStorageKey,
+  updateStructuredTaskState,
+  upsertStructuredTaskState,
+  type StructuredTaskState,
+  type StructuredTaskStateStore,
+  type TaskStateConfidence,
+  type TaskWorkingSetEntry,
+} from './taskState';
+import {
+  createTaskSwitchCandidateHash,
+  deriveMeaningfulFileCluster,
+  detectTaskSwitchCandidate,
+  type TaskSwitchCandidate,
+  type TaskSwitchSnapshot,
+} from './taskSwitch';
 import { renderPanelClientScript } from './webview/panelClientScript';
 import {
   renderChangesSinceCard,
@@ -172,9 +203,11 @@ import {
 } from './webview/panelCards';
 import {
   renderCheckpointCard,
+  renderCognitiveDebriefCard,
   renderCompanionNextSteps,
   renderCompanionNudgeCard,
   renderConfidenceCard,
+  renderTaskStateCard,
   renderGroupedEvidenceListItems,
   renderGroupedActionSections,
   renderIntentEditor,
@@ -258,6 +291,8 @@ const KEY_AI_PAYLOAD_CONSENT_PREFIX = 'tacos.aiPayloadConsent';
 const KEY_NOISE_BUDGET_EVENTS_PREFIX = 'tacos.noiseBudgetEvents';
 const KEY_PANEL_SECTION_STATE_PREFIX = 'tacos.panelSectionState';
 const KEY_RESUME_SAFETY_CONTEXT_PREFIX = 'tacos.resumeSafetyContext';
+const KEY_TASK_CHECKPOINT_PROMPT_SNOOZE_UNTIL_PREFIX = 'tacos.taskCheckpointPromptSnoozeUntil';
+const KEY_TASK_SWITCH_DISMISSED_HASH_PREFIX = 'tacos.taskSwitchDismissedHash';
 const SECRET_OPENAI_API_KEY = 'tacos.openaiApiKey';
 const DEMO_RESUME_CONTEXT_HASH = '__tacos_demo_resume__';
 
@@ -412,6 +447,8 @@ interface RuntimeState {
   panelCheckpointNotes: CheckpointNote[];
   panelPrimaryCheckpointNote?: CheckpointNote;
   panelCheckpointScope?: string;
+  panelTaskState?: StructuredTaskState;
+  panelCognitiveDebrief?: CognitiveDebrief;
   panelManualPercolationBypass: boolean;
   panelScratchpadPreviewLines: string[];
   panelScratchpadExists: boolean;
@@ -459,6 +496,9 @@ interface RuntimeState {
   };
   lastSummaryContextUnchanged: boolean;
   meaningfulActivitySinceCheckpointPrompt: boolean;
+  lastTaskSwitchSnapshot?: TaskSwitchSnapshot;
+  lastTaskSwitchCandidate?: TaskSwitchCandidate;
+  lastTaskSwitchSuppressionReason?: string;
   pauseUntilRestart: boolean;
   snoozeUntil: number;
   summaryQuietUntil: number;
@@ -520,6 +560,8 @@ interface PresentSummaryOptions {
   checkpointPrimaryNote?: CheckpointNote;
   checkpointNotes?: CheckpointNote[];
   checkpointScope?: string;
+  structuredTaskState?: StructuredTaskState;
+  cognitiveDebrief?: CognitiveDebrief;
   providerModeSnapshot?: ProviderModeSnapshot;
   aiPayloadConsentSignature?: string;
   manualPercolationBypass?: boolean;
@@ -605,6 +647,8 @@ export function activate(context: vscode.ExtensionContext): void {
     panelCheckpointNotes: [],
     panelPrimaryCheckpointNote: undefined,
     panelCheckpointScope: undefined,
+    panelTaskState: undefined,
+    panelCognitiveDebrief: undefined,
     panelManualPercolationBypass: false,
     panelScratchpadPreviewLines: [],
     panelScratchpadExists: false,
@@ -644,6 +688,9 @@ export function activate(context: vscode.ExtensionContext): void {
     detailsMarkdownCache: undefined,
     lastSummaryContextUnchanged: false,
     meaningfulActivitySinceCheckpointPrompt: false,
+    lastTaskSwitchSnapshot: undefined,
+    lastTaskSwitchCandidate: undefined,
+    lastTaskSwitchSuppressionReason: undefined,
     pauseUntilRestart: false,
     snoozeUntil: context.workspaceState.get<number>(KEY_SUMMARY_SNOOZE_UNTIL, 0),
     summaryQuietUntil: context.workspaceState.get<number>(KEY_SUMMARY_QUIET_UNTIL, 0),
@@ -828,6 +875,140 @@ export function activate(context: vscode.ExtensionContext): void {
       return true;
     }),
     vscode.commands.registerCommand(
+      'tacos.__test.seedStructuredTaskState',
+      async (rawInput?: unknown) => {
+        const workspaceRoot = pickWorkspaceRoot();
+        if (!workspaceRoot) {
+          return undefined;
+        }
+
+        const input =
+          rawInput && typeof rawInput === 'object' ? (rawInput as Record<string, unknown>) : {};
+        const scope = resolveStructuredTaskScopeState(
+          context,
+          workspaceRoot,
+          typeof input.branch === 'string' ? input.branch : state.panelSummary?.currentBranch,
+        );
+        const now =
+          typeof input.now === 'number' && Number.isFinite(input.now)
+            ? Math.floor(input.now)
+            : Date.now();
+        const existing = resolveActiveStructuredTaskState(context, workspaceRoot, scope.branch);
+        const task = createStructuredTaskState({
+          taskId:
+            typeof input.taskId === 'string' && input.taskId.trim()
+              ? input.taskId.trim()
+              : existing?.taskId,
+          workspaceRoot,
+          repo: scope.repo,
+          branch: typeof input.branch === 'string' ? input.branch.trim() : scope.branch,
+          taskPartition:
+            typeof input.taskPartition === 'string' && input.taskPartition.trim()
+              ? input.taskPartition.trim()
+              : scope.taskPartition,
+          objective:
+            typeof input.objective === 'string' && input.objective.trim()
+              ? input.objective.trim()
+              : 'Investigate recovery path',
+          nextAction:
+            typeof input.nextAction === 'string' && input.nextAction.trim()
+              ? input.nextAction.trim()
+              : 'Reopen the last safe breakpoint and verify the next action',
+          confidence:
+            input.confidence === 'low' || input.confidence === 'high' ? input.confidence : 'medium',
+          currentHypothesis:
+            typeof input.currentHypothesis === 'string' ? input.currentHypothesis : undefined,
+          assumptions: Array.isArray(input.assumptions) ? input.assumptions : [],
+          blockers: Array.isArray(input.blockers) ? input.blockers : [],
+          workingSet: Array.isArray(input.workingSet)
+            ? input.workingSet
+                .map((entry) =>
+                  entry && typeof entry === 'object'
+                    ? createTaskWorkingSetEntry(
+                        typeof (entry as { kind?: unknown }).kind === 'string'
+                          ? ((entry as { kind: TaskWorkingSetEntry['kind'] })
+                              .kind as TaskWorkingSetEntry['kind'])
+                          : 'file',
+                        typeof (entry as { label?: unknown }).label === 'string'
+                          ? (entry as { label: string }).label
+                          : '',
+                        typeof (entry as { target?: unknown }).target === 'string'
+                          ? (entry as { target: string }).target
+                          : undefined,
+                        now,
+                      )
+                    : undefined,
+                )
+                .filter((entry): entry is TaskWorkingSetEntry => Boolean(entry))
+            : buildStructuredTaskWorkingSet(workspaceRoot, now),
+          lastKnownSafeBreakpoint: {
+            ...captureLastKnownSafeBreakpoint(workspaceRoot, scope),
+            file:
+              typeof input.breakpointFile === 'string'
+                ? input.breakpointFile
+                : captureLastKnownSafeBreakpoint(workspaceRoot, scope).file,
+            line:
+              typeof input.breakpointLine === 'number' && Number.isFinite(input.breakpointLine)
+                ? Math.floor(input.breakpointLine)
+                : captureLastKnownSafeBreakpoint(workspaceRoot, scope).line,
+            capturedAt: now,
+          },
+          staleAfter:
+            typeof input.staleAfter === 'number' && Number.isFinite(input.staleAfter)
+              ? Math.floor(input.staleAfter)
+              : undefined,
+          createdAt: now,
+          updatedAt: now,
+          switchCount:
+            typeof input.switchCount === 'number' && Number.isFinite(input.switchCount)
+              ? Math.floor(input.switchCount)
+              : 0,
+          resolutionState:
+            input.resolutionState === 'resolved' || input.resolutionState === 'dismissed'
+              ? input.resolutionState
+              : 'active',
+        });
+        const store = upsertStructuredTaskState(
+          readStructuredTaskStateStore(context, workspaceRoot),
+          task,
+        );
+        await writeStructuredTaskStateStore(context, workspaceRoot, store);
+        await refreshPanelCheckpointState(context, workspaceRoot);
+        rerenderPanel();
+        return task.taskId;
+      },
+    ),
+    vscode.commands.registerCommand('tacos.__test.getStructuredTaskStateSnapshot', async () => {
+      const workspaceRoot = pickWorkspaceRoot();
+      if (!workspaceRoot) {
+        return undefined;
+      }
+
+      const store = readStructuredTaskStateStore(context, workspaceRoot);
+      const tasks = listStructuredTasksForWorkspace(store, workspaceRoot);
+      const activeTask = resolveActiveStructuredTaskState(
+        context,
+        workspaceRoot,
+        state.panelSummary?.currentBranch,
+      );
+      return {
+        workspaceRoot,
+        totalTasks: tasks.length,
+        activeTaskId: activeTask?.taskId,
+        activeTaskObjective: activeTask?.objective,
+        activeTaskSwitchCount: activeTask?.switchCount ?? 0,
+        activeTaskFreshness: describeStructuredTaskStateFreshness(activeTask),
+        tasks: tasks.map((task) => ({
+          taskId: task.taskId,
+          objective: task.objective,
+          branch: task.branch,
+          taskPartition: task.taskPartition,
+          resolutionState: task.resolutionState,
+          switchCount: task.switchCount,
+        })),
+      };
+    }),
+    vscode.commands.registerCommand(
       'tacos.__test.pickWorkspaceRoot',
       async (preferred?: string) => {
         const preferredWorkspaceRoot = typeof preferred === 'string' ? preferred : undefined;
@@ -871,6 +1052,14 @@ export function activate(context: vscode.ExtensionContext): void {
         doneItemsCount: state.doneItems.values().length,
         lastSummaryContextUnchanged: state.lastSummaryContextUnchanged,
         activeNudgeContextHash: state.activeNudges?.contextHash,
+        activeStructuredTaskCount: workspaceRoot
+          ? listStructuredTasksForWorkspace(
+              readStructuredTaskStateStore(context, workspaceRoot),
+              workspaceRoot,
+            ).filter((task) => task.resolutionState === 'active').length
+          : 0,
+        hasTaskSwitchCandidate: Boolean(state.lastTaskSwitchCandidate),
+        lastTaskSwitchSuppressionReason: state.lastTaskSwitchSuppressionReason ?? '',
         scopedAutoTriggerFingerprint,
         scopedNudgeShownAt,
         scopedNoiseBudgetEventCount,
@@ -1158,6 +1347,8 @@ export function activate(context: vscode.ExtensionContext): void {
         advisoryOnlyRowCount,
         hasLegacyNextStepsCard: panelHtml.includes('<h3>Next Steps</h3>'),
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
+        hasTaskStateCard: panelHtml.includes('<h3>Task State</h3>'),
+        hasCognitiveDebriefCard: panelHtml.includes('<h3>Cognitive Debrief</h3>'),
         hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
         isCompanionHomeFirstCard: firstCardTitle === 'Companion Home',
         hasWhySurfacedAction,
@@ -1572,13 +1763,32 @@ export function activate(context: vscode.ExtensionContext): void {
         cached,
         checkpointContext.primaryNote,
       );
+      const activeStructuredTaskState = resolveActiveStructuredTaskState(
+        context,
+        root,
+        cached.currentBranch,
+      );
+      const structuredSummary = applyStructuredTaskStateToSummary(
+        summaryWithCheckpoint,
+        activeStructuredTaskState,
+        {
+          currentBranch: cached.currentBranch,
+          currentTaskPartition: resolveTaskPartitionKey(context, root, cached.currentBranch),
+        },
+      );
+      const cognitiveDebrief = buildCognitiveDebrief({
+        tasks: listStructuredTasksForWorkspace(readStructuredTaskStateStore(context, root), root),
+        activeTaskId: activeStructuredTaskState?.taskId,
+      });
 
-      await presentSummary(context, summaryWithCheckpoint, 'cached', {
+      await presentSummary(context, structuredSummary, 'cached', {
         autoOpenDetails: true,
         workspaceRoot: root,
         checkpointPrimaryNote: checkpointContext.primaryNote,
         checkpointNotes: checkpointContext.notes,
         checkpointScope: checkpointContext.scope,
+        structuredTaskState: activeStructuredTaskState,
+        cognitiveDebrief,
       });
     }),
     vscode.commands.registerCommand('tacos.generateStandupUpdate', async () => {
@@ -1698,6 +1908,41 @@ export function activate(context: vscode.ExtensionContext): void {
       markMeaningfulActivity();
       await persistActivity(context);
       void vscode.window.showInformationMessage('TaCoS: URL added to recent context.');
+    }),
+    vscode.commands.registerCommand('tacos.captureTaskCheckpoint', async () => {
+      await captureTaskCheckpointCommand(context);
+    }),
+    vscode.commands.registerCommand('tacos.markTaskResolved', async () => {
+      await markTaskResolvedCommand(context);
+    }),
+    vscode.commands.registerCommand('tacos.confirmTaskSwitch', async () => {
+      const workspaceRoot = pickWorkspaceRoot();
+      if (!workspaceRoot) {
+        void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+        return;
+      }
+
+      const snapshot = await buildTaskSwitchSnapshot(context, workspaceRoot);
+      const candidate = detectTaskSwitchCandidate({
+        previous: state.lastTaskSwitchSnapshot,
+        current: snapshot,
+        idleBoundaryMinutes: getConfig().resumeSafetyIdleMinutes,
+        manualConfirm: true,
+      }) ?? {
+        current: snapshot,
+        previous: state.lastTaskSwitchSnapshot,
+        reasonCodes: ['manual-confirm'],
+        summary: 'Manual task switch confirmation',
+        explainability: ['Manual switch confirmation requested.'],
+      };
+      const captured = await maybeOfferTaskCheckpointPrompt(context, workspaceRoot, candidate);
+      if (!captured) {
+        recordMetricCounter('taskSwitchCorrected');
+      }
+      state.lastTaskSwitchSnapshot = snapshot;
+    }),
+    vscode.commands.registerCommand('tacos.showCognitiveDebrief', async () => {
+      await showCognitiveDebriefCommand(context);
     }),
     vscode.commands.registerCommand('tacos.addCheckpointNote', async () => {
       const root = pickWorkspaceRoot();
@@ -2093,6 +2338,9 @@ export function activate(context: vscode.ExtensionContext): void {
       const now = Date.now();
       if (!windowState.focused) {
         const workspaceRoot = pickWorkspaceRoot() ?? '';
+        if (workspaceRoot) {
+          state.lastTaskSwitchSnapshot = await buildTaskSwitchSnapshot(context, workspaceRoot);
+        }
         await context.workspaceState.update(KEY_LAST_BLUR_AT, now);
         await context.workspaceState.update(KEY_LAST_WORKSPACE_ON_BLUR, workspaceRoot);
         await maybePromptCheckpointOnBlur(context, now, workspaceRoot || undefined);
@@ -2217,6 +2465,19 @@ async function handleFocusRegainSummaryTrigger(
       outcome = 'gated';
       return;
     }
+
+    const currentTaskSwitchSnapshot = await buildTaskSwitchSnapshot(context, root);
+    const focusReturnIdleMinutes = Math.max(0, Math.floor((now - lastBlurAt) / 60_000));
+    const taskSwitchCandidate = detectTaskSwitchCandidate({
+      previous: state.lastTaskSwitchSnapshot,
+      current: currentTaskSwitchSnapshot,
+      idleBoundaryMinutes: config.resumeSafetyIdleMinutes,
+      focusReturnIdleMinutes,
+    });
+    if (taskSwitchCandidate) {
+      await maybeOfferTaskCheckpointPrompt(context, root, taskSwitchCandidate);
+    }
+    state.lastTaskSwitchSnapshot = currentTaskSwitchSnapshot;
 
     outcome = 'triggered';
     state.lastAutoFocusTriggerAt = now;
@@ -2456,6 +2717,8 @@ async function triggerSummary(
     checkpointPrimaryNote: prepared.checkpointPrimaryNote,
     checkpointNotes: prepared.checkpointNotes,
     checkpointScope: prepared.checkpointScope,
+    structuredTaskState: prepared.structuredTaskState,
+    cognitiveDebrief: prepared.cognitiveDebrief,
     percolationPriors: prepared.rankingPriors,
   });
   state.meaningfulActivitySinceCheckpointPrompt = false;
@@ -2918,6 +3181,8 @@ interface PreparedTriggerSummary {
   checkpointNotes: CheckpointNote[];
   checkpointPrimaryNote?: CheckpointNote;
   checkpointScope: string;
+  structuredTaskState?: StructuredTaskState;
+  cognitiveDebrief?: CognitiveDebrief;
   rankingPriors: PercolationUserPriors;
   signals: ResumeSignals;
   config: ExtensionConfig;
@@ -3001,11 +3266,29 @@ async function prepareTriggerSummary(
     baseSummary.currentBranch,
     true,
   );
-  const localSummary = applyCheckpointNoteToSummary(baseSummary, checkpointContext.primaryNote);
+  const activeStructuredTaskState = resolveActiveStructuredTaskState(
+    context,
+    root,
+    baseSummary.currentBranch,
+  );
+  const localSummaryWithCheckpoint = applyCheckpointNoteToSummary(
+    baseSummary,
+    checkpointContext.primaryNote,
+  );
+  const localSummary = applyStructuredTaskStateToSummary(
+    localSummaryWithCheckpoint,
+    activeStructuredTaskState,
+    {
+      currentBranch: baseSummary.currentBranch,
+      currentTaskPartition: resolveTaskPartitionKey(context, root, baseSummary.currentBranch),
+    },
+  );
   const aiPayloadCheckpointNotes =
-    config.aiIncludeCheckpointNotes && checkpointContext.primaryNote?.status === 'open'
-      ? [checkpointContext.primaryNote.text]
-      : [];
+    config.aiIncludeCheckpointNotes && activeStructuredTaskState
+      ? formatStructuredTaskStateForPrompt(activeStructuredTaskState)
+      : config.aiIncludeCheckpointNotes && checkpointContext.primaryNote?.status === 'open'
+        ? [checkpointContext.primaryNote.text]
+        : [];
   const scratchpadPrior = await loadScratchpadPriorSnapshot(
     context,
     root,
@@ -3036,12 +3319,14 @@ async function prepareTriggerSummary(
   aiPayloadSummary.userCorrections = corrections;
   aiPayloadSummary.correctionsFingerprint = correctionsFingerprint;
   const rankingPriors: PercolationUserPriors = {
-    checkpointNoteText:
-      checkpointContext.primaryNote?.status === 'open'
+    checkpointNoteText: activeStructuredTaskState
+      ? `${activeStructuredTaskState.objective}. ${activeStructuredTaskState.nextAction}`
+      : checkpointContext.primaryNote?.status === 'open'
         ? checkpointContext.primaryNote.text
         : undefined,
-    checkpointUpdatedAt:
-      checkpointContext.primaryNote?.status === 'open'
+    checkpointUpdatedAt: activeStructuredTaskState
+      ? activeStructuredTaskState.updatedAt
+      : checkpointContext.primaryNote?.status === 'open'
         ? checkpointContext.primaryNote.updatedAt
         : undefined,
     correctionHints: corrections,
@@ -3050,6 +3335,10 @@ async function prepareTriggerSummary(
     scratchpadExcerpt: scratchpadPrior.excerpt,
     scratchpadUpdatedAt: scratchpadPrior.updatedAt,
   };
+  const cognitiveDebrief = buildCognitiveDebrief({
+    tasks: listStructuredTasksForWorkspace(readStructuredTaskStateStore(context, root), root),
+    activeTaskId: activeStructuredTaskState?.taskId,
+  });
   const cacheKey = summaryCacheKey(context, root);
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
   const correctionsUnchanged =
@@ -3077,6 +3366,15 @@ async function prepareTriggerSummary(
   const adaptationNow = Date.now();
   const triggerReason = contextUnchanged && cached ? 'cached' : reason;
   const summary = contextUnchanged && cached ? cached : localSummary;
+  if (activeStructuredTaskState) {
+    summary.structuredTaskStateUsed = true;
+    summary.structuredTaskStateFreshness = describeStructuredTaskStateFreshness(
+      activeStructuredTaskState,
+      adaptationNow,
+    );
+    summary.structuredTaskSwitchClass =
+      describeStructuredTaskSwitchClass(activeStructuredTaskState);
+  }
   adaptAndRememberPercolationSignals(
     summary,
     signals,
@@ -3100,6 +3398,8 @@ async function prepareTriggerSummary(
     checkpointNotes: checkpointContext.notes,
     checkpointPrimaryNote: checkpointContext.primaryNote,
     checkpointScope: checkpointContext.scope,
+    structuredTaskState: activeStructuredTaskState,
+    cognitiveDebrief,
     rankingPriors,
     signals,
     config,
@@ -3148,6 +3448,14 @@ async function refineSummaryInBackground(
     return;
   }
   refined = applyCheckpointNoteToSummary(refined, prepared.checkpointPrimaryNote);
+  refined = applyStructuredTaskStateToSummary(refined, prepared.structuredTaskState, {
+    currentBranch: prepared.localSummary.currentBranch,
+    currentTaskPartition: resolveTaskPartitionKey(
+      context,
+      prepared.root,
+      prepared.localSummary.currentBranch,
+    ),
+  });
   refined = applyIntentOverrideToSummary(
     refined,
     prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
@@ -3210,8 +3518,20 @@ async function generateSummary(
     refined,
     prepared.checkpointPrimaryNote,
   );
-  const refinedWithIntentOverride = applyIntentOverrideToSummary(
+  const refinedWithTaskState = applyStructuredTaskStateToSummary(
     refinedWithCheckpoint,
+    prepared.structuredTaskState,
+    {
+      currentBranch: prepared.localSummary.currentBranch,
+      currentTaskPartition: resolveTaskPartitionKey(
+        context,
+        prepared.root,
+        prepared.localSummary.currentBranch,
+      ),
+    },
+  );
+  const refinedWithIntentOverride = applyIntentOverrideToSummary(
+    refinedWithTaskState,
     prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
   );
   adaptAndRememberPercolationSignals(
@@ -3359,8 +3679,24 @@ async function presentSummary(
       uiSurface: config.uiSurface,
       interruptionEvent: 0,
       interruptionTimingClass: classifyInterruptionTiming(triggerReason, options.focusRegainedAt),
-      resumeWithNote: options.checkpointPrimaryNote ? 1 : 0,
+      resumeWithNote: options.checkpointPrimaryNote || options.structuredTaskState ? 1 : 0,
+      resumeWithStructuredTaskState: options.structuredTaskState ? 1 : 0,
+      resumeTaskStateFreshness: options.structuredTaskState
+        ? describeStructuredTaskStateFreshness(options.structuredTaskState)
+        : 'none',
+      taskSwitchSessionClass: options.structuredTaskState
+        ? describeStructuredTaskSwitchClass(options.structuredTaskState)
+        : 'none',
     };
+    if (options.structuredTaskState && isStructuredTaskStateStale(options.structuredTaskState)) {
+      recordMetricCounter('structuredTaskStateStale');
+    }
+    if (summary.structuredTaskStateUsed) {
+      recordMetricCounter('resumeBriefUsesCheckpointState');
+    }
+    if ((summary.timelineCues?.length ?? 0) > 0) {
+      recordMetricCounter('resumeBriefShowsTimelineCue');
+    }
   }
 
   await updateActiveNudges(context, summary, workspaceRoot, config, triggerReason === 'cached');
@@ -4356,6 +4692,22 @@ function recordMetricCounter(
     | 'noteCreated'
     | 'noteMarkedDone'
     | 'notePinned'
+    | 'checkpointOffered'
+    | 'checkpointCompleted'
+    | 'checkpointSkipped'
+    | 'checkpointDismissed'
+    | 'checkpointEditedLater'
+    | 'structuredTaskStateCreated'
+    | 'structuredTaskStateResolved'
+    | 'structuredTaskStateStale'
+    | 'taskSwitchDetected'
+    | 'taskSwitchConfirmed'
+    | 'taskSwitchCorrected'
+    | 'resumeBriefUsesCheckpointState'
+    | 'resumeBriefShowsTimelineCue'
+    | 'dailyDebriefOpened'
+    | 'abandonedThreadSurfaced'
+    | 'unresolvedBlockerSurfaced'
     | 'resumePathCompletions'
     | 'scratchpadOpened'
     | 'scratchpadAppended'
@@ -4370,6 +4722,41 @@ function recordMetricCounter(
   }
 
   state.metricSession[field] = (state.metricSession[field] ?? 0) + amount;
+}
+
+function recordMetricValue(field: 'checkpointFieldCompleteness', value: number): void {
+  if (!state.metricSession || !Number.isFinite(value)) {
+    return;
+  }
+
+  state.metricSession[field] = Math.max(0, Math.round(value));
+}
+
+function beginEphemeralMetricSession(workspaceRoot: string): boolean {
+  if (state.metricSession || !getConfig().metricsEnabled) {
+    return false;
+  }
+
+  state.metricSession = {
+    startedAt: Date.now(),
+    workspaceRoot,
+    trigger: 'manual',
+    uiSurface: getConfig().uiSurface,
+    interruptionEvent: 0,
+    interruptionTimingClass: 'boundary',
+  };
+  return true;
+}
+
+async function finalizeEphemeralMetricSession(
+  context: vscode.ExtensionContext,
+  created: boolean,
+): Promise<void> {
+  if (!created) {
+    return;
+  }
+
+  await finalizeCurrentMetric(context);
 }
 
 const PANEL_EMPHASIS_REASONS = new Set<SummaryPresentationReason>([
@@ -5594,6 +5981,8 @@ async function showDetailsPanel(
     | 'checkpointPrimaryNote'
     | 'checkpointNotes'
     | 'checkpointScope'
+    | 'structuredTaskState'
+    | 'cognitiveDebrief'
     | 'providerModeSnapshot'
     | 'aiPayloadConsentSignature'
     | 'manualPercolationBypass'
@@ -5612,12 +6001,16 @@ async function showDetailsPanel(
   state.panelCheckpointNotes = sortCheckpointNotes(options.checkpointNotes ?? []);
   state.panelPrimaryCheckpointNote = options.checkpointPrimaryNote;
   state.panelCheckpointScope = options.checkpointScope;
+  state.panelTaskState = options.structuredTaskState;
+  state.panelCognitiveDebrief = options.cognitiveDebrief;
   state.panelManualPercolationBypass = Boolean(options.manualPercolationBypass);
   state.panelScratchpadPriorExcerpt = options.percolationPriors?.scratchpadExcerpt;
   if (demoMode) {
     state.panelCheckpointNotes = [];
     state.panelPrimaryCheckpointNote = undefined;
     state.panelCheckpointScope = undefined;
+    state.panelTaskState = undefined;
+    state.panelCognitiveDebrief = undefined;
     state.panelManualPercolationBypass = false;
     state.panelProviderModeSnapshot = undefined;
     state.panelAiPayloadConsentSignature = undefined;
@@ -5651,6 +6044,8 @@ async function showDetailsPanel(
       state.panelCheckpointNotes = [];
       state.panelPrimaryCheckpointNote = undefined;
       state.panelCheckpointScope = undefined;
+      state.panelTaskState = undefined;
+      state.panelCognitiveDebrief = undefined;
       state.panelManualPercolationBypass = false;
       state.panelScratchpadPreviewLines = [];
       state.panelScratchpadExists = false;
@@ -5724,18 +6119,55 @@ async function showDetailsPanel(
           return;
         }
 
-        const firstAction = state.panelSummary?.recommendedFirstAction?.trim();
-        const seededValue = firstAction ? `Next: ${firstAction}` : undefined;
+        const firstAction =
+          state.panelSummary?.nextLikelySafeMove?.trim() ||
+          state.panelSummary?.recommendedFirstAction?.trim();
         recordBlockedPrimaryClick();
-        const saved = await promptAndSaveCheckpointNote(context, workspaceRoot, {
+        const saved = await captureTaskCheckpointCommand(context, workspaceRoot, {
           title: 'TaCoS: Capture Session Checkpoint',
-          prompt: 'Save a one-line checkpoint for your next resume.',
-          placeHolder: 'Example: Continue from parser error and rerun npm test',
-          initialValue: seededValue,
+          initialNextAction: firstAction || undefined,
         });
-        recordBlockedPrimaryCompletion(saved);
+        recordBlockedPrimaryCompletion(Boolean(saved));
         await refreshPanelCheckpointState(context, workspaceRoot);
         rerenderPanel();
+        return;
+      }
+
+      if (message.type === 'taskStateResolve') {
+        await markTaskResolvedCommand(context, state.panelWorkspaceRoot);
+        return;
+      }
+
+      if (message.type === 'confirmTaskSwitch') {
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        if (!workspaceRoot) {
+          void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+          return;
+        }
+
+        const snapshot = await buildTaskSwitchSnapshot(context, workspaceRoot);
+        const candidate = detectTaskSwitchCandidate({
+          previous: state.lastTaskSwitchSnapshot,
+          current: snapshot,
+          idleBoundaryMinutes: getConfig().resumeSafetyIdleMinutes,
+          manualConfirm: true,
+        }) ?? {
+          current: snapshot,
+          previous: state.lastTaskSwitchSnapshot,
+          reasonCodes: ['manual-confirm'],
+          summary: 'Manual task switch confirmation',
+          explainability: ['Manual switch confirmation requested.'],
+        };
+        const captured = await maybeOfferTaskCheckpointPrompt(context, workspaceRoot, candidate);
+        if (!captured) {
+          recordMetricCounter('taskSwitchCorrected');
+        }
+        state.lastTaskSwitchSnapshot = snapshot;
+        return;
+      }
+
+      if (message.type === 'showCognitiveDebrief') {
+        await showCognitiveDebriefCommand(context, state.panelWorkspaceRoot);
         return;
       }
 
@@ -6260,6 +6692,8 @@ async function showDetailsPanel(
       state.panelPrimaryCheckpointNote =
         options.checkpointPrimaryNote ?? selectPrimaryCheckpointNote(state.panelCheckpointNotes);
       state.panelCheckpointScope = options.checkpointScope;
+      state.panelTaskState = options.structuredTaskState ?? state.panelTaskState;
+      state.panelCognitiveDebrief = options.cognitiveDebrief ?? state.panelCognitiveDebrief;
       if (state.panelSummary) {
         const nextSummary = applyCheckpointNoteToSummary(
           state.panelSummary,
@@ -6403,21 +6837,45 @@ function renderWebview(
   const primaryOpenCheckpoint =
     primaryCheckpointNote?.status === 'open' ? primaryCheckpointNote : undefined;
   const currentCheckpointNote = primaryOpenCheckpoint ?? openCheckpointNotes[0];
-  const checkpointCard = demoMode
+  const activeTaskState = state.panelTaskState;
+  const taskStateCard = demoMode
     ? ''
-    : renderCheckpointCard({
-        openCheckpointCount,
-        currentCheckpointNote: currentCheckpointNote
+    : renderTaskStateCard(
+        activeTaskState
           ? {
-              text: currentCheckpointNote.text,
-              file: currentCheckpointNote.file,
-              line: currentCheckpointNote.line,
-              branch: currentCheckpointNote.branch,
-              partition: currentCheckpointNote.partition,
-              pinned: currentCheckpointNote.pinned,
+              objective: activeTaskState.objective,
+              nextLikelySafeMove:
+                summary.nextLikelySafeMove ?? `Suggested next move: ${activeTaskState.nextAction}`,
+              confidence: activeTaskState.confidence,
+              blockers: activeTaskState.blockers,
+              assumptions: activeTaskState.assumptions,
+              workingSet: activeTaskState.workingSet.map((entry) => entry.label),
+              freshness: describeStructuredTaskStateFreshness(activeTaskState),
+              staleLabel: formatStaleAfterLabel(activeTaskState),
+              safeBreakpoint: formatSafeBreakpoint(activeTaskState),
+              switchCount: activeTaskState.switchCount,
             }
           : undefined,
-      });
+      );
+  const checkpointCard =
+    demoMode || activeTaskState
+      ? ''
+      : renderCheckpointCard({
+          openCheckpointCount,
+          currentCheckpointNote: currentCheckpointNote
+            ? {
+                text: currentCheckpointNote.text,
+                file: currentCheckpointNote.file,
+                line: currentCheckpointNote.line,
+                branch: currentCheckpointNote.branch,
+                partition: currentCheckpointNote.partition,
+                pinned: currentCheckpointNote.pinned,
+              }
+            : undefined,
+        });
+  const cognitiveDebriefCard = demoMode
+    ? ''
+    : renderCognitiveDebriefCard(summarizeCognitiveDebriefCounts(state.panelCognitiveDebrief));
   const scratchpadPreviewLines = state.panelScratchpadPreviewLines.slice(
     0,
     SCRATCHPAD_PREVIEW_MAX_LINES,
@@ -6439,7 +6897,7 @@ function renderWebview(
   const confidenceCard = renderConfidenceCard({
     longGap: hasLongGap,
     lowConfidence: Boolean(summary.lowConfidence),
-    hasCurrentCheckpointNote: Boolean(currentCheckpointNote),
+    hasCurrentCheckpointNote: Boolean(currentCheckpointNote || activeTaskState),
     resumeGapMinutes: summary.resumeGapMinutes,
     lastActionLabel: summary.lastActionLabel,
     recommendedFirstAction: summary.recommendedFirstAction,
@@ -6503,10 +6961,14 @@ function renderWebview(
           context: activeExtensionContext,
           workspaceRoot: panelWorkspaceRoot,
           priors: {
-            checkpointNoteText:
-              currentCheckpointNote?.status === 'open' ? currentCheckpointNote.text : undefined,
-            checkpointUpdatedAt:
-              currentCheckpointNote?.status === 'open'
+            checkpointNoteText: activeTaskState
+              ? `${activeTaskState.objective}. ${activeTaskState.nextAction}`
+              : currentCheckpointNote?.status === 'open'
+                ? currentCheckpointNote.text
+                : undefined,
+            checkpointUpdatedAt: activeTaskState
+              ? activeTaskState.updatedAt
+              : currentCheckpointNote?.status === 'open'
                 ? currentCheckpointNote.updatedAt
                 : undefined,
             correctionHints: summary.userCorrections,
@@ -6535,7 +6997,7 @@ function renderWebview(
     trusted,
     longGap: Boolean(summary.longGap),
     lowConfidence: Boolean(summary.lowConfidence),
-    hasCheckpointNote: Boolean(currentCheckpointNote),
+    hasCheckpointNote: Boolean(currentCheckpointNote || activeTaskState),
     hasFailingTask,
     lastTaskName: demoMode ? undefined : state.lastTaskName,
     lastTaskExitCode: demoMode ? undefined : state.lastTaskExitCode,
@@ -6610,7 +7072,9 @@ function renderWebview(
   const recapPendingList = recapPendingItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
   const nowCheckpointLine = currentCheckpointNote
     ? `<p class="companion-meta"><strong>Checkpoint:</strong> ${escapeHtml(currentCheckpointNote.text)}</p>`
-    : '';
+    : activeTaskState
+      ? `<p class="companion-meta"><strong>Checkpoint:</strong> ${escapeHtml(activeTaskState.nextAction)}</p>`
+      : '';
   const lastActionLabel = summary.lastActionLabel?.trim() || 'No last action captured yet.';
   const lastActionContext = summary.lastActionContext?.trim();
   const lastActionEvidence = summary.lastActionEvidenceId
@@ -6836,8 +7300,9 @@ function renderWebview(
       {
         label: 'Notes & Feedback',
         buttonsTrustedHtml: [
-          `<button type="button" class="secondary" data-action="sessionAddCheckpoint" ${demoDisabledAttr}>Add note</button>`,
+          `<button type="button" class="secondary" data-action="sessionAddCheckpoint" ${demoDisabledAttr}>Capture checkpoint</button>`,
           `<button type="button" class="secondary" data-action="checkpointOpenList" ${demoDisabledAttr}>List notes</button>`,
+          `<button type="button" class="secondary" data-action="showCognitiveDebrief" ${demoDisabledAttr}>Show debrief</button>`,
           `<button type="button" data-action="rateHelpfulness" ${demoDisabledAttr}>Rate helpfulness</button>`,
           `<button type="button" class="secondary" data-action="fixSummary" ${demoDisabledAttr}>Fix summary</button>`,
         ],
@@ -7167,7 +7632,9 @@ function renderWebview(
     resumePathCard,
     confidenceCard,
     statusCard,
+    taskStateCard,
     checkpointCard,
+    cognitiveDebriefCard,
     scratchpadCard,
     quickActionsCard,
     restorePackCard,
@@ -7638,7 +8105,25 @@ async function switchTaskPartition(context: vscode.ExtensionContext): Promise<vo
   }
 
   const nextValue = input.trim();
+  const currentSnapshot = await buildTaskSwitchSnapshot(context, workspaceRoot);
+  const nextPartition = resolveTaskPartitionFromInputs({
+    manualTaskPartition: nextValue,
+    scopeBranch: currentSnapshot.branch,
+  });
+  const nextSnapshot = await buildTaskSwitchSnapshot(context, workspaceRoot, {
+    branchOverride: currentSnapshot.branch,
+    taskPartitionOverride: nextPartition,
+  });
+  const switchCandidate = detectTaskSwitchCandidate({
+    previous: currentSnapshot,
+    current: nextSnapshot,
+    idleBoundaryMinutes: getConfig().resumeSafetyIdleMinutes,
+  });
+  if (switchCandidate) {
+    await maybeOfferTaskCheckpointPrompt(context, workspaceRoot, switchCandidate);
+  }
   await applyTaskPartitionSwitch(context, workspaceRoot, nextValue);
+  state.lastTaskSwitchSnapshot = nextSnapshot;
   void vscode.window.showInformationMessage(
     nextValue
       ? `TaCoS: switched to task partition "${nextValue}".`
@@ -10074,6 +10559,11 @@ function getConfig(): ExtensionConfig {
     resumeSafetyEnabled: config.get<boolean>('resumeSafety.enabled', true),
     resumeSafetyIdleMinutes: Math.max(1, config.get<number>('resumeSafety.idleMinutes', 10)),
     resumeSafetyStrict: config.get<boolean>('resumeSafety.strict', false),
+    taskCheckpointEnabled: config.get<boolean>('taskCheckpoint.enabled', true),
+    taskCheckpointPromptOnLikelySwitch: config.get<boolean>(
+      'taskCheckpoint.promptOnLikelySwitch',
+      true,
+    ),
     showTimeline: config.get<boolean>('showTimeline', true),
     promptCheckpointOnBlur: config.get<boolean>('promptCheckpointOnBlur', false),
     minIdleMinutes: Math.max(1, config.get<number>('minIdleMinutes', 10)),
@@ -10644,6 +11134,19 @@ function collectWorkspaceScopedKeys(
       matchesEncodedWorkspaceKey(key, KEY_AI_PAYLOAD_CONSENT_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_SCRATCHPAD_SCOPE_MODE_PREFIX, workspaceRoot, false) ||
       matchesEncodedWorkspaceKey(key, KEY_ACTIVITY_STORAGE_PREFIX, workspaceRoot, true) ||
+      matchesEncodedWorkspaceKey(key, 'tacos.taskStateStore', workspaceRoot, false) ||
+      matchesEncodedWorkspaceKey(
+        key,
+        KEY_TASK_CHECKPOINT_PROMPT_SNOOZE_UNTIL_PREFIX,
+        workspaceRoot,
+        false,
+      ) ||
+      matchesEncodedWorkspaceKey(
+        key,
+        KEY_TASK_SWITCH_DISMISSED_HASH_PREFIX,
+        workspaceRoot,
+        false,
+      ) ||
       matchesEncodedWorkspaceKey(key, 'tacos.checkpointNotes', workspaceRoot, true) ||
       matchesEncodedWorkspaceKey(key, 'tacos.checkpointNote', workspaceRoot, false)
     );
@@ -10697,6 +11200,8 @@ function resetRuntimeWorkspaceState(): void {
   state.panelCheckpointNotes = [];
   state.panelPrimaryCheckpointNote = undefined;
   state.panelCheckpointScope = undefined;
+  state.panelTaskState = undefined;
+  state.panelCognitiveDebrief = undefined;
   state.panelScratchpadPreviewLines = [];
   state.panelScratchpadExists = false;
   state.panelScratchpadHasContent = false;
@@ -10714,6 +11219,9 @@ function resetRuntimeWorkspaceState(): void {
   state.scratchSummary = undefined;
   state.scratchSummaryPriorSnapshot = undefined;
   state.detailsMarkdownCache = undefined;
+  state.lastTaskSwitchSnapshot = undefined;
+  state.lastTaskSwitchCandidate = undefined;
+  state.lastTaskSwitchSuppressionReason = undefined;
   if (state.panel) {
     state.panel.dispose();
   }
@@ -10951,6 +11459,226 @@ interface ClipboardCheckpointOptions {
   scope?: CheckpointNoteScope;
   file?: string;
   line?: number;
+}
+
+interface StructuredTaskScopeState {
+  workspaceRoot: string;
+  repo: string;
+  branch: string;
+  taskPartition: string;
+}
+
+function taskCheckpointPromptSnoozeKey(workspaceRoot: string): string {
+  return `${KEY_TASK_CHECKPOINT_PROMPT_SNOOZE_UNTIL_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function taskSwitchDismissedHashKey(workspaceRoot: string): string {
+  return `${KEY_TASK_SWITCH_DISMISSED_HASH_PREFIX}.${Buffer.from(workspaceRoot).toString('base64url')}`;
+}
+
+function readStructuredTaskStateStore(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+): StructuredTaskStateStore {
+  return parseStructuredTaskStateStore(
+    context.workspaceState.get<unknown>(taskStateStorageKey(workspaceRoot)),
+  );
+}
+
+async function writeStructuredTaskStateStore(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  store: StructuredTaskStateStore,
+): Promise<void> {
+  const normalized = parseStructuredTaskStateStore(store);
+  await context.workspaceState.update(
+    taskStateStorageKey(workspaceRoot),
+    normalized.tasks.length > 0 ? normalized : undefined,
+  );
+}
+
+function resolveStructuredTaskScopeState(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  branchHint?: string,
+): StructuredTaskScopeState {
+  const branch = branchHint?.trim() || resolveScopeBranch(context, workspaceRoot);
+  return {
+    workspaceRoot,
+    repo: path.basename(workspaceRoot),
+    branch,
+    taskPartition: resolveTaskPartitionKey(context, workspaceRoot, branch),
+  };
+}
+
+function captureLastKnownSafeBreakpoint(
+  workspaceRoot: string,
+  scope: StructuredTaskScopeState,
+): StructuredTaskState['lastKnownSafeBreakpoint'] {
+  const editor = vscode.window.activeTextEditor;
+  if (editor?.document.uri.scheme === 'file') {
+    return {
+      file: toRelativePath(editor.document.uri.fsPath, workspaceRoot),
+      line: editor.selection.active.line + 1,
+      branch: scope.branch,
+      taskPartition: scope.taskPartition,
+      label: 'Active editor',
+      capturedAt: Date.now(),
+    };
+  }
+
+  const recentEdit = state.recentEditLocations[0];
+  if (recentEdit) {
+    return {
+      file: recentEdit.path,
+      line: recentEdit.line + 1,
+      branch: scope.branch,
+      taskPartition: scope.taskPartition,
+      label: 'Recent edit',
+      capturedAt: Date.now(),
+    };
+  }
+
+  return {
+    branch: scope.branch,
+    taskPartition: scope.taskPartition,
+    label: state.panelSummary?.lastActionLabel ?? 'Recent task context',
+    capturedAt: Date.now(),
+  };
+}
+
+function buildStructuredTaskWorkingSet(
+  workspaceRoot: string,
+  now = Date.now(),
+): TaskWorkingSetEntry[] {
+  const entries: TaskWorkingSetEntry[] = [];
+  const pushEntry = (entry: TaskWorkingSetEntry | undefined): void => {
+    if (!entry) {
+      return;
+    }
+    const key = `${entry.kind}:${entry.target ?? entry.label}`;
+    if (
+      entries.some(
+        (candidate) => `${candidate.kind}:${candidate.target ?? candidate.label}` === key,
+      )
+    ) {
+      return;
+    }
+    entries.push(entry);
+  };
+
+  for (const file of state.recentFiles.values().slice(0, 4)) {
+    pushEntry(createTaskWorkingSetEntry('file', file, file, now));
+  }
+  for (const url of state.recentUrls.values().slice(0, 2)) {
+    pushEntry(createTaskWorkingSetEntry('url', url, url, now));
+  }
+  if (state.lastTaskName) {
+    pushEntry(createTaskWorkingSetEntry('task', state.lastTaskName, state.lastTaskName, now));
+  }
+  if (state.lastDebugConfigName) {
+    pushEntry(
+      createTaskWorkingSetEntry('debug', state.lastDebugConfigName, state.lastDebugConfigName, now),
+    );
+  }
+
+  const editor = vscode.window.activeTextEditor;
+  if (editor?.document.uri.scheme === 'file') {
+    pushEntry(
+      createTaskWorkingSetEntry(
+        'file',
+        toRelativePath(editor.document.uri.fsPath, workspaceRoot),
+        toRelativePath(editor.document.uri.fsPath, workspaceRoot),
+        now,
+      ),
+    );
+  }
+
+  return entries.slice(0, 8);
+}
+
+function resolveActiveStructuredTaskState(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  branchHint?: string,
+): StructuredTaskState | undefined {
+  const scope = resolveStructuredTaskScopeState(context, workspaceRoot, branchHint);
+  const store = readStructuredTaskStateStore(context, workspaceRoot);
+  return findActiveStructuredTaskForScope(store, workspaceRoot, scope.branch, scope.taskPartition);
+}
+
+function formatSafeBreakpoint(task: StructuredTaskState | undefined): string | undefined {
+  if (!task) {
+    return undefined;
+  }
+  const file = task.lastKnownSafeBreakpoint.file?.trim();
+  const line = task.lastKnownSafeBreakpoint.line;
+  if (file) {
+    return typeof line === 'number' ? `${file}:${line}` : file;
+  }
+  return task.lastKnownSafeBreakpoint.label?.trim() || undefined;
+}
+
+function formatStaleAfterLabel(task: StructuredTaskState | undefined): string | undefined {
+  if (!task?.staleAfter) {
+    return undefined;
+  }
+  return `Stale after ${new Date(task.staleAfter).toLocaleString()}`;
+}
+
+function summarizeCognitiveDebriefCounts(debrief: CognitiveDebrief | undefined):
+  | {
+      abandonedThreadCount: number;
+      unresolvedBlockerCount: number;
+      repeatedSwitchCount: number;
+      staleTaskStateCount: number;
+      openAssumptionCount: number;
+    }
+  | undefined {
+  if (!debrief) {
+    return undefined;
+  }
+  return {
+    abandonedThreadCount: debrief.abandonedThreads.length,
+    unresolvedBlockerCount: debrief.unresolvedBlockers.length,
+    repeatedSwitchCount: debrief.repeatedSwitchTasks.length,
+    staleTaskStateCount: debrief.staleTaskStates.length,
+    openAssumptionCount: debrief.openAssumptions.length,
+  };
+}
+
+async function buildTaskSwitchSnapshot(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  options: {
+    branchOverride?: string;
+    taskPartitionOverride?: string;
+  } = {},
+): Promise<TaskSwitchSnapshot> {
+  const config = getConfig();
+  const scope = resolveStructuredTaskScopeState(context, workspaceRoot, options.branchOverride);
+  let branch = options.branchOverride?.trim() || scope.branch;
+  if (state.workspaceTrusted && vscode.workspace.isTrusted) {
+    try {
+      const git = await collectGit(workspaceRoot, config);
+      if (git.isRepo && git.branch.trim()) {
+        branch = git.branch.trim();
+      }
+    } catch {
+      // Ignore branch enrichment failures and fall back to persisted scope state.
+    }
+  }
+
+  return {
+    workspaceRoot,
+    branch,
+    taskPartition: options.taskPartitionOverride?.trim() || scope.taskPartition,
+    fileCluster: deriveMeaningfulFileCluster([
+      ...state.recentFiles.values().slice(0, 6),
+      ...(state.panelSummary?.recentFilesSnapshot ?? []).slice(0, 4),
+    ]),
+    observedAt: Date.now(),
+  };
 }
 
 function workspaceGlobalCheckpointScope(workspaceRoot: string): string {
@@ -11221,6 +11949,8 @@ async function refreshPanelCheckpointState(
     state.panelCheckpointNotes = [];
     state.panelPrimaryCheckpointNote = undefined;
     state.panelCheckpointScope = undefined;
+    state.panelTaskState = undefined;
+    state.panelCognitiveDebrief = undefined;
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
     state.panelScratchpadHasContent = false;
@@ -11243,6 +11973,16 @@ async function refreshPanelCheckpointState(
   state.panelCheckpointNotes = resolved.notes;
   state.panelPrimaryCheckpointNote = resolved.primaryNote;
   state.panelCheckpointScope = resolved.scope;
+  state.panelTaskState = resolveActiveStructuredTaskState(
+    context,
+    root,
+    state.panelSummary?.currentBranch,
+  );
+  const store = readStructuredTaskStateStore(context, root);
+  state.panelCognitiveDebrief = buildCognitiveDebrief({
+    tasks: listStructuredTasksForWorkspace(store, root),
+    activeTaskId: state.panelTaskState?.taskId,
+  });
 
   if (state.panelSummary) {
     const nextSummary = applyCheckpointNoteToSummary(
@@ -11250,15 +11990,29 @@ async function refreshPanelCheckpointState(
       resolved.primaryNote,
       previousOpenNoteText,
     );
-    state.panelSummary = nextSummary;
-    state.scratchSummary = nextSummary;
+    const mergedSummary = applyStructuredTaskStateToSummary(nextSummary, state.panelTaskState, {
+      currentBranch: state.panelSummary.currentBranch,
+      currentTaskPartition: resolveTaskPartitionKey(
+        context,
+        root,
+        state.panelSummary.currentBranch,
+      ),
+    });
+    state.panelSummary = mergedSummary;
+    state.scratchSummary = mergedSummary;
     if (state.scratchSummaryPriorSnapshot?.contextHash === nextSummary.contextHash) {
       state.scratchSummaryPriorSnapshot = {
         ...state.scratchSummaryPriorSnapshot,
-        checkpointNoteText:
-          resolved.primaryNote?.status === 'open' ? resolved.primaryNote.text : undefined,
-        checkpointUpdatedAt:
-          resolved.primaryNote?.status === 'open' ? resolved.primaryNote.updatedAt : undefined,
+        checkpointNoteText: state.panelTaskState
+          ? `${state.panelTaskState.objective}. ${state.panelTaskState.nextAction}`
+          : resolved.primaryNote?.status === 'open'
+            ? resolved.primaryNote.text
+            : undefined,
+        checkpointUpdatedAt: state.panelTaskState
+          ? state.panelTaskState.updatedAt
+          : resolved.primaryNote?.status === 'open'
+            ? resolved.primaryNote.updatedAt
+            : undefined,
       };
     }
     updateCompanionStatusBar();
@@ -11365,6 +12119,630 @@ async function saveCheckpointNoteFromClipboard(
   void vscode.window.showInformationMessage(
     `${options.successMessage ?? 'TaCoS: checkpoint note saved for this task scope.'}${redactionDetail}`,
   );
+  return true;
+}
+
+function parseStructuredListInput(value: string | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value
+        .split(',')
+        .map((entry) => entry.replace(/\s+/gu, ' ').trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 8);
+}
+
+type StaleAfterPreset = 'none' | '4h' | '24h' | '72h' | '168h';
+
+function resolveStaleAfterPreset(
+  task: StructuredTaskState | undefined,
+  now = Date.now(),
+): StaleAfterPreset {
+  if (!task?.staleAfter || task.staleAfter <= now) {
+    return 'none';
+  }
+
+  const deltaHours = Math.round((task.staleAfter - now) / (60 * 60_000));
+  if (deltaHours <= 4) {
+    return '4h';
+  }
+  if (deltaHours <= 24) {
+    return '24h';
+  }
+  if (deltaHours <= 72) {
+    return '72h';
+  }
+  return '168h';
+}
+
+function staleAfterFromPreset(preset: StaleAfterPreset, now = Date.now()): number | undefined {
+  if (preset === 'none') {
+    return undefined;
+  }
+
+  const hours = preset === '4h' ? 4 : preset === '24h' ? 24 : preset === '72h' ? 72 : 168;
+  return now + hours * 60 * 60_000;
+}
+
+async function captureTaskCheckpointCommand(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+  options: {
+    title?: string;
+    promptPrefix?: string;
+    initialNextAction?: string;
+    incrementSwitchCount?: boolean;
+    preferredTaskId?: string;
+  } = {},
+): Promise<StructuredTaskState | undefined> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return undefined;
+  }
+
+  const config = getConfig();
+  if (!config.taskCheckpointEnabled) {
+    void vscode.window.showInformationMessage(
+      'TaCoS: structured task checkpoints are disabled in settings.',
+    );
+    return undefined;
+  }
+
+  const scope = resolveStructuredTaskScopeState(
+    context,
+    workspaceRoot,
+    state.panelSummary?.currentBranch,
+  );
+  const existingStore = readStructuredTaskStateStore(context, workspaceRoot);
+  const existing =
+    (options.preferredTaskId
+      ? findStructuredTaskStateById(existingStore, options.preferredTaskId)
+      : undefined) ?? resolveActiveStructuredTaskState(context, workspaceRoot, scope.branch);
+  const summary = state.panelSummary ?? state.scratchSummary;
+  const currentConfidence = existing?.confidence ?? 'medium';
+  const currentStalePreset = resolveStaleAfterPreset(existing);
+  const objective = await vscode.window.showInputBox({
+    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    prompt:
+      options.promptPrefix ?? 'Capture the objective for the task you want to recover quickly.',
+    placeHolder: 'Example: Stabilize the incident rollback verification flow',
+    value: existing?.objective ?? summary?.intent ?? '',
+    ignoreFocusOut: true,
+    validateInput: (value) => (value.trim() ? undefined : 'Objective is required.'),
+  });
+  if (typeof objective === 'undefined') {
+    return undefined;
+  }
+
+  const nextAction = await vscode.window.showInputBox({
+    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    prompt: 'Capture the next likely safe move as a suggestion you can verify later.',
+    placeHolder: 'Example: Reopen the auth middleware diff and rerun the targeted test',
+    value:
+      options.initialNextAction ??
+      existing?.nextAction ??
+      summary?.nextLikelySafeMove ??
+      summary?.recommendedFirstAction ??
+      '',
+    ignoreFocusOut: true,
+    validateInput: (value) => (value.trim() ? undefined : 'Next step is required.'),
+  });
+  if (typeof nextAction === 'undefined') {
+    return undefined;
+  }
+
+  type ConfidencePick = vscode.QuickPickItem & { value: TaskStateConfidence };
+  const confidencePick = await vscode.window.showQuickPick<ConfidencePick>(
+    [
+      {
+        value: 'high',
+        label: 'High confidence',
+        description: currentConfidence === 'high' ? 'Current' : '',
+        detail: 'You know the next move and recovery cues are solid.',
+      },
+      {
+        value: 'medium',
+        label: 'Medium confidence',
+        description: currentConfidence === 'medium' ? 'Current' : '',
+        detail: 'You mostly know the next move, but verification still matters.',
+      },
+      {
+        value: 'low',
+        label: 'Low confidence',
+        description: currentConfidence === 'low' ? 'Current' : '',
+        detail: 'State is fragile or ambiguous; capture more cues now.',
+      },
+    ],
+    {
+      title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+      placeHolder: 'How confident are you that this state will recover cleanly?',
+      ignoreFocusOut: true,
+    },
+  );
+  if (!confidencePick) {
+    return undefined;
+  }
+
+  type StalePick = vscode.QuickPickItem & { value: StaleAfterPreset };
+  const stalePick = await vscode.window.showQuickPick<StalePick>(
+    [
+      {
+        value: 'none',
+        label: 'No stale timeout',
+        description: currentStalePreset === 'none' ? 'Current' : '',
+        detail: 'Keep this checkpoint active until you resolve it.',
+      },
+      {
+        value: '4h',
+        label: 'Stale after 4 hours',
+        description: currentStalePreset === '4h' ? 'Current' : '',
+        detail: 'Good for incident or short-lived interruption context.',
+      },
+      {
+        value: '24h',
+        label: 'Stale after 24 hours',
+        description: currentStalePreset === '24h' ? 'Current' : '',
+        detail: 'Good for same-day recovery.',
+      },
+      {
+        value: '72h',
+        label: 'Stale after 72 hours',
+        description: currentStalePreset === '72h' ? 'Current' : '',
+        detail: 'Good for longer-running investigations.',
+      },
+      {
+        value: '168h',
+        label: 'Stale after 7 days',
+        description: currentStalePreset === '168h' ? 'Current' : '',
+        detail: 'Good for slower research or architecture work.',
+      },
+    ],
+    {
+      title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+      placeHolder: 'Optional deterministic freshness boundary',
+      ignoreFocusOut: true,
+    },
+  );
+  if (!stalePick) {
+    return undefined;
+  }
+
+  const currentHypothesis = await vscode.window.showInputBox({
+    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    prompt: 'Optional: capture the current hypothesis or framing for this task.',
+    placeHolder: 'Example: Failure is likely coming from stale branch-specific config',
+    value: existing?.currentHypothesis ?? '',
+    ignoreFocusOut: true,
+  });
+  if (typeof currentHypothesis === 'undefined') {
+    return undefined;
+  }
+
+  const assumptionsRaw = await vscode.window.showInputBox({
+    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    prompt: 'Optional: assumptions to verify later (comma-separated).',
+    placeHolder: 'Example: canary is still pinned, rollback branch matches prod',
+    value: existing?.assumptions.join(', ') ?? '',
+    ignoreFocusOut: true,
+  });
+  if (typeof assumptionsRaw === 'undefined') {
+    return undefined;
+  }
+
+  const blockersRaw = await vscode.window.showInputBox({
+    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    prompt: 'Optional: blockers or open questions (comma-separated).',
+    placeHolder: 'Example: waiting on logs, flaky test still red',
+    value: existing?.blockers.join(', ') ?? '',
+    ignoreFocusOut: true,
+  });
+  if (typeof blockersRaw === 'undefined') {
+    return undefined;
+  }
+
+  const now = Date.now();
+  const nextTask = existing
+    ? updateStructuredTaskState(
+        existing,
+        {
+          objective,
+          nextAction,
+          confidence: confidencePick.value,
+          currentHypothesis: currentHypothesis.trim() || undefined,
+          assumptions: parseStructuredListInput(assumptionsRaw),
+          blockers: parseStructuredListInput(blockersRaw),
+          workingSet: buildStructuredTaskWorkingSet(workspaceRoot, now),
+          lastKnownSafeBreakpoint: captureLastKnownSafeBreakpoint(workspaceRoot, scope),
+          staleAfter: staleAfterFromPreset(stalePick.value, now),
+          switchCount: options.incrementSwitchCount
+            ? existing.switchCount + 1
+            : existing.switchCount,
+          resolutionState: 'active',
+          resolvedAt: undefined,
+        },
+        now,
+      )
+    : createStructuredTaskState({
+        workspaceRoot,
+        repo: scope.repo,
+        branch: scope.branch,
+        taskPartition: scope.taskPartition,
+        objective,
+        nextAction,
+        confidence: confidencePick.value,
+        currentHypothesis: currentHypothesis.trim() || undefined,
+        assumptions: parseStructuredListInput(assumptionsRaw),
+        blockers: parseStructuredListInput(blockersRaw),
+        workingSet: buildStructuredTaskWorkingSet(workspaceRoot, now),
+        lastKnownSafeBreakpoint: captureLastKnownSafeBreakpoint(workspaceRoot, scope),
+        staleAfter: staleAfterFromPreset(stalePick.value, now),
+        switchCount: options.incrementSwitchCount ? 1 : 0,
+      });
+  const store = upsertStructuredTaskState(existingStore, nextTask);
+  await writeStructuredTaskStateStore(context, workspaceRoot, store);
+  state.panelTaskState = nextTask;
+  state.panelCognitiveDebrief = buildCognitiveDebrief({
+    tasks: listStructuredTasksForWorkspace(store, workspaceRoot),
+    activeTaskId: nextTask.taskId,
+  });
+  const ephemeralMetricSession = beginEphemeralMetricSession(workspaceRoot);
+
+  if (existing) {
+    recordMetricCounter('checkpointEditedLater');
+  } else {
+    recordMetricCounter('structuredTaskStateCreated');
+  }
+  recordMetricCounter('checkpointCompleted');
+  recordMetricValue('checkpointFieldCompleteness', computeCheckpointFieldCompleteness(nextTask));
+  await refreshPanelCheckpointState(context, workspaceRoot);
+  rerenderPanel();
+  void vscode.window.showInformationMessage(
+    existing
+      ? 'TaCoS: structured task checkpoint updated.'
+      : 'TaCoS: structured task checkpoint captured.',
+  );
+  await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+  return nextTask;
+}
+
+async function markTaskResolvedCommand(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+  preferredTaskId?: string,
+): Promise<boolean> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return false;
+  }
+
+  const store = readStructuredTaskStateStore(context, workspaceRoot);
+  const current =
+    (preferredTaskId ? findStructuredTaskStateById(store, preferredTaskId) : undefined) ??
+    resolveActiveStructuredTaskState(context, workspaceRoot, state.panelSummary?.currentBranch);
+  if (!current) {
+    void vscode.window.showInformationMessage(
+      'TaCoS: no active structured task checkpoint to resolve.',
+    );
+    return false;
+  }
+  const ephemeralMetricSession = beginEphemeralMetricSession(workspaceRoot);
+
+  const nextStore = upsertStructuredTaskState(store, markStructuredTaskStateResolved(current));
+  await writeStructuredTaskStateStore(context, workspaceRoot, nextStore);
+  recordMetricCounter('structuredTaskStateResolved');
+  state.panelTaskState = resolveActiveStructuredTaskState(
+    context,
+    workspaceRoot,
+    state.panelSummary?.currentBranch,
+  );
+  state.panelCognitiveDebrief = buildCognitiveDebrief({
+    tasks: listStructuredTasksForWorkspace(nextStore, workspaceRoot),
+    activeTaskId: state.panelTaskState?.taskId,
+  });
+  await refreshPanelCheckpointState(context, workspaceRoot);
+  rerenderPanel();
+  void vscode.window.showInformationMessage('TaCoS: task marked resolved.');
+  await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+  return true;
+}
+
+async function openStructuredTaskSafeBreakpoint(
+  workspaceRoot: string,
+  task: StructuredTaskState,
+): Promise<void> {
+  const file = task.lastKnownSafeBreakpoint.file?.trim();
+  if (!file) {
+    return;
+  }
+
+  const target = resolveFileTargetInWorkspace(workspaceRoot, file);
+  if (!target) {
+    return;
+  }
+
+  const document = await vscode.workspace.openTextDocument(target);
+  const editor = await vscode.window.showTextDocument(document, {
+    preview: false,
+    preserveFocus: false,
+  });
+  const line = Math.max(0, (task.lastKnownSafeBreakpoint.line ?? 1) - 1);
+  const position = new vscode.Position(line, 0);
+  editor.selection = new vscode.Selection(position, position);
+  editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+}
+
+async function resumeStructuredTaskFromDebrief(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  task: StructuredTaskState,
+): Promise<void> {
+  const currentScope = resolveStructuredTaskScopeState(
+    context,
+    workspaceRoot,
+    state.panelSummary?.currentBranch,
+  );
+  if (currentScope.taskPartition !== task.taskPartition) {
+    await applyTaskPartitionSwitch(context, workspaceRoot, task.taskPartition);
+  }
+
+  const store = upsertStructuredTaskState(
+    readStructuredTaskStateStore(context, workspaceRoot),
+    markStructuredTaskStateResumed(task),
+  );
+  await writeStructuredTaskStateStore(context, workspaceRoot, store);
+  await openStructuredTaskSafeBreakpoint(workspaceRoot, task);
+  await triggerSummary(context, 'manual');
+  if (task.branch !== currentScope.branch) {
+    void vscode.window.showInformationMessage(
+      `TaCoS: verify branch before acting. This task was captured on ${task.branch}.`,
+    );
+  }
+}
+
+async function showCognitiveDebriefCommand(
+  context: vscode.ExtensionContext,
+  preferredWorkspaceRoot?: string,
+): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot(preferredWorkspaceRoot);
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+
+  const tasks = listStructuredTasksForWorkspace(
+    readStructuredTaskStateStore(context, workspaceRoot),
+    workspaceRoot,
+  );
+  const activeTask = resolveActiveStructuredTaskState(
+    context,
+    workspaceRoot,
+    state.panelSummary?.currentBranch,
+  );
+  const debrief = buildCognitiveDebrief({
+    tasks,
+    activeTaskId: activeTask?.taskId,
+  });
+  state.panelCognitiveDebrief = debrief;
+  const ephemeralMetricSession = beginEphemeralMetricSession(workspaceRoot);
+  recordMetricCounter('dailyDebriefOpened');
+  recordMetricCounter('abandonedThreadSurfaced', debrief.abandonedThreads.length);
+  recordMetricCounter('unresolvedBlockerSurfaced', debrief.unresolvedBlockers.length);
+
+  type DebriefPick = vscode.QuickPickItem & {
+    task?: StructuredTaskState;
+  };
+  const picks: DebriefPick[] = [
+    ...debrief.abandonedThreads.map((item) => ({
+      label: item.title,
+      description: 'Abandoned thread',
+      detail: item.detail,
+      task: item.task,
+    })),
+    ...debrief.unresolvedBlockers.map((item) => ({
+      label: item.title,
+      description: 'Unresolved blocker',
+      detail: item.detail,
+      task: item.task,
+    })),
+    ...debrief.repeatedSwitchTasks.map((item) => ({
+      label: item.title,
+      description: 'Repeated-switch task',
+      detail: item.detail,
+      task: item.task,
+    })),
+    ...debrief.staleTaskStates.map((item) => ({
+      label: item.title,
+      description: 'Stale task state',
+      detail: item.detail,
+      task: item.task,
+    })),
+    ...debrief.openAssumptions.map((item) => ({
+      label: item.title,
+      description: 'Open assumption',
+      detail: item.detail,
+      task: item.task,
+    })),
+  ];
+
+  if (picks.length === 0) {
+    rerenderPanel();
+    void vscode.window.showInformationMessage(
+      'TaCoS: no abandoned or stale threads surfaced in the current cognitive debrief.',
+    );
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return;
+  }
+
+  const picked = await vscode.window.showQuickPick(picks, {
+    title: 'TaCoS: Cognitive Debrief',
+    placeHolder: 'Choose a surfaced task to resume, edit, or resolve.',
+    ignoreFocusOut: true,
+  });
+  if (!picked?.task) {
+    rerenderPanel();
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return;
+  }
+
+  type DebriefActionPick = vscode.QuickPickItem & {
+    id: 'resume' | 'edit' | 'resolve';
+  };
+  const action = await vscode.window.showQuickPick<DebriefActionPick>(
+    [
+      {
+        id: 'resume',
+        label: 'Resume this task',
+        detail:
+          'Switch partition if needed, open the saved breakpoint, and refresh the resume brief.',
+      },
+      { id: 'edit', label: 'Edit checkpoint', detail: 'Update structured task state in place.' },
+      { id: 'resolve', label: 'Mark resolved', detail: 'Close this thread explicitly.' },
+    ],
+    {
+      title: `TaCoS: ${picked.label}`,
+      ignoreFocusOut: true,
+    },
+  );
+  if (!action) {
+    rerenderPanel();
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return;
+  }
+
+  if (action.id === 'resume') {
+    await resumeStructuredTaskFromDebrief(context, workspaceRoot, picked.task);
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return;
+  }
+  if (action.id === 'edit') {
+    await captureTaskCheckpointCommand(context, workspaceRoot, {
+      title: 'TaCoS: Edit Task Checkpoint',
+      preferredTaskId: picked.task.taskId,
+    });
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return;
+  }
+  await markTaskResolvedCommand(context, workspaceRoot, picked.task.taskId);
+  await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+}
+
+async function maybeOfferTaskCheckpointPrompt(
+  context: vscode.ExtensionContext,
+  workspaceRoot: string,
+  candidate: TaskSwitchCandidate,
+): Promise<boolean> {
+  const config = getConfig();
+  const now = Date.now();
+  state.lastTaskSwitchCandidate = candidate;
+  state.lastTaskSwitchSuppressionReason = undefined;
+
+  if (!config.taskCheckpointEnabled || !config.taskCheckpointPromptOnLikelySwitch) {
+    state.lastTaskSwitchSuppressionReason = 'disabled-by-setting';
+    return false;
+  }
+  if (!config.enabled || config.pauseSummaries || state.pauseUntilRestart) {
+    state.lastTaskSwitchSuppressionReason = 'paused';
+    return false;
+  }
+  if (state.snoozeUntil > now) {
+    state.lastTaskSwitchSuppressionReason = 'summary-snoozed';
+    return false;
+  }
+  const quietState = resolveSummaryQuietState(now, config.summaryQuietHours);
+  if (quietState.active) {
+    state.lastTaskSwitchSuppressionReason = 'quiet-hours';
+    return false;
+  }
+
+  const promptSnoozeUntil = context.workspaceState.get<number>(
+    taskCheckpointPromptSnoozeKey(workspaceRoot),
+    0,
+  );
+  if (promptSnoozeUntil > now) {
+    state.lastTaskSwitchSuppressionReason = 'checkpoint-snoozed';
+    return false;
+  }
+
+  const candidateHash = createTaskSwitchCandidateHash(candidate);
+  const dismissedHash = readWorkspaceStateString(
+    context,
+    taskSwitchDismissedHashKey(workspaceRoot),
+    '',
+  );
+  if (dismissedHash && dismissedHash === candidateHash) {
+    state.lastTaskSwitchSuppressionReason = 'candidate-dismissed';
+    return false;
+  }
+
+  const budgetDecision = await consumeNoiseBudgetSignal(
+    context,
+    workspaceRoot,
+    'checkpoint-prompt',
+    now,
+  );
+  if (!budgetDecision.allowed) {
+    state.lastTaskSwitchSuppressionReason = 'noise-budget';
+    return false;
+  }
+
+  const ephemeralMetricSession = beginEphemeralMetricSession(workspaceRoot);
+  recordMetricCounter('checkpointOffered');
+  recordMetricCounter('taskSwitchDetected');
+  const detail = candidate.explainability[0] ?? candidate.summary;
+  const action = await vscode.window.showInformationMessage(
+    `TaCoS: likely task switch detected. ${detail}`,
+    'Capture',
+    'Skip',
+    'Snooze',
+    'Dismiss',
+  );
+  if (action === 'Skip') {
+    recordMetricCounter('checkpointSkipped');
+    state.lastTaskSwitchSuppressionReason = 'skipped';
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return false;
+  }
+  if (action === 'Snooze') {
+    await context.workspaceState.update(
+      taskCheckpointPromptSnoozeKey(workspaceRoot),
+      now + 30 * 60_000,
+    );
+    state.lastTaskSwitchSuppressionReason = 'user-snoozed';
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return false;
+  }
+  if (action === 'Dismiss') {
+    await context.workspaceState.update(taskSwitchDismissedHashKey(workspaceRoot), candidateHash);
+    recordMetricCounter('checkpointDismissed');
+    state.lastTaskSwitchSuppressionReason = 'user-dismissed';
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return false;
+  }
+  if (action !== 'Capture') {
+    state.lastTaskSwitchSuppressionReason = 'ignored';
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return false;
+  }
+
+  await context.workspaceState.update(taskSwitchDismissedHashKey(workspaceRoot), undefined);
+  const task = await captureTaskCheckpointCommand(context, workspaceRoot, {
+    title: 'TaCoS: Capture Task Checkpoint',
+    promptPrefix: candidate.summary,
+    incrementSwitchCount: true,
+  });
+  if (!task) {
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return false;
+  }
+  recordMetricCounter('taskSwitchConfirmed');
+  await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
   return true;
 }
 
@@ -12726,6 +14104,19 @@ async function copyDiagnosticsBundle(context: vscode.ExtensionContext): Promise<
   const config = getConfig();
   const rolloutFlags = resolvePercolationRolloutFlags(config);
   const metrics = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
+  const workspaceRoot = pickWorkspaceRoot();
+  const taskStore = workspaceRoot
+    ? readStructuredTaskStateStore(context, workspaceRoot)
+    : undefined;
+  const workspaceTasks = workspaceRoot
+    ? listStructuredTasksForWorkspace(
+        taskStore ?? parseStructuredTaskStateStore(undefined),
+        workspaceRoot,
+      )
+    : [];
+  const activeTask = workspaceRoot
+    ? resolveActiveStructuredTaskState(context, workspaceRoot, state.panelSummary?.currentBranch)
+    : undefined;
   const diagnostics = buildDiagnosticsText({
     generatedAt: Date.now(),
     extensionVersion: extensionVersion(),
@@ -12740,6 +14131,17 @@ async function copyDiagnosticsBundle(context: vscode.ExtensionContext): Promise<
     percolationExplainabilityActive: rolloutFlags.explainabilityEnabled,
     percolationNotificationBrokerEnabled: config.percolationNotificationBrokerEnabled,
     percolationNotificationBrokerActive: rolloutFlags.notificationBrokerEnabled,
+    taskCheckpointEnabled: config.taskCheckpointEnabled,
+    taskCheckpointPromptOnLikelySwitch: config.taskCheckpointPromptOnLikelySwitch,
+    activeStructuredTaskFreshness: describeStructuredTaskStateFreshness(activeTask),
+    activeStructuredTaskSwitchClass: describeStructuredTaskSwitchClass(activeTask),
+    activeStructuredTaskCount: workspaceTasks.filter((task) => task.resolutionState === 'active')
+      .length,
+    resolvedStructuredTaskCount: workspaceTasks.filter((task) => task.resolutionState !== 'active')
+      .length,
+    lastTaskSwitchSummary: state.lastTaskSwitchCandidate?.summary,
+    lastTaskSwitchReasonCodes: state.lastTaskSwitchCandidate?.reasonCodes,
+    lastTaskSwitchSuppressionReason: state.lastTaskSwitchSuppressionReason,
     recentMetrics: metrics,
     performanceCounters: {
       focusHandling: summarizePerformanceCounter(state.perfFocusHandling),

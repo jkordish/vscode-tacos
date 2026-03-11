@@ -2,23 +2,30 @@
 
 ## Product Overview
 
-TaCoS is a desktop-first VS Code extension that reduces interruption recovery cost by generating local-first resume briefs and safe next actions when users return to work.
+TaCoS is a desktop-first VS Code extension for interruption-heavy engineers. It reduces interruption recovery cost by preserving and restoring task state with local-first resume briefs, structured checkpoints, safe next actions, and explicit retrieval cues.
 
 ## Current Scope
 
 - Automatic and manual resume brief generation.
 - Resume Safety Check annunciation after meaningful resume events.
 - Evidence-backed companion surfaces and restore actions.
+- Structured task checkpoints with typed local task-state storage.
+- Deterministic task-switch detection with conservative likely-boundary prompting.
+- Resume Brief v2 state recovery that merges checkpoint state with current repo/editor evidence.
+- On-demand Daily Cognitive Debrief for abandoned, stale, and unresolved threads.
 - Ambient-to-deep UX layering (status bar ambient cues, glanceable Companion Home, one-click deep trust/evidence drill-down).
 - Privacy and trust controls (redaction, consent, retention, Restricted Mode behavior).
 - Optional provider refinement (`local`, `vscode-lm`, `openai`).
-- Checkpoint notes, scoped scratchpad, task partitions, standup generation.
+- Legacy checkpoint notes, scoped scratchpad, task partitions, standup generation.
 - Local-only metrics/diagnostics export and support workflows.
 
 ## Non-goals
 
 - Browser/web extension runtime support.
 - Cloud sync or hosted backend services.
+- Generic “AI productivity assistant” positioning.
+- Team dashboards, employee surveillance, or productivity scoring.
+- Interruptibility prediction based on biometrics or pseudo-scientific signals.
 - Autonomous destructive execution without explicit user action.
 - Background remote telemetry streaming.
 
@@ -182,6 +189,111 @@ Users can take the wrong first action after resuming because the visible editor,
 ### Open questions
 
 - Should future versions add a branch-change-after-idle trigger when it becomes cheap and reliable enough?
+
+## Feature: Cognitive Observability v1
+
+### Problem
+
+Engineers doing interruption-heavy work lose mental state across branch switches, partition switches, idle gaps, incident pivots, and parallel work. Pure summaries help, but they do not fully preserve prospective intent, blockers, assumptions, and retrieval cues.
+
+### Goals
+
+- Preserve task state before it decays.
+- Restore task state with explicit chronology, evidence, and verification cues.
+- Keep prompting conservative, explainable, and easy to dismiss.
+- Reuse TaCoS primitives instead of creating a second product surface.
+- Keep everything local-first and safe-by-default.
+
+### Non-goals
+
+- Generic chatbot workflows.
+- Autonomous task execution.
+- Hidden surveillance or interruptibility prediction.
+- Team dashboards or productivity scoring.
+
+### User-facing behavior
+
+- `TaCoS: Capture Task Checkpoint` captures structured task state with:
+  - `objective`
+  - `working set`
+  - `assumptions`
+  - `blockers`
+  - `next action`
+  - `confidence`
+  - optional `stale after`
+  - `last known safe breakpoint`
+- `TaCoS: Mark Task Resolved` explicitly closes the active structured task in the current scope.
+- `TaCoS: Confirm Task Switch` lets the user confirm a switch boundary and capture a checkpoint if needed.
+- `TaCoS: Show Cognitive Debrief` surfaces abandoned threads, unresolved blockers, repeated-switch tasks, stale task states, and open assumptions.
+- Likely-switch prompting is optional and conservative. It appears only at deterministic likely boundaries and always gives `Capture`, `Skip`, `Snooze`, and `Dismiss`.
+- Resume Brief v2 prioritizes:
+  - what you were doing
+  - what changed since
+  - next likely safe move
+  - open questions and unresolved blockers
+  - timeline, evidence, and retrieval cues
+- Companion Home remains ambient -> glanceable -> deep. TaCoS does not become a chat sidebar.
+
+### Technical shape / architecture notes
+
+- `src/taskState.ts` is the typed local structured task-state store.
+- `src/taskSwitch.ts` provides deterministic switch-candidate detection and explainability.
+- `src/structuredRecovery.ts` merges structured task state into resume summaries.
+- `src/cognitiveDebrief.ts` derives debrief sections from structured task state.
+- `src/extension.ts` orchestrates capture, prompt gating, panel rendering, task resolution, and diagnostics wiring.
+- `src/webview/panelFragments.ts` renders the `Task State` and `Cognitive Debrief` cards.
+- Legacy checkpoint-note flows remain available for compatibility, but structured task state is now the primary recovery primitive.
+- File-cluster drift is supporting evidence only and never a sole switch trigger.
+- Restricted Mode remains fail-closed for trust-sensitive signals; branch/debug/task context degrades gracefully when unavailable.
+
+### Settings and commands affected
+
+- Settings:
+  - `tacos.taskCheckpoint.enabled`
+  - `tacos.taskCheckpoint.promptOnLikelySwitch`
+  - `tacos.promptCheckpointOnBlur` remains legacy note-only behavior
+  - `tacos.resumeSafety.idleMinutes` is reused as the idle boundary threshold for likely-switch detection
+- Commands:
+  - `tacos.captureTaskCheckpoint`
+  - `tacos.markTaskResolved`
+  - `tacos.confirmTaskSwitch`
+  - `tacos.showCognitiveDebrief`
+
+### Acceptance criteria
+
+- Structured task state is stored locally in typed, versioned form.
+- Manual checkpoint capture is fast and editable later.
+- Likely-switch detection is deterministic, conservative, and explainable in diagnostics.
+- Resume Brief v2 uses structured task state when present and keeps `next likely safe move` framed as suggestion plus verification.
+- Cognitive Debrief remains on-demand, local-only, and non-surveillant.
+- Local metrics capture checkpoint usage, switch detection, debrief surfacing, and structured-state cohorts without adding remote telemetry.
+
+### Risks / failure modes
+
+- Overlap between legacy checkpoint notes and structured task state could confuse users if compatibility copy drifts.
+- Aggressive switch detection could feel naggy if supporting signals ever become sole triggers.
+- Richer task-state persistence increases the importance of clear privacy copy and explicit workspace forget flows.
+
+### Open questions
+
+- Should future versions support richer task-state editing from the panel card itself without adding modal complexity?
+- Should future versions add a scheduled debrief summary, or remain strictly on-demand?
+
+### Research mapping
+
+- Leroy (2009): unfinished-task carryover supports checkpointing and explicit closure.
+- Altmann and Trafton (2002, 2007) plus Monk, Trafton, and Boehm-Davis (2008): resumption is a retrieval problem, so TaCoS preserves prospective goal state and recovery cues.
+- Adamczyk and Bailey (2004) plus Iqbal and Bailey (2008): prompting belongs at likely boundaries, not arbitrary mid-flow moments.
+- Parnin and Rugaber plus DeLine and Parnin (2010): interrupted programming recovery depends on chronology, artifacts, intent, and cues, not summary text alone.
+- TaCoS preprint: summaries help, but evidence and timeline cues can outperform summary-only recovery paths.
+- Interruptibility replication: TaCoS explicitly avoids biometrics and pseudo-scientific interruptibility prediction.
+- Amershi et al. (2019): prompting remains calm, explainable, dismissible, and user-controlled.
+- Parasuraman and Riley (1997) plus Parasuraman, Sheridan, and Wickens (2000): TaCoS automates orientation and retrieval, not judgment or execution.
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P13`.
+- Research map: `docs/references.md`.
 
 ## Feature: Panel Disclosure Emphasis and Stability
 

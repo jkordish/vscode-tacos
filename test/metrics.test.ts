@@ -260,6 +260,21 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('companionPrimaryCtaCompletionRate');
     expect(lines[0]).toContain('noteCreated');
     expect(lines[0]).toContain('resumeWithNote');
+    expect(lines[0]).toContain('checkpointOffered');
+    expect(lines[0]).toContain('checkpointCompleted');
+    expect(lines[0]).toContain('checkpointEditedLater');
+    expect(lines[0]).toContain('structuredTaskStateCreated');
+    expect(lines[0]).toContain('structuredTaskStateResolved');
+    expect(lines[0]).toContain('taskSwitchDetected');
+    expect(lines[0]).toContain('taskSwitchConfirmed');
+    expect(lines[0]).toContain('resumeBriefUsesCheckpointState');
+    expect(lines[0]).toContain('resumeBriefShowsTimelineCue');
+    expect(lines[0]).toContain('dailyDebriefOpened');
+    expect(lines[0]).toContain('abandonedThreadSurfaced');
+    expect(lines[0]).toContain('unresolvedBlockerSurfaced');
+    expect(lines[0]).toContain('resumeWithStructuredTaskState');
+    expect(lines[0]).toContain('taskSwitchSessionClass');
+    expect(lines[0]).toContain('resumeTaskStateFreshness');
     expect(lines[0]).toContain('scratchpadOpened');
     expect(lines[0]).toContain('scratchpadAppended');
     expect(lines[0]).toContain('redactionEventsTotal');
@@ -415,6 +430,10 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| Primary CTA completion rate (`completions/clicks`) | 1.0000 |');
     expect(markdown).toContain('| blockerPromotionTaskFailure (total) | 1 |');
     expect(markdown).toContain('| blockerPromotionDiagnostics (total) | 1 |');
+    expect(markdown).toContain('| checkpointOffered (total) | 0 |');
+    expect(markdown).toContain('| structuredTaskStateCreated (total) | 0 |');
+    expect(markdown).toContain('| resumeBriefUsesCheckpointState (total) | 0 |');
+    expect(markdown).toContain('| dailyDebriefOpened (total) | 0 |');
     expect(markdown).toContain('| priorPromotionCheckpoint (total) | 0 |');
     expect(markdown).toContain('| priorPromotionCorrections (total) | 0 |');
     expect(markdown).toContain('| priorPromotionScratchpad (total) | 0 |');
@@ -438,6 +457,19 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     );
     expect(markdown).toContain('| scratchpadOpened (total) | 1 |');
     expect(markdown).toContain('| scratchpadAppended (total) | 2 |');
+    expect(markdown).toContain(
+      'Resumption lag by structured checkpoint cohort (`firstActionLagMs`)',
+    );
+    expect(markdown).toContain('| resumeWithStructuredTaskState = 1 | 0 | n/a | n/a |');
+    expect(markdown).toContain(
+      '| resumeWithStructuredTaskState = 0 | 3 | 2500 (2.5s) | 3400 (3.4s) |',
+    );
+    expect(markdown).toContain('Resumption lag by switch stability (`firstActionLagMs`)');
+    expect(markdown).toContain('| taskSwitchSessionClass = stable | 0 | n/a | n/a |');
+    expect(markdown).toContain('| taskSwitchSessionClass = repeated-switch | 0 | n/a | n/a |');
+    expect(markdown).toContain('Resumption lag by task-state freshness (`firstActionLagMs`)');
+    expect(markdown).toContain('| resumeTaskStateFreshness = fresh | 0 | n/a | n/a |');
+    expect(markdown).toContain('| resumeTaskStateFreshness = stale | 0 | n/a | n/a |');
   });
 
   it('stays privacy-safe and marks gate as met for qualifying dogfooding sample', () => {

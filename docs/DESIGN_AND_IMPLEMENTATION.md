@@ -2,14 +2,16 @@
 
 ## Purpose and UX Philosophy
 
-TaCoS helps developers recover task context quickly after interruptions.
+TaCoS helps interruption-heavy engineers recover task context quickly after interruptions.
 
 Principles:
 
 - local-first by default,
 - evidence-backed and safe actions,
 - explicit trust/privacy boundaries,
-- low-friction controls for pause/snooze/quiet behavior.
+- low-friction controls for pause/snooze/quiet behavior,
+- preserve mental state instead of pretending the AI should do all the thinking,
+- prefer deterministic cues over speculative intelligence theater.
 
 ## Activation Model
 
@@ -28,6 +30,8 @@ Principles:
 
 - Workspace/editor signals, git snapshot, optional terminal/debug traces, URLs.
 - Collection is bounded by settings and trust state.
+- Cognitive Observability v1 adds a typed structured task-state collector that captures objective, working set, assumptions, blockers, next action, confidence, stale boundary, and last known safe breakpoint.
+- Deterministic task-switch detection uses bounded, inspectable signals: focus-return after idle, workspace root changes, task partition changes, trusted branch changes, manual confirmation, and file-cluster drift as supporting evidence only.
 - Percolation signal adapters normalize trigger-time runtime state into typed policy signals (`src/percolation/signals.ts`) for deterministic ranking input.
 - Git semantic enrichment captures branch-switch, recent-commit checkpoint, and upstream divergence metadata from trusted git snapshots before policy ranking.
 - Summary generation computes precision `Changes Since Last Time` buckets (`Code`, `Runs`, `Blocker`, `Key files`, `Git`, `References`) plus a deterministic novelty profile (`score` + `low`/`medium`/`high`) consumed by ranking defaults.
@@ -48,6 +52,7 @@ Principles:
 ### Storage / retention / metrics
 
 - Workspace/global state for scoped context.
+- Structured task state is stored in versioned local workspace state keyed by workspace root, branch, and task partition scope.
 - SecretStorage for provider credentials.
 - Local file exports for metrics snapshots.
 - Retention pruning + explicit forget/revoke paths.
@@ -56,6 +61,8 @@ Principles:
 
 - Companion webview panel (primary detail/action UI).
 - Status bar and notification prompts.
+- Structured checkpoint capture/edit/resolve commands keep state capture manual-first and lightweight.
+- Likely-switch prompting uses conservative, explainable notification prompts with `Capture`, `Skip`, `Snooze`, and `Dismiss`.
 - Resume Safety Check uses a second short-lived status-bar annunciator so `State / Risk / Verify` can appear without forcing a new panel or modal flow.
 - Status bar semantics are compact and policy-driven (`class + reason`) so ambient state remains stable; active-mode elevation is reserved for rare high-risk blocked states.
 - Focus-triggered summary presentation now runs through a deterministic surface broker (`none` vs `statusbar` vs `panel` vs `notification`) with explicit reason enums; `tacos.uiSurface` remains a hard cap/user override.
@@ -66,6 +73,8 @@ Principles:
 - Companion Home includes a one-click `Open evidence tray` action; Evidence now groups rows by surfaced-decision relevance while retaining the existing safe open/static affordance semantics.
 - Trust Center includes a compact Trust & Privacy tray (preset, retention, provider mode, consent status) with one-click payload preview and consent-revoke entrypoints; nested `Why am I seeing this?` details include the same payload-preview deep-link for decision-specific auditability.
 - Restricted Mode copy explicitly calls out filtered signal classes and marks execution-style affordances as suppressed with clear trust-enable reasons.
+- Resume Brief v2 prioritizes `what you were doing`, `what changed since`, `next likely safe move`, `open questions`, and `timeline/evidence/retrieval cues`.
+- The panel now prefers a `Task State` card over the legacy note card when structured task state exists, and adds an on-demand `Cognitive Debrief` card that surfaces stale or abandoned threads without becoming a generic chat surface.
 - Command palette and keybinding surfaces.
 - Collapsible panel sections keep stable order and persisted expansion state; policy emphasis is conveyed via summary badges/accent instead of auto-expansion or reordering, and only targets sections currently rendered by settings/trust mode.
 
@@ -85,10 +94,11 @@ Principles:
 1. Trigger occurs (focus-return or command).
 2. Runtime resolves workspace/trust/scope and loads config.
 3. Context collection runs with trust/privacy constraints.
-4. Local summary is generated, validated, and rendered.
-5. Optional provider refinement runs if enabled/allowed.
-6. UI actions revalidate evidence before opening/running targets.
-7. Metrics/diagnostics remain local unless user explicitly exports/shares.
+4. Structured task state for the active scope is loaded and any likely switch candidate is evaluated with deterministic explainability.
+5. Local summary is generated, then structured task state is merged in to produce Resume Brief v2 recovery sections.
+6. Optional provider refinement runs if enabled/allowed, and structured task state is re-applied to preserve local recovery cues.
+7. UI actions revalidate evidence before opening/running targets.
+8. Metrics/diagnostics remain local unless user explicitly exports/shares.
 
 ## Command Surfaces
 
@@ -96,7 +106,8 @@ Key capability clusters:
 
 - resume: show now, show last, copy prompt + open Codex,
 - controls: pause/resume/snooze/quiet/toggle,
-- notes/scratchpad: checkpoint and scratchpad commands,
+- state capture: structured checkpoint capture, task resolution, manual task-switch confirmation, cognitive debrief,
+- notes/scratchpad: legacy checkpoint-note compatibility flows and scratchpad commands,
 - execution helpers: restore working set, restore query capture, jump to last edit,
 - workflow: standup generation, task partition switching,
 - safety/admin: privacy preset, retention, diagnostics, sanitizer test, forget workspace, consent revoke.
@@ -106,6 +117,7 @@ Key capability clusters:
 `package.json` contributes the `tacos.*` configuration surface for:
 
 - trigger timing and presentation,
+- structured checkpoint enablement and likely-switch prompting,
 - percolation rollout controls (policy engine, explainability affordances, notification broker),
 - context depth and privacy,
 - nudge suppression and quiet windows,
@@ -120,6 +132,7 @@ Primary stores:
 
 - `workspaceState`: scoped activity, summaries, notes, partitions, nudge state, metrics records.
 - `workspaceState`: also stores the latest scoped Resume Safety Check context (`sharedState`, `staleAssumption`, `nextVerificationAction`, plus lightweight provenance).
+- `workspaceState`: also stores structured task-state records, checkpoint-prompt snoozes, and dismissed switch-candidate hashes.
 - `globalState`: cross-workspace helper state where needed.
 - `SecretStorage`: OpenAI API key.
 - local files: `.tacos/metrics.json` and `.tacos/metrics.csv` exports.
@@ -129,7 +142,9 @@ Primary stores:
 - Metrics schema includes percolation decision-chain counters (`percolationDecisionCount`, segmented surface selections including `panel-silent`/`panel-emphasis`, and confidence-band counters) for policy-outcome analysis.
 - Metrics schema includes AI payload-preview entrypoint counters (`aiPayloadPreviewOpensTrustCenter`, `aiPayloadPreviewOpensWhySurfaced`, `aiPayloadPreviewOpensCompanionHome`) so trust-drill-down adoption can be measured locally.
 - Metrics schema includes Resume Safety Check counters (`resumeSafetyShown`, `resumeSafetyDismissed`, `resumeSafetyActionClicks`, `resumeSafetyMismatchDetected`, `resumeSafetyStrictWarnings`) plus `resumeSafetyFirstActionLagMs`.
+- Metrics schema now also includes structured checkpoint counters, task-switch counters, debrief counters, and cohort fields for `resumeWithStructuredTaskState`, `taskSwitchSessionClass`, and `resumeTaskStateFreshness`.
 - Suppression memory for nudge cooldown windows and noise-budget windows is partition-scoped; explicit task-partition switches clear destination-scope suppression memory.
+- Structured checkpoint prompt snoozes and switch dismissals are also workspace-scoped and explainable.
 - extension storage scratchpad files scoped by workspace/partition context.
 
 Retention:
@@ -146,15 +161,17 @@ Retention:
 ## Diagnostics and Metrics
 
 - `TaCoS: Copy Diagnostics` emits privacy-safe environment/mode context plus active percolation rollout flag state.
+- Diagnostics now include structured checkpoint enablement, active structured-task freshness/class counts, and the latest likely-switch explainability/suppression state.
 - `TaCoS: Export Local Metrics` writes local artifacts only.
 - Resume Safety Check evaluation uses local-only counters and lag metrics; no remote telemetry path was added.
+- Cognitive Observability evaluation remains local-only and focuses on recovery-support signals, not performance surveillance.
 - Metrics are not auto-uploaded by TaCoS.
 
 ## What Is Intentionally Local-Only
 
 - baseline summary generation,
 - workspace state persistence,
-- checkpoint/scratchpad storage,
+- structured task-state, checkpoint-note, and scratchpad storage,
 - metrics and diagnostics collection/export.
 
 ## What Can Leave the Machine

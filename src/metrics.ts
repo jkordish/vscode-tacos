@@ -72,8 +72,28 @@ const CSV_HEADERS = [
   'noteCreated',
   'noteMarkedDone',
   'notePinned',
+  'checkpointOffered',
+  'checkpointCompleted',
+  'checkpointSkipped',
+  'checkpointDismissed',
+  'checkpointEditedLater',
+  'checkpointFieldCompleteness',
+  'structuredTaskStateCreated',
+  'structuredTaskStateResolved',
+  'structuredTaskStateStale',
+  'taskSwitchDetected',
+  'taskSwitchConfirmed',
+  'taskSwitchCorrected',
+  'resumeBriefUsesCheckpointState',
+  'resumeBriefShowsTimelineCue',
+  'dailyDebriefOpened',
+  'abandonedThreadSurfaced',
+  'unresolvedBlockerSurfaced',
   'resumePathCompletions',
   'resumeWithNote',
+  'resumeWithStructuredTaskState',
+  'taskSwitchSessionClass',
+  'resumeTaskStateFreshness',
   'scratchpadOpened',
   'scratchpadAppended',
   'redactionEventsTotal',
@@ -327,6 +347,13 @@ function summarizeTimingClassCounts(
   return counts;
 }
 
+function summarizeLagForFilter(
+  metrics: MetricRecord[],
+  predicate: (metric: MetricRecord) => boolean,
+): { n: number; p50?: number; p95?: number } {
+  return summarizeLag(metrics.filter(predicate), 'firstActionLagMs');
+}
+
 export interface MetricsBaselineSnapshotOptions {
   generatedAt?: number;
   sourceLabel?: string;
@@ -387,6 +414,23 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const notesCreated = summarizeTotal(metrics, 'noteCreated');
   const notesMarkedDone = summarizeTotal(metrics, 'noteMarkedDone');
   const notesPinned = summarizeTotal(metrics, 'notePinned');
+  const checkpointOffered = summarizeTotal(metrics, 'checkpointOffered');
+  const checkpointCompleted = summarizeTotal(metrics, 'checkpointCompleted');
+  const checkpointSkipped = summarizeTotal(metrics, 'checkpointSkipped');
+  const checkpointDismissed = summarizeTotal(metrics, 'checkpointDismissed');
+  const checkpointEditedLater = summarizeTotal(metrics, 'checkpointEditedLater');
+  const checkpointFieldCompleteness = summarizeTotal(metrics, 'checkpointFieldCompleteness');
+  const structuredTaskStateCreated = summarizeTotal(metrics, 'structuredTaskStateCreated');
+  const structuredTaskStateResolved = summarizeTotal(metrics, 'structuredTaskStateResolved');
+  const structuredTaskStateStale = summarizeTotal(metrics, 'structuredTaskStateStale');
+  const taskSwitchDetected = summarizeTotal(metrics, 'taskSwitchDetected');
+  const taskSwitchConfirmed = summarizeTotal(metrics, 'taskSwitchConfirmed');
+  const taskSwitchCorrected = summarizeTotal(metrics, 'taskSwitchCorrected');
+  const resumeBriefUsesCheckpointState = summarizeTotal(metrics, 'resumeBriefUsesCheckpointState');
+  const resumeBriefShowsTimelineCue = summarizeTotal(metrics, 'resumeBriefShowsTimelineCue');
+  const dailyDebriefOpened = summarizeTotal(metrics, 'dailyDebriefOpened');
+  const abandonedThreadSurfaced = summarizeTotal(metrics, 'abandonedThreadSurfaced');
+  const unresolvedBlockerSurfaced = summarizeTotal(metrics, 'unresolvedBlockerSurfaced');
   const resumePathCompletions = summarizeTotal(metrics, 'resumePathCompletions');
   const scratchpadOpened = summarizeTotal(metrics, 'scratchpadOpened');
   const scratchpadAppended = summarizeTotal(metrics, 'scratchpadAppended');
@@ -414,6 +458,30 @@ export function buildMetricsBaselineSnapshotMarkdown(
   const lagActionWithoutNote = summarizeLag(
     metrics.filter((metric) => metric.resumeWithNote !== 1),
     'firstActionLagMs',
+  );
+  const lagActionWithStructuredTaskState = summarizeLagForFilter(
+    metrics,
+    (metric) => metric.resumeWithStructuredTaskState === 1,
+  );
+  const lagActionWithoutStructuredTaskState = summarizeLagForFilter(
+    metrics,
+    (metric) => metric.resumeWithStructuredTaskState !== 1,
+  );
+  const lagActionStableSwitch = summarizeLagForFilter(
+    metrics,
+    (metric) => metric.taskSwitchSessionClass === 'stable',
+  );
+  const lagActionRepeatedSwitch = summarizeLagForFilter(
+    metrics,
+    (metric) => metric.taskSwitchSessionClass === 'repeated-switch',
+  );
+  const lagActionFreshTaskState = summarizeLagForFilter(
+    metrics,
+    (metric) => metric.resumeTaskStateFreshness === 'fresh',
+  );
+  const lagActionStaleTaskState = summarizeLagForFilter(
+    metrics,
+    (metric) => metric.resumeTaskStateFreshness === 'stale',
   );
   const forcedOpenRate = promptImpressions > 0 ? forcedOpenClicks / promptImpressions : undefined;
   const followThroughRate =
@@ -509,6 +577,23 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| noteCreated (total) | ${notesCreated} |`,
     `| noteMarkedDone (total) | ${notesMarkedDone} |`,
     `| notePinned (total) | ${notesPinned} |`,
+    `| checkpointOffered (total) | ${checkpointOffered} |`,
+    `| checkpointCompleted (total) | ${checkpointCompleted} |`,
+    `| checkpointSkipped (total) | ${checkpointSkipped} |`,
+    `| checkpointDismissed (total) | ${checkpointDismissed} |`,
+    `| checkpointEditedLater (total) | ${checkpointEditedLater} |`,
+    `| checkpointFieldCompleteness (total) | ${checkpointFieldCompleteness} |`,
+    `| structuredTaskStateCreated (total) | ${structuredTaskStateCreated} |`,
+    `| structuredTaskStateResolved (total) | ${structuredTaskStateResolved} |`,
+    `| structuredTaskStateStale (total) | ${structuredTaskStateStale} |`,
+    `| taskSwitchDetected (total) | ${taskSwitchDetected} |`,
+    `| taskSwitchConfirmed (total) | ${taskSwitchConfirmed} |`,
+    `| taskSwitchCorrected (total) | ${taskSwitchCorrected} |`,
+    `| resumeBriefUsesCheckpointState (total) | ${resumeBriefUsesCheckpointState} |`,
+    `| resumeBriefShowsTimelineCue (total) | ${resumeBriefShowsTimelineCue} |`,
+    `| dailyDebriefOpened (total) | ${dailyDebriefOpened} |`,
+    `| abandonedThreadSurfaced (total) | ${abandonedThreadSurfaced} |`,
+    `| unresolvedBlockerSurfaced (total) | ${unresolvedBlockerSurfaced} |`,
     `| resumePathCompletions (total) | ${resumePathCompletions} |`,
     `| scratchpadOpened (total) | ${scratchpadOpened} |`,
     `| scratchpadAppended (total) | ${scratchpadAppended} |`,
@@ -550,6 +635,29 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| resumeWithNote = 0 | ${lagActionWithoutNote.n} | ${formatMs(lagActionWithoutNote.p50)} | ${formatMs(lagActionWithoutNote.p95)} |`,
     '',
     `Sessions with checkpoint note on resume: ${sessionsWithNote}/${sessions}`,
+    '',
+    'Resumption lag by structured checkpoint cohort (`firstActionLagMs`):',
+    '',
+    '| Cohort | Sessions | p50 (ms / s) | p95 (ms / s) |',
+    '| --- | ---: | ---: | ---: |',
+    `| resumeWithStructuredTaskState = 1 | ${lagActionWithStructuredTaskState.n} | ${formatMs(lagActionWithStructuredTaskState.p50)} | ${formatMs(lagActionWithStructuredTaskState.p95)} |`,
+    `| resumeWithStructuredTaskState = 0 | ${lagActionWithoutStructuredTaskState.n} | ${formatMs(lagActionWithoutStructuredTaskState.p50)} | ${formatMs(lagActionWithoutStructuredTaskState.p95)} |`,
+    '',
+    `Sessions with structured task state on resume: ${metrics.filter((metric) => metric.resumeWithStructuredTaskState === 1).length}/${sessions}`,
+    '',
+    'Resumption lag by switch stability (`firstActionLagMs`):',
+    '',
+    '| Cohort | Sessions | p50 (ms / s) | p95 (ms / s) |',
+    '| --- | ---: | ---: | ---: |',
+    `| taskSwitchSessionClass = stable | ${lagActionStableSwitch.n} | ${formatMs(lagActionStableSwitch.p50)} | ${formatMs(lagActionStableSwitch.p95)} |`,
+    `| taskSwitchSessionClass = repeated-switch | ${lagActionRepeatedSwitch.n} | ${formatMs(lagActionRepeatedSwitch.p50)} | ${formatMs(lagActionRepeatedSwitch.p95)} |`,
+    '',
+    'Resumption lag by task-state freshness (`firstActionLagMs`):',
+    '',
+    '| Cohort | Sessions | p50 (ms / s) | p95 (ms / s) |',
+    '| --- | ---: | ---: | ---: |',
+    `| resumeTaskStateFreshness = fresh | ${lagActionFreshTaskState.n} | ${formatMs(lagActionFreshTaskState.p50)} | ${formatMs(lagActionFreshTaskState.p95)} |`,
+    `| resumeTaskStateFreshness = stale | ${lagActionStaleTaskState.n} | ${formatMs(lagActionStaleTaskState.p50)} | ${formatMs(lagActionStaleTaskState.p95)} |`,
     '',
     'Notes:',
     '- Snapshot contains aggregate-only values and excludes raw workspace paths.',
@@ -632,8 +740,30 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.noteCreated ?? 0) > 0 ||
     (metric.noteMarkedDone ?? 0) > 0 ||
     (metric.notePinned ?? 0) > 0 ||
+    (metric.checkpointOffered ?? 0) > 0 ||
+    (metric.checkpointCompleted ?? 0) > 0 ||
+    (metric.checkpointSkipped ?? 0) > 0 ||
+    (metric.checkpointDismissed ?? 0) > 0 ||
+    (metric.checkpointEditedLater ?? 0) > 0 ||
+    metric.checkpointFieldCompleteness !== undefined ||
+    (metric.structuredTaskStateCreated ?? 0) > 0 ||
+    (metric.structuredTaskStateResolved ?? 0) > 0 ||
+    (metric.structuredTaskStateStale ?? 0) > 0 ||
+    (metric.taskSwitchDetected ?? 0) > 0 ||
+    (metric.taskSwitchConfirmed ?? 0) > 0 ||
+    (metric.taskSwitchCorrected ?? 0) > 0 ||
+    (metric.resumeBriefUsesCheckpointState ?? 0) > 0 ||
+    (metric.resumeBriefShowsTimelineCue ?? 0) > 0 ||
+    (metric.dailyDebriefOpened ?? 0) > 0 ||
+    (metric.abandonedThreadSurfaced ?? 0) > 0 ||
+    (metric.unresolvedBlockerSurfaced ?? 0) > 0 ||
     (metric.resumePathCompletions ?? 0) > 0 ||
     metric.resumeWithNote === 1 ||
+    metric.resumeWithStructuredTaskState === 1 ||
+    metric.taskSwitchSessionClass === 'stable' ||
+    metric.taskSwitchSessionClass === 'repeated-switch' ||
+    metric.resumeTaskStateFreshness === 'fresh' ||
+    metric.resumeTaskStateFreshness === 'stale' ||
     (metric.scratchpadOpened ?? 0) > 0 ||
     (metric.scratchpadAppended ?? 0) > 0 ||
     (metric.redactionEventsTotal ?? 0) > 0 ||
@@ -726,8 +856,28 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.noteCreated),
       toOptionalNumber(metric.noteMarkedDone),
       toOptionalNumber(metric.notePinned),
+      toOptionalNumber(metric.checkpointOffered),
+      toOptionalNumber(metric.checkpointCompleted),
+      toOptionalNumber(metric.checkpointSkipped),
+      toOptionalNumber(metric.checkpointDismissed),
+      toOptionalNumber(metric.checkpointEditedLater),
+      toOptionalNumber(metric.checkpointFieldCompleteness),
+      toOptionalNumber(metric.structuredTaskStateCreated),
+      toOptionalNumber(metric.structuredTaskStateResolved),
+      toOptionalNumber(metric.structuredTaskStateStale),
+      toOptionalNumber(metric.taskSwitchDetected),
+      toOptionalNumber(metric.taskSwitchConfirmed),
+      toOptionalNumber(metric.taskSwitchCorrected),
+      toOptionalNumber(metric.resumeBriefUsesCheckpointState),
+      toOptionalNumber(metric.resumeBriefShowsTimelineCue),
+      toOptionalNumber(metric.dailyDebriefOpened),
+      toOptionalNumber(metric.abandonedThreadSurfaced),
+      toOptionalNumber(metric.unresolvedBlockerSurfaced),
       toOptionalNumber(metric.resumePathCompletions),
       toOptionalNumber(metric.resumeWithNote),
+      toOptionalNumber(metric.resumeWithStructuredTaskState),
+      metric.taskSwitchSessionClass ?? '',
+      metric.resumeTaskStateFreshness ?? '',
       toOptionalNumber(metric.scratchpadOpened),
       toOptionalNumber(metric.scratchpadAppended),
       toOptionalNumber(metric.redactionEventsTotal),
