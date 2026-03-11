@@ -155,7 +155,10 @@ import {
   type ResumeSafetyTrigger,
   type ResumeSafetyVerificationAction,
 } from './resumeSafety';
-import { applyStructuredTaskStateToSummary } from './structuredRecovery';
+import {
+  applyStructuredTaskStateToSummary,
+  stripStructuredTaskStateFromSummary,
+} from './structuredRecovery';
 import {
   computeCheckpointFieldCompleteness,
   createStructuredTaskState,
@@ -442,6 +445,7 @@ interface RuntimeState {
   };
   panel?: vscode.WebviewPanel;
   panelSummary?: ResumeSummary;
+  panelBaseSummary?: ResumeSummary;
   panelWorkspaceRoot?: string;
   panelProviderModeSnapshot?: ProviderModeSnapshot;
   panelAiPayloadConsentSignature?: string;
@@ -558,6 +562,7 @@ interface PresentSummaryOptions {
   preferBackgroundPresentation?: boolean;
   focusRegainedAt?: number;
   workspaceRoot?: string;
+  panelBaseSummary?: ResumeSummary;
   checkpointPrimaryNote?: CheckpointNote;
   checkpointNotes?: CheckpointNote[];
   checkpointScope?: string;
@@ -661,6 +666,8 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBarReason: 'awaiting summary',
     statusBarElevated: false,
     activeNudges: undefined,
+    panelSummary: undefined,
+    panelBaseSummary: undefined,
     panelProviderModeSnapshot: undefined,
     panelAiPayloadConsentSignature: undefined,
     panelCheckpointNotes: [],
@@ -1803,6 +1810,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await presentSummary(context, structuredSummary, 'cached', {
         autoOpenDetails: true,
         workspaceRoot: root,
+        panelBaseSummary: stripStructuredTaskStateFromSummary(cached),
         checkpointPrimaryNote: checkpointContext.primaryNote,
         checkpointNotes: checkpointContext.notes,
         checkpointScope: checkpointContext.scope,
@@ -2728,6 +2736,7 @@ async function triggerSummary(
     preferBackgroundPresentation: reason === 'focus' && deferPromptToBackground,
     focusRegainedAt: reason === 'focus' ? focusRegainedAt : undefined,
     workspaceRoot: root,
+    panelBaseSummary: prepared.panelBaseSummary,
     providerModeSnapshot: {
       requestedProvider: prepared.providerPlan.requestedProvider,
       activeProvider: prepared.providerPlan.activeProvider,
@@ -3193,6 +3202,7 @@ interface PreparedTriggerSummary {
   cacheKey: string;
   triggerReason: TriggerReason;
   summary: ResumeSummary;
+  panelBaseSummary: ResumeSummary;
   localSummary: ResumeSummary;
   aiPayloadSummary: ResumeSummary;
   aiPayloadCheckpointNotes: string[];
@@ -3337,6 +3347,14 @@ async function prepareTriggerSummary(
   localSummary.correctionsFingerprint = correctionsFingerprint;
   aiPayloadSummary.userCorrections = corrections;
   aiPayloadSummary.correctionsFingerprint = correctionsFingerprint;
+  const panelBaseSummary: ResumeSummary = {
+    ...baseSummary,
+    links: [...baseSummary.links],
+    nextSteps: [...baseSummary.nextSteps],
+    topFiles: [...baseSummary.topFiles],
+    userCorrections: corrections,
+    correctionsFingerprint,
+  };
   const rankingPriors: PercolationUserPriors = {
     checkpointNoteText: activeStructuredTaskState
       ? `${activeStructuredTaskState.objective}. ${activeStructuredTaskState.nextAction}`
@@ -3410,6 +3428,7 @@ async function prepareTriggerSummary(
     cacheKey,
     triggerReason,
     summary,
+    panelBaseSummary,
     localSummary,
     aiPayloadSummary,
     aiPayloadCheckpointNotes,
@@ -3466,7 +3485,11 @@ async function refineSummaryInBackground(
     }
     return;
   }
-  refined = applyCheckpointNoteToSummary(refined, prepared.checkpointPrimaryNote);
+  const refinedPanelBaseSummary = applyIntentOverrideToSummary(
+    refined,
+    prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
+  );
+  refined = applyCheckpointNoteToSummary(refinedPanelBaseSummary, prepared.checkpointPrimaryNote);
   refined = applyStructuredTaskStateToSummary(refined, prepared.structuredTaskState, {
     currentBranch: prepared.localSummary.currentBranch,
     currentTaskPartition: resolveTaskPartitionKey(
@@ -3475,10 +3498,6 @@ async function refineSummaryInBackground(
       prepared.localSummary.currentBranch,
     ),
   });
-  refined = applyIntentOverrideToSummary(
-    refined,
-    prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
-  );
 
   if (state.activeRefinementSequence !== sequence) {
     return;
@@ -3497,7 +3516,12 @@ async function refineSummaryInBackground(
   await context.workspaceState.update(prepared.cacheKey, refined);
 
   if (state.scratchSummary?.contextHash === prepared.localSummary.contextHash) {
-    updateSummaryScratchpad(refined, prepared.root, prepared.rankingPriors);
+    updateSummaryScratchpad(
+      refined,
+      prepared.root,
+      prepared.rankingPriors,
+      refinedPanelBaseSummary,
+    );
     return;
   }
 
@@ -3721,7 +3745,12 @@ async function presentSummary(
   await updateActiveNudges(context, summary, workspaceRoot, config, triggerReason === 'cached');
   state.panelProviderModeSnapshot = options.providerModeSnapshot;
   state.panelAiPayloadConsentSignature = options.aiPayloadConsentSignature;
-  updateSummaryScratchpad(summary, options.workspaceRoot, options.percolationPriors);
+  updateSummaryScratchpad(
+    summary,
+    options.workspaceRoot,
+    options.percolationPriors,
+    options.panelBaseSummary,
+  );
 
   const panelOptions: PresentSummaryOptions = {
     ...options,
@@ -5997,6 +6026,7 @@ async function showDetailsPanel(
   options: Pick<
     PresentSummaryOptions,
     | 'workspaceRoot'
+    | 'panelBaseSummary'
     | 'checkpointPrimaryNote'
     | 'checkpointNotes'
     | 'checkpointScope'
@@ -6011,9 +6041,15 @@ async function showDetailsPanel(
   const demoMode = isDemoResumeSummary(summary);
   const workspaceRoot = demoMode ? undefined : pickWorkspaceRoot(options.workspaceRoot);
   if (!demoMode) {
-    updateSummaryScratchpad(summary, workspaceRoot, options.percolationPriors);
+    updateSummaryScratchpad(
+      summary,
+      workspaceRoot,
+      options.percolationPriors,
+      options.panelBaseSummary,
+    );
   }
   state.panelSummary = summary;
+  state.panelBaseSummary = options.panelBaseSummary ?? stripStructuredTaskStateFromSummary(summary);
   state.panelWorkspaceRoot = workspaceRoot;
   state.panelProviderModeSnapshot = options.providerModeSnapshot;
   state.panelAiPayloadConsentSignature = options.aiPayloadConsentSignature;
@@ -6056,6 +6092,7 @@ async function showDetailsPanel(
     state.panel.onDidDispose(() => {
       state.panel = undefined;
       state.panelSummary = undefined;
+      state.panelBaseSummary = undefined;
       state.panelWorkspaceRoot = undefined;
       state.panelProviderModeSnapshot = undefined;
       state.panelAiPayloadConsentSignature = undefined;
@@ -6739,12 +6776,20 @@ async function showDetailsPanel(
       state.panelTaskState = options.structuredTaskState ?? state.panelTaskState;
       state.panelCognitiveDebrief = options.cognitiveDebrief ?? state.panelCognitiveDebrief;
       if (state.panelSummary) {
+        const baseSummary = state.panelBaseSummary ?? stripStructuredTaskStateFromSummary(summary);
         const nextSummary = applyCheckpointNoteToSummary(
-          state.panelSummary,
+          baseSummary,
           state.panelPrimaryCheckpointNote,
         );
-        state.panelSummary = nextSummary;
-        updateSummaryScratchpad(nextSummary, workspaceRoot);
+        state.panelSummary = applyStructuredTaskStateToSummary(nextSummary, state.panelTaskState, {
+          currentBranch: baseSummary.currentBranch,
+          currentTaskPartition: resolveTaskPartitionKey(
+            context,
+            workspaceRoot,
+            baseSummary.currentBranch,
+          ),
+        });
+        updateSummaryScratchpad(state.panelSummary, workspaceRoot);
       }
     } else {
       await refreshPanelCheckpointState(context, workspaceRoot);
@@ -6760,6 +6805,7 @@ function updateSummaryScratchpad(
   summary: ResumeSummary,
   workspaceRoot?: string,
   percolationPriors?: PercolationUserPriors,
+  panelBaseSummary?: ResumeSummary,
 ): void {
   state.scratchSummary = summary;
   if (percolationPriors) {
@@ -6781,6 +6827,9 @@ function updateSummaryScratchpad(
   }
 
   state.panelSummary = summary;
+  if (panelBaseSummary) {
+    state.panelBaseSummary = panelBaseSummary;
+  }
   if (workspaceRoot) {
     state.panelWorkspaceRoot = workspaceRoot;
   }
@@ -9048,6 +9097,7 @@ async function runActionSafetyNoopChecks(
   const root = pickWorkspaceRoot();
   const original = {
     panelSummary: state.panelSummary,
+    panelBaseSummary: state.panelBaseSummary,
     scratchSummary: state.scratchSummary,
     scratchSummaryPriorSnapshot: state.scratchSummaryPriorSnapshot,
     lastTaskName: state.lastTaskName,
@@ -9077,6 +9127,7 @@ async function runActionSafetyNoopChecks(
 
   try {
     state.panelSummary = undefined;
+    state.panelBaseSummary = undefined;
     state.scratchSummary = undefined;
     state.scratchSummaryPriorSnapshot = undefined;
     if (root) {
@@ -9124,6 +9175,7 @@ async function runActionSafetyNoopChecks(
     }
   } finally {
     state.panelSummary = original.panelSummary;
+    state.panelBaseSummary = original.panelBaseSummary;
     state.scratchSummary = original.scratchSummary;
     state.scratchSummaryPriorSnapshot = original.scratchSummaryPriorSnapshot;
     state.lastTaskName = original.lastTaskName;
@@ -10925,6 +10977,9 @@ async function applyIntentOverrideToActiveContext(
   if (state.panelSummary?.contextHash === contextHash) {
     state.panelSummary = applyIntentOverrideToSummary(state.panelSummary, persistedIntent);
   }
+  if (state.panelBaseSummary?.contextHash === contextHash) {
+    state.panelBaseSummary = applyIntentOverrideToSummary(state.panelBaseSummary, persistedIntent);
+  }
 
   const cacheKey = summaryCacheKey(context, workspaceRoot);
   const cached = context.workspaceState.get<ResumeSummary>(cacheKey);
@@ -11245,6 +11300,7 @@ function resetRuntimeWorkspaceState(): void {
   state.panelPrimaryCheckpointNote = undefined;
   state.panelCheckpointScope = undefined;
   state.panelTaskState = undefined;
+  state.panelBaseSummary = undefined;
   state.panelCognitiveDebrief = undefined;
   state.panelScratchpadPreviewLines = [];
   state.panelScratchpadExists = false;
@@ -11994,6 +12050,7 @@ async function refreshPanelCheckpointState(
     state.panelPrimaryCheckpointNote = undefined;
     state.panelCheckpointScope = undefined;
     state.panelTaskState = undefined;
+    state.panelBaseSummary = undefined;
     state.panelCognitiveDebrief = undefined;
     state.panelScratchpadPreviewLines = [];
     state.panelScratchpadExists = false;
@@ -12029,18 +12086,15 @@ async function refreshPanelCheckpointState(
   });
 
   if (state.panelSummary) {
+    const baseSummary = state.panelBaseSummary ?? state.panelSummary;
     const nextSummary = applyCheckpointNoteToSummary(
-      state.panelSummary,
+      baseSummary,
       resolved.primaryNote,
       previousOpenNoteText,
     );
     const mergedSummary = applyStructuredTaskStateToSummary(nextSummary, state.panelTaskState, {
-      currentBranch: state.panelSummary.currentBranch,
-      currentTaskPartition: resolveTaskPartitionKey(
-        context,
-        root,
-        state.panelSummary.currentBranch,
-      ),
+      currentBranch: baseSummary.currentBranch,
+      currentTaskPartition: resolveTaskPartitionKey(context, root, baseSummary.currentBranch),
     });
     state.panelSummary = mergedSummary;
     state.scratchSummary = mergedSummary;

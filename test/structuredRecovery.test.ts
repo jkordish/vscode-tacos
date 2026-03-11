@@ -1,4 +1,7 @@
-import { applyStructuredTaskStateToSummary } from '../src/structuredRecovery';
+import {
+  applyStructuredTaskStateToSummary,
+  stripStructuredTaskStateFromSummary,
+} from '../src/structuredRecovery';
 import { createStructuredTaskState } from '../src/taskState';
 import type { ResumeSummary } from '../src/types';
 
@@ -84,5 +87,63 @@ describe('structuredRecovery', () => {
     expect(result.timelineCues).toContain('Last known safe breakpoint: src/summary.ts:212');
     expect(result.detailsMarkdown).toContain('## What You Were Doing');
     expect(result.codexPrompt).toContain('## Timeline / Evidence / Retrieval Cues');
+  });
+
+  it('reapplies structured recovery without duplicating its sections', () => {
+    const now = Date.UTC(2026, 2, 10, 19, 0, 0);
+    const task = createStructuredTaskState({
+      workspaceRoot: '/workspace/repo',
+      repo: 'repo',
+      branch: 'feature/INC-89',
+      taskPartition: 'INC-89',
+      objective: 'Keep panel refresh stable',
+      nextAction: 'Rebuild from a clean base summary',
+      assumptions: ['The base summary still holds the original intent'],
+      blockers: ['Need refreshes to stay idempotent'],
+      lastKnownSafeBreakpoint: {
+        file: 'src/extension.ts',
+        line: 12037,
+        capturedAt: now,
+      },
+      updatedAt: now,
+      createdAt: now - 30 * 60_000,
+    });
+    const summary: ResumeSummary = {
+      version: 2,
+      generatedAt: now,
+      workspaceRoot: '/workspace/repo',
+      intent: 'Original intent',
+      currentBranch: 'feature/INC-89',
+      topFiles: ['src/extension.ts'],
+      links: [],
+      commands: [],
+      checks: [],
+      nextSteps: ['Inspect refresh logic'],
+      blockers: [],
+      recentChanges: [],
+      detailsMarkdown: '## Existing details',
+      codexPrompt: 'Existing prompt',
+      providerMeta: { provider: 'local', model: 'n/a' },
+      riskFlags: [],
+      evidenceCatalog: [],
+    };
+
+    const once = applyStructuredTaskStateToSummary(summary, task, {
+      currentBranch: 'feature/INC-89',
+      currentTaskPartition: 'INC-89',
+      now,
+    });
+    const twice = applyStructuredTaskStateToSummary(once, task, {
+      currentBranch: 'feature/INC-89',
+      currentTaskPartition: 'INC-89',
+      now,
+    });
+    const stripped = stripStructuredTaskStateFromSummary(once);
+
+    expect((twice.detailsMarkdown.match(/## What You Were Doing/gu) ?? []).length).toBe(1);
+    expect((twice.codexPrompt.match(/## What You Were Doing/gu) ?? []).length).toBe(1);
+    expect(stripped.detailsMarkdown).toBe('## Existing details');
+    expect(stripped.codexPrompt).toBe('Existing prompt');
+    expect(stripped.nextLikelySafeMove).toBeUndefined();
   });
 });
