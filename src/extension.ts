@@ -1387,7 +1387,7 @@ export function activate(context: vscode.ExtensionContext): void {
         aiPayloadPreviewTrustCenterCount,
         aiPayloadPreviewWhySurfacedCount,
         hasIntentEditor: panelHtml.includes('data-action="setIntentOverride"'),
-        hasIntentSourceLabel: panelHtml.includes('Intent source:'),
+        hasIntentSourceLabel: panelHtml.includes('data-intent-source-label="true"'),
         hasLastActionCue: panelHtml.includes('data-last-action-cue="true"'),
         hasActiveBlockedCard,
         primaryBlockerActionCount,
