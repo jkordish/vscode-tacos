@@ -11,13 +11,20 @@ Status vocabulary used in this file:
 
 ### P1. Docs/control-plane bootstrap
 
-- status: `doing`
+- status: `done`
 - why: keep behavior contracts, execution sequencing, and contribution hygiene explicit.
 - scope: top-level operating docs, templates, and canonical privacy/design docs.
 - dependencies: none.
-- immediate next actions:
-  - finish docs consistency sweep (`README`, specs, privacy, templates).
-  - ensure command/settings/trust docs match manifest and runtime behavior.
+- recent progress:
+  - completed docs consistency sweep across `README`, `SPECS.md`, `CHANGELOG`, `PLANS.md`, `docs/DESIGN_AND_IMPLEMENTATION.md`, `docs/PRIVACY_AND_SAFETY.md`, and `CONTRIBUTING.md`.
+  - corrected `README` command title drift (`Show Last Summary`).
+  - stamped `[Unreleased]` → `[0.9.0] - 2026-04-02` in `CHANGELOG`.
+  - bumped `package.json` version to `0.9.0` to match release.
+  - verified all commands/settings in manifest match docs and runtime registrations.
+  - verified CI workflow gates (`format → lint → typecheck → unit → integration → package`) are stable and intentional.
+  - verified trust/privacy boundary docs match implementation (`Restricted Mode`, AI payload paths, redaction, consent).
+  - confirmed 388 unit tests pass clean; test coverage is comprehensive across all domain modules.
+  - documented internal runtime commands (`tacos.resumeSafetyRunVerifyAction`, `tacos.openCompanionActions`) as intentionally absent from manifest in design doc.
 - risks/rollback:
   - risk: doc drift from rapid feature iteration.
   - rollback: narrow doc-only corrective PR.
@@ -334,6 +341,75 @@ Status vocabulary used in this file:
   - `CONTRIBUTING.md`
   - `docs/DESIGN_AND_IMPLEMENTATION.md`
   - `CHANGELOG.md`
+
+### P15. Companion panel UX polish pass
+
+- status: `done`
+- why: reduce friction and cognitive overhead during resume flows by improving label clarity, information hierarchy, and progressive disclosure across all companion panel cards.
+- scope: `src/webview/panelFragments.ts`, `src/webview/panelCards.ts`, `src/webview/panelStyles.ts`, and aligned test updates.
+- recent progress:
+  - renamed `Cognitive Debrief` → `Mental Load` with item-count badge in heading; only non-zero counts render; counts prominently styled via `debrief-count`.
+  - Notes card heading now shows natural-language count badge (`1 open note` / `N open notes`); button row shortened and reordered.
+  - Task State card badges read `{level} confidence` and freshness; switch count suppressed when zero; `Safe breakpoint` uses compact `card-meta` styling; action labels changed to `Update task state` / `Switch task`.
+  - Confidence/reorientation card: low-evidence title changed from `Low Confidence` → `What are we doing?`; card gets `card-attention` left-accent border.
+  - Companion Nudge heading changed to `Suggestion`; dismiss actions relabeled `Got it` / `Not now`.
+  - Resume Path: live progress badge in heading, summary text simplified to `Re-enter the task`, completed steps visually struck through.
+  - Session Recap: section headings use `✓ Done` (green) / `⚑ Pending / Blocked` (amber).
+  - `Changes Since Last Time` card renamed to `What Changed`.
+  - Restore Pack: Restricted Mode notice moved above action grid with left-accent warning style.
+  - Status card: `Refresh summary now` → `Refresh`; auto-summary status rendered inline.
+  - Added CSS utility classes: `card-attention`, `card-meta`, `badge-done`, `badge-attention`, `badge-confidence`, `badge-freshness`, `debrief-list`, `debrief-count`, `resume-path-item-done`, `status-autosummary-row`, `restricted-mode-note`, `recap-section-done`, `recap-section-pending`.
+  - Updated `test/panelFragments.test.ts` and `test/panelCards.test.ts` to match new strings; `verify:quick` exits 0 (56 suites / 388 tests).
+- risks/rollback:
+  - risk: renaming cards or buttons may require snapshot updates in integration tests if those tests assert exact text.
+  - rollback: revert label/class changes; CSS additions are additive and safe to remove without breaking behavior.
+- links:
+  - `src/webview/panelFragments.ts`
+  - `src/webview/panelCards.ts`
+  - `src/webview/panelStyles.ts`
+  - `CHANGELOG.md`
+
+### P17. v0.99 release preparation
+
+- status: `done`
+- why: stamp all docs and version artifacts for the `v0.99.0` milestone — the last pre-`v1.0` feature-complete release.
+- scope: `package.json` version bump, `CHANGELOG.md` `[0.99.0]` stamp, `README.md` refresh with accurate feature set (prospective intent capture, full command table, settings tables, Companion panel card inventory), and `PLANS.md` ledger update.
+- dependencies: P15, P16.
+- recent progress:
+  - bumped `package.json` version to `0.99.0`.
+  - stamped `CHANGELOG.md` `[Unreleased]` entries as `[0.99.0] - 2026-04-03`; added empty `[Unreleased]` section for next cycle.
+  - rewrote `README.md` for v0.99: accurate five-primitive feature summary, full command table, settings tables by category, Companion panel card inventory, prospective intent capture section, research grounding, and updated quick-start.
+  - confirmed `.github/workflows/release-vsix.yml` is solid: `v*` tag trigger → `verify:quick` → `package:vsix` → GitHub release artifact upload via `softprops/action-gh-release@v2`. No Marketplace publish (correct pre-v1.0 policy).
+- risks/rollback:
+  - risk: doc drift from any last-minute v0.99.x patches.
+  - rollback: narrow corrective doc PR before tagging.
+- links:
+  - `package.json`
+  - `CHANGELOG.md`
+  - `README.md`
+  - `.github/workflows/release-vsix.yml`
+
+### P16. Prospective intent capture and cognitive observability loop
+
+- status: `doing`
+- why: the biggest research-backed gap between automated summaries and real-world resumption is **prospective information** — the intended next step at switch time (ICSE'26 TaCoS paper). IDEAS.md codifies the full evidence-based plan: measure resumption, improve resumption, avoid crutch. This plan slice sequences the next iteration.
+- scope: tightening prospective capture at likely-switch moments; local "day view" friction summary; breakpoint-aware checkpoint policy tuning; and validation gates (noise gate + outcome gate).
+- dependencies: P13 (Cognitive Observability v1), P15 (UX polish), P8 (signal normalization).
+- immediate next actions:
+  - define gold metric contract: resumption lag, first-action lag, wrong-first-action proxy, prompt-per-hour cap.
+  - add a "prospective intent" field to the structured checkpoint capture flow (single next verification action, max 1 line).
+  - tighten the breakpoint-aware checkpoint prompt policy to suppress mid-activity prompts more aggressively based on high-load signal proxies (typing deferral, recent edit activity).
+  - add a lightweight local "session friction summary" view to surface interruption cost trends (prompt-per-hour, suppression health, mismatch rate).
+- risks/rollback:
+  - risk: new prompts at switch time create the self-interruptions the tool aims to prevent.
+  - rollback: increase suppression thresholds and shrink checkpoint prompt window before landing any new capture UI.
+- links:
+  - `docs/ideas.md`
+  - `docs/references.md` (refs 9, 14, 15, 16)
+  - `src/taskSwitch.ts`
+  - `src/taskState.ts`
+  - `src/noiseControl.ts`
+  - `src/metrics.ts`
 
 ## Blockers
 

@@ -17,7 +17,7 @@ export function inferTaskPartitionKey(branch: string): string | undefined {
     return ticketMatch[1];
   }
 
-  const issueMatch = normalized.match(/#(\d{2,})/);
+  const issueMatch = normalized.match(/#(\d{1,6})/);
   if (issueMatch?.[1]) {
     return `issue-${issueMatch[1]}`;
   }

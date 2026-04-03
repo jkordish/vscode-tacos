@@ -20,7 +20,7 @@ describe('taskState helpers', () => {
       taskPartition: 'INC-42',
       objective: 'Stabilize rollback verification',
       nextAction: 'Open the failing healthcheck diff',
-      confidence: 'medium',
+      confidence: 'high',
       lastKnownSafeBreakpoint: {
         file: 'src/healthcheck.ts',
         line: 48,
@@ -29,6 +29,7 @@ describe('taskState helpers', () => {
       workingSet: [{ kind: 'file', label: 'src/healthcheck.ts', target: 'src/healthcheck.ts' }],
       assumptions: ['Rollback branch still points at prod SHA'],
       blockers: ['Need fresh canary logs'],
+      prospectiveNextVerification: 'Confirm healthcheck returns 200 after rollback',
       staleAfter: now + 4 * 60 * 60_000,
       createdAt: now,
       updatedAt: now,

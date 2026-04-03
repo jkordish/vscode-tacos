@@ -201,7 +201,7 @@ function buildSharedState(input: ResumeSafetyInput): string {
     return 'Workspace context captured.';
   }
 
-  return parts.slice(0, 2).join('. ');
+  return parts.join('. ');
 }
 
 function buildFallbackVerificationAction(input: ResumeSafetyInput): ResumeSafetyVerificationAction {

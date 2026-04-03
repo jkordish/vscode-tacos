@@ -401,6 +401,7 @@ export const PANEL_WEBVIEW_STYLE = `
         border-radius: var(--radius-2);
         min-height: 24px;
         padding: var(--space-2) var(--space-3);
+        cursor: pointer;
       }
       button:focus-visible {
         outline: 2px solid var(--vscode-focusBorder);
@@ -428,15 +429,21 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: 12px;
         margin-top: 8px;
       }
+      .restricted-mode-note {
+        font-size: 12px;
+        margin-bottom: var(--space-2);
+        padding: var(--space-1) var(--space-2);
+        border-left: 3px solid var(--vscode-testing-iconQueued, #cca700);
+        color: var(--vscode-editorWarning-foreground, var(--surface-muted));
+        background: transparent;
+      }
       .note-actions {
         display: flex;
         gap: var(--space-2);
         flex-wrap: wrap;
       }
       .note-actions button {
-        border-radius: 6px;
         padding: 6px 10px;
-        cursor: pointer;
       }
       .timeline-group ul {
         margin-top: 0;
@@ -522,15 +529,14 @@ export const PANEL_WEBVIEW_STYLE = `
         gap: var(--space-2);
       }
       .companion-block h4 {
-        margin-top: 0;
-        margin-bottom: 6px;
+        margin: 0;
         font-size: 12px;
         text-transform: uppercase;
         letter-spacing: 0.04em;
         color: var(--surface-muted);
       }
       .companion-primary {
-        margin: 0 0 8px 0;
+        margin: 0;
         font-weight: 700;
         line-height: 1.4;
         max-inline-size: 72ch;
@@ -604,7 +610,7 @@ export const PANEL_WEBVIEW_STYLE = `
         width: 100%;
         box-sizing: border-box;
         padding: 6px 8px;
-        border-radius: 6px;
+        border-radius: var(--radius-1);
         border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
         background: var(--vscode-input-background);
         color: var(--vscode-input-foreground);
@@ -616,8 +622,11 @@ export const PANEL_WEBVIEW_STYLE = `
         flex-wrap: wrap;
       }
       .compact-list {
-        margin: 0 0 10px 0;
+        margin: 0 0 var(--space-2) 0;
         padding-left: 18px;
+      }
+      .compact-list:last-child {
+        margin-bottom: 0;
       }
       .companion-restore-grid {
         display: grid;
@@ -641,9 +650,90 @@ export const PANEL_WEBVIEW_STYLE = `
       .recap-card h4 {
         margin-top: 0;
       }
+      .recap-section-heading {
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: var(--space-2);
+      }
+      .recap-section-done {
+        color: var(--vscode-testing-iconPassed);
+      }
+      .recap-section-pending {
+        color: var(--vscode-testing-iconQueued, var(--surface-muted));
+      }
       .details-markdown p,
       .details-markdown li {
         max-inline-size: 72ch;
+      }
+      /* card-attention: draws the eye without being alarming */
+      .card-attention {
+        border-left: 3px solid var(--vscode-testing-iconQueued, #cca700);
+      }
+      /* card-meta: secondary context line below companion-primary */
+      .card-meta {
+        font-size: 12px;
+        margin-top: var(--space-1);
+      }
+      .card-meta-label {
+        font-weight: 600;
+      }
+      .card-stale-label {
+        font-size: 12px;
+        font-style: italic;
+      }
+      /* badge variants */
+      .badge-done {
+        border-color: var(--vscode-testing-iconPassed);
+        color: var(--vscode-testing-iconPassed);
+      }
+      .badge-attention {
+        border-color: var(--vscode-testing-iconQueued, #cca700);
+        color: var(--vscode-testing-iconQueued, var(--surface-muted));
+      }
+      .badge-confidence {
+        border-color: var(--accent);
+      }
+      .badge-freshness {
+        border-color: var(--vscode-testing-iconPassed);
+      }
+      /* debrief list: show counts prominently */
+      .debrief-list {
+        padding-left: 0;
+        list-style: none;
+      }
+      .debrief-list li {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-1);
+        margin-bottom: var(--space-1);
+      }
+      .debrief-count {
+        font-size: 1.1em;
+        font-weight: 700;
+        min-width: 1.8ch;
+        text-align: right;
+        color: var(--vscode-testing-iconQueued, var(--surface-strong));
+      }
+      /* resume path: visually mute completed steps */
+      .resume-path-item-done .resume-path-toggle span {
+        text-decoration: line-through;
+        color: var(--surface-muted);
+      }
+      /* status autosummary inline layout */
+      .status-autosummary-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: var(--space-2);
+      }
+      .status-autosummary-detail {
+        font-size: 12px;
+      }
+      /* shortcut help summary */
+      .shortcut-help-summary {
+        font-size: 12px;
+        cursor: pointer;
       }
       @media (min-width: 1100px) {
         .companion-grid {

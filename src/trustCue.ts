@@ -35,10 +35,10 @@ export function buildTrustCue(summary: ResumeSummary | undefined): TrustCue {
   return {
     headline: `Based on: ${fileCount} files • ${runCount} runs • branch ${branch}`,
     details: [
-      `${pluralize(fileCount, 'file')} evidence item`,
-      `${pluralize(runCount, 'run/debug')} evidence item`,
-      `${pluralize(urlCount, 'URL')} evidence item`,
-      `${pluralize(gitCount, 'git/branch')} evidence item`,
+      `${pluralize(fileCount, 'file')} evidence ${fileCount === 1 ? 'item' : 'items'}`,
+      `${pluralize(runCount, 'run/debug')} evidence ${runCount === 1 ? 'item' : 'items'}`,
+      `${pluralize(urlCount, 'URL')} evidence ${urlCount === 1 ? 'item' : 'items'}`,
+      `${pluralize(gitCount, 'git/branch')} evidence ${gitCount === 1 ? 'item' : 'items'}`,
     ],
   };
 }

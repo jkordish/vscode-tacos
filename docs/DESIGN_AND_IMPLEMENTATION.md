@@ -112,6 +112,16 @@ Key capability clusters:
 - workflow: standup generation, task partition switching,
 - safety/admin: privacy preset, retention, diagnostics, sanitizer test, forget workspace, consent revoke.
 
+### Internal Runtime Commands
+
+A small set of commands are registered at runtime but intentionally absent from `package.json` `contributes.commands`:
+
+- `tacos.resumeSafetyRunVerifyAction`: invoked by the Resume Safety Check status-bar item's action button; not a user-discoverable command.
+- `tacos.openCompanionActions`: internal quick-pick handler for the Companion status-bar item click; not surfaced in the command palette.
+- `tacos.__test.*`: integration test probe commands registered only in the test environment.
+
+These commands are not listed in the manifest because they are either internal action triggers (not user-initiated) or test-only probes.
+
 ## Settings Model
 
 `package.json` contributes the `tacos.*` configuration surface for:

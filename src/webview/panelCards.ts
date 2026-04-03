@@ -39,12 +39,14 @@ export interface StatusCardInput {
 export function renderStatusCard(input: StatusCardInput): string {
   return `<div class="card">
       <h3>Status</h3>
-      <div class="status-label">${escapeHtml(input.sourceLabel)} · ${escapeHtml(input.generatedAtLabel)}</div>
+      <div class="status-label">${escapeHtml(input.sourceLabel)} · <span class="muted">${escapeHtml(input.generatedAtLabel)}</span></div>
       <div class="status-detail muted">${escapeHtml(input.statusHint)}</div>
-      <div class="status-detail"><strong>${escapeHtml(input.autoSummaryStatusLabel)}</strong></div>
-      <div class="status-detail muted">${escapeHtml(input.autoSummaryStatusDetail)}</div>
+      <div class="status-detail status-autosummary-row">
+        <strong>${escapeHtml(input.autoSummaryStatusLabel)}</strong>
+        <span class="muted status-autosummary-detail">${escapeHtml(input.autoSummaryStatusDetail)}</span>
+      </div>
       <div class="status-actions">
-        <button type="button" data-action="refreshSummary">Refresh summary now</button>
+        <button type="button" data-action="refreshSummary">Refresh</button>
         <button type="button" class="secondary" data-action="toggleAutoSummaries" ${
           input.autoSummaryToggleDisabledAttr
         }>${escapeHtml(input.autoSummaryToggleLabel)}</button>
@@ -136,12 +138,12 @@ export function renderRecapCard(input: RecapCardInput): string {
       <h3>Session Recap</h3>
       <div class="recap-grid">
         <section>
-          <h4>Done since last resume</h4>
-          <ul class="compact-list">${input.recapDoneListTrustedHtml || '<li>None captured yet.</li>'}</ul>
+          <h4 class="recap-section-heading recap-section-done">✓ Done</h4>
+          <ul class="compact-list">${input.recapDoneListTrustedHtml || '<li class="muted">Nothing captured yet.</li>'}</ul>
         </section>
         <section>
-          <h4>Pending / blocked</h4>
-          <ul class="compact-list">${input.recapPendingListTrustedHtml || '<li>No blocker captured.</li>'}</ul>
+          <h4 class="recap-section-heading recap-section-pending">⚑ Pending / Blocked</h4>
+          <ul class="compact-list">${input.recapPendingListTrustedHtml || '<li class="muted">No blockers captured.</li>'}</ul>
         </section>
       </div>
     </div>`;
@@ -149,8 +151,8 @@ export function renderRecapCard(input: RecapCardInput): string {
 
 export function renderChangesSinceCard(changesSinceItemsTrustedHtml: string): string {
   return `<div class="card">
-      <h3>Changes Since Last Time</h3>
-      <ul class="compact-list">${changesSinceItemsTrustedHtml || '<li>No changes captured.</li>'}</ul>
+      <h3>What Changed</h3>
+      <ul class="compact-list">${changesSinceItemsTrustedHtml || '<li class="muted">No changes captured yet.</li>'}</ul>
     </div>`;
 }
 
@@ -189,7 +191,7 @@ export function renderTitledListCard(input: TitledListCardInput): string {
   const listClass = input.listClassName ? ` class="${escapeHtml(input.listClassName)}"` : '';
   return `<div class="card">
       <h3>${escapeHtml(input.title)}</h3>
-      <ul${listClass}>${input.listItemsTrustedHtml || `<li>${escapeHtml(input.emptyMessage)}</li>`}</ul>
+      <ul${listClass}>${input.listItemsTrustedHtml || `<li class="muted">${escapeHtml(input.emptyMessage)}</li>`}</ul>
     </div>`;
 }
 
@@ -198,11 +200,11 @@ export function renderQuickActionsCard(quickActionGroupsTrustedHtml: string): st
       <h3>Quick Actions</h3>
       ${quickActionGroupsTrustedHtml}
       <details class="shortcut-help">
-        <summary><strong>Keyboard shortcuts</strong></summary>
+        <summary class="muted shortcut-help-summary">Keyboard shortcuts</summary>
         <ul class="compact-list">
-          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>: Refresh summary</li>
+          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>: Refresh</li>
           <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd>: Copy next steps</li>
-          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd>: Focus intent editor</li>
+          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd>: Focus intent</li>
         </ul>
       </details>
     </div>`;
@@ -214,12 +216,8 @@ export function renderRestorePackCard(
 ): string {
   return `<div class="card">
       <h3>Restore Pack</h3>
+      ${trustedWorkspace ? '' : '<div class="restore-note restricted-mode-note">⚠ Restricted Mode — execution actions disabled.</div>'}
       ${restorePackGroupsTrustedHtml}
-      ${
-        trustedWorkspace
-          ? ''
-          : '<div class="restore-note">Restricted Mode: task/debug/branch execution actions are disabled.</div>'
-      }
     </div>`;
 }
 
@@ -240,7 +238,7 @@ export function renderEvidenceCard(input: EvidenceCardInput): string {
         <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Evidence</span>${emphasisBadge}</summary>
         <div class="panel-section-body">
           <ul class="evidence-list" id="evidence-list">${
-            input.evidenceItemsTrustedHtml || '<li>None captured</li>'
+            input.evidenceItemsTrustedHtml || '<li class="muted">No evidence captured yet.</li>'
           }</ul>
           ${
             hasExtraEvidence

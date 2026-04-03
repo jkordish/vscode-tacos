@@ -97,7 +97,7 @@ describe('panelCards', () => {
     );
     expect(timeline).toContain('No timeline entries captured yet.');
     expect(list).toContain('<h3>Top Files</h3>');
-    expect(list).toContain('<li>None captured</li>');
+    expect(list).toContain('<li class="muted">None captured</li>');
     expect(evidence).toContain('data-action="toggleEvidenceMore"');
     expect(evidence).toContain('data-hidden-count="3"');
     expect(evidence).toContain('aria-controls="evidence-list"');
@@ -123,8 +123,9 @@ describe('panelCards', () => {
     expect(recap).not.toContain('data-action="copyNextSteps"');
     expect(quickActions).toContain('<h3>Quick Actions</h3>');
     expect(quickActions).toContain('Keyboard shortcuts');
-    expect(restore).toContain('Restricted Mode: task/debug/branch execution actions are disabled.');
-    expect(changes).toContain('<h3>Changes Since Last Time</h3>');
+    expect(restore).toContain('Restricted Mode');
+    expect(restore).toContain('execution actions disabled');
+    expect(changes).toContain('<h3>What Changed</h3>');
   });
 
   it('renders evidence card show-more control with stable hidden-count metadata', () => {

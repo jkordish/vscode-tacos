@@ -10,14 +10,17 @@ export interface RankingWeights {
   userPrior: number;
 }
 
+// Weights must sum to 1.0 (interruptCost is subtracted, all others are added).
+// Positive weights: urgency(0.28) + actionability(0.22) + continuity(0.18) +
+//   novelty(0.09) + confidence(0.05) + userPrior(0.18) = 1.00 (minus interruptCost 0.09)
 export const DEFAULT_RANKING_WEIGHTS: RankingWeights = {
-  urgency: 0.3,
-  actionability: 0.25,
-  continuity: 0.2,
-  novelty: 0.1,
-  interruptCost: 0.1,
+  urgency: 0.28,
+  actionability: 0.22,
+  continuity: 0.18,
+  novelty: 0.09,
+  interruptCost: 0.09,
   confidence: 0.05,
-  userPrior: 0.2,
+  userPrior: 0.18,
 };
 
 export interface RankingScoreBreakdown {

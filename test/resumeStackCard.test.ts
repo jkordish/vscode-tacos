@@ -39,23 +39,23 @@ describe('renderResumeStackCard', () => {
      "<div class="card">
            <h3>Companion Home</h3>
            <div class="companion-grid">
-             <section class="companion-block" data-companion-section="now" data-companion-slot-source="summary:intent-and-retrieval-cues">
+              <section class="companion-block" data-companion-section="now" data-companion-slot-source="summary:intent-and-retrieval-cues">
                <h4>Now</h4>
-               <p class="companion-kicker">Current focus</p>
+               <p class="companion-kicker">Intent</p>
                <p class="companion-primary">Implement gating tests</p>
-               <p class="companion-meta">Intent source: inferred</p>
+               <p class="companion-meta">Inferred from context</p>
                <p class="companion-meta">Mode: coding</p>
                
-               <p class="companion-kicker">Last action</p>
+               <p class="companion-kicker">Retrieval cue</p>
                <p class="companion-primary" data-last-action-cue="true">Edited src/extension.ts:42</p>
                <p class="companion-meta">retrieval cue: last edit</p>
                <div class="status-actions"><button type="button" class="secondary" data-action="openEvidence" data-evidence-id="file:src/extension.ts">Open last action</button></div>
              </section>
              <section class="companion-block" data-companion-section="next" data-companion-slot-source="summary:none">
                <h4>Next</h4>
-               <p class="companion-kicker">Next safe action</p>
+               <p class="companion-kicker">Next step</p>
                <p class="companion-primary">Open src/extension.ts and run verify</p>
-               <p class="state-caption state-safe" data-next-safe-status="safe" data-next-emphasis-token="advisory"><span class="slot-token slot-token-advisory" data-emphasis-token="advisory">ADVISORY</span> Status: Safe action available</p>
+               <p class="state-caption state-safe" data-next-safe-status="safe" data-next-emphasis-token="advisory"><span class="slot-token slot-token-advisory" data-emphasis-token="advisory">~</span> Status: Safe action available</p>
                <details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">Based on file evidence: src/extension.ts.</p></details>
                <ul class="compact-list"><li>No next steps captured yet.</li></ul>
                <div class="status-actions">
@@ -69,7 +69,7 @@ describe('renderResumeStackCard', () => {
              </section>
              <section class="companion-block" data-companion-section="blocked" data-companion-slot-source="blocker:none" data-blocked-card="none">
                <h4>Blocked</h4>
-               <p class="state-caption state-clear" data-blocked-status="clear" data-blocked-emphasis-token="advisory"><span class="slot-token slot-token-advisory" data-emphasis-token="advisory">ADVISORY</span> Status: No blocker</p>
+               <p class="state-caption state-clear" data-blocked-status="clear" data-blocked-emphasis-token="advisory"><span class="slot-token slot-token-advisory" data-emphasis-token="advisory">~</span> Status: No blocker</p>
                <p class="companion-primary">No active blocker</p>
                <p class="muted">Continue with the first suggested next step.</p>
                
@@ -123,7 +123,7 @@ describe('renderResumeStackCard', () => {
     });
 
     expect(html).toContain('Ship &lt;v0.6&gt; safely');
-    expect(html).toContain('Intent source: user-edited');
+    expect(html).toContain('Edited by you');
     expect(html).toContain('<div class="intent-editor">editor</div>');
     expect(html).toContain('Mode: review &amp; tune');
     expect(html).toContain('No last action captured yet.');
