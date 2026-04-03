@@ -4,6 +4,57 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+<!-- next release notes go here -->
+
+## [0.99.0] - 2026-04-03
+
+### Added
+
+- P16 Prospective intent capture (ICSE'26 TaCoS research gap — generated summaries lacked "prospective information" present in manual notes):
+  - Added `prospectiveNextVerification` field to `StructuredTaskState` and `CreateStructuredTaskStateInput` (max 280 chars, optional).
+  - Wired into `normalizeTask()`, `createStructuredTaskState()`, and `updateStructuredTaskState()` with `patchHasOwn` guard for correct patch-clear semantics.
+  - Checkpoint completeness scoring now uses 9 fields (was 8); `prospectiveNextVerification` presence is a strong completeness signal.
+  - `formatStructuredTaskStateForPrompt()` now surfaces prospective intent immediately after the core objective/next-action/confidence triad.
+
+### Changed
+
+- UX polish pass 2 — quieter, more intelligent defaults across all companion panel surfaces:
+  - Companion Home slot-token labels simplified to `✓` / `~` / `–` (was uppercase `PRIMARY`/`ADVISORY`/`SUPPRESSED`); CSS data-attributes still drive visual treatment so semantics are unchanged.
+  - `renderCompanionNextSteps` non-actionable step rows: removed `Advisory:` prefix label — the advisory text now stands alone without the unnecessary header.
+  - `renderIntentEditor` label in editable mode shortened from `"Intent (editable)"` → `"Intent"` — the field being editable is self-evident from the presence of the input.
+  - `renderScratchpadCard` empty state copy cleaned up: `"Scratchpad has content, but no preview lines were detected."` → `"Scratchpad has content."` (removes internal debug language).
+  - `renderConfidenceCard` reorientation copy softened: `"You've been away a while — reorient before executing anything risky."` → `"You've been away a while. Take a moment to reorient before acting."` and `"Intent is unclear. Add one line of context before continuing."` → `"Intent is unclear. A quick one-liner will help."` (less preachy, less alarming).
+  - `renderCheckpointCard` add-note button label changed from `"+ Add"` → `"Add note"` (clearer verb-noun pattern, consistent with rest of button vocabulary).
+  - `renderEvidenceCard` empty-state list item now carries `class="muted"` (was bare `<li>None captured</li>`, now `<li class="muted">No evidence captured yet.</li>`).
+
+- UX cleanup and bug fixes across the companion panel:
+  - All interactive buttons now show `cursor: pointer` (was missing from base `button` style, making buttons look non-interactive in some VS Code themes).
+  - `.companion-primary` bottom margin removed (flex gap handles spacing); eliminates double-gap in companion grid blocks.
+  - `.compact-list` bottom margin reduced to `var(--space-2)` and cleared when the list is the last child in its container.
+  - `.companion-block h4` top/bottom margins removed (layout gap handles vertical rhythm consistently).
+  - `.intent-editor input` border-radius aligned to `var(--radius-1)` design token (was hardcoded `6px`).
+  - `.note-actions button` redundant `border-radius` override removed (inherits from base `button` consistently).
+  - Advisory reason copy in next-steps list shortened: `"Advisory only: no safe one-click action is available"` → `"No safe one-click action available for this step."`, etc.
+  - `renderConfidenceCard` long-gap list item label renamed from `"Next safe action:"` to `"Next step:"` to match companion grid rename.
+  - `renderCompanionNudgeCard` empty-card guard fixed: previously a card with only `nudgeExplainabilityTrustedHtml` (and no nudge and no suppression label) would render an empty `<h3>Suggestion</h3>` shell; guard now checks all three content sources before rendering.
+  - `renderTitledListCard` empty fallback `<li>` now carries `class="muted"` for visual consistency with other empty-state patterns across the panel.
+
+- Companion panel UX polish pass (P15):
+  - Notes card heading now shows count as a badge (`1 open note` / `N open notes`) and button row trimmed to `Mark done`, `Pin/Unpin`, `Dismiss`, `All notes`, `+ Add`.
+  - Task State card badges now read `{level} confidence` and `{freshness}` with zero-suppressed switch count; `Safe breakpoint` and stale label use smaller `card-meta` styling; action buttons renamed to `Update task state` and `Switch task` for clarity.
+  - Mental Load card (formerly `Cognitive Debrief`) shows item count badge in heading and only renders non-zero counts, with counts styled prominently via `debrief-count`.
+  - Confidence/reorientation card title for low-evidence state changed to `What are we doing?`; card gets a left-accent border via `card-attention` to draw the eye without alarming the user.
+  - Companion Nudge card heading changed to `Suggestion`; dismiss actions relabeled `Got it` / `Not now` to reduce ambiguity.
+  - Resume Path heading now shows live progress badge (`0 of 3 steps done` → `All steps complete ✓`); summary text simplified to `Re-enter the task`; completed steps are visually struck through.
+  - Session Recap section headings now show `✓ Done` (green) and `⚑ Pending / Blocked` (amber) to improve at-a-glance scanability.
+  - `Changes Since Last Time` card renamed to `What Changed`.
+  - Restore Pack card now surfaces Restricted Mode notice above the action grid rather than below, using a left-accent warning style.
+  - Status card `Refresh summary now` button shortened to `Refresh`; auto-summary status rendered inline.
+  - Keyboard shortcut list entries shortened for compact display.
+  - Added CSS utilities: `card-attention`, `card-meta`, `card-meta-label`, `card-stale-label`, `badge-done`, `badge-attention`, `badge-confidence`, `badge-freshness`, `debrief-list`, `debrief-count`, `resume-path-item-done`, `status-autosummary-row`, `restricted-mode-note`, `recap-section-done`, `recap-section-pending`.
+
+## [0.9.0] - 2026-04-02
+
 ### Added
 
 - Cognitive Observability v1:

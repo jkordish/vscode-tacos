@@ -47,18 +47,20 @@ export function renderCheckpointCard(input: CheckpointCardInput): string {
     .filter(Boolean)
     .join(' · ');
 
+  const notesCountLabel =
+    input.openCheckpointCount === 1 ? '1 open note' : `${input.openCheckpointCount} open notes`;
   return `<div class="card">
-      <h3>Notes (${input.openCheckpointCount})</h3>
+      <h3>Notes <span class="badge">${escapeHtml(notesCountLabel)}</span></h3>
       <p class="companion-primary">${escapeHtml(input.currentCheckpointNote.text)}</p>
-      ${checkpointContextLine ? `<p class="muted">${escapeHtml(checkpointContextLine)}</p>` : ''}
+      ${checkpointContextLine ? `<p class="muted card-meta">${escapeHtml(checkpointContextLine)}</p>` : ''}
       <div class="note-actions">
         <button type="button" data-action="checkpointMarkDone">Mark done</button>
         <button type="button" class="secondary" data-action="checkpointPinToggle">${
           input.currentCheckpointNote.pinned ? 'Unpin' : 'Pin'
         }</button>
         <button type="button" class="secondary" data-action="checkpointDismiss">Dismiss</button>
+        <button type="button" class="secondary" data-action="checkpointOpenList">All notes</button>
         <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>
-        <button type="button" class="secondary" data-action="checkpointOpenList">List notes</button>
       </div>
     </div>`;
 }
@@ -117,34 +119,34 @@ export function renderTaskStateCard(input: TaskStateCardInput | undefined): stri
           : ''
       }
       <div class="step-evidence">
-        <span class="badge">Confidence: ${escapeHtml(input.confidence)}</span>
-        <span class="badge">Freshness: ${escapeHtml(freshnessLabel)}</span>
-        <span class="badge">Switch count: ${escapeHtml(String(input.switchCount))}</span>
+        <span class="badge badge-confidence">${escapeHtml(input.confidence)} confidence</span>
+        <span class="badge badge-freshness">${escapeHtml(freshnessLabel)}</span>
+        ${input.switchCount > 0 ? `<span class="badge">${escapeHtml(String(input.switchCount))} switch${input.switchCount === 1 ? '' : 'es'}</span>` : ''}
       </div>
       ${
         input.safeBreakpoint
-          ? `<p class="muted"><strong>Last known safe breakpoint:</strong> ${escapeHtml(
+          ? `<p class="card-meta muted"><span class="card-meta-label">Safe breakpoint:</span> ${escapeHtml(
               input.safeBreakpoint,
             )}</p>`
           : ''
       }
-      ${input.staleLabel ? `<p class="muted">${escapeHtml(input.staleLabel)}</p>` : ''}
+      ${input.staleLabel ? `<p class="muted card-stale-label">${escapeHtml(input.staleLabel)}</p>` : ''}
       <details>
         <summary><strong>Working set</strong></summary>
         ${workingSetHtml}
       </details>
       <details>
-        <summary><strong>Blockers (${input.blockers.length})</strong></summary>
+        <summary><strong>Blockers${input.blockers.length > 0 ? ` (${input.blockers.length})` : ''}</strong></summary>
         ${blockersHtml}
       </details>
       <details>
-        <summary><strong>Assumptions (${input.assumptions.length})</strong></summary>
+        <summary><strong>Assumptions${input.assumptions.length > 0 ? ` (${input.assumptions.length})` : ''}</strong></summary>
         ${assumptionsHtml}
       </details>
       <div class="note-actions">
-        <button type="button" data-action="captureStructuredCheckpoint">Edit checkpoint</button>
+        <button type="button" data-action="captureStructuredCheckpoint">Update task state</button>
         <button type="button" class="secondary" data-action="taskStateResolve">Mark resolved</button>
-        <button type="button" class="secondary" data-action="confirmTaskSwitch">Confirm switch</button>
+        <button type="button" class="secondary" data-action="confirmTaskSwitch">Switch task</button>
       </div>
     </div>`;
 }
@@ -173,17 +175,17 @@ export function renderCognitiveDebriefCard(input: CognitiveDebriefCardInput | un
   }
 
   return `<div class="card">
-      <h3>Cognitive Debrief</h3>
-      <p class="muted">On-demand local review of threads that may still be taxing your attention.</p>
-      <ul class="compact-list">
-        <li>Abandoned threads: ${escapeHtml(String(input.abandonedThreadCount))}</li>
-        <li>Unresolved blockers: ${escapeHtml(String(input.unresolvedBlockerCount))}</li>
-        <li>Repeated-switch tasks: ${escapeHtml(String(input.repeatedSwitchCount))}</li>
-        <li>Stale task states: ${escapeHtml(String(input.staleTaskStateCount))}</li>
-        <li>Open assumptions: ${escapeHtml(String(input.openAssumptionCount))}</li>
+      <h3>Mental Load <span class="badge badge-attention">${total} item${total === 1 ? '' : 's'}</span></h3>
+      <p class="muted">Open threads that may be taking up attention. Review to clear your head.</p>
+      <ul class="compact-list debrief-list">
+        ${input.abandonedThreadCount > 0 ? `<li><span class="debrief-count">${escapeHtml(String(input.abandonedThreadCount))}</span> abandoned thread${input.abandonedThreadCount === 1 ? '' : 's'}</li>` : ''}
+        ${input.unresolvedBlockerCount > 0 ? `<li><span class="debrief-count">${escapeHtml(String(input.unresolvedBlockerCount))}</span> unresolved blocker${input.unresolvedBlockerCount === 1 ? '' : 's'}</li>` : ''}
+        ${input.repeatedSwitchCount > 0 ? `<li><span class="debrief-count">${escapeHtml(String(input.repeatedSwitchCount))}</span> repeated-switch task${input.repeatedSwitchCount === 1 ? '' : 's'}</li>` : ''}
+        ${input.staleTaskStateCount > 0 ? `<li><span class="debrief-count">${escapeHtml(String(input.staleTaskStateCount))}</span> stale task state${input.staleTaskStateCount === 1 ? '' : 's'}</li>` : ''}
+        ${input.openAssumptionCount > 0 ? `<li><span class="debrief-count">${escapeHtml(String(input.openAssumptionCount))}</span> open assumption${input.openAssumptionCount === 1 ? '' : 's'}</li>` : ''}
       </ul>
       <div class="status-actions">
-        <button type="button" data-action="showCognitiveDebrief">Show cognitive debrief</button>
+        <button type="button" data-action="showCognitiveDebrief">Review open threads</button>
       </div>
     </div>`;
 }
@@ -206,9 +208,7 @@ export function renderScratchpadCard(input: ScratchpadCardInput): string {
           .map((line) => `<li>${escapeHtml(line)}</li>`)
           .join('')}</ul>`
       : `<p class="muted">${
-          input.scratchpadHasContent
-            ? 'Scratchpad has content, but no preview lines were detected.'
-            : 'No scratchpad content yet.'
+          input.scratchpadHasContent ? 'Scratchpad has content.' : 'No scratchpad content yet.'
         }</p>`;
 
   return `<div class="card">
@@ -259,7 +259,7 @@ export function renderConfidenceCard(input: ConfidenceCardInput): string {
         `<li><strong>Retrieval cue:</strong> ${escapeHtml(
           input.lastActionLabel?.trim() || 'No last action captured yet.',
         )}</li>`,
-        `<li><strong>Next safe action:</strong> ${escapeHtml(
+        `<li><strong>Next step:</strong> ${escapeHtml(
           input.recommendedFirstAction?.trim() ||
             input.firstNextStep ||
             'Open a recent file and reorient context.',
@@ -268,15 +268,15 @@ export function renderConfidenceCard(input: ConfidenceCardInput): string {
         .filter(Boolean)
         .join('')
     : candidateIntentItems || '<li>No strong candidates captured.</li>';
-  const reorientationCardTitle = input.longGap ? 'Welcome back' : 'Low Confidence';
+  const reorientationCardTitle = input.longGap ? 'Welcome back' : 'What are we doing?';
   const reorientationCardDescription = input.longGap
-    ? 'Welcome back — reorient before executing risky actions.'
-    : 'Unclear intent (low evidence). Add one line of context before continuing.';
+    ? "You've been away a while. Take a moment to reorient before acting."
+    : 'Intent is unclear. A quick one-liner will help.';
   const reorientationCardAction = !input.hasCurrentCheckpointNote
     ? '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add one-line checkpoint</button>'
     : '';
 
-  return `<div class="card">
+  return `<div class="card card-attention">
       <h3>${reorientationCardTitle}</h3>
       <p class="muted">${reorientationCardDescription}</p>
       <ul class="compact-list">${reorientationCardItems}</ul>
@@ -294,7 +294,7 @@ export interface IntentEditorInput {
 export function renderIntentEditor(input: IntentEditorInput): string {
   const intentInputId = escapeHtml(input.intentInputId);
   const readOnly = Boolean(input.readOnly);
-  const intentLabel = readOnly ? 'Intent (read-only in sample mode)' : 'Intent (editable)';
+  const intentLabel = readOnly ? 'Intent (read-only in sample mode)' : 'Intent';
   const disabledAttr = readOnly ? 'disabled aria-disabled="true"' : '';
   const resetDisabledAttr =
     readOnly || !input.intentOverridden ? 'disabled aria-disabled="true"' : '';
@@ -345,17 +345,15 @@ export function renderCompanionNextSteps(input: CompanionNextStepsInput): string
           : '';
       const advisoryReason = !action
         ? evidenceIds.length === 0
-          ? 'Advisory only: no captured evidence for this step yet.'
+          ? 'No captured evidence for this step yet.'
           : input.lowConfidence
-            ? 'Advisory only: evidence confidence is low right now.'
-            : 'Advisory only: no safe one-click action is available for this step.'
+            ? 'Low confidence — verify before acting.'
+            : 'No safe one-click action available for this step.'
         : '';
       const badgeRow = badges ? `<div class="step-evidence">${badges}</div>` : '';
       const actionRow = actionButton ? `<div class="step-actions">${actionButton}</div>` : '';
       const advisoryRow = advisoryReason
-        ? `<div class="step-advisory" role="note"><strong>Advisory:</strong> ${escapeHtml(
-            advisoryReason,
-          )}</div>`
+        ? `<div class="step-advisory" role="note">${escapeHtml(advisoryReason)}</div>`
         : '';
       return `<li>${escapeHtml(step)}${badgeRow}${actionRow}${advisoryRow}</li>`;
     })
@@ -529,9 +527,11 @@ export function renderResumePathCard(input: ResumePathCardInput): string {
   const readOnlyAttr = readOnly
     ? ' data-resume-path-readonly="true"'
     : ' data-resume-path-readonly="false"';
+  const completedStepCount = input.steps.filter((s) => s.checked).length;
+  const totalStepCount = input.steps.length;
   const resumePathItems = input.steps
     .map(
-      (step) => `<li class="resume-path-item">
+      (step) => `<li class="resume-path-item${step.checked ? ' resume-path-item-done' : ''}">
         <label class="resume-path-toggle">
           <input type="checkbox" data-resume-path-toggle="true" data-resume-path-step-id="${escapeHtml(step.id)}" ${
             step.checked ? 'checked' : ''
@@ -542,11 +542,14 @@ export function renderResumePathCard(input: ResumePathCardInput): string {
       </li>`,
     )
     .join('');
+  const progressLabel = input.completed
+    ? 'All steps complete ✓'
+    : `${completedStepCount} of ${totalStepCount} steps done`;
   return `<div class="card"${readOnlyAttr}>
-      <h3>Resume Path</h3>
+      <h3>Resume Path <span class="badge ${input.completed ? 'badge-done' : ''}">${escapeHtml(progressLabel)}</span></h3>
       <details data-resume-path-details="true" ${input.completed && input.collapsed ? '' : 'open'}>
         <summary class="panel-disclosure-summary"><span class="section-heading-inline">${
-          input.completed ? 'Resume Path complete' : 'Complete this 3-step re-entry path'
+          input.completed ? 'Re-entry complete — review steps' : 'Re-enter the task'
         }</span></summary>
         ${readOnlyHint}
         <ul class="compact-list resume-path-list">${resumePathItems}</ul>
@@ -563,12 +566,16 @@ export interface CompanionNudgeCardInput {
 }
 
 export function renderCompanionNudgeCard(input: CompanionNudgeCardInput): string {
-  if (!input.primaryNudge && !input.secondaryNudge && !input.nudgeSuppressionLabel) {
+  const hasContent =
+    Boolean(input.primaryNudge) ||
+    Boolean(input.nudgeSuppressionLabel) ||
+    Boolean(input.nudgeExplainabilityTrustedHtml);
+  if (!hasContent) {
     return '';
   }
 
   return `<div class="card">
-      <h3>Companion Nudge</h3>
+      <h3>Suggestion</h3>
       ${
         input.primaryNudge
           ? `<p class="companion-primary">${escapeHtml(input.primaryNudge.title)}</p>
@@ -584,8 +591,8 @@ export function renderCompanionNudgeCard(input: CompanionNudgeCardInput): string
             )}">${escapeHtml(input.actionLabelForId(input.secondaryNudge.action))}</button>`
           : ''
       }
-        <button type="button" class="secondary" data-action="acknowledgeNudge">Acknowledge</button>
-        <button type="button" class="secondary" data-action="dismissNudge">Dismiss for this context</button>
+        <button type="button" class="secondary" data-action="acknowledgeNudge">Got it</button>
+        <button type="button" class="secondary" data-action="dismissNudge">Not now</button>
       </div>`
           : ''
       }

@@ -74,21 +74,21 @@ describe('panelFragments', () => {
       intentOverridden: false,
     });
 
-    expect(checkpoint).toContain('<h3>Notes (2)</h3>');
+    expect(checkpoint).toContain('<h3>Notes <span class="badge">2 open notes</span></h3>');
     expect(checkpoint).toContain('data-action="checkpointMarkDone"');
     expect(checkpoint).toContain('data-action="sessionAddCheckpoint"');
     expect(taskState).toContain('<h3>Task State</h3>');
     expect(taskState).toContain('data-action="captureStructuredCheckpoint"');
     expect(taskState).toContain('data-action="taskStateResolve"');
     expect(taskState).toContain('data-action="confirmTaskSwitch"');
-    expect(debrief).toContain('<h3>Cognitive Debrief</h3>');
+    expect(debrief).toContain('<h3>Mental Load');
     expect(debrief).toContain('data-action="showCognitiveDebrief"');
     expect(scratchpad).toContain('data-action="openScratchpad"');
     expect(scratchpad).toContain('Scope: task partition ABC-148');
     expect(confidence).toContain('<h3>Welcome back</h3>');
     expect(confidence).toContain('Retrieval cue');
     expect(confidence).toContain('data-action="sessionAddCheckpoint"');
-    expect(intentEditor).toContain('Intent (editable)');
+    expect(intentEditor).toContain('>Intent<');
     expect(intentEditor).toContain('data-action="setIntentOverride"');
     expect(intentEditor).toContain('data-action="clearIntentOverride" disabled');
     expect(intentEditor).toContain('data-intent-editor-readonly="false"');
@@ -174,9 +174,7 @@ describe('panelFragments', () => {
 
     expect(nextSteps).toContain('data-step-index="0"');
     expect(nextSteps).toContain('data-action="runNextStepAction"');
-    expect(nextSteps).toContain(
-      'Advisory only: no safe one-click action is available for this step.',
-    );
+    expect(nextSteps).toContain('No safe one-click action available for this step.');
     expect(renderStepEvidenceBadge('unknown:evidence')).toContain(
       '<span class="badge">unknown:evidence</span>',
     );

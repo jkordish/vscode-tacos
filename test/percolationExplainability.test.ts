@@ -87,12 +87,12 @@ describe('percolation explainability payload', () => {
      [
        "Surfaced item: Recommended first action",
        "Kind: recommended-action",
-       "Score: 0.608",
+       "Score: 0.553",
        "Confidence: 80%",
        "Evidence IDs: ev-1",
        "Suppression: cooldown",
        "Reason: A deterministic ranking policy selected the highest-scoring candidate.",
-       "Reason: Top weighted factors: urgency=0.210, actionability=0.200, continuity=0.160.",
+       "Reason: Top weighted factors: urgency=0.196, actionability=0.176, continuity=0.144.",
        "Reason: Surfacing is currently suppressed by cooldown.",
        "Missing signal: No recent failing command signal was detected.",
      ]

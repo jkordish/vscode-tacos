@@ -42,6 +42,13 @@ export interface StructuredTaskState {
   assumptions: string[];
   blockers: string[];
   nextAction: string;
+  /**
+   * Prospective intent: the single next verification action the user intends to
+   * perform. Captured at likely task-switch moments so it survives context decay.
+   * Max 280 chars. Source: ICSE'26 TaCoS study — generated summaries often lacked
+   * this "prospective information" which was present in manual notes.
+   */
+  prospectiveNextVerification?: string;
   confidence: TaskStateConfidence;
   lastKnownSafeBreakpoint: LastKnownSafeBreakpoint;
   staleAfter?: number;
@@ -69,6 +76,7 @@ export interface CreateStructuredTaskStateInput {
   assumptions?: string[];
   blockers?: string[];
   nextAction: string;
+  prospectiveNextVerification?: string;
   confidence?: TaskStateConfidence;
   lastKnownSafeBreakpoint: LastKnownSafeBreakpoint;
   staleAfter?: number;
@@ -249,6 +257,7 @@ function normalizeTask(raw: unknown): StructuredTaskState | undefined {
     assumptions: normalizeList(value.assumptions),
     blockers: normalizeList(value.blockers),
     nextAction,
+    prospectiveNextVerification: normalizeText(value.prospectiveNextVerification),
     confidence: normalizeConfidence(value.confidence),
     lastKnownSafeBreakpoint,
     staleAfter: normalizeFiniteTimestamp(value.staleAfter),
@@ -309,7 +318,11 @@ export function parseStructuredTaskStateStore(raw: unknown): StructuredTaskState
 export function createStructuredTaskState(
   input: CreateStructuredTaskStateInput,
 ): StructuredTaskState {
-  const now = normalizeFiniteTimestamp(input.updatedAt) ?? Date.now();
+  // Derive timestamps independently so a provided `updatedAt` does not
+  // silently backdate `createdAt` on newly-created tasks.
+  const wallNow = Date.now();
+  const updatedAt = normalizeFiniteTimestamp(input.updatedAt) ?? wallNow;
+  const createdAt = normalizeFiniteTimestamp(input.createdAt) ?? wallNow;
   return {
     taskId: normalizeText(input.taskId, 80) ?? randomUUID(),
     workspaceRoot: normalizeText(input.workspaceRoot, 400) ?? '',
@@ -322,13 +335,14 @@ export function createStructuredTaskState(
     assumptions: normalizeList(input.assumptions ?? []),
     blockers: normalizeList(input.blockers ?? []),
     nextAction: normalizeText(input.nextAction) ?? '',
+    prospectiveNextVerification: normalizeText(input.prospectiveNextVerification),
     confidence: normalizeConfidence(input.confidence),
     lastKnownSafeBreakpoint: normalizeSafeBreakpoint(input.lastKnownSafeBreakpoint) ?? {
-      capturedAt: now,
+      capturedAt: updatedAt,
     },
     staleAfter: normalizeFiniteTimestamp(input.staleAfter),
-    createdAt: normalizeFiniteTimestamp(input.createdAt) ?? now,
-    updatedAt: now,
+    createdAt,
+    updatedAt,
     lastResumedAt: normalizeFiniteTimestamp(input.lastResumedAt),
     switchCount:
       typeof input.switchCount === 'number' &&
@@ -423,6 +437,9 @@ export function updateStructuredTaskState(
     assumptions: patch.assumptions ?? task.assumptions,
     blockers: patch.blockers ?? task.blockers,
     nextAction: patch.nextAction ?? task.nextAction,
+    prospectiveNextVerification: patchHasOwn(patch, 'prospectiveNextVerification')
+      ? patch.prospectiveNextVerification
+      : task.prospectiveNextVerification,
     confidence: patch.confidence ?? task.confidence,
     lastKnownSafeBreakpoint: patch.lastKnownSafeBreakpoint ?? task.lastKnownSafeBreakpoint,
     staleAfter,
@@ -509,7 +526,12 @@ export function computeCheckpointFieldCompleteness(task: StructuredTaskState): n
     task.assumptions.length > 0,
     task.blockers.length > 0,
     Boolean(task.nextAction.trim()),
-    Boolean(task.confidence),
+    // prospectiveNextVerification is the "future intent" field — the single next
+    // check the user intends to do. Its presence is a strong completeness signal.
+    Boolean(task.prospectiveNextVerification?.trim()),
+    // confidence is always non-empty ('low'|'medium'|'high'), so reward anything
+    // other than the default 'medium' as an explicit user choice.
+    task.confidence !== 'medium',
     Boolean(task.staleAfter),
     Boolean(
       task.lastKnownSafeBreakpoint.file ||
@@ -527,6 +549,11 @@ export function formatStructuredTaskStateForPrompt(task: StructuredTaskState): s
     `Next action: ${task.nextAction}`,
     `Confidence: ${task.confidence}`,
   ];
+  if (task.prospectiveNextVerification) {
+    // Surface prospective intent first — it is the most decay-resistant signal
+    // for re-entry (ICSE'26: generated summaries lacked this; manual notes had it).
+    lines.push(`Next verification: ${task.prospectiveNextVerification}`);
+  }
   if (task.currentHypothesis) {
     lines.push(`Current hypothesis: ${task.currentHypothesis}`);
   }

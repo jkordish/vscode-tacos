@@ -58,6 +58,18 @@ TaCoS is not trying to automate engineering judgment away. The design target is 
     Link: https://doi.org/10.1109/3468.844354
     Relevance: automation level matters. TaCoS stays low on the ladder: recover context, suggest verification, leave execution to the user.
 
+14. Nicole Forsgren, Eirini Kalliamvakou, Abi Noda, Michaela Greiler, Brian Houck, Margaret-Anne Storey. "The SPACE of Developer Productivity." 2021.
+    Link: https://queue.acm.org/detail.cfm?id=3454124
+    Relevance: developer productivity is multi-dimensional; "time spent on unplanned work or rework" and context switching are measurable proxies. Supports TaCoS local metrics design.
+
+15. Meyer et al. "Today Was a Good Day: The Daily Life of Software Developers." 2019.
+    Link: https://doi.org/10.1109/TSE.2017.2734581
+    Relevance: "Mind the Gap" / developer diary study showing that more-interruptions-than-usual predicts lower self-rated productivity while fewer-interruptions-than-usual predicts higher. Supports local per-session friction scoring and noise budget targets.
+
+16. Gonçalves et al. "An empirical study of the effects of interruptions on software engineering activities." ICSE'24.
+    Link: https://doi.org/10.1145/3597503.3639219
+    Relevance: controlled lab study showing that high-dominance on-screen interruptions increase comprehension time, and that subjective stress ratings can diverge from physiological measures. Reinforces conservative interruptibility thresholds and warns against over-trusting self-report.
+
 ## Supporting References
 
 1. Mark Weiser, John Seely Brown. "The Coming Age of Calm Technology." 1996.
@@ -136,6 +148,18 @@ Implemented mapping:
 - model output remains untrusted
 - no hidden actions
 - no autonomous execution runner
+
+## Product Mapping (Additions)
+
+### Local Friction Metrics and Noise Budget
+
+- Meyer et al. (2019): daily diary evidence that more-interruptions-than-usual is a negative productivity predictor; supports per-session noise budget targets and friction scoring.
+- Gonçalves et al. (ICSE'24): high-dominance interruptions inflate comprehension time; corroborates conservative mid-task suppression and reinforces quiet-by-default posture.
+- SPACE (2021): supports multi-dimensional local metrics exports (lag, friction, follow-through, suppression health) as first-class product concerns rather than vanity metrics.
+
+### See Also
+
+- `docs/ideas.md`: full cognitive observability product thesis with citation map, evidence-based plan, and guardrails for future features.
 
 ## Maintainer Notes
 

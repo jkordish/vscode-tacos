@@ -522,9 +522,12 @@ function normalizeTerminalEntryForMode(rawEntry: string): string {
 
   // Persisted terminal entries may be stored as
   // `terminal:<safe_label>#<hash>`, where safe_label uses underscores.
+  // Use slice instead of split(':', 2) so labels that themselves contain
+  // colons (e.g. `terminal:npm run foo:bar#hash`) are not truncated.
   if (entry.startsWith('terminal:')) {
-    const [, token = ''] = entry.split(':', 2);
-    const [label] = token.split('#', 1);
+    const rest = entry.slice('terminal:'.length);
+    const hashIndex = rest.indexOf('#');
+    const label = hashIndex >= 0 ? rest.slice(0, hashIndex) : rest;
     return label.replaceAll('_', ' ');
   }
 

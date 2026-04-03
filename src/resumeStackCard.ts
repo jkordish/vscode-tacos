@@ -7,10 +7,12 @@ import { escapeHtml } from './webviewSecurity';
 export type TrustedHtml = string;
 export type CompanionSlotToken = 'primary' | 'advisory' | 'suppressed';
 
+// Token labels are aria-hidden — CSS drives the visual treatment via data attributes.
+// Keeping them short avoids cluttering the visual scan path.
 const SLOT_TOKEN_LABELS: Record<CompanionSlotToken, string> = {
-  primary: 'PRIMARY',
-  advisory: 'ADVISORY',
-  suppressed: 'SUPPRESSED',
+  primary: '✓',
+  advisory: '~',
+  suppressed: '–',
 };
 
 function normalizeCompanionSlotToken(token: CompanionSlotToken | undefined): CompanionSlotToken {
@@ -80,18 +82,18 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
   return `<div class="card">
       <h3>Companion Home</h3>
       <div class="companion-grid">
-        <section class="companion-block" data-companion-section="now" data-companion-slot-source="${escapeHtml(
-          nowSlotSourceClass,
-        )}">
+         <section class="companion-block" data-companion-section="now" data-companion-slot-source="${escapeHtml(
+           nowSlotSourceClass,
+         )}">
           <h4>Now</h4>
-          <p class="companion-kicker">Current focus</p>
+          <p class="companion-kicker">Intent</p>
           <p class="companion-primary">${escapeHtml(input.intent)}</p>
-          <p class="companion-meta">Intent source: ${
-            input.intentOverridden ? 'user-edited' : 'inferred'
+          <p class="companion-meta">${
+            input.intentOverridden ? 'Edited by you' : 'Inferred from context'
           }</p>${input.intentEditorTrustedHtml ?? ''}
           <p class="companion-meta">Mode: ${escapeHtml(input.mode)}</p>
           ${input.nowCheckpointLineTrustedHtml ?? ''}
-          <p class="companion-kicker">Last action</p>
+          <p class="companion-kicker">Retrieval cue</p>
           <p class="companion-primary" data-last-action-cue="true">${escapeHtml(input.lastActionLabel)}</p>
           ${
             input.lastActionContext
@@ -108,7 +110,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           nextSlotSourceClass,
         )}">
           <h4>Next</h4>
-          <p class="companion-kicker">Next safe action</p>
+          <p class="companion-kicker">Next step</p>
           <p class="companion-primary">${escapeHtml(input.nextSafeActionSummary)}</p>
           <p class="state-caption ${
             input.hasPrimaryNextAction ? 'state-safe' : 'state-advisory'
