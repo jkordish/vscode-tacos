@@ -305,7 +305,7 @@ export function renderIntentEditor(input: IntentEditorInput): string {
     ? ' data-intent-editor-readonly="true"'
     : ' data-intent-editor-readonly="false"';
   return `<div class="intent-editor"${modeAttr}>
-      <label class="companion-kicker" for="${intentInputId}">${intentLabel}</label>
+      <label class="companion-kicker" for="${intentInputId}" data-intent-source-label="true">${intentLabel}</label>
       <div class="intent-editor-row">
         <input id="${intentInputId}" type="text" maxlength="280" value="${escapeHtml(
           input.intent,
