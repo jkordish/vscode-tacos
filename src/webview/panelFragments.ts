@@ -545,7 +545,7 @@ export function renderResumePathCard(input: ResumePathCardInput): string {
   const progressLabel = input.completed
     ? 'All steps complete ✓'
     : `${completedStepCount} of ${totalStepCount} steps done`;
-  return `<div class="card"${readOnlyAttr}>
+  return `<div class="card" data-resume-path-card="true"${readOnlyAttr}>
       <h3>Resume Path <span class="badge ${input.completed ? 'badge-done' : ''}">${escapeHtml(progressLabel)}</span></h3>
       <details data-resume-path-details="true" ${input.completed && input.collapsed ? '' : 'open'}>
         <summary class="panel-disclosure-summary"><span class="section-heading-inline">${

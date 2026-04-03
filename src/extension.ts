@@ -1426,7 +1426,7 @@ export function activate(context: vscode.ExtensionContext): void {
         evidenceExpanded,
         detailsExpanded,
         moreContextExpanded,
-        hasResumePathCard: panelHtml.includes('<h3>Resume Path</h3>'),
+        hasResumePathCard: panelHtml.includes('data-resume-path-card="true"'),
         resumePathStepCount: (panelHtml.match(/<input[^>]*data-resume-path-toggle="true"/gu) ?? [])
           .length,
         disabledResumePathToggleCount,
