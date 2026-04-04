@@ -14377,7 +14377,9 @@ async function finalizeCurrentMetric(context: vscode.ExtensionContext): Promise<
     return;
   }
 
-  const history = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
+  // Shallow-copy to avoid mutating the array stored in workspaceState in-place
+  // before the corresponding update call completes.
+  const history = [...context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, [])];
   history.unshift(state.metricSession);
   if (history.length > 200) {
     history.length = 200;
