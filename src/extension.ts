@@ -7652,7 +7652,7 @@ function renderWebview(
     emptyMessage: 'None captured',
   });
   const topLinksCard = renderTitledListCard({
-    title: 'Top Links / Files',
+    title: 'Top Links',
     listItemsTrustedHtml: linkItems,
     emptyMessage: 'None captured',
   });

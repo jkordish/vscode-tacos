@@ -706,6 +706,7 @@ export const PANEL_WEBVIEW_STYLE = `
       /* ── Mental Load card — dominant, demands attention ─────────────── */
       .card-mental-load {
         border-left: 3px solid var(--vscode-errorForeground, #f14c4c);
+        background: color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 4%, var(--surface-bg));
       }
       /* ── Meta / supplemental text ───────────────────────────────────── */
       .card-meta {
@@ -919,7 +920,8 @@ export const PANEL_WEBVIEW_STYLE = `
         .slot-token {
           color: ButtonText;
         }
-        .card-attention {
+        .card-attention,
+        .card-mental-load {
           background: Canvas;
           border-left-color: ButtonText;
         }
