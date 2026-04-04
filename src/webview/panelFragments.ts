@@ -172,7 +172,7 @@ export function renderCognitiveDebriefCard(input: CognitiveDebriefCardInput | un
     return '';
   }
 
-  return `<div class="card">
+  return `<div class="card card-mental-load">
       <h3>Mental Load <span class="badge badge-attention">${total} item${total === 1 ? '' : 's'}</span></h3>
       <p class="muted">Open threads competing for attention.</p>
       <ul class="compact-list debrief-list">

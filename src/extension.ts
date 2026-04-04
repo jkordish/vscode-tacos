@@ -7473,7 +7473,7 @@ function renderWebview(
     : summary.source === 'local'
       ? refinementActive
         ? 'AI refinement in progress.'
-        : 'Running local-only summary.'
+        : ''
       : localGeneratedAtLabel
         ? `Started local at ${localGeneratedAtLabel}.`
         : 'AI refinement complete.';
