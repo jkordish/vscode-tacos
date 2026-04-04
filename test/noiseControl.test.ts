@@ -1,9 +1,11 @@
 import {
   evaluateNoiseBudget,
   shouldAutoTriggerSummary,
+  shouldDeferCheckpointPromptHighLoad,
   shouldDeferPromptAfterFocusRegain,
   shouldPromptCheckpointOnBlur,
 } from '../src/noiseControl';
+import type { CheckpointHighLoadDeferralInput } from '../src/noiseControl';
 
 describe('shouldAutoTriggerSummary', () => {
   it('blocks triggers when idle, project switch, and significant-change gates are all false', () => {
@@ -390,5 +392,97 @@ describe('evaluateNoiseBudget', () => {
 
     expect(decision.allowed).toBe(true);
     expect(decision.reason).toBeUndefined();
+  });
+});
+
+describe('shouldDeferCheckpointPromptHighLoad', () => {
+  it('returns false when highLoadWindowMs is zero (disabled)', () => {
+    const input: CheckpointHighLoadDeferralInput = {
+      now: 100_000,
+      lastMeaningfulActivityAt: 99_000,
+      highLoadWindowMs: 0,
+    };
+    expect(shouldDeferCheckpointPromptHighLoad(input)).toBe(false);
+  });
+
+  it('returns false when highLoadWindowMs is negative (disabled)', () => {
+    const input: CheckpointHighLoadDeferralInput = {
+      now: 100_000,
+      lastMeaningfulActivityAt: 99_000,
+      highLoadWindowMs: -1,
+    };
+    expect(shouldDeferCheckpointPromptHighLoad(input)).toBe(false);
+  });
+
+  it('returns false when lastMeaningfulActivityAt is zero', () => {
+    const input: CheckpointHighLoadDeferralInput = {
+      now: 100_000,
+      lastMeaningfulActivityAt: 0,
+      highLoadWindowMs: 90_000,
+    };
+    expect(shouldDeferCheckpointPromptHighLoad(input)).toBe(false);
+  });
+
+  it('returns false when lastMeaningfulActivityAt is negative', () => {
+    const input: CheckpointHighLoadDeferralInput = {
+      now: 100_000,
+      lastMeaningfulActivityAt: -1,
+      highLoadWindowMs: 90_000,
+    };
+    expect(shouldDeferCheckpointPromptHighLoad(input)).toBe(false);
+  });
+
+  it('returns false when lastMeaningfulActivityAt is not finite (NaN)', () => {
+    const input: CheckpointHighLoadDeferralInput = {
+      now: 100_000,
+      lastMeaningfulActivityAt: NaN,
+      highLoadWindowMs: 90_000,
+    };
+    expect(shouldDeferCheckpointPromptHighLoad(input)).toBe(false);
+  });
+
+  it('returns false when lastMeaningfulActivityAt is not finite (Infinity)', () => {
+    const input: CheckpointHighLoadDeferralInput = {
+      now: 100_000,
+      lastMeaningfulActivityAt: Infinity,
+      highLoadWindowMs: 90_000,
+    };
+    expect(shouldDeferCheckpointPromptHighLoad(input)).toBe(false);
+  });
+
+  it('returns true when activity is within the high-load window', () => {
+    const input: CheckpointHighLoadDeferralInput = {
+      now: 100_000,
+      lastMeaningfulActivityAt: 50_000,
+      highLoadWindowMs: 90_000,
+    };
+    expect(shouldDeferCheckpointPromptHighLoad(input)).toBe(true);
+  });
+
+  it('returns false when activity age exceeds the high-load window', () => {
+    const input: CheckpointHighLoadDeferralInput = {
+      now: 200_000,
+      lastMeaningfulActivityAt: 50_000,
+      highLoadWindowMs: 90_000,
+    };
+    expect(shouldDeferCheckpointPromptHighLoad(input)).toBe(false);
+  });
+
+  it('returns true at exact boundary (activityAgeMs === highLoadWindowMs)', () => {
+    const input: CheckpointHighLoadDeferralInput = {
+      now: 190_000,
+      lastMeaningfulActivityAt: 100_000,
+      highLoadWindowMs: 90_000,
+    };
+    expect(shouldDeferCheckpointPromptHighLoad(input)).toBe(true);
+  });
+
+  it('returns false when activity timestamp is in the future (activityAgeMs < 0)', () => {
+    const input: CheckpointHighLoadDeferralInput = {
+      now: 100_000,
+      lastMeaningfulActivityAt: 150_000,
+      highLoadWindowMs: 90_000,
+    };
+    expect(shouldDeferCheckpointPromptHighLoad(input)).toBe(false);
   });
 });

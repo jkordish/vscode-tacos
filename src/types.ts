@@ -275,6 +275,20 @@ export interface MetricRecord {
   redactionHighRiskDetectedTotal?: number;
   aiSendBlockedBySanitizerTotal?: number;
   aiSendAllowedAfterReviewTotal?: number;
+  /**
+   * Number of times `prospectiveNextVerification` was explicitly captured in a
+   * structured checkpoint during this session (non-empty value saved).
+   */
+  prospectiveIntentCaptureCount?: number;
+  /**
+   * Number of times an auto-triggered checkpoint prompt was suppressed because
+   * the user was in a high-load activity window (recent edit activity).
+   */
+  checkpointPromptSuppressedHighLoad?: number;
+  /**
+   * Session friction summary was opened by the user.
+   */
+  sessionFrictionSummaryOpened?: number;
 }
 
 export interface VscodeLmModelSelector {

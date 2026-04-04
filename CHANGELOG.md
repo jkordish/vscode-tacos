@@ -4,7 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
-<!-- next release notes go here -->
+### Added
+
+- P16 Prospective Intent Capture — cognitive observability loop tightening:
+  - `prospectiveNextVerification` field added to `StructuredTaskState` and `CreateStructuredTaskStateInput` (max 280 chars, optional). Captures the intended next verification action at checkpoint time before context switches.
+  - `TaCoS: Capture Task Checkpoint` now prompts for prospective next verification as a dedicated step; field is recorded in structured task state and counted in local metrics via `prospectiveIntentCaptureCount`.
+  - Checkpoint completeness scoring now uses 9 fields (was 8); `prospectiveNextVerification` presence is a strong completeness signal.
+  - `formatStructuredTaskStateForPrompt()` surfaces prospective intent immediately after the core objective/next-action/confidence triad so AI refinement paths see it in context.
+  - `shouldDeferCheckpointPromptHighLoad` policy: checkpoint prompt is suppressed when the user is in an active work window (`lastMeaningfulActivityAt` within `cooldownMinutes` of now), avoiding self-interruption at the worst moment. Suppression events are counted via `checkpointPromptSuppressedHighLoad`.
+  - `TaCoS: Show Session Friction Summary` command opens a local-only markdown document in a side panel summarizing prompt-per-hour, suppression health, and mismatch rate from the workspace metric history.
+  - Three new local-only `MetricRecord` fields: `prospectiveIntentCaptureCount`, `checkpointPromptSuppressedHighLoad`, `sessionFrictionSummaryOpened`. All included in CSV export and baseline snapshot.
 
 ## [0.99.0] - 2026-04-03
 

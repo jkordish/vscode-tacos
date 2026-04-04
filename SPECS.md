@@ -1271,3 +1271,79 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 
 - Plan: `PLANS.md` item `P8`.
 - Issue: https://github.com/jkordish/vscode-tacos/issues/252
+
+## Feature: Prospective Intent Capture and Cognitive Observability Loop (P16)
+
+### Problem
+
+Automated summaries reliably capture what happened but miss **prospective information** — the intended next step and verification action that existed in the engineer's working memory at the moment of the context switch. The ICSE'26 TaCoS research paper identifies this as the primary remaining gap between automated resumption support and manual-note quality. Additionally, checkpoint prompts firing during peak edit activity create the self-interruption the tool is meant to prevent, and there is no local visibility into per-session interruption cost trends.
+
+### Goals
+
+- Capture prospective intent (next verification action) at checkpoint time before context switches.
+- Suppress checkpoint prompts when the user is actively working (high-load window) to avoid self-interruption.
+- Surface a local-only session friction summary so engineers can observe their own interruption cost trends.
+- Record gold-metric contract fields (prospective capture count, high-load suppression count, friction summary opens) in local metrics without adding remote telemetry.
+
+### Non-goals
+
+- AI-generated prospective intent suggestions.
+- Automatic checkpoint prompting at arbitrary intervals.
+- Remote or team-level friction dashboards.
+- Hard-blocking execution on missing prospective intent.
+
+### User-facing behavior
+
+- `TaCoS: Capture Task Checkpoint` now includes a `Prospective next verification (optional)` InputBox step — a single short line (max 280 chars) for the intended next verification action.
+- Checkpoint prompt is suppressed when `lastMeaningfulActivityAt` is within the cooldown window of the current time (`shouldDeferCheckpointPromptHighLoad`). Suppression reason is recorded as `high-load-deferred`.
+- `TaCoS: Show Session Friction Summary` opens a local markdown document in a side panel with prompt-per-hour, suppression health, and mismatch rate from workspace metric history. Requires at least one metric session to exist.
+- Structured task state with a filled `prospectiveNextVerification` field is surfaced to AI refinement flows immediately after the objective/next-action/confidence triad.
+
+### Technical shape / architecture notes
+
+- `prospectiveNextVerification?: string` added to `StructuredTaskState` and `CreateStructuredTaskStateInput` in `src/taskState.ts`.
+- `normalizeTask()`, `createStructuredTaskState()`, and `updateStructuredTaskState()` handle the field with `patchHasOwn` guard for correct patch-clear semantics.
+- `computeCheckpointFieldCompleteness()` now scores 9 fields (was 8); `prospectiveNextVerification` presence is a strong signal.
+- `shouldDeferCheckpointPromptHighLoad(input: CheckpointHighLoadDeferralInput): boolean` in `src/noiseControl.ts` returns `true` when `activityAgeMs` is non-negative and within `highLoadWindowMs`.
+- High-load deferral is wired into `maybeOfferTaskCheckpointPrompt` in `src/extension.ts` after the existing budget check, using `config.cooldownMinutes * 60_000` as the window.
+- `showSessionFrictionSummaryCommand` in `src/extension.ts` reads `MetricRecord[]` from `workspaceState`, calls `buildMetricsBaselineSnapshotMarkdown`, and opens the result as a `markdown` text document in `ViewColumn.Beside`.
+- Three new `MetricRecord` fields: `prospectiveIntentCaptureCount`, `checkpointPromptSuppressedHighLoad`, `sessionFrictionSummaryOpened`. All wired into CSV headers, `buildMetricsCsv` row builder, `buildMetricsBaselineSnapshotMarkdown`, and `hasAnyRecordedMetric`.
+- Command `tacos.showSessionFrictionSummary` is registered in `package.json` with `onCommand:tacos.showSessionFrictionSummary` activation event.
+
+### Settings and commands affected
+
+- No new settings.
+- Commands:
+  - `tacos.captureTaskCheckpoint` — extended with `prospectiveNextVerification` capture step.
+  - `tacos.showSessionFrictionSummary` — new command.
+
+### Acceptance criteria
+
+- `prospectiveNextVerification` is stored, normalized, and surfaced in prompt context deterministically.
+- Checkpoint completeness score reflects 9 fields with `prospectiveNextVerification` as a positive signal.
+- `shouldDeferCheckpointPromptHighLoad` is deterministic, unit-tested (10 cases), and wired into the checkpoint prompt flow.
+- `showSessionFrictionSummaryCommand` renders the baseline snapshot markdown and opens it beside the current editor.
+- Three new metric fields appear in CSV export headers, row builder, and baseline snapshot output.
+- `tacos.showSessionFrictionSummary` is declared in `package.json` contributes and activationEvents.
+- All 399 unit tests pass; `verify:quick` exits 0.
+
+### Risks / failure modes
+
+- Prospective intent prompt adds one extra step to checkpoint flow — keep it optional and fast to skip.
+- High-load suppression window uses `cooldownMinutes` as a proxy; too large a value could suppress checkpoint prompts entirely in busy sessions.
+
+### Open questions
+
+- Should prospective intent be editable from the Task State panel card without reopening the full checkpoint capture flow?
+- Should the friction summary auto-refresh, or remain strictly on-demand?
+
+### Research mapping
+
+- ICSE'26 TaCoS preprint: prospective information is the primary gap between automated and manual-note resumption quality.
+- Altmann and Trafton (2002, 2007): prospective goal encoding at interruption time is the key to reliable resumption.
+- Adamczyk and Bailey (2004) / Iqbal and Bailey (2008): high-load suppression aligns with prompting at breakpoints, not mid-activity.
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P16`.
+- Research map: `docs/references.md`.

@@ -69,6 +69,7 @@
     "onCommand:tacos.configureSummaryQuietHours",
     "onCommand:tacos.generateStandupUpdate",
     "onCommand:tacos.restoreWorkingSet",
+    "onCommand:tacos.showSessionFrictionSummary",
     "onCommand:tacos.captureRestoreSearchQuery",
     "onCommand:tacos.switchTaskPartition",
     "onCommand:tacos.resumeSummaries",
@@ -180,6 +181,10 @@
       {
         "command": "tacos.restoreWorkingSet",
         "title": "TaCoS: Restore Working Set"
+      },
+      {
+        "command": "tacos.showSessionFrictionSummary",
+        "title": "TaCoS: Show Session Friction Summary"
       },
       {
         "command": "tacos.captureRestoreSearchQuery",
