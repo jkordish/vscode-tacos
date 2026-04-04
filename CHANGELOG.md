@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.99.1] - 2026-04-04
+
+### Fixed
+
+- Badge class no longer produces trailing whitespace when `badge-attention` modifier is absent (`panelFragments.ts`).
+- Removed duplicate `font-size` and `letter-spacing` declarations in h3 CSS block (`panelStyles.ts`).
+- Fixed misleading comment at `maybeOfferTaskCheckpointPrompt` — clarifies why `beginEphemeralMetricSession` is called before suppression paths.
+- Fixed trigger misclassification in `beginEphemeralMetricSession`: function now accepts an optional `TriggerReason` parameter (default `'manual'`); call-site derives `'focus'` vs `'manual'` from `reasonCodes` so focus-driven checkpoint prompt events are no longer silently misclassified.
+- Fixed stale checkpoint overlay in `panelBaseSummary`: `refinedPanelBaseSummary` is now a clean baseline (raw AI output + intentOverride only); checkpoint and taskState overlays are applied separately on the cached/displayed summary path, preventing stale checkpoint guidance from persisting after note resolution.
+- Removed redundant `if (ephemeralCreated)` guard in `showSessionFrictionSummaryCommand` — `finalizeEphemeralMetricSession` already no-ops when not created.
+- Updated broken internal doc references to deleted files: `docs/metrics-baseline.md` references replaced with `docs/metrics.md`; `docs/ux/dynamic-percolation-v0.8.0-spec.md` references replaced with `docs/ux/dynamic-percolation-mockups.md` in `README.md`, `CHANGELOG.md`, `PLANS.md`, `docs/metrics.md`, and `docs/manual-smoke-runbook.md`.
+
 ### Added
 
 - P16 Prospective Intent Capture — cognitive observability loop tightening:
