@@ -415,7 +415,7 @@ function renderEvidenceListItem(item: SummaryEvidenceItem, hiddenClass = ''): st
   const label = clickable
     ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}" title="${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}">${escapeHtml(item.label)}</button>`
     : `<span class="evidence-label" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_STATIC_HINT_TEXT)}">${escapeHtml(item.label)}</span>`;
-  return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> <code>${escapeHtml(item.id)}</code>${target}</div></li>`;
+  return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span>${target}</div></li>`;
 }
 
 export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]): string {

@@ -144,7 +144,7 @@ export function renderRecapCard(input: RecapCardInput): string {
           <ul class="compact-list">${input.recapDoneListTrustedHtml || '<li class="muted">Nothing captured yet.</li>'}</ul>
         </section>
         <section>
-          <h4 class="recap-section-heading recap-section-pending">⚑ Pending / Blocked</h4>
+          <h4 class="recap-section-heading recap-section-pending">● Pending / Blocked</h4>
           <ul class="compact-list">${input.recapPendingListTrustedHtml || '<li class="muted">No blockers captured.</li>'}</ul>
         </section>
       </div>
