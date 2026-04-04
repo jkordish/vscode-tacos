@@ -12453,6 +12453,12 @@ async function captureTaskCheckpointCommand(
     placeHolder: 'Example: Confirm healthcheck returns 200 after the rollback',
     value: existing?.prospectiveNextVerification ?? '',
     ignoreFocusOut: true,
+    validateInput: (value) => {
+      if (value.trim().length <= 280) {
+        return undefined;
+      }
+      return 'Prospective next verification must be 280 characters or fewer.';
+    },
   });
   if (typeof prospectiveNextVerification === 'undefined') {
     return undefined;
@@ -12797,18 +12803,10 @@ async function maybeOfferTaskCheckpointPrompt(
     return 'suppressed';
   }
 
-  const budgetDecision = await consumeNoiseBudgetSignal(
-    context,
-    workspaceRoot,
-    'checkpoint-prompt',
-    now,
-  );
-  if (!budgetDecision.allowed) {
-    state.lastTaskSwitchSuppressionReason = 'noise-budget';
-    return 'suppressed';
-  }
+  const isManualConfirm = candidate.reasonCodes.includes('manual-confirm');
 
   if (
+    !isManualConfirm &&
     shouldDeferCheckpointPromptHighLoad({
       now,
       lastMeaningfulActivityAt: state.lastMeaningfulActivityAt,
@@ -12817,6 +12815,17 @@ async function maybeOfferTaskCheckpointPrompt(
   ) {
     state.lastTaskSwitchSuppressionReason = 'high-load-deferred';
     recordMetricCounter('checkpointPromptSuppressedHighLoad');
+    return 'suppressed';
+  }
+
+  const budgetDecision = await consumeNoiseBudgetSignal(
+    context,
+    workspaceRoot,
+    'checkpoint-prompt',
+    now,
+  );
+  if (!budgetDecision.allowed) {
+    state.lastTaskSwitchSuppressionReason = 'noise-budget';
     return 'suppressed';
   }
 
@@ -14315,13 +14324,18 @@ async function showSessionFrictionSummaryCommand(context: vscode.ExtensionContex
     return;
   }
   const markdown = buildMetricsBaselineSnapshotMarkdown(metrics, { generatedAt: Date.now() });
-  recordMetricCounter('sessionFrictionSummaryOpened');
   const doc = await vscode.workspace.openTextDocument({ language: 'markdown', content: markdown });
   await vscode.window.showTextDocument(doc, {
     preview: false,
     viewColumn: vscode.ViewColumn.Beside,
     preserveFocus: false,
   });
+
+  const ephemeralCreated = beginEphemeralMetricSession(workspaceRoot);
+  recordMetricCounter('sessionFrictionSummaryOpened');
+  if (ephemeralCreated) {
+    await finalizeEphemeralMetricSession(context, ephemeralCreated);
+  }
 }
 
 async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<void> {

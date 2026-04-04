@@ -235,7 +235,8 @@ export interface CheckpointHighLoadDeferralInput {
    * Window (ms) within which recent meaningful activity is considered "high load".
    * Checkpoint prompts are suppressed when `now - lastMeaningfulActivityAt <= highLoadWindowMs`.
    * A value ≤ 0 disables high-load deferral entirely.
-   * Recommended default: 90_000 (90 seconds).
+   * Recommended default: align with the configured cooldown window (`cooldownMinutes * 60_000`),
+   * which is typically 300_000 (5 minutes) with the current wiring.
    */
   highLoadWindowMs: number;
 }
