@@ -104,6 +104,9 @@ const CSV_HEADERS = [
   'companionForcedOpenRate',
   'companionPrimaryCtaClickThroughRate',
   'companionPrimaryCtaCompletionRate',
+  'prospectiveIntentCaptureCount',
+  'checkpointPromptSuppressedHighLoad',
+  'sessionFrictionSummaryOpened',
 ] as const;
 
 function csvEscape(value: string): string {
@@ -605,6 +608,9 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| aiPayloadPreviewOpensWhySurfaced (total) | ${aiPayloadPreviewOpensWhySurfaced} |`,
     `| aiPayloadPreviewOpensCompanionHome (total) | ${aiPayloadPreviewOpensCompanionHome} |`,
     `| summaryQuietActions (total) | ${summarizeTotal(metrics, 'summaryQuietActions')} |`,
+    `| prospectiveIntentCaptureCount (total) | ${summarizeTotal(metrics, 'prospectiveIntentCaptureCount')} |`,
+    `| checkpointPromptSuppressedHighLoad (total) | ${summarizeTotal(metrics, 'checkpointPromptSuppressedHighLoad')} |`,
+    `| sessionFrictionSummaryOpened (total) | ${summarizeTotal(metrics, 'sessionFrictionSummaryOpened')} |`,
     '',
     'Interruption timing class:',
     '',
@@ -769,7 +775,10 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.redactionEventsTotal ?? 0) > 0 ||
     (metric.redactionHighRiskDetectedTotal ?? 0) > 0 ||
     (metric.aiSendBlockedBySanitizerTotal ?? 0) > 0 ||
-    (metric.aiSendAllowedAfterReviewTotal ?? 0) > 0
+    (metric.aiSendAllowedAfterReviewTotal ?? 0) > 0 ||
+    (metric.prospectiveIntentCaptureCount ?? 0) > 0 ||
+    (metric.checkpointPromptSuppressedHighLoad ?? 0) > 0 ||
+    (metric.sessionFrictionSummaryOpened ?? 0) > 0
   );
 }
 
@@ -888,6 +897,9 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toRatio(forcedOpens, prompts),
       toRatio(primaryCtaClicks, primaryCtaImpressions),
       toRatio(primaryCtaCompletions, primaryCtaClicks),
+      toOptionalNumber(metric.prospectiveIntentCaptureCount),
+      toOptionalNumber(metric.checkpointPromptSuppressedHighLoad),
+      toOptionalNumber(metric.sessionFrictionSummaryOpened),
     ];
 
     lines.push(fields.map((value) => csvEscape(value)).join(','));

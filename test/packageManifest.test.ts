@@ -91,4 +91,16 @@ describe('package manifest resume safety contributions', () => {
     expect(manifest.activationEvents ?? []).toContain('onCommand:tacos.confirmTaskSwitch');
     expect(manifest.activationEvents ?? []).toContain('onCommand:tacos.showCognitiveDebrief');
   });
+
+  it('declares the showSessionFrictionSummary command and activation event (P16)', () => {
+    const manifest = readPackageJson();
+    const commands = new Map(
+      (manifest.contributes?.commands ?? []).map((entry) => [entry.command, entry]),
+    );
+
+    expect(commands.get('tacos.showSessionFrictionSummary')).toMatchObject({
+      title: 'TaCoS: Show Session Friction Summary',
+    });
+    expect(manifest.activationEvents ?? []).toContain('onCommand:tacos.showSessionFrictionSummary');
+  });
 });

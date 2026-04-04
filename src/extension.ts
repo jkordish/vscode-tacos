@@ -58,6 +58,7 @@ import {
   type NoiseBudgetEvent,
   type NoiseBudgetSignalKind,
   shouldAutoTriggerSummary,
+  shouldDeferCheckpointPromptHighLoad,
   shouldDeferPromptAfterFocusRegain,
   shouldPromptCheckpointOnBlur,
 } from './noiseControl';
@@ -1826,6 +1827,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('tacos.restoreWorkingSet', async () => {
       await restoreWorkingSetCommand(context);
+    }),
+    vscode.commands.registerCommand('tacos.showSessionFrictionSummary', async () => {
+      await showSessionFrictionSummaryCommand(context);
     }),
     vscode.commands.registerCommand('tacos.captureRestoreSearchQuery', async () => {
       await captureRestoreSearchQuery(context);
@@ -4765,7 +4769,10 @@ function recordMetricCounter(
     | 'redactionEventsTotal'
     | 'redactionHighRiskDetectedTotal'
     | 'aiSendBlockedBySanitizerTotal'
-    | 'aiSendAllowedAfterReviewTotal',
+    | 'aiSendAllowedAfterReviewTotal'
+    | 'prospectiveIntentCaptureCount'
+    | 'checkpointPromptSuppressedHighLoad'
+    | 'sessionFrictionSummaryOpened',
   amount = 1,
 ): void {
   if (!state.metricSession) {
@@ -12440,6 +12447,17 @@ async function captureTaskCheckpointCommand(
     return undefined;
   }
 
+  const prospectiveNextVerification = await vscode.window.showInputBox({
+    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    prompt: 'Optional: what is the single next verification action you intend to do? (max 1 line)',
+    placeHolder: 'Example: Confirm healthcheck returns 200 after the rollback',
+    value: existing?.prospectiveNextVerification ?? '',
+    ignoreFocusOut: true,
+  });
+  if (typeof prospectiveNextVerification === 'undefined') {
+    return undefined;
+  }
+
   const now = Date.now();
   const safeBreakpointScope: StructuredTaskScopeState = existing
     ? {
@@ -12459,6 +12477,7 @@ async function captureTaskCheckpointCommand(
           currentHypothesis: currentHypothesis.trim() || undefined,
           assumptions: parseStructuredListInput(assumptionsRaw),
           blockers: parseStructuredListInput(blockersRaw),
+          prospectiveNextVerification: prospectiveNextVerification.trim() || undefined,
           workingSet: buildStructuredTaskWorkingSet(workspaceRoot, now),
           lastKnownSafeBreakpoint: captureLastKnownSafeBreakpoint(
             workspaceRoot,
@@ -12484,6 +12503,7 @@ async function captureTaskCheckpointCommand(
         currentHypothesis: currentHypothesis.trim() || undefined,
         assumptions: parseStructuredListInput(assumptionsRaw),
         blockers: parseStructuredListInput(blockersRaw),
+        prospectiveNextVerification: prospectiveNextVerification.trim() || undefined,
         workingSet: buildStructuredTaskWorkingSet(workspaceRoot, now),
         lastKnownSafeBreakpoint: captureLastKnownSafeBreakpoint(workspaceRoot, safeBreakpointScope),
         staleAfter: staleAfterFromPreset(stalePick.value, now),
@@ -12504,6 +12524,9 @@ async function captureTaskCheckpointCommand(
     recordMetricCounter('structuredTaskStateCreated');
   }
   recordMetricCounter('checkpointCompleted');
+  if (nextTask.prospectiveNextVerification) {
+    recordMetricCounter('prospectiveIntentCaptureCount');
+  }
   recordMetricValue('checkpointFieldCompleteness', computeCheckpointFieldCompleteness(nextTask));
   await refreshPanelCheckpointState(context, workspaceRoot);
   rerenderPanel();
@@ -12782,6 +12805,18 @@ async function maybeOfferTaskCheckpointPrompt(
   );
   if (!budgetDecision.allowed) {
     state.lastTaskSwitchSuppressionReason = 'noise-budget';
+    return 'suppressed';
+  }
+
+  if (
+    shouldDeferCheckpointPromptHighLoad({
+      now,
+      lastMeaningfulActivityAt: state.lastMeaningfulActivityAt,
+      highLoadWindowMs: config.cooldownMinutes * 60_000,
+    })
+  ) {
+    state.lastTaskSwitchSuppressionReason = 'high-load-deferred';
+    recordMetricCounter('checkpointPromptSuppressedHighLoad');
     return 'suppressed';
   }
 
@@ -14264,6 +14299,29 @@ async function copyMetricsBaselineSnapshot(context: vscode.ExtensionContext): Pr
   void vscode.window.showInformationMessage(
     'TaCoS: metrics baseline snapshot copied to clipboard.',
   );
+}
+
+async function showSessionFrictionSummaryCommand(context: vscode.ExtensionContext): Promise<void> {
+  const workspaceRoot = pickWorkspaceRoot();
+  if (!workspaceRoot) {
+    void vscode.window.showInformationMessage('TaCoS: Open a workspace folder first.');
+    return;
+  }
+  const metrics = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
+  if (metrics.length === 0) {
+    void vscode.window.showInformationMessage(
+      'TaCoS: no local metrics found yet. Run a few sessions first, then try again.',
+    );
+    return;
+  }
+  const markdown = buildMetricsBaselineSnapshotMarkdown(metrics, { generatedAt: Date.now() });
+  recordMetricCounter('sessionFrictionSummaryOpened');
+  const doc = await vscode.workspace.openTextDocument({ language: 'markdown', content: markdown });
+  await vscode.window.showTextDocument(doc, {
+    preview: false,
+    viewColumn: vscode.ViewColumn.Beside,
+    preserveFocus: false,
+  });
 }
 
 async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<void> {

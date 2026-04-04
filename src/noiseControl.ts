@@ -227,3 +227,41 @@ export function shouldPromptCheckpointOnBlur(input: BlurCheckpointDecisionInput)
     significantChange: true,
   });
 }
+
+export interface CheckpointHighLoadDeferralInput {
+  now: number;
+  lastMeaningfulActivityAt: number;
+  /**
+   * Window (ms) within which recent meaningful activity is considered "high load".
+   * Checkpoint prompts are suppressed when `now - lastMeaningfulActivityAt <= highLoadWindowMs`.
+   * A value ≤ 0 disables high-load deferral entirely.
+   * Recommended default: 90_000 (90 seconds).
+   */
+  highLoadWindowMs: number;
+}
+
+/**
+ * Returns `true` when the user has had recent meaningful activity within the
+ * high-load window, signalling that a checkpoint prompt would self-interrupt an
+ * active work session. Callers should suppress the auto-triggered checkpoint
+ * prompt and record `checkpointPromptSuppressedHighLoad` in local metrics when
+ * this returns `true`.
+ *
+ * This implements P16's "tighten breakpoint-aware checkpoint prompt policy"
+ * requirement: suppress mid-activity checkpoint prompts based on high-load
+ * signal proxies (recent edit activity within the configured window).
+ */
+export function shouldDeferCheckpointPromptHighLoad(
+  input: CheckpointHighLoadDeferralInput,
+): boolean {
+  if (input.highLoadWindowMs <= 0) {
+    return false;
+  }
+
+  if (!Number.isFinite(input.lastMeaningfulActivityAt) || input.lastMeaningfulActivityAt <= 0) {
+    return false;
+  }
+
+  const activityAgeMs = input.now - input.lastMeaningfulActivityAt;
+  return activityAgeMs >= 0 && activityAgeMs <= input.highLoadWindowMs;
+}

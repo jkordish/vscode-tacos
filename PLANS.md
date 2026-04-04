@@ -391,25 +391,28 @@ Status vocabulary used in this file:
 
 ### P16. Prospective intent capture and cognitive observability loop
 
-- status: `doing`
+- status: `done`
 - why: the biggest research-backed gap between automated summaries and real-world resumption is **prospective information** — the intended next step at switch time (ICSE'26 TaCoS paper). IDEAS.md codifies the full evidence-based plan: measure resumption, improve resumption, avoid crutch. This plan slice sequences the next iteration.
 - scope: tightening prospective capture at likely-switch moments; local "day view" friction summary; breakpoint-aware checkpoint policy tuning; and validation gates (noise gate + outcome gate).
 - dependencies: P13 (Cognitive Observability v1), P15 (UX polish), P8 (signal normalization).
-- immediate next actions:
-  - define gold metric contract: resumption lag, first-action lag, wrong-first-action proxy, prompt-per-hour cap.
-  - add a "prospective intent" field to the structured checkpoint capture flow (single next verification action, max 1 line).
-  - tighten the breakpoint-aware checkpoint prompt policy to suppress mid-activity prompts more aggressively based on high-load signal proxies (typing deferral, recent edit activity).
-  - add a lightweight local "session friction summary" view to surface interruption cost trends (prompt-per-hour, suppression health, mismatch rate).
+- recent progress:
+  - defined gold metric contract: added `prospectiveIntentCaptureCount`, `checkpointPromptSuppressedHighLoad`, and `sessionFrictionSummaryOpened` fields to `MetricRecord`; wired into CSV headers, row builder, `buildMetricsBaselineSnapshotMarkdown`, and `hasAnyRecordedMetric`.
+  - added `prospectiveNextVerification` field (max 280 chars, optional) to `StructuredTaskState` and `CreateStructuredTaskStateInput` in `src/taskState.ts`; wired into `normalizeTask()`, `createStructuredTaskState()`, `updateStructuredTaskState()`, completeness scoring (now 9 fields), and `formatStructuredTaskStateForPrompt()`.
+  - `TaCoS: Capture Task Checkpoint` now prompts for prospective next verification as a dedicated InputBox step; field counted via `prospectiveIntentCaptureCount`.
+  - tightened breakpoint-aware checkpoint prompt policy: `shouldDeferCheckpointPromptHighLoad` in `src/noiseControl.ts` suppresses checkpoint prompts when `lastMeaningfulActivityAt` is within `cooldownMinutes * 60_000` of now; wired into `maybeOfferTaskCheckpointPrompt` with `high-load-deferred` suppression reason and `checkpointPromptSuppressedHighLoad` metric counter.
+  - added `TaCoS: Show Session Friction Summary` command: opens a local-only markdown baseline snapshot in `ViewColumn.Beside`; registered in `package.json` with `onCommand:tacos.showSessionFrictionSummary` activation event.
+  - 10-case unit test suite for `shouldDeferCheckpointPromptHighLoad`; `packageManifest.test.ts` asserts the new command and activation event; `verify:quick` exits 0 (399 tests, 56 suites).
+  - docs parity: `SPECS.md` P16 feature section added; `CHANGELOG.md` `[Unreleased]` entries written; `PLANS.md` ledger updated.
 - risks/rollback:
   - risk: new prompts at switch time create the self-interruptions the tool aims to prevent.
   - rollback: increase suppression thresholds and shrink checkpoint prompt window before landing any new capture UI.
 - links:
-  - `docs/ideas.md`
   - `docs/references.md` (refs 9, 14, 15, 16)
   - `src/taskSwitch.ts`
   - `src/taskState.ts`
   - `src/noiseControl.ts`
   - `src/metrics.ts`
+  - `src/extension.ts`
 
 ## Blockers
 
