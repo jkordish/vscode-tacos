@@ -14350,10 +14350,6 @@ async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<vo
   const hasEdit = state.metricSession.firstMeaningfulEditLagMs !== undefined;
   const hasRun = state.metricSession.firstRunLagMs !== undefined;
 
-  if (!hasEdit && !hasRun) {
-    return;
-  }
-
   if (!hasEdit || !hasRun) {
     return;
   }
