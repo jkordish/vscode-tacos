@@ -23,7 +23,7 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: var(--vscode-font-size);
         line-height: 1.5;
         margin: 0;
-        padding: var(--space-3) var(--space-4) var(--space-4);
+        padding: var(--space-2) var(--space-3) var(--space-3);
       }
       main {
         display: block;
@@ -331,6 +331,9 @@ export const PANEL_WEBVIEW_STYLE = `
         line-height: 1.45;
         max-inline-size: 72ch;
         color: var(--surface-strong);
+      }
+      .companion-primary:last-child {
+        margin-bottom: 0;
       }
       /* ── Timeline ───────────────────────────────────────────────────── */
       .timeline-link-button {
@@ -642,6 +645,14 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: 12px;
       }
       /* ── Trust Center ───────────────────────────────────────────────── */
+      .trust-tray-label {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 600;
+        color: var(--surface-muted);
+        margin-bottom: var(--space-2);
+      }
       .trust-row {
         margin-bottom: var(--space-1);
         font-size: 12px;
@@ -806,7 +817,7 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       /* ── Notes ──────────────────────────────────────────────────────── */
       .note-actions {
-        margin-top: var(--space-3);
+        margin-top: var(--space-2);
         display: flex;
         gap: var(--space-2);
         flex-wrap: wrap;
@@ -844,7 +855,7 @@ export const PANEL_WEBVIEW_STYLE = `
       /* ── Responsive: narrow sidebar ─────────────────────────────────── */
       @media (max-width: 500px) {
         body {
-          padding: var(--space-2) var(--space-3) var(--space-3);
+          padding: var(--space-1) var(--space-2) var(--space-2);
         }
         .companion-grid {
           grid-template-columns: 1fr;
