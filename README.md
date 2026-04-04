@@ -244,7 +244,6 @@ TaCoS is **desktop-first**. It runs in the Node-hosted VS Code extension runtime
 **Metrics and validation:**
 
 - [docs/metrics.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/metrics.md)
-- [docs/metrics-baseline.md](https://github.com/jkordish/vscode-tacos/blob/main/docs/metrics-baseline.md)
 
 **Contributor/operator docs:**
 

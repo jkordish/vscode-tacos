@@ -15,7 +15,7 @@ TaCoS metrics are local-only. No telemetry upload or external analytics pipeline
 
 1. Open Command Palette.
 2. Run `TaCoS: Copy Metrics Baseline Snapshot`.
-3. Paste the markdown snapshot into `docs/metrics-baseline.md` or an issue comment.
+3. Paste the markdown snapshot into an issue comment or release PR description.
 
 The copied snapshot includes:
 

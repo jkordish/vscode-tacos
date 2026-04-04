@@ -6,7 +6,7 @@ Related:
 
 - Epic: [#229](https://github.com/jkordish/vscode-tacos/issues/229) Metrics, Experimentation, and Release Validation
 - Child issue: [#257](https://github.com/jkordish/vscode-tacos/issues/257) Expand manual smoke runbook and acceptance report for percolation UX
-- Percolation behavior contract: `docs/ux/dynamic-percolation-v0.8.0-spec.md`
+- Percolation behavior contract: `docs/ux/dynamic-percolation-mockups.md`
 - Integration matrix anchor: `test/integration/suite/percolationDecisionMatrix.js`
 - Metrics dictionary: `docs/metrics.md`
 - Acceptance report: `docs/acceptance-report.md`
@@ -240,7 +240,7 @@ Notes: `__________`
 After executing sections above:
 
 1. Run `TaCoS: Copy Metrics Baseline Snapshot`.
-2. Paste into `docs/metrics-baseline.md` (or issue comment for release PR).
+2. Paste into an issue comment or release PR description.
 3. Run `TaCoS: Export Local Metrics` and inspect `.tacos/metrics.csv`.
 4. Record percolation-specific fields:
    - `percolationDecisionCount`

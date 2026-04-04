@@ -3494,8 +3494,17 @@ async function refineSummaryInBackground(
     }
     return;
   }
-  const refinedWithCheckpoint = applyCheckpointNoteToSummary(
+  // panelBaseSummary must be a clean baseline: raw AI output + intent override only.
+  // Downstream refresh functions (e.g. refreshPanelCheckpointState) re-apply
+  // checkpoint and taskState on top of panelBaseSummary, so baking them in here
+  // would cause stale checkpoint guidance after the first state change.
+  const refinedPanelBaseSummary = applyIntentOverrideToSummary(
     refined,
+    prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
+  );
+  // Apply overlays for the cached/displayed summary.
+  const refinedWithCheckpoint = applyCheckpointNoteToSummary(
+    refinedPanelBaseSummary,
     prepared.checkpointPrimaryNote,
   );
   const refinedWithTaskState = applyStructuredTaskStateToSummary(
@@ -3510,11 +3519,7 @@ async function refineSummaryInBackground(
       ),
     },
   );
-  const refinedPanelBaseSummary = applyIntentOverrideToSummary(
-    refinedWithTaskState,
-    prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
-  );
-  refined = refinedPanelBaseSummary;
+  refined = refinedWithTaskState;
 
   if (state.activeRefinementSequence !== sequence) {
     return;
@@ -4800,7 +4805,10 @@ function recordMetricValue(field: 'checkpointFieldCompleteness', value: number):
   state.metricSession[field] = Math.max(0, Math.round(value));
 }
 
-function beginEphemeralMetricSession(workspaceRoot: string): boolean {
+function beginEphemeralMetricSession(
+  workspaceRoot: string,
+  trigger: TriggerReason = 'manual',
+): boolean {
   if (state.metricSession || !getConfig().metricsEnabled) {
     return false;
   }
@@ -4808,7 +4816,7 @@ function beginEphemeralMetricSession(workspaceRoot: string): boolean {
   state.metricSession = {
     startedAt: Date.now(),
     workspaceRoot,
-    trigger: 'manual',
+    trigger,
     uiSurface: getConfig().uiSurface,
     interruptionEvent: 0,
     interruptionTimingClass: 'boundary',
@@ -12816,9 +12824,19 @@ async function maybeOfferTaskCheckpointPrompt(
   const isManualConfirm = candidate.reasonCodes.includes('manual-confirm');
 
   // Start an ephemeral metric session before any checkpoint-prompt-specific
-  // suppression paths so that suppression counters (highLoad, noise-budget)
-  // are reliably captured even when no primary session is active.
-  const ephemeralMetricSession = beginEphemeralMetricSession(workspaceRoot);
+  // suppression paths so that suppression counters (e.g. highLoad) are
+  // reliably captured even when no primary session is active.
+  const checkpointPromptTrigger: TriggerReason = isManualConfirm
+    ? 'manual'
+    : candidate.reasonCodes.some(
+          (reasonCode) => reasonCode.includes('focus') || reasonCode.includes('blur'),
+        )
+      ? 'focus'
+      : 'manual';
+  const ephemeralMetricSession = beginEphemeralMetricSession(
+    workspaceRoot,
+    checkpointPromptTrigger,
+  );
 
   if (
     !isManualConfirm &&

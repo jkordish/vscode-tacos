@@ -134,7 +134,7 @@ Status vocabulary used in this file:
   - risk: over-aggressive suppression hides useful cues.
   - rollback: revert to previous ranking/suppression default behavior.
 - links:
-  - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
+  - `docs/ux/dynamic-percolation-mockups.md`
   - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
   - https://github.com/jkordish/vscode-tacos/issues/237
   - https://github.com/jkordish/vscode-tacos/issues/236
@@ -161,7 +161,7 @@ Status vocabulary used in this file:
   - risk: restricted-mode copy can become too verbose and overpower primary resume guidance.
   - rollback: keep suppression semantics/guards intact and revert to shorter copy strings only.
 - links:
-  - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
+  - `docs/ux/dynamic-percolation-mockups.md`
   - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
   - https://github.com/jkordish/vscode-tacos/issues/227
   - https://github.com/jkordish/vscode-tacos/issues/242
@@ -189,7 +189,7 @@ Status vocabulary used in this file:
   - risk: duplicated or stale signal bundles can skew ranking behavior.
   - rollback: fall back to summary-only signal defaults while preserving adapter tests for incremental reland.
 - links:
-  - `docs/ux/dynamic-percolation-v0.8.0-spec.md`
+  - `docs/ux/dynamic-percolation-mockups.md`
   - `docs/roadmap/v0.8.0-dynamic-percolation-issues.md`
   - https://github.com/jkordish/vscode-tacos/issues/228
   - https://github.com/jkordish/vscode-tacos/issues/248

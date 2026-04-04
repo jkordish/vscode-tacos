@@ -74,16 +74,14 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       h3 {
         margin: 0 0 var(--space-2) 0;
-        font-size: var(--vscode-font-size);
+        font-size: 11px;
         font-weight: 600;
         display: flex;
         align-items: center;
         gap: var(--space-2);
-        letter-spacing: 0.01em;
+        letter-spacing: 0.06em;
         color: var(--surface-muted);
         text-transform: uppercase;
-        font-size: 11px;
-        letter-spacing: 0.06em;
       }
       h4 {
         margin: 0 0 var(--space-2) 0;
