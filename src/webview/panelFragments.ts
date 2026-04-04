@@ -130,15 +130,15 @@ export function renderTaskStateCard(input: TaskStateCardInput | undefined): stri
       }
       ${input.staleLabel ? `<p class="muted card-stale-label">${escapeHtml(input.staleLabel)}</p>` : ''}
         <details>
-         <summary><strong>Working set</strong></summary>
+         <summary class="panel-disclosure-summary"><strong>Working set</strong></summary>
          ${workingSetHtml}
         </details>
         <details>
-         <summary><strong>Blockers${input.blockers.length > 0 ? ` (${input.blockers.length})` : ''}</strong></summary>
+         <summary class="panel-disclosure-summary"><strong>Blockers${input.blockers.length > 0 ? ` (${input.blockers.length})` : ''}</strong></summary>
          ${blockersHtml}
         </details>
         <details>
-         <summary><strong>Assumptions${input.assumptions.length > 0 ? ` (${input.assumptions.length})` : ''}</strong></summary>
+         <summary class="panel-disclosure-summary"><strong>Assumptions${input.assumptions.length > 0 ? ` (${input.assumptions.length})` : ''}</strong></summary>
          ${assumptionsHtml}
         </details>
       <div class="note-actions">

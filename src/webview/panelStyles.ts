@@ -645,13 +645,20 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: 12px;
       }
       /* ── Trust Center ───────────────────────────────────────────────── */
-      .trust-tray-label {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        font-weight: 600;
+      .trust-details-more {
+        margin: var(--space-2) 0;
+      }
+      .trust-details-summary {
+        font-size: 12px;
         color: var(--surface-muted);
-        margin-bottom: var(--space-2);
+        cursor: pointer;
+        padding: 2px 0;
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+      }
+      .trust-details-more[open] .trust-details-summary {
+        margin-bottom: var(--space-1);
       }
       .trust-row {
         margin-bottom: var(--space-1);

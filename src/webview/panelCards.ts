@@ -83,16 +83,18 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
       <details data-panel-section="trustCenter" ${emphasisAttrs ? `${emphasisAttrs} ` : ''}${input.expanded ? 'open' : ''}>
         <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Trust Center</span>${emphasisBadge}</summary>
         <div class="panel-section-body">
-          <div class="muted trust-tray-label"><strong>Trust &amp; Privacy tray</strong></div>
           <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(input.trustTrackingLabel)}</div>
-          <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
           <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(input.sentToAiLabel)}</div>
-          <div class="trust-row"><span class="trust-key">Collection changes:</span> ${escapeHtml(input.collectionPolicyLabel)}</div>
-          <div class="trust-row"><span class="trust-key">Privacy preset:</span> ${escapeHtml(input.privacyPresetLabel)}</div>
-          <div class="trust-row"><span class="trust-key">Retention:</span> ${escapeHtml(input.retentionPolicyLabel)}</div>
-          <div class="trust-row"><span class="trust-key">AI provider:</span> ${escapeHtml(input.aiProviderModeLabel)}</div>
           <div class="trust-row"><span class="trust-key">Consent:</span> ${escapeHtml(input.aiConsentStatusLabel)}</div>
-          <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(input.trustBasedOn)}</div>
+          <details class="trust-details-more">
+            <summary class="panel-disclosure-summary trust-details-summary">More details</summary>
+            <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
+            <div class="trust-row"><span class="trust-key">Collection changes:</span> ${escapeHtml(input.collectionPolicyLabel)}</div>
+            <div class="trust-row"><span class="trust-key">Privacy preset:</span> ${escapeHtml(input.privacyPresetLabel)}</div>
+            <div class="trust-row"><span class="trust-key">Retention:</span> ${escapeHtml(input.retentionPolicyLabel)}</div>
+            <div class="trust-row"><span class="trust-key">AI provider:</span> ${escapeHtml(input.aiProviderModeLabel)}</div>
+            <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(input.trustBasedOn)}</div>
+          </details>
           ${
             showWhySurfacedDetails
               ? `<details data-why-surfaced-details="true">

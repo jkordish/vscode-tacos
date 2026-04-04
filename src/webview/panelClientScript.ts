@@ -10,7 +10,6 @@ export function renderPanelClientScript(
         'fixSummary',
         'checkpointPinToggle',
         'checkpointMarkDone',
-        'checkpointDismiss',
         'checkpointOpenList',
         'taskStateResolve',
         'openScratchpad',
