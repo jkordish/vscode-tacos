@@ -7572,7 +7572,7 @@ function renderWebview(
             ? `Temporary quiet is active until ${formatTimestamp(summaryQuietState.temporaryUntil ?? 0)}.`
             : summaryQuietState.source === 'configured'
               ? `Within your configured quiet window (${config.summaryQuietHours}).`
-              : 'Runs on focus after idle and cooldown checks.';
+              : '';
   const autoSummaryToggleLabel = autoSummariesPaused
     ? 'Resume auto summaries'
     : 'Pause auto summaries';

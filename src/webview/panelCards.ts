@@ -41,10 +41,7 @@ export function renderStatusCard(input: StatusCardInput): string {
       <h3>Status</h3>
       <div class="status-label">${escapeHtml(input.sourceLabel)}<span class="muted"> · ${escapeHtml(input.generatedAtLabel)}</span></div>
       ${input.statusHint ? `<div class="status-detail muted">${escapeHtml(input.statusHint)}</div>` : ''}
-      <div class="status-autosummary-row">
-        <span class="status-label">${escapeHtml(input.autoSummaryStatusLabel)}</span>
-        <span class="muted status-autosummary-detail">${escapeHtml(input.autoSummaryStatusDetail)}</span>
-      </div>
+      ${input.autoSummaryStatusDetail ? `<div class="status-autosummary-row"><span class="status-label">${escapeHtml(input.autoSummaryStatusLabel)}</span><span class="muted status-autosummary-detail">${escapeHtml(input.autoSummaryStatusDetail)}</span></div>` : ''}
       <div class="status-actions">
         <button type="button" data-action="refreshSummary">Refresh</button>
         <button type="button" class="secondary" data-action="toggleAutoSummaries" ${
