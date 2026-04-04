@@ -3492,19 +3492,27 @@ async function refineSummaryInBackground(
     }
     return;
   }
-  const refinedPanelBaseSummary = applyIntentOverrideToSummary(
+  const refinedWithCheckpoint = applyCheckpointNoteToSummary(
     refined,
+    prepared.checkpointPrimaryNote,
+  );
+  const refinedWithTaskState = applyStructuredTaskStateToSummary(
+    refinedWithCheckpoint,
+    prepared.structuredTaskState,
+    {
+      currentBranch: prepared.localSummary.currentBranch,
+      currentTaskPartition: resolveTaskPartitionKey(
+        context,
+        prepared.root,
+        prepared.localSummary.currentBranch,
+      ),
+    },
+  );
+  const refinedPanelBaseSummary = applyIntentOverrideToSummary(
+    refinedWithTaskState,
     prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
   );
-  refined = applyCheckpointNoteToSummary(refinedPanelBaseSummary, prepared.checkpointPrimaryNote);
-  refined = applyStructuredTaskStateToSummary(refined, prepared.structuredTaskState, {
-    currentBranch: prepared.localSummary.currentBranch,
-    currentTaskPartition: resolveTaskPartitionKey(
-      context,
-      prepared.root,
-      prepared.localSummary.currentBranch,
-    ),
-  });
+  refined = refinedPanelBaseSummary;
 
   if (state.activeRefinementSequence !== sequence) {
     return;
