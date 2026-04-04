@@ -3409,7 +3409,9 @@ async function prepareTriggerSummary(
 
   const adaptationNow = Date.now();
   const triggerReason = contextUnchanged && cached ? 'cached' : reason;
-  const summary = contextUnchanged && cached ? cached : localSummary;
+  // Shallow-copy the cached object so in-place mutations below do not silently
+  // dirty the object stored in workspaceState without a corresponding update call.
+  const summary = contextUnchanged && cached ? { ...cached } : localSummary;
   if (activeStructuredTaskState) {
     summary.structuredTaskStateUsed = true;
     summary.structuredTaskStateFreshness = describeStructuredTaskStateFreshness(
@@ -3492,19 +3494,32 @@ async function refineSummaryInBackground(
     }
     return;
   }
+  // panelBaseSummary must be a clean baseline: raw AI output + intent override only.
+  // Downstream refresh functions (e.g. refreshPanelCheckpointState) re-apply
+  // checkpoint and taskState on top of panelBaseSummary, so baking them in here
+  // would cause stale checkpoint guidance after the first state change.
   const refinedPanelBaseSummary = applyIntentOverrideToSummary(
     refined,
     prepared.localSummary.intentOverridden ? prepared.localSummary.intent : undefined,
   );
-  refined = applyCheckpointNoteToSummary(refinedPanelBaseSummary, prepared.checkpointPrimaryNote);
-  refined = applyStructuredTaskStateToSummary(refined, prepared.structuredTaskState, {
-    currentBranch: prepared.localSummary.currentBranch,
-    currentTaskPartition: resolveTaskPartitionKey(
-      context,
-      prepared.root,
-      prepared.localSummary.currentBranch,
-    ),
-  });
+  // Apply overlays for the cached/displayed summary.
+  const refinedWithCheckpoint = applyCheckpointNoteToSummary(
+    refinedPanelBaseSummary,
+    prepared.checkpointPrimaryNote,
+  );
+  const refinedWithTaskState = applyStructuredTaskStateToSummary(
+    refinedWithCheckpoint,
+    prepared.structuredTaskState,
+    {
+      currentBranch: prepared.localSummary.currentBranch,
+      currentTaskPartition: resolveTaskPartitionKey(
+        context,
+        prepared.root,
+        prepared.localSummary.currentBranch,
+      ),
+    },
+  );
+  refined = refinedWithTaskState;
 
   if (state.activeRefinementSequence !== sequence) {
     return;
@@ -4790,7 +4805,10 @@ function recordMetricValue(field: 'checkpointFieldCompleteness', value: number):
   state.metricSession[field] = Math.max(0, Math.round(value));
 }
 
-function beginEphemeralMetricSession(workspaceRoot: string): boolean {
+function beginEphemeralMetricSession(
+  workspaceRoot: string,
+  trigger: TriggerReason = 'manual',
+): boolean {
   if (state.metricSession || !getConfig().metricsEnabled) {
     return false;
   }
@@ -4798,7 +4816,7 @@ function beginEphemeralMetricSession(workspaceRoot: string): boolean {
   state.metricSession = {
     startedAt: Date.now(),
     workspaceRoot,
-    trigger: 'manual',
+    trigger,
     uiSurface: getConfig().uiSurface,
     interruptionEvent: 0,
     interruptionTimingClass: 'boundary',
@@ -12453,6 +12471,12 @@ async function captureTaskCheckpointCommand(
     placeHolder: 'Example: Confirm healthcheck returns 200 after the rollback',
     value: existing?.prospectiveNextVerification ?? '',
     ignoreFocusOut: true,
+    validateInput: (value) => {
+      if (value.trim().length <= 280) {
+        return undefined;
+      }
+      return 'Prospective next verification must be 280 characters or fewer.';
+    },
   });
   if (typeof prospectiveNextVerification === 'undefined') {
     return undefined;
@@ -12797,18 +12821,25 @@ async function maybeOfferTaskCheckpointPrompt(
     return 'suppressed';
   }
 
-  const budgetDecision = await consumeNoiseBudgetSignal(
-    context,
+  const isManualConfirm = candidate.reasonCodes.includes('manual-confirm');
+
+  // Start an ephemeral metric session before any checkpoint-prompt-specific
+  // suppression paths so that suppression counters (e.g. highLoad) are
+  // reliably captured even when no primary session is active.
+  const checkpointPromptTrigger: TriggerReason = isManualConfirm
+    ? 'manual'
+    : candidate.reasonCodes.some(
+          (reasonCode) => reasonCode.includes('focus') || reasonCode.includes('blur'),
+        )
+      ? 'focus'
+      : 'manual';
+  const ephemeralMetricSession = beginEphemeralMetricSession(
     workspaceRoot,
-    'checkpoint-prompt',
-    now,
+    checkpointPromptTrigger,
   );
-  if (!budgetDecision.allowed) {
-    state.lastTaskSwitchSuppressionReason = 'noise-budget';
-    return 'suppressed';
-  }
 
   if (
+    !isManualConfirm &&
     shouldDeferCheckpointPromptHighLoad({
       now,
       lastMeaningfulActivityAt: state.lastMeaningfulActivityAt,
@@ -12817,10 +12848,22 @@ async function maybeOfferTaskCheckpointPrompt(
   ) {
     state.lastTaskSwitchSuppressionReason = 'high-load-deferred';
     recordMetricCounter('checkpointPromptSuppressedHighLoad');
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
     return 'suppressed';
   }
 
-  const ephemeralMetricSession = beginEphemeralMetricSession(workspaceRoot);
+  const budgetDecision = await consumeNoiseBudgetSignal(
+    context,
+    workspaceRoot,
+    'checkpoint-prompt',
+    now,
+  );
+  if (!budgetDecision.allowed) {
+    state.lastTaskSwitchSuppressionReason = 'noise-budget';
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
+    return 'suppressed';
+  }
+
   recordMetricCounter('checkpointOffered');
   recordMetricCounter('taskSwitchDetected');
   const detail = candidate.explainability[0] ?? candidate.summary;
@@ -14315,13 +14358,16 @@ async function showSessionFrictionSummaryCommand(context: vscode.ExtensionContex
     return;
   }
   const markdown = buildMetricsBaselineSnapshotMarkdown(metrics, { generatedAt: Date.now() });
-  recordMetricCounter('sessionFrictionSummaryOpened');
   const doc = await vscode.workspace.openTextDocument({ language: 'markdown', content: markdown });
   await vscode.window.showTextDocument(doc, {
     preview: false,
     viewColumn: vscode.ViewColumn.Beside,
     preserveFocus: false,
   });
+
+  const ephemeralCreated = beginEphemeralMetricSession(workspaceRoot);
+  recordMetricCounter('sessionFrictionSummaryOpened');
+  await finalizeEphemeralMetricSession(context, ephemeralCreated);
 }
 
 async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<void> {
@@ -14331,10 +14377,6 @@ async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<vo
 
   const hasEdit = state.metricSession.firstMeaningfulEditLagMs !== undefined;
   const hasRun = state.metricSession.firstRunLagMs !== undefined;
-
-  if (!hasEdit && !hasRun) {
-    return;
-  }
 
   if (!hasEdit || !hasRun) {
     return;
@@ -14353,7 +14395,9 @@ async function finalizeCurrentMetric(context: vscode.ExtensionContext): Promise<
     return;
   }
 
-  const history = context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, []);
+  // Shallow-copy to avoid mutating the array stored in workspaceState in-place
+  // before the corresponding update call completes.
+  const history = [...context.workspaceState.get<MetricRecord[]>(KEY_METRIC_HISTORY, [])];
   history.unshift(state.metricSession);
   if (history.length > 200) {
     history.length = 200;

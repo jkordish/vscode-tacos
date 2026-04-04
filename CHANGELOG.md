@@ -272,8 +272,7 @@ All notable changes to this project are documented in this file.
 - 5-minute quickstart documentation with local-only setup, optional AI consent flow, and privacy preset guidance.
 - Metrics documentation bundle:
   - `docs/metrics.md` data dictionary and export workflow
-  - `docs/metrics-baseline.md` dogfooding baseline template
-  - `scripts/metrics-summary.mjs` local markdown summary helper
+  - `scripts/metrics-summary.mjs` local markdown summary helper (use `TaCoS: Copy Metrics Baseline Snapshot` to generate; paste into an issue comment or release PR)
 - Privacy-safe diagnostics workflow:
   - `TaCoS: Copy Diagnostics` command
   - Bug/UX/metrics issue templates under `.github/ISSUE_TEMPLATE/`

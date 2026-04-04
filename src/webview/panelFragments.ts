@@ -50,9 +50,9 @@ export function renderCheckpointCard(input: CheckpointCardInput): string {
   const notesCountLabel =
     input.openCheckpointCount === 1 ? '1 open note' : `${input.openCheckpointCount} open notes`;
   return `<div class="card">
-      <h3>Notes <span class="badge">${escapeHtml(notesCountLabel)}</span></h3>
+      <h3>Notes <span class="${input.currentCheckpointNote.pinned ? 'badge badge-attention' : 'badge'}">${escapeHtml(notesCountLabel)}</span></h3>
       <p class="companion-primary">${escapeHtml(input.currentCheckpointNote.text)}</p>
-      ${checkpointContextLine ? `<p class="muted card-meta">${escapeHtml(checkpointContextLine)}</p>` : ''}
+      ${checkpointContextLine ? `<p class="card-meta">${escapeHtml(checkpointContextLine)}</p>` : ''}
       <div class="note-actions">
         <button type="button" data-action="checkpointMarkDone">Mark done</button>
         <button type="button" class="secondary" data-action="checkpointPinToggle">${

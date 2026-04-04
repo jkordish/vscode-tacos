@@ -172,6 +172,39 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
+
+  it('treats prospective intent capture count as recorded metric activity', () => {
+    const metric: MetricRecord = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      prospectiveIntentCaptureCount: 1,
+    };
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
+
+  it('treats checkpointPromptSuppressedHighLoad as recorded metric activity', () => {
+    const metric: MetricRecord = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'focus',
+      checkpointPromptSuppressedHighLoad: 1,
+    };
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
+
+  it('treats sessionFrictionSummaryOpened as recorded metric activity', () => {
+    const metric: MetricRecord = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      sessionFrictionSummaryOpened: 1,
+    };
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -281,6 +314,9 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('redactionHighRiskDetectedTotal');
     expect(lines[0]).toContain('aiSendBlockedBySanitizerTotal');
     expect(lines[0]).toContain('aiSendAllowedAfterReviewTotal');
+    expect(lines[0]).toContain('prospectiveIntentCaptureCount');
+    expect(lines[0]).toContain('checkpointPromptSuppressedHighLoad');
+    expect(lines[0]).toContain('sessionFrictionSummaryOpened');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('"/workspace/repo,feature"');
     expect(lines[1]).toContain(',statusbar,');
@@ -440,6 +476,9 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| noveltyScoreBucketLow (total) | 0 |');
     expect(markdown).toContain('| noveltyScoreBucketMedium (total) | 0 |');
     expect(markdown).toContain('| noveltyScoreBucketHigh (total) | 0 |');
+    expect(markdown).toContain('| prospectiveIntentCaptureCount (total) | 0 |');
+    expect(markdown).toContain('| checkpointPromptSuppressedHighLoad (total) | 0 |');
+    expect(markdown).toContain('| sessionFrictionSummaryOpened (total) | 0 |');
     expect(markdown).toContain('| boundary | 1 | 0.3333 |');
     expect(markdown).toContain('| mid-activity | 1 | 0.3333 |');
     expect(markdown).toContain('| unknown | 1 | 0.3333 |');
