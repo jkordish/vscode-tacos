@@ -9,10 +9,10 @@ export const PANEL_WEBVIEW_STYLE = `
         --space-2: 8px;
         --space-3: 12px;
         --space-4: 16px;
-        --radius-1: 6px;
-        --radius-2: 8px;
-        --radius-3: 10px;
-        --radius-4: 12px;
+        --radius-1: 4px;
+        --radius-2: 6px;
+        --radius-3: 6px;
+        --radius-4: 8px;
         --motion-quick: 120ms;
         --motion-soft: 180ms;
       }
@@ -23,7 +23,7 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: var(--vscode-font-size);
         line-height: 1.5;
         margin: 0;
-        padding: var(--space-4);
+        padding: var(--space-3) var(--space-4) var(--space-4);
       }
       main {
         display: block;
@@ -57,32 +57,36 @@ export const PANEL_WEBVIEW_STYLE = `
         outline: 2px solid var(--vscode-focusBorder);
         outline-offset: 2px;
       }
+      /* ── Cards ─────────────────────────────────────────────────────── */
       .card {
         border: 1px solid var(--surface-border);
         border-radius: var(--radius-4);
         padding: var(--space-3);
-        margin-bottom: var(--space-3);
+        margin-bottom: var(--space-2);
         background: var(--surface-bg);
       }
+      .card:last-child {
+        margin-bottom: 0;
+      }
+      /* ── Typography ─────────────────────────────────────────────────── */
       ul {
-        padding-left: 20px;
+        padding-left: 18px;
       }
       h3 {
-        margin-top: 0;
-        margin-bottom: var(--space-2);
+        margin: 0 0 var(--space-2) 0;
+        font-size: var(--vscode-font-size);
+        font-weight: 600;
         display: flex;
         align-items: center;
         gap: var(--space-2);
-      }
-      h3::before {
-        content: '';
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: var(--accent);
+        letter-spacing: 0.01em;
+        color: var(--surface-muted);
+        text-transform: uppercase;
+        font-size: 11px;
+        letter-spacing: 0.06em;
       }
       h4 {
-        margin-bottom: 8px;
+        margin: 0 0 var(--space-2) 0;
       }
       a {
         color: var(--vscode-textLink-foreground);
@@ -115,23 +119,24 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .mode {
         color: var(--vscode-descriptionForeground);
-        font-size: 13px;
+        font-size: 12px;
       }
       .status-label {
-        font-weight: 700;
-        font-size: 13px;
+        font-weight: 600;
+        font-size: var(--vscode-font-size);
+        color: var(--surface-strong);
       }
       .status-detail {
         margin-top: var(--space-1);
       }
       .status-actions {
-        margin-top: var(--space-2);
+        margin-top: var(--space-3);
         display: flex;
         flex-wrap: wrap;
         gap: var(--space-2);
       }
       .step-evidence {
-        margin-top: var(--space-1);
+        margin-top: var(--space-2);
         display: flex;
         gap: var(--space-1);
         flex-wrap: wrap;
@@ -141,21 +146,26 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .step-action {
         min-height: 24px;
-        padding: 6px 10px;
+        padding: 4px 10px;
         font-size: 12px;
       }
       .step-advisory {
         margin-top: var(--space-1);
         font-size: 12px;
+        color: var(--surface-muted);
       }
+      /* ── Badges ────────────────────────────────────────────────────── */
       .badge {
-        display: inline-block;
+        display: inline-flex;
+        align-items: center;
         border: 1px solid var(--vscode-widget-border);
-        border-radius: 999px;
-        padding: 2px var(--space-2);
-        font-size: 12px;
+        border-radius: var(--radius-1);
+        padding: 1px var(--space-2);
+        font-size: 11px;
         text-decoration: none;
         color: inherit;
+        line-height: 1.4;
+        white-space: nowrap;
       }
       .badge.clickable {
         cursor: pointer;
@@ -165,23 +175,56 @@ export const PANEL_WEBVIEW_STYLE = `
         color: inherit;
         border-width: 1px;
         border-style: solid;
-        min-height: 24px;
-        min-width: 24px;
-        padding: 4px 10px;
-        font-size: 12px;
+        min-height: 22px;
+        min-width: 22px;
+        padding: 2px 8px;
+        font-size: 11px;
       }
       .badge.kind-url {
         border-color: var(--vscode-textLink-foreground);
+        color: var(--vscode-textLink-foreground);
       }
       .badge.kind-file {
         border-color: var(--vscode-charts-green);
+        color: var(--vscode-charts-green);
+      }
+      /* ── Buttons ───────────────────────────────────────────────────── */
+      button {
+        border: 1px solid var(--vscode-button-border, transparent);
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border-radius: var(--radius-2);
+        min-height: 24px;
+        padding: var(--space-1) var(--space-3);
+        cursor: pointer;
+        font-size: var(--vscode-font-size);
+        font-family: var(--vscode-font-family);
+        transition: opacity var(--motion-quick) ease;
+      }
+      button:focus-visible {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
+      }
+      button.secondary {
+        background: transparent;
+        color: var(--vscode-foreground);
+        border-color: var(--vscode-button-secondaryBorder, var(--vscode-widget-border));
+      }
+      button.secondary:hover {
+        background: var(--vscode-button-secondaryHoverBackground, rgba(128,128,128,0.1));
+      }
+      button:disabled,
+      button[aria-disabled='true'] {
+        opacity: 0.45;
+        cursor: default;
+        pointer-events: none;
       }
       .text-link-button {
         border: none;
         background: transparent;
         color: var(--vscode-textLink-foreground);
-        min-height: 24px;
-        padding: 2px var(--space-1);
+        min-height: 22px;
+        padding: 1px var(--space-1);
         border-radius: var(--radius-1);
         text-align: left;
         text-decoration: underline;
@@ -196,6 +239,102 @@ export const PANEL_WEBVIEW_STYLE = `
         outline: 2px solid var(--vscode-focusBorder);
         outline-offset: 2px;
       }
+      summary:focus-visible {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
+      }
+      /* ── Disclosure (collapsible sections) ──────────────────────────── */
+      details summary {
+        cursor: pointer;
+        list-style: none;
+      }
+      details summary::-webkit-details-marker {
+        display: none;
+      }
+      .card > details[data-panel-section] > summary {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-height: 24px;
+        border-radius: var(--radius-1);
+        padding: 2px 0;
+      }
+      .card > details[data-panel-section] > summary::before {
+        content: '';
+        display: inline-block;
+        width: 0;
+        height: 0;
+        border-top: 4px solid transparent;
+        border-bottom: 4px solid transparent;
+        border-left: 6px solid var(--surface-muted);
+        flex: 0 0 auto;
+        margin-right: 2px;
+        transition: transform var(--motion-quick) ease;
+      }
+      .card > details[data-panel-section][open] > summary::before {
+        transform: rotate(90deg);
+      }
+      .panel-disclosure-summary {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        width: 100%;
+      }
+      .card > details[data-panel-section][data-panel-emphasis-level='elevated'] > summary {
+        border-left: 2px solid var(--vscode-textLink-foreground);
+        padding-left: var(--space-1);
+      }
+      .card > details[data-panel-section][data-panel-emphasis-level='critical'] > summary {
+        border-left: 2px solid var(--vscode-errorForeground);
+        padding-left: var(--space-1);
+      }
+      .panel-emphasis-badge {
+        margin-left: auto;
+        font-size: 11px;
+        padding: 1px var(--space-2);
+      }
+      .panel-emphasis-elevated {
+        border-color: var(--vscode-textLink-foreground);
+        color: var(--vscode-textLink-foreground);
+      }
+      .panel-emphasis-critical {
+        border-color: var(--vscode-errorForeground);
+        color: var(--vscode-errorForeground);
+      }
+      .section-heading {
+        font-weight: 600;
+        font-size: var(--vscode-font-size);
+        line-height: 1.3;
+        color: var(--surface-strong);
+      }
+      .section-heading-inline {
+        font-weight: 600;
+      }
+      .panel-section-body {
+        margin-top: var(--space-3);
+      }
+      .more-context-stack > .card {
+        margin-bottom: var(--space-2);
+      }
+      .more-context-stack > .card:last-child {
+        margin-bottom: 0;
+      }
+      .show-more-btn {
+        margin-top: var(--space-2);
+      }
+      .muted {
+        color: var(--surface-muted);
+      }
+      /* ── Primary content text ───────────────────────────────────────── */
+      .companion-primary {
+        margin: 0 0 var(--space-2) 0;
+        font-weight: 600;
+        font-size: calc(var(--vscode-font-size) + 1px);
+        line-height: 1.45;
+        max-inline-size: 72ch;
+        color: var(--surface-strong);
+      }
+      /* ── Timeline ───────────────────────────────────────────────────── */
       .timeline-link-button {
         align-self: flex-start;
       }
@@ -211,6 +350,32 @@ export const PANEL_WEBVIEW_STYLE = `
       .timeline-label {
         font-weight: 600;
       }
+      .timeline-group ul {
+        margin-top: 0;
+      }
+      .timeline-group li {
+        display: grid;
+        grid-template-columns: 64px 1fr;
+        gap: var(--space-2);
+        margin-bottom: var(--space-1);
+      }
+      .timeline-time {
+        color: var(--vscode-descriptionForeground);
+        font-size: 11px;
+        padding-top: 3px;
+        white-space: nowrap;
+      }
+      .timeline-row {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .timeline-detail {
+        color: var(--vscode-descriptionForeground);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      /* ── Evidence ───────────────────────────────────────────────────── */
       .evidence-list {
         list-style: none;
         margin: 0;
@@ -242,8 +407,11 @@ export const PANEL_WEBVIEW_STYLE = `
         border: 1px solid var(--vscode-widget-border);
         border-radius: var(--radius-2);
         padding: var(--space-2);
-        margin-bottom: var(--space-2);
+        margin-bottom: var(--space-1);
         background: var(--vscode-editor-background);
+      }
+      .evidence-item:last-child {
+        margin-bottom: 0;
       }
       .evidence-row {
         display: flex;
@@ -264,11 +432,12 @@ export const PANEL_WEBVIEW_STYLE = `
         display: flex;
         flex-wrap: wrap;
         gap: var(--space-1);
-        font-size: 12px;
+        font-size: 11px;
+        color: var(--surface-muted);
       }
       .evidence-affordance {
         border: 1px solid var(--vscode-widget-border);
-        border-radius: 999px;
+        border-radius: var(--radius-1);
         padding: 1px var(--space-2);
         font-size: 11px;
         white-space: nowrap;
@@ -279,6 +448,7 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .evidence-affordance-static {
         color: var(--surface-muted);
+        border-color: transparent;
       }
       .evidence-kind {
         color: var(--vscode-descriptionForeground);
@@ -293,193 +463,21 @@ export const PANEL_WEBVIEW_STYLE = `
       .evidence-list.show-more .extra-evidence {
         display: block;
       }
-      details summary {
-        cursor: pointer;
-      }
-      .card > details[data-panel-section] > summary {
-        list-style: none;
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
-        min-height: 24px;
-      }
-      .card > details[data-panel-section] > summary::before {
-        content: '▸';
-        color: var(--surface-muted);
-        flex: 0 0 auto;
-        font-size: 12px;
-        line-height: 1;
-        transition: transform var(--motion-quick) ease;
-      }
-      .card > details[data-panel-section] > summary::-webkit-details-marker {
-        display: none;
-      }
-      .card > details[data-panel-section][open] > summary::before {
-        transform: rotate(90deg);
-      }
-      .panel-disclosure-summary {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
-      }
-      .card > details[data-panel-section][data-panel-emphasis-level='elevated'] > summary {
-        border-left: 2px solid var(--vscode-textLink-foreground);
-        padding-left: var(--space-1);
-      }
-      .card > details[data-panel-section][data-panel-emphasis-level='critical'] > summary {
-        border-left: 2px solid var(--vscode-errorForeground);
-        padding-left: var(--space-1);
-      }
-      .panel-emphasis-badge {
-        margin-left: auto;
-        font-size: 11px;
-        padding: 1px var(--space-2);
-      }
-      .panel-emphasis-elevated {
-        border-color: var(--vscode-textLink-foreground);
-      }
-      .panel-emphasis-critical {
-        border-color: var(--vscode-errorForeground);
-        color: var(--vscode-errorForeground);
-      }
-      .section-heading {
-        font-weight: 700;
-        font-size: 1.1em;
-        line-height: 1.3;
-      }
-      .section-heading-inline {
-        font-weight: 700;
-      }
-      .panel-section-body {
-        margin-top: var(--space-2);
-      }
-      .more-context-stack > .card {
-        margin-bottom: var(--space-2);
-      }
-      .more-context-stack > .card:last-child {
-        margin-bottom: 0;
-      }
-      .show-more-btn {
-        margin-top: var(--space-2);
-      }
-      .muted {
-        color: var(--surface-muted);
-      }
-      .resume-path-list {
-        margin-top: var(--space-2);
-      }
-      .resume-path-item {
-        margin-bottom: var(--space-2);
-      }
-      .resume-path-toggle {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
-        cursor: pointer;
-        font-weight: 600;
-      }
-      .resume-path-toggle input[type='checkbox'] {
-        width: 14px;
-        height: 14px;
-      }
-      .resume-path-detail {
-        margin: 4px 0 0 22px;
-        font-size: 12px;
-      }
-      .blocker-disabled-reason {
-        margin-top: var(--space-2);
-      }
-      .restore-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-        gap: var(--space-2);
-      }
-      button {
-        border: 1px solid var(--vscode-button-border, transparent);
-        background: var(--vscode-button-background);
-        color: var(--vscode-button-foreground);
-        border-radius: var(--radius-2);
-        min-height: 24px;
-        padding: var(--space-2) var(--space-3);
-        cursor: pointer;
-      }
-      button:focus-visible {
-        outline: 2px solid var(--vscode-focusBorder);
-        outline-offset: 2px;
-      }
-      summary:focus-visible {
-        outline: 2px solid var(--vscode-focusBorder);
-        outline-offset: 2px;
-      }
-      button.secondary {
-        background: transparent;
-        color: var(--vscode-editor-foreground);
-        border-color: var(--vscode-widget-border);
-      }
-      .restore-grid button {
-        text-align: left;
-        cursor: pointer;
-      }
-      .restore-grid button:disabled {
-        opacity: 0.5;
-        cursor: default;
-      }
-      .restore-note {
-        color: var(--vscode-descriptionForeground);
-        font-size: 12px;
-        margin-top: 8px;
-      }
-      .restricted-mode-note {
-        font-size: 12px;
-        margin-bottom: var(--space-2);
-        padding: var(--space-1) var(--space-2);
-        border-left: 3px solid var(--vscode-testing-iconQueued, #cca700);
-        color: var(--vscode-editorWarning-foreground, var(--surface-muted));
-        background: transparent;
-      }
-      .note-actions {
-        display: flex;
-        gap: var(--space-2);
-        flex-wrap: wrap;
-      }
-      .note-actions button {
-        padding: 6px 10px;
-      }
-      .timeline-group ul {
-        margin-top: 0;
-      }
-      .timeline-group li {
-        display: grid;
-        grid-template-columns: 70px 1fr;
-        gap: 8px;
-        margin-bottom: 6px;
-      }
-      .timeline-time {
-        color: var(--vscode-descriptionForeground);
-        font-size: 12px;
-        padding-top: 2px;
-      }
-      .timeline-row {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-      }
-      .timeline-detail {
-        color: var(--vscode-descriptionForeground);
-        font-size: 12px;
-        overflow-wrap: anywhere;
-      }
+      /* ── Quick Actions card ─────────────────────────────────────────── */
       .quick-actions {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
         gap: var(--space-2);
       }
       .quick-actions button {
         min-width: 0;
         width: 100%;
+        text-align: left;
       }
       .shortcut-help {
-        margin-top: var(--space-2);
+        margin-top: var(--space-3);
+        border-top: 1px solid var(--surface-border);
+        padding-top: var(--space-2);
       }
       kbd {
         border: 1px solid var(--vscode-widget-border);
@@ -487,6 +485,7 @@ export const PANEL_WEBVIEW_STYLE = `
         padding: 0 4px;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
         font-size: 11px;
+        background: var(--vscode-editor-background);
       }
       .action-group + .action-group {
         margin-top: var(--space-2);
@@ -494,18 +493,19 @@ export const PANEL_WEBVIEW_STYLE = `
       .action-group h4,
       .action-group h5 {
         margin: 0 0 var(--space-2) 0;
-        font-size: 12px;
+        font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.06em;
         color: var(--surface-muted);
       }
+      /* ── Companion grid (Now / Next / Blocked / Restore) ────────────── */
       .companion-grid {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr 1fr;
         grid-template-areas:
           'now next'
           'blocked restore';
-        gap: var(--space-3);
+        gap: var(--space-2);
       }
       .companion-block[data-companion-section='now'] {
         grid-area: now;
@@ -522,24 +522,19 @@ export const PANEL_WEBVIEW_STYLE = `
       .companion-block {
         border: 1px solid var(--vscode-widget-border);
         border-radius: var(--radius-3);
-        padding: var(--space-3);
-        background: var(--vscode-editor-background);
+        padding: var(--space-2) var(--space-3);
+        background: var(--surface-bg);
         display: flex;
         flex-direction: column;
-        gap: var(--space-2);
+        gap: var(--space-1);
+        min-width: 0;
       }
       .companion-block h4 {
         margin: 0;
-        font-size: 12px;
+        font-size: 10px;
         text-transform: uppercase;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.07em;
         color: var(--surface-muted);
-      }
-      .companion-primary {
-        margin: 0;
-        font-weight: 700;
-        line-height: 1.4;
-        max-inline-size: 72ch;
       }
       .state-caption {
         margin: 0 0 var(--space-1) 0;
@@ -564,7 +559,7 @@ export const PANEL_WEBVIEW_STYLE = `
         align-items: center;
         justify-content: center;
         border: 1px solid var(--vscode-widget-border);
-        border-radius: 999px;
+        border-radius: var(--radius-1);
         min-height: 18px;
         padding: 0 var(--space-1);
         font-size: 10px;
@@ -578,9 +573,11 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .slot-token-primary {
         border-color: var(--vscode-testing-iconPassed);
+        color: var(--vscode-testing-iconPassed);
       }
       .slot-token-advisory {
         border-color: var(--vscode-testing-iconQueued);
+        color: var(--vscode-testing-iconQueued);
       }
       .slot-token-suppressed {
         border-color: var(--surface-muted);
@@ -588,32 +585,37 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .companion-kicker {
         margin: 0;
-        font-size: 12px;
+        font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.06em;
         color: var(--surface-muted);
       }
       .companion-meta {
         margin: 0;
         color: var(--surface-muted);
+        font-size: 12px;
         max-inline-size: 72ch;
       }
+      /* ── Intent editor ──────────────────────────────────────────────── */
       .intent-editor {
         border: 1px solid var(--vscode-widget-border);
         border-radius: var(--radius-2);
-        padding: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+        background: var(--vscode-editor-background);
       }
       .intent-editor-row {
-        margin-top: 6px;
+        margin-top: var(--space-1);
       }
       .intent-editor input[type='text'] {
         width: 100%;
         box-sizing: border-box;
-        padding: 6px 8px;
+        padding: 5px var(--space-2);
         border-radius: var(--radius-1);
         border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
         background: var(--vscode-input-background);
         color: var(--vscode-input-foreground);
+        font-family: var(--vscode-font-family);
+        font-size: var(--vscode-font-size);
       }
       .intent-editor-actions {
         display: flex;
@@ -623,38 +625,52 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .compact-list {
         margin: 0 0 var(--space-2) 0;
-        padding-left: 18px;
+        padding-left: 16px;
+        line-height: 1.6;
       }
       .compact-list:last-child {
         margin-bottom: 0;
       }
+      .compact-list li {
+        margin-bottom: 2px;
+      }
       .companion-restore-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
         gap: var(--space-1);
       }
       .companion-restore-grid button {
         text-align: left;
+        font-size: 12px;
       }
+      /* ── Trust Center ───────────────────────────────────────────────── */
       .trust-row {
+        margin-bottom: var(--space-1);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .trust-row:last-of-type {
         margin-bottom: var(--space-2);
       }
       .trust-key {
         font-weight: 600;
+        color: var(--surface-strong);
       }
+      /* ── Session Recap ──────────────────────────────────────────────── */
       .recap-card .recap-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-        gap: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: var(--space-3);
       }
       .recap-card h4 {
         margin-top: 0;
       }
       .recap-section-heading {
-        font-size: 12px;
+        font-size: 11px;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.06em;
         margin-bottom: var(--space-2);
+        font-weight: 600;
       }
       .recap-section-done {
         color: var(--vscode-testing-iconPassed);
@@ -666,23 +682,31 @@ export const PANEL_WEBVIEW_STYLE = `
       .details-markdown li {
         max-inline-size: 72ch;
       }
-      /* card-attention: draws the eye without being alarming */
+      /* ── Attention card (Welcome back / low-confidence) ─────────────── */
       .card-attention {
         border-left: 3px solid var(--vscode-testing-iconQueued, #cca700);
+        background: color-mix(in srgb, var(--vscode-testing-iconQueued, #cca700) 4%, var(--surface-bg));
       }
-      /* card-meta: secondary context line below companion-primary */
+      /* ── Mental Load card — dominant, demands attention ─────────────── */
+      .card-mental-load {
+        border-left: 3px solid var(--vscode-errorForeground, #f14c4c);
+      }
+      /* ── Meta / supplemental text ───────────────────────────────────── */
       .card-meta {
         font-size: 12px;
-        margin-top: var(--space-1);
+        margin: var(--space-1) 0 0;
+        color: var(--surface-muted);
       }
       .card-meta-label {
         font-weight: 600;
+        color: var(--surface-strong);
       }
       .card-stale-label {
         font-size: 12px;
         font-style: italic;
+        color: var(--vscode-testing-iconQueued, var(--surface-muted));
       }
-      /* badge variants */
+      /* ── Badge variants ─────────────────────────────────────────────── */
       .badge-done {
         border-color: var(--vscode-testing-iconPassed);
         color: var(--vscode-testing-iconPassed);
@@ -693,11 +717,13 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .badge-confidence {
         border-color: var(--accent);
+        color: var(--accent);
       }
       .badge-freshness {
         border-color: var(--vscode-testing-iconPassed);
+        color: var(--vscode-testing-iconPassed);
       }
-      /* debrief list: show counts prominently */
+      /* ── Cognitive debrief count list ───────────────────────────────── */
       .debrief-list {
         padding-left: 0;
         list-style: none;
@@ -705,51 +731,122 @@ export const PANEL_WEBVIEW_STYLE = `
       .debrief-list li {
         display: flex;
         align-items: baseline;
-        gap: var(--space-1);
+        gap: var(--space-2);
         margin-bottom: var(--space-1);
+        font-size: 13px;
       }
       .debrief-count {
-        font-size: 1.1em;
+        font-size: 1.15em;
         font-weight: 700;
         min-width: 1.8ch;
         text-align: right;
         color: var(--vscode-testing-iconQueued, var(--surface-strong));
+        font-variant-numeric: tabular-nums;
       }
-      /* resume path: visually mute completed steps */
+      /* ── Resume path ────────────────────────────────────────────────── */
+      .resume-path-list {
+        margin-top: var(--space-2);
+      }
+      .resume-path-item {
+        margin-bottom: var(--space-2);
+      }
+      .resume-path-item:last-child {
+        margin-bottom: 0;
+      }
+      .resume-path-toggle {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        cursor: pointer;
+        font-weight: 600;
+      }
+      .resume-path-toggle input[type='checkbox'] {
+        width: 14px;
+        height: 14px;
+        flex: 0 0 auto;
+      }
+      .resume-path-detail {
+        margin: 3px 0 0 22px;
+        font-size: 12px;
+        color: var(--surface-muted);
+      }
       .resume-path-item-done .resume-path-toggle span {
         text-decoration: line-through;
         color: var(--surface-muted);
       }
-      /* status autosummary inline layout */
+      .resume-path-item-done .resume-path-detail {
+        text-decoration: line-through;
+      }
+      /* ── Blocker / disabled notes ───────────────────────────────────── */
+      .blocker-disabled-reason {
+        margin-top: var(--space-2);
+      }
+      .restore-note {
+        color: var(--vscode-descriptionForeground);
+        font-size: 12px;
+        margin-top: var(--space-1);
+        margin-bottom: var(--space-2);
+      }
+      .restricted-mode-note {
+        font-size: 12px;
+        margin-bottom: var(--space-2);
+        padding: var(--space-1) var(--space-2);
+        border-left: 2px solid var(--vscode-testing-iconQueued, #cca700);
+        color: var(--vscode-editorWarning-foreground, var(--surface-muted));
+        background: transparent;
+      }
+      /* ── Restore Pack ───────────────────────────────────────────────── */
+      .restore-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: var(--space-2);
+      }
+      .restore-grid button {
+        text-align: left;
+        cursor: pointer;
+        font-size: 12px;
+      }
+      /* ── Notes ──────────────────────────────────────────────────────── */
+      .note-actions {
+        margin-top: var(--space-3);
+        display: flex;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .note-actions button {
+        padding: 4px 10px;
+        font-size: 12px;
+      }
+      /* ── Status autosummary ─────────────────────────────────────────── */
       .status-autosummary-row {
         display: flex;
         flex-wrap: wrap;
         align-items: baseline;
         gap: var(--space-2);
+        margin-top: var(--space-2);
       }
       .status-autosummary-detail {
         font-size: 12px;
+        color: var(--surface-muted);
       }
-      /* shortcut help summary */
+      /* ── Keyboard shortcut help ─────────────────────────────────────── */
       .shortcut-help-summary {
         font-size: 12px;
         cursor: pointer;
+        color: var(--surface-muted);
+        padding: 2px 0;
       }
-      @media (min-width: 1100px) {
+      /* ── Responsive: wide sidebar / multi-column ────────────────────── */
+      @media (min-width: 900px) {
         .companion-grid {
           grid-template-columns: repeat(4, minmax(0, 1fr));
           grid-template-areas: 'now next blocked restore';
         }
       }
-      @media (prefers-reduced-motion: reduce) {
-        .card > details[data-panel-section] > summary::before,
-        .slot-token {
-          transition: none;
-        }
-      }
-      @media (max-width: 700px) {
+      /* ── Responsive: narrow sidebar ─────────────────────────────────── */
+      @media (max-width: 500px) {
         body {
-          padding: 10px;
+          padding: var(--space-2) var(--space-3) var(--space-3);
         }
         .companion-grid {
           grid-template-columns: 1fr;
@@ -769,6 +866,14 @@ export const PANEL_WEBVIEW_STYLE = `
           grid-template-columns: 56px 1fr;
         }
       }
+      /* ── Reduced motion ─────────────────────────────────────────────── */
+      @media (prefers-reduced-motion: reduce) {
+        .card > details[data-panel-section] > summary::before,
+        .slot-token {
+          transition: none;
+        }
+      }
+      /* ── Forced colors (Windows High Contrast) ──────────────────────── */
       @media (forced-colors: active) {
         button,
         .badge,
@@ -785,7 +890,7 @@ export const PANEL_WEBVIEW_STYLE = `
           border-color: ButtonText;
         }
         .card > details[data-panel-section] > summary::before {
-          color: ButtonText;
+          border-left-color: ButtonText;
         }
         .card > details[data-panel-section][data-panel-emphasis-level='elevated'] > summary,
         .card > details[data-panel-section][data-panel-emphasis-level='critical'] > summary {
@@ -797,6 +902,10 @@ export const PANEL_WEBVIEW_STYLE = `
         .state-blocked,
         .slot-token {
           color: ButtonText;
+        }
+        .card-attention {
+          background: Canvas;
+          border-left-color: ButtonText;
         }
         button:focus-visible,
         summary:focus-visible,

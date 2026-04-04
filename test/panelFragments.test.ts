@@ -74,7 +74,9 @@ describe('panelFragments', () => {
       intentOverridden: false,
     });
 
-    expect(checkpoint).toContain('<h3>Notes <span class="badge">2 open notes</span></h3>');
+    expect(checkpoint).toContain(
+      '<h3>Notes <span class="badge badge-attention">2 open notes</span></h3>',
+    );
     expect(checkpoint).toContain('data-action="checkpointMarkDone"');
     expect(checkpoint).toContain('data-action="sessionAddCheckpoint"');
     expect(taskState).toContain('<h3>Task State</h3>');

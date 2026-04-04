@@ -38,8 +38,8 @@ TaCoS is not trying to automate engineering judgment away. The design target is 
    Link: https://www.microsoft.com/en-us/research/publication/evaluating-cues-for-resuming-interrupted-programming-tasks/
    Relevance: timeline and evidence cues can outperform pure summary. TaCoS Resume Brief v2 explicitly surfaces chronology, evidence, and retrieval cues.
 
-9. "TaCoS: Generated Context Summaries for Task Resumption." Preprint.
-   Link: https://arxiv.org/abs/2502.13128
+9. "TaCoS: Generated Context Summaries for Task Resumption." ICSE 2026.
+   Link: https://hasel.dev/publications/
    Relevance: TaCoS-specific evidence suggests summaries help, but evidence and timeline cues can outperform summary-only recovery. This directly motivated Resume Brief v2 and Cognitive Debrief.
 
 10. "Interruptibility of software developers and its prediction using psycho-physiological sensors: a replication."
@@ -156,10 +156,6 @@ Implemented mapping:
 - Meyer et al. (2019): daily diary evidence that more-interruptions-than-usual is a negative productivity predictor; supports per-session noise budget targets and friction scoring.
 - Gonçalves et al. (ICSE'24): high-dominance interruptions inflate comprehension time; corroborates conservative mid-task suppression and reinforces quiet-by-default posture.
 - SPACE (2021): supports multi-dimensional local metrics exports (lag, friction, follow-through, suppression health) as first-class product concerns rather than vanity metrics.
-
-### See Also
-
-- `docs/ideas.md`: full cognitive observability product thesis with citation map, evidence-based plan, and guardrails for future features.
 
 ## Maintainer Notes
 

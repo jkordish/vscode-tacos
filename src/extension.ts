@@ -12805,6 +12805,11 @@ async function maybeOfferTaskCheckpointPrompt(
 
   const isManualConfirm = candidate.reasonCodes.includes('manual-confirm');
 
+  // Start an ephemeral metric session before any checkpoint-prompt-specific
+  // suppression paths so that suppression counters (highLoad, noise-budget)
+  // are reliably captured even when no primary session is active.
+  const ephemeralMetricSession = beginEphemeralMetricSession(workspaceRoot);
+
   if (
     !isManualConfirm &&
     shouldDeferCheckpointPromptHighLoad({
@@ -12815,6 +12820,7 @@ async function maybeOfferTaskCheckpointPrompt(
   ) {
     state.lastTaskSwitchSuppressionReason = 'high-load-deferred';
     recordMetricCounter('checkpointPromptSuppressedHighLoad');
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
     return 'suppressed';
   }
 
@@ -12826,10 +12832,10 @@ async function maybeOfferTaskCheckpointPrompt(
   );
   if (!budgetDecision.allowed) {
     state.lastTaskSwitchSuppressionReason = 'noise-budget';
+    await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
     return 'suppressed';
   }
 
-  const ephemeralMetricSession = beginEphemeralMetricSession(workspaceRoot);
   recordMetricCounter('checkpointOffered');
   recordMetricCounter('taskSwitchDetected');
   const detail = candidate.explainability[0] ?? candidate.summary;
