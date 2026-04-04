@@ -3409,7 +3409,9 @@ async function prepareTriggerSummary(
 
   const adaptationNow = Date.now();
   const triggerReason = contextUnchanged && cached ? 'cached' : reason;
-  const summary = contextUnchanged && cached ? cached : localSummary;
+  // Shallow-copy the cached object so in-place mutations below do not silently
+  // dirty the object stored in workspaceState without a corresponding update call.
+  const summary = contextUnchanged && cached ? { ...cached } : localSummary;
   if (activeStructuredTaskState) {
     summary.structuredTaskStateUsed = true;
     summary.structuredTaskStateFreshness = describeStructuredTaskStateFreshness(
