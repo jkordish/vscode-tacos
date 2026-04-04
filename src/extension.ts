@@ -14339,9 +14339,7 @@ async function showSessionFrictionSummaryCommand(context: vscode.ExtensionContex
 
   const ephemeralCreated = beginEphemeralMetricSession(workspaceRoot);
   recordMetricCounter('sessionFrictionSummaryOpened');
-  if (ephemeralCreated) {
-    await finalizeEphemeralMetricSession(context, ephemeralCreated);
-  }
+  await finalizeEphemeralMetricSession(context, ephemeralCreated);
 }
 
 async function maybeFinalizeMetric(context: vscode.ExtensionContext): Promise<void> {
