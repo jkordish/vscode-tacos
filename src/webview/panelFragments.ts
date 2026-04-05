@@ -87,6 +87,12 @@ export function renderTaskStateCard(input: TaskStateCardInput | undefined): stri
       : input.freshness === 'fresh'
         ? 'Fresh'
         : 'No freshness signal';
+  const freshnessBadgeClass =
+    input.freshness === 'fresh'
+      ? 'badge badge-freshness'
+      : input.freshness === 'stale'
+        ? 'badge badge-attention'
+        : 'badge';
   const workingSetHtml =
     input.workingSet.length > 0
       ? `<ul class="compact-list">${input.workingSet
@@ -118,7 +124,7 @@ export function renderTaskStateCard(input: TaskStateCardInput | undefined): stri
       }
       <div class="step-evidence">
         <span class="badge badge-confidence">${escapeHtml(input.confidence)} confidence</span>
-        <span class="badge badge-freshness">${escapeHtml(freshnessLabel)}</span>
+        <span class="${freshnessBadgeClass}">${escapeHtml(freshnessLabel)}</span>
         ${input.switchCount > 0 ? `<span class="badge">${escapeHtml(String(input.switchCount))} switch${input.switchCount === 1 ? '' : 'es'}</span>` : ''}
       </div>
       ${

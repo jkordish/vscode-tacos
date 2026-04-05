@@ -757,7 +757,7 @@ export const PANEL_WEBVIEW_STYLE = `
         font-weight: 700;
         min-width: 1.8ch;
         text-align: right;
-        color: var(--vscode-testing-iconQueued, var(--surface-strong));
+        color: var(--vscode-errorForeground, #f14c4c);
         font-variant-numeric: tabular-nums;
       }
       /* ── Resume path ────────────────────────────────────────────────── */

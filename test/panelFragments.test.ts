@@ -83,6 +83,7 @@ describe('panelFragments', () => {
     expect(taskState).toContain('data-action="captureStructuredCheckpoint"');
     expect(taskState).toContain('data-action="taskStateResolve"');
     expect(taskState).toContain('data-action="confirmTaskSwitch"');
+    expect(taskState).toContain('class="badge badge-freshness"');
     expect(debrief).toContain('<h3>Mental Load');
     expect(debrief).toContain('data-action="showCognitiveDebrief"');
     expect(scratchpad).toContain('data-action="openScratchpad"');
@@ -234,6 +235,35 @@ describe('panelFragments', () => {
     expect(html).toContain('data-evidence-group="primary"');
     expect(html).toContain('data-evidence-group="context"');
     expect(html).toContain('class="evidence-group extra-evidence-group"');
+  });
+
+  it('renders correct freshness badge class for stale and unknown states', () => {
+    const stale = renderTaskStateCard({
+      objective: 'Investigate recovery path',
+      confidence: 'low',
+      blockers: [],
+      assumptions: [],
+      workingSet: [],
+      freshness: 'stale',
+      switchCount: 0,
+    });
+    const none = renderTaskStateCard({
+      objective: 'Investigate recovery path',
+      confidence: 'medium',
+      blockers: [],
+      assumptions: [],
+      workingSet: [],
+      freshness: 'none',
+      switchCount: 0,
+    });
+
+    expect(stale).toContain('class="badge badge-attention"');
+    expect(stale).toContain('>Stale<');
+    expect(stale).not.toContain('class="badge badge-freshness"');
+    expect(none).toContain('class="badge"');
+    expect(none).toContain('>No freshness signal<');
+    expect(none).not.toContain('class="badge badge-freshness"');
+    expect(none).not.toContain('class="badge badge-attention"');
   });
 
   it('suppresses duplicate next-step action button when the same step is surfaced above the list', () => {
