@@ -1,6 +1,6 @@
 # vscode-tacos
 
-**TaCoS Resume Brief** — `v0.99.1`
+**TaCoS Resume Brief** — `v0.99.2`
 
 TaCoS is a desktop-first, VS Code-first, local-first extension for cognitive state recovery after interruptions.
 
