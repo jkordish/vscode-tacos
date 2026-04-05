@@ -80,7 +80,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
     : '';
 
   return `<div class="card">
-      <h3>Companion Home</h3>
+      <h3>Resume Brief</h3>
       <div class="companion-grid">
          <section class="companion-block" data-companion-section="now" data-companion-slot-source="${escapeHtml(
            nowSlotSourceClass,

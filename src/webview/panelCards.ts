@@ -137,11 +137,11 @@ export function renderRecapCard(input: RecapCardInput): string {
       <h3>Session Recap</h3>
       <div class="recap-grid">
         <section>
-          <h4 class="recap-section-heading recap-section-done">✓ Done</h4>
+          <h4 class="recap-section-heading recap-section-done"><span aria-hidden="true">✓</span> Done</h4>
           <ul class="compact-list">${input.recapDoneListTrustedHtml || '<li class="muted">Nothing captured yet.</li>'}</ul>
         </section>
         <section>
-          <h4 class="recap-section-heading recap-section-pending">● Pending / Blocked</h4>
+          <h4 class="recap-section-heading recap-section-pending"><span aria-hidden="true">●</span> Pending / Blocked</h4>
           <ul class="compact-list">${input.recapPendingListTrustedHtml || '<li class="muted">No blockers captured.</li>'}</ul>
         </section>
       </div>
@@ -215,7 +215,7 @@ export function renderRestorePackCard(
 ): string {
   return `<div class="card">
       <h3>Restore Pack</h3>
-      ${trustedWorkspace ? '' : '<div class="restore-note restricted-mode-note">⚠ Restricted Mode — execution actions disabled.</div>'}
+      ${trustedWorkspace ? '' : '<div class="restore-note restricted-mode-note"><span aria-hidden="true">⚠</span> Restricted Mode — execution actions disabled.</div>'}
       ${restorePackGroupsTrustedHtml}
     </div>`;
 }
