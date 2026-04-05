@@ -28,7 +28,7 @@ TaCoS combines five local-first recovery primitives:
 TaCoS keeps a calm, layered interaction model:
 
 - **Ambient** — quiet status-bar cues.
-- **Glanceable** — Companion Home answers `Now / Next / Blocked / Restore`.
+- **Glanceable** — Resume Brief answers `Now / Next / Blocked / Restore`.
 - **Deep** — Trust, evidence, timeline, and AI payload drill-down, one click away.
 
 ---
@@ -150,7 +150,7 @@ The Companion panel provides a glanceable, layered resume surface. Key cards:
 - **Restore Pack** — working-set restore actions with Restricted Mode notice surfaced prominently.
 - **Trust Center** — explainability trail, AI payload preview, consent controls.
 
-Companion Home slot tokens use quiet visual labels (`✓` / `~` / `–`) with CSS data-attributes driving semantic treatment.
+Resume Brief slot tokens use quiet visual labels (`✓` / `~` / `–`) with CSS data-attributes driving semantic treatment.
 
 ---
 

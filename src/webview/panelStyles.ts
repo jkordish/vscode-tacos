@@ -599,8 +599,9 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: 12px;
         max-inline-size: 72ch;
       }
-      /* Reset browser-default paragraph margins inside tight grid cells */
-      .companion-block p {
+      /* Reset browser-default paragraph margins inside tight grid cells
+         without overriding explicit spacing on specialized paragraph styles */
+      .companion-block p:not(.state-caption):not(.companion-primary) {
         margin: 0;
       }
       /* Tighter action row and list indent inside companion grid cells */

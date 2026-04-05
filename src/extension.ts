@@ -1378,9 +1378,11 @@ export function activate(context: vscode.ExtensionContext): void {
         hasLegacyNextStepsCard: panelHtml.includes('<h3>Next Steps</h3>'),
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
         hasTaskStateCard: panelHtml.includes('<h3>Task State</h3>'),
-        hasCognitiveDebriefCard: panelHtml.includes('<h3>Cognitive Debrief</h3>'),
-        hasCompanionHomeCard: panelHtml.includes('<h3>Resume Brief</h3>'),
-        isCompanionHomeFirstCard: firstCardTitle === 'Resume Brief',
+        hasCognitiveDebriefCard:
+          panelHtml.includes('<h3>Mental Load</h3>') ||
+          panelHtml.includes('<h3>Cognitive Debrief</h3>'),
+        hasResumeBriefCard: panelHtml.includes('<h3>Resume Brief</h3>'),
+        isResumeBriefFirstCard: firstCardTitle === 'Resume Brief',
         hasWhySurfacedAction,
         hasWhySurfacedDetails,
         hasAiPayloadPreviewAction,
