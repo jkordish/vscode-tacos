@@ -597,6 +597,17 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: 12px;
         max-inline-size: 72ch;
       }
+      /* Reset browser-default paragraph margins inside tight grid cells */
+      .companion-block p {
+        margin: 0;
+      }
+      /* Tighter action row and list indent inside companion grid cells */
+      .companion-block .status-actions {
+        margin-top: var(--space-2);
+      }
+      .companion-block .compact-list {
+        padding-left: 12px;
+      }
       /* ── Intent editor ──────────────────────────────────────────────── */
       .intent-editor {
         border: 1px solid var(--vscode-widget-border);

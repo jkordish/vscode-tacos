@@ -145,8 +145,8 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           }" data-blocked-emphasis-token="${escapeHtml(blockedToken)}"${blockedPrimaryCtaSourceAttr}><span class="slot-token slot-token-${escapeHtml(blockedToken)}" data-emphasis-token="${escapeHtml(blockedToken)}" aria-hidden="true">${SLOT_TOKEN_LABELS[blockedToken]}</span> Status: ${
             input.hasBlocker ? 'Blocked' : 'No blocker'
           }</p>
-          <p class="companion-primary">${escapeHtml(input.blockerTitle)}</p>
-          <p class="muted">${escapeHtml(input.blockerDetail)}</p>
+          ${input.hasBlocker ? `<p class="companion-primary">${escapeHtml(input.blockerTitle)}</p>` : ''}
+          ${input.hasBlocker ? `<p class="muted">${escapeHtml(input.blockerDetail)}</p>` : ''}
           ${input.blockerMetaTrustedHtml ?? ''}
           ${input.blockerDisabledReasonTrustedHtml ?? ''}
           ${

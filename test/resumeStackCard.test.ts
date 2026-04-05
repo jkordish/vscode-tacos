@@ -70,8 +70,8 @@ describe('renderResumeStackCard', () => {
              <section class="companion-block" data-companion-section="blocked" data-companion-slot-source="blocker:none" data-blocked-card="none">
                <h4>Blocked</h4>
                <p class="state-caption state-clear" data-blocked-status="clear" data-blocked-emphasis-token="advisory"><span class="slot-token slot-token-advisory" data-emphasis-token="advisory" aria-hidden="true">~</span> Status: No blocker</p>
-               <p class="companion-primary">No active blocker</p>
-               <p class="muted">Continue with the first suggested next step.</p>
+               
+               
                
                
                
