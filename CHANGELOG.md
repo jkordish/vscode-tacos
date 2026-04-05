@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- UX polish rounds 6–10 (branch `fix/ux-ui-polish`):
+  - Companion grid slot-token `<span>` elements now carry `aria-hidden="true"` so screen readers skip decorative emphasis glyphs (`✓` / `~` / `–`).
+  - Resume Path progress badge copy simplified: "All steps complete ✓" → "All steps complete" (decorative checkmark removed; badge label is now plain text).
+  - Companion grid Blocked section: `blockerTitle` and `blockerDetail` paragraphs are suppressed when `hasBlocker` is false — the state-caption "Status: No blocker" is sufficient and avoids rendering empty content areas.
+  - `panelStyles.ts`: `.companion-block p:not(.state-caption):not(.companion-primary) { margin: 0 }` resets browser-default paragraph margins inside tight grid cells without overriding explicit spacing on `.state-caption` and `.companion-primary` elements (previously the broad `.companion-block p` rule incorrectly zeroed those margins); `.companion-block .status-actions { margin-top: var(--space-2) }` keeps the action row consistently spaced; `.companion-block .compact-list { padding-left: 12px }` tightens list indent inside grid cells.
+  - `getResumeFlowSnapshot` instrumentation payload: `hasCompanionHomeCard` renamed to `hasResumeBriefCard`; `isCompanionHomeFirstCard` renamed to `isResumeBriefFirstCard` to match the current card title "Resume Brief".
+  - `hasCognitiveDebriefCard` in `getResumeFlowSnapshot` now checks for `<h3>Mental Load</h3>` (current card title) OR `<h3>Cognitive Debrief</h3>` (backwards-compatibility fallback).
+  - Integration test `resumeFlowCriticalPath.js` updated to assert `hasResumeBriefCard` and `isResumeBriefFirstCard` (was `hasCompanionHomeCard` / `isCompanionHomeFirstCard`).
+  - README: "Companion Home" terminology updated to "Resume Brief" in two locations (interaction model bullet and Companion Panel section slot-token description).
+
 ## [0.99.1] - 2026-04-04
 
 ### Fixed

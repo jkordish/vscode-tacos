@@ -37,7 +37,7 @@ describe('renderResumeStackCard', () => {
 
     expect(html).toMatchInlineSnapshot(`
      "<div class="card">
-           <h3>Companion Home</h3>
+           <h3>Resume Brief</h3>
            <div class="companion-grid">
               <section class="companion-block" data-companion-section="now" data-companion-slot-source="summary:intent-and-retrieval-cues">
                <h4>Now</h4>
@@ -55,7 +55,7 @@ describe('renderResumeStackCard', () => {
                <h4>Next</h4>
                <p class="companion-kicker">Next step</p>
                <p class="companion-primary">Open src/extension.ts and run verify</p>
-               <p class="state-caption state-safe" data-next-safe-status="safe" data-next-emphasis-token="advisory"><span class="slot-token slot-token-advisory" data-emphasis-token="advisory">~</span> Status: Safe action available</p>
+               <p class="state-caption state-safe" data-next-safe-status="safe" data-next-emphasis-token="advisory"><span class="slot-token slot-token-advisory" data-emphasis-token="advisory" aria-hidden="true">~</span> Status: Safe action available</p>
                <details><summary><strong>Why this next step?</strong></summary><p class="muted" data-next-step-rationale="true">Based on file evidence: src/extension.ts.</p></details>
                <ul class="compact-list"><li>No next steps captured yet.</li></ul>
                <div class="status-actions">
@@ -69,9 +69,9 @@ describe('renderResumeStackCard', () => {
              </section>
              <section class="companion-block" data-companion-section="blocked" data-companion-slot-source="blocker:none" data-blocked-card="none">
                <h4>Blocked</h4>
-               <p class="state-caption state-clear" data-blocked-status="clear" data-blocked-emphasis-token="advisory"><span class="slot-token slot-token-advisory" data-emphasis-token="advisory">~</span> Status: No blocker</p>
-               <p class="companion-primary">No active blocker</p>
-               <p class="muted">Continue with the first suggested next step.</p>
+               <p class="state-caption state-clear" data-blocked-status="clear" data-blocked-emphasis-token="advisory"><span class="slot-token slot-token-advisory" data-emphasis-token="advisory" aria-hidden="true">~</span> Status: No blocker</p>
+               
+               
                
                
                

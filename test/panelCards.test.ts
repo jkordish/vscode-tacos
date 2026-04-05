@@ -56,7 +56,7 @@ describe('panelCards', () => {
     expect(trust).toContain('data-panel-emphasis-source="policy:trust-privacy"');
     expect(trust).toContain('data-panel-emphasis-badge="true"');
     expect(trust).toContain('>Trust &amp; Privacy</span></summary>');
-    expect(trust).toContain('<strong>Trust &amp; Privacy tray</strong>');
+    expect(trust).toContain('class="trust-details-more"');
     expect(trust).toContain('data-action="openPrivacySafety"');
     expect(trust).toContain('data-action="openAiPayloadPreview"');
     expect(trust).toContain('data-ai-payload-entrypoint="trust-center"');
@@ -131,7 +131,7 @@ describe('panelCards', () => {
   it('renders evidence card show-more control with stable hidden-count metadata', () => {
     const evidence = renderEvidenceCard({
       evidenceItemsTrustedHtml:
-        '<li class="evidence-item"><div class="evidence-row"><button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="file:src/extension.ts">src/extension.ts</button><span class="evidence-affordance evidence-affordance-clickable" data-evidence-affordance="open">Open</span></div><div class="evidence-meta"><span class="evidence-kind">[file]</span> <code>file:src/extension.ts</code></div></li>',
+        '<li class="evidence-item"><div class="evidence-row"><button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="file:src/extension.ts">src/extension.ts</button><span class="evidence-affordance evidence-affordance-clickable" data-evidence-affordance="open">Open</span></div><div class="evidence-meta"><span class="evidence-kind">[file]</span></div></li>',
       hiddenEvidenceCount: 2,
       expanded: false,
     });
@@ -141,7 +141,7 @@ describe('panelCards', () => {
             <details data-panel-section="evidence" >
               <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Evidence</span></summary>
               <div class="panel-section-body">
-                <ul class="evidence-list" id="evidence-list"><li class="evidence-item"><div class="evidence-row"><button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="file:src/extension.ts">src/extension.ts</button><span class="evidence-affordance evidence-affordance-clickable" data-evidence-affordance="open">Open</span></div><div class="evidence-meta"><span class="evidence-kind">[file]</span> <code>file:src/extension.ts</code></div></li></ul>
+                <ul class="evidence-list" id="evidence-list"><li class="evidence-item"><div class="evidence-row"><button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="file:src/extension.ts">src/extension.ts</button><span class="evidence-affordance evidence-affordance-clickable" data-evidence-affordance="open">Open</span></div><div class="evidence-meta"><span class="evidence-kind">[file]</span></div></li></ul>
                 <button type="button" class="show-more-btn" data-action="toggleEvidenceMore" data-hidden-count="2" aria-controls="evidence-list" aria-expanded="false">Show 2 more</button>
               </div>
             </details>

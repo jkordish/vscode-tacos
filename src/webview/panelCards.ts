@@ -41,10 +41,7 @@ export function renderStatusCard(input: StatusCardInput): string {
       <h3>Status</h3>
       <div class="status-label">${escapeHtml(input.sourceLabel)}<span class="muted"> · ${escapeHtml(input.generatedAtLabel)}</span></div>
       ${input.statusHint ? `<div class="status-detail muted">${escapeHtml(input.statusHint)}</div>` : ''}
-      <div class="status-autosummary-row">
-        <span class="status-label">${escapeHtml(input.autoSummaryStatusLabel)}</span>
-        <span class="muted status-autosummary-detail">${escapeHtml(input.autoSummaryStatusDetail)}</span>
-      </div>
+      ${input.autoSummaryStatusDetail ? `<div class="status-autosummary-row"><span class="status-label">${escapeHtml(input.autoSummaryStatusLabel)}</span><span class="muted status-autosummary-detail">${escapeHtml(input.autoSummaryStatusDetail)}</span></div>` : ''}
       <div class="status-actions">
         <button type="button" data-action="refreshSummary">Refresh</button>
         <button type="button" class="secondary" data-action="toggleAutoSummaries" ${
@@ -83,16 +80,18 @@ export function renderTrustCenterCard(input: TrustCenterCardInput): string {
       <details data-panel-section="trustCenter" ${emphasisAttrs ? `${emphasisAttrs} ` : ''}${input.expanded ? 'open' : ''}>
         <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Trust Center</span>${emphasisBadge}</summary>
         <div class="panel-section-body">
-          <div class="muted trust-tray-label"><strong>Trust &amp; Privacy tray</strong></div>
           <div class="trust-row"><span class="trust-key">Tracking:</span> ${escapeHtml(input.trustTrackingLabel)}</div>
-          <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
           <div class="trust-row"><span class="trust-key">Sent to AI:</span> ${escapeHtml(input.sentToAiLabel)}</div>
-          <div class="trust-row"><span class="trust-key">Collection changes:</span> ${escapeHtml(input.collectionPolicyLabel)}</div>
-          <div class="trust-row"><span class="trust-key">Privacy preset:</span> ${escapeHtml(input.privacyPresetLabel)}</div>
-          <div class="trust-row"><span class="trust-key">Retention:</span> ${escapeHtml(input.retentionPolicyLabel)}</div>
-          <div class="trust-row"><span class="trust-key">AI provider:</span> ${escapeHtml(input.aiProviderModeLabel)}</div>
           <div class="trust-row"><span class="trust-key">Consent:</span> ${escapeHtml(input.aiConsentStatusLabel)}</div>
-          <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(input.trustBasedOn)}</div>
+          <details class="trust-details-more">
+            <summary class="panel-disclosure-summary trust-details-summary">More details</summary>
+            <div class="trust-row"><span class="trust-key">Stored locally:</span> ${escapeHtml(input.storedLocallyLabel)}</div>
+            <div class="trust-row"><span class="trust-key">Collection changes:</span> ${escapeHtml(input.collectionPolicyLabel)}</div>
+            <div class="trust-row"><span class="trust-key">Privacy preset:</span> ${escapeHtml(input.privacyPresetLabel)}</div>
+            <div class="trust-row"><span class="trust-key">Retention:</span> ${escapeHtml(input.retentionPolicyLabel)}</div>
+            <div class="trust-row"><span class="trust-key">AI provider:</span> ${escapeHtml(input.aiProviderModeLabel)}</div>
+            <div class="trust-row"><span class="trust-key">Based on:</span> ${escapeHtml(input.trustBasedOn)}</div>
+          </details>
           ${
             showWhySurfacedDetails
               ? `<details data-why-surfaced-details="true">
@@ -138,11 +137,11 @@ export function renderRecapCard(input: RecapCardInput): string {
       <h3>Session Recap</h3>
       <div class="recap-grid">
         <section>
-          <h4 class="recap-section-heading recap-section-done">✓ Done</h4>
+          <h4 class="recap-section-heading recap-section-done"><span aria-hidden="true">✓</span> Done</h4>
           <ul class="compact-list">${input.recapDoneListTrustedHtml || '<li class="muted">Nothing captured yet.</li>'}</ul>
         </section>
         <section>
-          <h4 class="recap-section-heading recap-section-pending">⚑ Pending / Blocked</h4>
+          <h4 class="recap-section-heading recap-section-pending"><span aria-hidden="true">●</span> Pending / Blocked</h4>
           <ul class="compact-list">${input.recapPendingListTrustedHtml || '<li class="muted">No blockers captured.</li>'}</ul>
         </section>
       </div>
@@ -216,7 +215,7 @@ export function renderRestorePackCard(
 ): string {
   return `<div class="card">
       <h3>Restore Pack</h3>
-      ${trustedWorkspace ? '' : '<div class="restore-note restricted-mode-note">⚠ Restricted Mode — execution actions disabled.</div>'}
+      ${trustedWorkspace ? '' : '<div class="restore-note restricted-mode-note"><span aria-hidden="true">⚠</span> Restricted Mode — execution actions disabled.</div>'}
       ${restorePackGroupsTrustedHtml}
     </div>`;
 }

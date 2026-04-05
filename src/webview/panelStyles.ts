@@ -23,7 +23,7 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: var(--vscode-font-size);
         line-height: 1.5;
         margin: 0;
-        padding: var(--space-3) var(--space-4) var(--space-4);
+        padding: var(--space-2) var(--space-3) var(--space-3);
       }
       main {
         display: block;
@@ -257,7 +257,8 @@ export const PANEL_WEBVIEW_STYLE = `
         border-radius: var(--radius-1);
         padding: 2px 0;
       }
-      .card > details[data-panel-section] > summary::before {
+      .card > details[data-panel-section] > summary::before,
+      details > summary.panel-disclosure-summary::before {
         content: '';
         display: inline-block;
         width: 0;
@@ -269,7 +270,8 @@ export const PANEL_WEBVIEW_STYLE = `
         margin-right: 2px;
         transition: transform var(--motion-quick) ease;
       }
-      .card > details[data-panel-section][open] > summary::before {
+      .card > details[data-panel-section][open] > summary::before,
+      details[open] > summary.panel-disclosure-summary::before {
         transform: rotate(90deg);
       }
       .panel-disclosure-summary {
@@ -331,6 +333,9 @@ export const PANEL_WEBVIEW_STYLE = `
         line-height: 1.45;
         max-inline-size: 72ch;
         color: var(--surface-strong);
+      }
+      .companion-primary:last-child {
+        margin-bottom: 0;
       }
       /* ── Timeline ───────────────────────────────────────────────────── */
       .timeline-link-button {
@@ -594,6 +599,18 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: 12px;
         max-inline-size: 72ch;
       }
+      /* Reset browser-default paragraph margins inside tight grid cells
+         without overriding explicit spacing on specialized paragraph styles */
+      .companion-block p:not(.state-caption):not(.companion-primary) {
+        margin: 0;
+      }
+      /* Tighter action row and list indent inside companion grid cells */
+      .companion-block .status-actions {
+        margin-top: var(--space-2);
+      }
+      .companion-block .compact-list {
+        padding-left: 12px;
+      }
       /* ── Intent editor ──────────────────────────────────────────────── */
       .intent-editor {
         border: 1px solid var(--vscode-widget-border);
@@ -642,6 +659,21 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: 12px;
       }
       /* ── Trust Center ───────────────────────────────────────────────── */
+      .trust-details-more {
+        margin: var(--space-2) 0;
+      }
+      .trust-details-summary {
+        font-size: 12px;
+        color: var(--surface-muted);
+        cursor: pointer;
+        padding: 2px 0;
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+      }
+      .trust-details-more[open] .trust-details-summary {
+        margin-bottom: var(--space-1);
+      }
       .trust-row {
         margin-bottom: var(--space-1);
         font-size: 12px;
@@ -688,6 +720,7 @@ export const PANEL_WEBVIEW_STYLE = `
       /* ── Mental Load card — dominant, demands attention ─────────────── */
       .card-mental-load {
         border-left: 3px solid var(--vscode-errorForeground, #f14c4c);
+        background: color-mix(in srgb, var(--vscode-errorForeground, #f14c4c) 4%, var(--surface-bg));
       }
       /* ── Meta / supplemental text ───────────────────────────────────── */
       .card-meta {
@@ -738,7 +771,7 @@ export const PANEL_WEBVIEW_STYLE = `
         font-weight: 700;
         min-width: 1.8ch;
         text-align: right;
-        color: var(--vscode-testing-iconQueued, var(--surface-strong));
+        color: var(--vscode-errorForeground, #f14c4c);
         font-variant-numeric: tabular-nums;
       }
       /* ── Resume path ────────────────────────────────────────────────── */
@@ -806,7 +839,7 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       /* ── Notes ──────────────────────────────────────────────────────── */
       .note-actions {
-        margin-top: var(--space-3);
+        margin-top: var(--space-2);
         display: flex;
         gap: var(--space-2);
         flex-wrap: wrap;
@@ -844,7 +877,7 @@ export const PANEL_WEBVIEW_STYLE = `
       /* ── Responsive: narrow sidebar ─────────────────────────────────── */
       @media (max-width: 500px) {
         body {
-          padding: var(--space-2) var(--space-3) var(--space-3);
+          padding: var(--space-1) var(--space-2) var(--space-2);
         }
         .companion-grid {
           grid-template-columns: 1fr;
@@ -867,6 +900,7 @@ export const PANEL_WEBVIEW_STYLE = `
       /* ── Reduced motion ─────────────────────────────────────────────── */
       @media (prefers-reduced-motion: reduce) {
         .card > details[data-panel-section] > summary::before,
+        details > summary.panel-disclosure-summary::before,
         .slot-token {
           transition: none;
         }
@@ -887,7 +921,8 @@ export const PANEL_WEBVIEW_STYLE = `
           forced-color-adjust: auto;
           border-color: ButtonText;
         }
-        .card > details[data-panel-section] > summary::before {
+        .card > details[data-panel-section] > summary::before,
+        details > summary.panel-disclosure-summary::before {
           border-left-color: ButtonText;
         }
         .card > details[data-panel-section][data-panel-emphasis-level='elevated'] > summary,
@@ -901,7 +936,8 @@ export const PANEL_WEBVIEW_STYLE = `
         .slot-token {
           color: ButtonText;
         }
-        .card-attention {
+        .card-attention,
+        .card-mental-load {
           background: Canvas;
           border-left-color: ButtonText;
         }

@@ -80,7 +80,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
     : '';
 
   return `<div class="card">
-      <h3>Companion Home</h3>
+      <h3>Resume Brief</h3>
       <div class="companion-grid">
          <section class="companion-block" data-companion-section="now" data-companion-slot-source="${escapeHtml(
            nowSlotSourceClass,
@@ -114,7 +114,7 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
           <p class="companion-primary">${escapeHtml(input.nextSafeActionSummary)}</p>
           <p class="state-caption ${
             input.hasPrimaryNextAction ? 'state-safe' : 'state-advisory'
-          }" data-next-safe-status="${input.hasPrimaryNextAction ? 'safe' : 'advisory'}" data-next-emphasis-token="${escapeHtml(nextToken)}"${nextPrimaryCtaSourceAttr}><span class="slot-token slot-token-${escapeHtml(nextToken)}" data-emphasis-token="${escapeHtml(nextToken)}">${SLOT_TOKEN_LABELS[nextToken]}</span> Status: ${
+          }" data-next-safe-status="${input.hasPrimaryNextAction ? 'safe' : 'advisory'}" data-next-emphasis-token="${escapeHtml(nextToken)}"${nextPrimaryCtaSourceAttr}><span class="slot-token slot-token-${escapeHtml(nextToken)}" data-emphasis-token="${escapeHtml(nextToken)}" aria-hidden="true">${SLOT_TOKEN_LABELS[nextToken]}</span> Status: ${
             input.hasPrimaryNextAction ? 'Safe action available' : 'Advisory only'
           }</p>
           ${input.nextStepRationaleTrustedHtml ?? ''}
@@ -142,11 +142,11 @@ export function renderResumeStackCard(input: RenderResumeStackCardInput): string
                 : 'state-clear'
           }" data-blocked-status="${
             input.hasPrimaryBlockedAction ? 'primary' : input.hasBlocker ? 'advisory' : 'clear'
-          }" data-blocked-emphasis-token="${escapeHtml(blockedToken)}"${blockedPrimaryCtaSourceAttr}><span class="slot-token slot-token-${escapeHtml(blockedToken)}" data-emphasis-token="${escapeHtml(blockedToken)}">${SLOT_TOKEN_LABELS[blockedToken]}</span> Status: ${
+          }" data-blocked-emphasis-token="${escapeHtml(blockedToken)}"${blockedPrimaryCtaSourceAttr}><span class="slot-token slot-token-${escapeHtml(blockedToken)}" data-emphasis-token="${escapeHtml(blockedToken)}" aria-hidden="true">${SLOT_TOKEN_LABELS[blockedToken]}</span> Status: ${
             input.hasBlocker ? 'Blocked' : 'No blocker'
           }</p>
-          <p class="companion-primary">${escapeHtml(input.blockerTitle)}</p>
-          <p class="muted">${escapeHtml(input.blockerDetail)}</p>
+          ${input.hasBlocker ? `<p class="companion-primary">${escapeHtml(input.blockerTitle)}</p>` : ''}
+          ${input.hasBlocker ? `<p class="muted">${escapeHtml(input.blockerDetail)}</p>` : ''}
           ${input.blockerMetaTrustedHtml ?? ''}
           ${input.blockerDisabledReasonTrustedHtml ?? ''}
           ${

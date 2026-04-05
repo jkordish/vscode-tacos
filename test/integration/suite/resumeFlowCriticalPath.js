@@ -53,14 +53,14 @@ async function run() {
       'Expected panel summary to be available for critical resume flow.',
     );
     assert.equal(
-      resumeFlow?.hasCompanionHomeCard,
+      resumeFlow?.hasResumeBriefCard,
       true,
-      'Expected Companion Home card marker in panel render output.',
+      'Expected Resume Brief card marker in panel render output.',
     );
     assert.equal(
-      resumeFlow?.isCompanionHomeFirstCard,
+      resumeFlow?.isResumeBriefFirstCard,
       true,
-      'Expected Companion Home to be the first panel card for 5-second scanning.',
+      'Expected Resume Brief to be the first panel card for 5-second scanning.',
     );
     assert.deepEqual(
       resumeFlow?.companionSectionOrder,

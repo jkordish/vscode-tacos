@@ -60,7 +60,6 @@ export function renderCheckpointCard(input: CheckpointCardInput): string {
         }</button>
         <button type="button" class="secondary" data-action="checkpointDismiss">Dismiss</button>
         <button type="button" class="secondary" data-action="checkpointOpenList">All notes</button>
-        <button type="button" class="secondary" data-action="sessionAddCheckpoint">Add note</button>
       </div>
     </div>`;
 }
@@ -89,6 +88,12 @@ export function renderTaskStateCard(input: TaskStateCardInput | undefined): stri
       : input.freshness === 'fresh'
         ? 'Fresh'
         : 'No freshness signal';
+  const freshnessBadgeClass =
+    input.freshness === 'fresh'
+      ? 'badge badge-freshness'
+      : input.freshness === 'stale'
+        ? 'badge badge-attention'
+        : 'badge';
   const workingSetHtml =
     input.workingSet.length > 0
       ? `<ul class="compact-list">${input.workingSet
@@ -120,7 +125,7 @@ export function renderTaskStateCard(input: TaskStateCardInput | undefined): stri
       }
       <div class="step-evidence">
         <span class="badge badge-confidence">${escapeHtml(input.confidence)} confidence</span>
-        <span class="badge badge-freshness">${escapeHtml(freshnessLabel)}</span>
+        <span class="${freshnessBadgeClass}">${escapeHtml(freshnessLabel)}</span>
         ${input.switchCount > 0 ? `<span class="badge">${escapeHtml(String(input.switchCount))} switch${input.switchCount === 1 ? '' : 'es'}</span>` : ''}
       </div>
       ${
@@ -131,18 +136,18 @@ export function renderTaskStateCard(input: TaskStateCardInput | undefined): stri
           : ''
       }
       ${input.staleLabel ? `<p class="muted card-stale-label">${escapeHtml(input.staleLabel)}</p>` : ''}
-      <details>
-        <summary><strong>Working set</strong></summary>
-        ${workingSetHtml}
-      </details>
-      <details>
-        <summary><strong>Blockers${input.blockers.length > 0 ? ` (${input.blockers.length})` : ''}</strong></summary>
-        ${blockersHtml}
-      </details>
-      <details>
-        <summary><strong>Assumptions${input.assumptions.length > 0 ? ` (${input.assumptions.length})` : ''}</strong></summary>
-        ${assumptionsHtml}
-      </details>
+        <details>
+         <summary class="panel-disclosure-summary"><strong>Working set</strong></summary>
+         ${workingSetHtml}
+        </details>
+        <details>
+         <summary class="panel-disclosure-summary"><strong>Blockers${input.blockers.length > 0 ? ` (${input.blockers.length})` : ''}</strong></summary>
+         ${blockersHtml}
+        </details>
+        <details>
+         <summary class="panel-disclosure-summary"><strong>Assumptions${input.assumptions.length > 0 ? ` (${input.assumptions.length})` : ''}</strong></summary>
+         ${assumptionsHtml}
+        </details>
       <div class="note-actions">
         <button type="button" data-action="captureStructuredCheckpoint">Update task state</button>
         <button type="button" class="secondary" data-action="taskStateResolve">Mark resolved</button>
@@ -174,9 +179,9 @@ export function renderCognitiveDebriefCard(input: CognitiveDebriefCardInput | un
     return '';
   }
 
-  return `<div class="card">
+  return `<div class="card card-mental-load">
       <h3>Mental Load <span class="badge badge-attention">${total} item${total === 1 ? '' : 's'}</span></h3>
-      <p class="muted">Open threads that may be taking up attention. Review to clear your head.</p>
+      <p class="muted">Open threads competing for attention.</p>
       <ul class="compact-list debrief-list">
         ${input.abandonedThreadCount > 0 ? `<li><span class="debrief-count">${escapeHtml(String(input.abandonedThreadCount))}</span> abandoned thread${input.abandonedThreadCount === 1 ? '' : 's'}</li>` : ''}
         ${input.unresolvedBlockerCount > 0 ? `<li><span class="debrief-count">${escapeHtml(String(input.unresolvedBlockerCount))}</span> unresolved blocker${input.unresolvedBlockerCount === 1 ? '' : 's'}</li>` : ''}
@@ -220,9 +225,9 @@ export function renderScratchpadCard(input: ScratchpadCardInput): string {
       }
       ${scratchpadPreviewHtml}
       <div class="status-actions">
-        <button type="button" class="secondary" data-action="openScratchpad">Open Scratchpad</button>
-        <button type="button" class="secondary" data-action="appendScratchpad">Append</button>
-        <button type="button" class="secondary" data-action="setScratchpadScope">Set Scope</button>
+        <button type="button" class="secondary" data-action="openScratchpad" aria-label="Open scratchpad" title="Open scratchpad">Open</button>
+        <button type="button" class="secondary" data-action="appendScratchpad" aria-label="Append to scratchpad" title="Append to scratchpad">Append</button>
+        <button type="button" class="secondary" data-action="setScratchpadScope" aria-label="Set scratchpad scope" title="Set scratchpad scope">Scope</button>
       </div>
     </div>`;
 }
@@ -413,11 +418,11 @@ function renderEvidenceListItem(item: SummaryEvidenceItem, hiddenClass = ''): st
     : 'evidence-affordance evidence-affordance-static';
   const affordance = `<span class="${affordanceClass}" data-evidence-affordance="${
     clickable ? 'open' : 'static'
-  }" aria-hidden="true">${clickable ? 'Open' : 'Not clickable'}</span>`;
+  }" aria-hidden="true">${clickable ? 'Open' : 'Context only'}</span>`;
   const label = clickable
     ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(item.id)}" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}" title="${escapeHtml(EVIDENCE_OPEN_HINT_TEXT)}">${escapeHtml(item.label)}</button>`
     : `<span class="evidence-label" aria-label="${escapeHtml(item.label)} - ${escapeHtml(EVIDENCE_STATIC_HINT_TEXT)}">${escapeHtml(item.label)}</span>`;
-  return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span> <code>${escapeHtml(item.id)}</code>${target}</div></li>`;
+  return `<li class="evidence-item ${hiddenClass}"><div class="evidence-row">${label}${affordance}</div><div class="evidence-meta"><span class="evidence-kind">[${escapeHtml(item.kind)}]</span>${target}</div></li>`;
 }
 
 export function renderEvidenceListItems(evidenceCatalog: SummaryEvidenceItem[]): string {
@@ -543,10 +548,10 @@ export function renderResumePathCard(input: ResumePathCardInput): string {
     )
     .join('');
   const progressLabel = input.completed
-    ? 'All steps complete ✓'
+    ? 'All steps complete'
     : `${completedStepCount} of ${totalStepCount} steps done`;
   return `<div class="card" data-resume-path-card="true"${readOnlyAttr}>
-      <h3>Resume Path <span class="badge ${input.completed ? 'badge-done' : ''}">${escapeHtml(progressLabel)}</span></h3>
+      <h3>Resume Path <span class="${input.completed ? 'badge badge-done' : 'badge'}">${escapeHtml(progressLabel)}</span></h3>
       <details data-resume-path-details="true" ${input.completed && input.collapsed ? '' : 'open'}>
         <summary class="panel-disclosure-summary"><span class="section-heading-inline">${
           input.completed ? 'Re-entry complete — review steps' : 'Re-enter the task'

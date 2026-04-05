@@ -1378,9 +1378,11 @@ export function activate(context: vscode.ExtensionContext): void {
         hasLegacyNextStepsCard: panelHtml.includes('<h3>Next Steps</h3>'),
         hasRecommendedFirstAction: Boolean(summary?.recommendedFirstAction?.trim()),
         hasTaskStateCard: panelHtml.includes('<h3>Task State</h3>'),
-        hasCognitiveDebriefCard: panelHtml.includes('<h3>Cognitive Debrief</h3>'),
-        hasCompanionHomeCard: panelHtml.includes('<h3>Companion Home</h3>'),
-        isCompanionHomeFirstCard: firstCardTitle === 'Companion Home',
+        hasCognitiveDebriefCard:
+          panelHtml.includes('<h3>Mental Load</h3>') ||
+          panelHtml.includes('<h3>Cognitive Debrief</h3>'),
+        hasResumeBriefCard: panelHtml.includes('<h3>Resume Brief</h3>'),
+        isResumeBriefFirstCard: firstCardTitle === 'Resume Brief',
         hasWhySurfacedAction,
         hasWhySurfacedDetails,
         hasAiPayloadPreviewAction,
@@ -7473,7 +7475,7 @@ function renderWebview(
     : summary.source === 'local'
       ? refinementActive
         ? 'AI refinement in progress.'
-        : 'Running local-only summary.'
+        : ''
       : localGeneratedAtLabel
         ? `Started local at ${localGeneratedAtLabel}.`
         : 'AI refinement complete.';
@@ -7572,7 +7574,7 @@ function renderWebview(
             ? `Temporary quiet is active until ${formatTimestamp(summaryQuietState.temporaryUntil ?? 0)}.`
             : summaryQuietState.source === 'configured'
               ? `Within your configured quiet window (${config.summaryQuietHours}).`
-              : 'Runs on focus after idle and cooldown checks.';
+              : '';
   const autoSummaryToggleLabel = autoSummariesPaused
     ? 'Resume auto summaries'
     : 'Pause auto summaries';
@@ -7652,7 +7654,7 @@ function renderWebview(
     emptyMessage: 'None captured',
   });
   const topLinksCard = renderTitledListCard({
-    title: 'Top Links / Files',
+    title: 'Top Links',
     listItemsTrustedHtml: linkItems,
     emptyMessage: 'None captured',
   });
