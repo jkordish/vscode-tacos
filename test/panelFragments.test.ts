@@ -78,6 +78,8 @@ describe('panelFragments', () => {
       '<h3>Notes <span class="badge badge-attention">2 open notes</span></h3>',
     );
     expect(checkpoint).toContain('data-action="checkpointMarkDone"');
+    expect(checkpoint).toContain('data-action="checkpointPinToggle"');
+    expect(checkpoint).toContain('data-action="checkpointDismiss"');
     expect(checkpoint).toContain('data-action="checkpointOpenList"');
     expect(taskState).toContain('<h3>Task State</h3>');
     expect(taskState).toContain('data-action="captureStructuredCheckpoint"');

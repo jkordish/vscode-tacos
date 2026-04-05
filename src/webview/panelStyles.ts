@@ -257,7 +257,8 @@ export const PANEL_WEBVIEW_STYLE = `
         border-radius: var(--radius-1);
         padding: 2px 0;
       }
-      .card > details[data-panel-section] > summary::before {
+      .card > details[data-panel-section] > summary::before,
+      details > summary.panel-disclosure-summary::before {
         content: '';
         display: inline-block;
         width: 0;
@@ -269,7 +270,8 @@ export const PANEL_WEBVIEW_STYLE = `
         margin-right: 2px;
         transition: transform var(--motion-quick) ease;
       }
-      .card > details[data-panel-section][open] > summary::before {
+      .card > details[data-panel-section][open] > summary::before,
+      details[open] > summary.panel-disclosure-summary::before {
         transform: rotate(90deg);
       }
       .panel-disclosure-summary {
@@ -897,6 +899,7 @@ export const PANEL_WEBVIEW_STYLE = `
       /* ── Reduced motion ─────────────────────────────────────────────── */
       @media (prefers-reduced-motion: reduce) {
         .card > details[data-panel-section] > summary::before,
+        details > summary.panel-disclosure-summary::before,
         .slot-token {
           transition: none;
         }
@@ -917,7 +920,8 @@ export const PANEL_WEBVIEW_STYLE = `
           forced-color-adjust: auto;
           border-color: ButtonText;
         }
-        .card > details[data-panel-section] > summary::before {
+        .card > details[data-panel-section] > summary::before,
+        details > summary.panel-disclosure-summary::before {
           border-left-color: ButtonText;
         }
         .card > details[data-panel-section][data-panel-emphasis-level='elevated'] > summary,

@@ -58,6 +58,7 @@ export function renderCheckpointCard(input: CheckpointCardInput): string {
         <button type="button" class="secondary" data-action="checkpointPinToggle">${
           input.currentCheckpointNote.pinned ? 'Unpin' : 'Pin'
         }</button>
+        <button type="button" class="secondary" data-action="checkpointDismiss">Dismiss</button>
         <button type="button" class="secondary" data-action="checkpointOpenList">All notes</button>
       </div>
     </div>`;
@@ -224,9 +225,9 @@ export function renderScratchpadCard(input: ScratchpadCardInput): string {
       }
       ${scratchpadPreviewHtml}
       <div class="status-actions">
-        <button type="button" class="secondary" data-action="openScratchpad">Open</button>
-        <button type="button" class="secondary" data-action="appendScratchpad">Append</button>
-        <button type="button" class="secondary" data-action="setScratchpadScope">Scope</button>
+        <button type="button" class="secondary" data-action="openScratchpad" aria-label="Open scratchpad" title="Open scratchpad">Open</button>
+        <button type="button" class="secondary" data-action="appendScratchpad" aria-label="Append to scratchpad" title="Append to scratchpad">Append</button>
+        <button type="button" class="secondary" data-action="setScratchpadScope" aria-label="Set scratchpad scope" title="Set scratchpad scope">Scope</button>
       </div>
     </div>`;
 }
