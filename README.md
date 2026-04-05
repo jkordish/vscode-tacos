@@ -1,6 +1,6 @@
 # vscode-tacos
 
-**TaCoS Resume Brief** — `v0.99.0`
+**TaCoS Resume Brief** — `v0.99.1`
 
 TaCoS is a desktop-first, VS Code-first, local-first extension for cognitive state recovery after interruptions.
 
@@ -168,7 +168,7 @@ Companion Home slot tokens use quiet visual labels (`✓` / `~` / `–`) with CS
 | Setting                          | Default | Description                                       |
 | -------------------------------- | ------- | ------------------------------------------------- |
 | `tacos.resumeSafety.enabled`     | `true`  | Show post-resume safety check annunciator         |
-| `tacos.resumeSafety.idleMinutes` | `15`    | Minimum idle time before safety check triggers    |
+| `tacos.resumeSafety.idleMinutes` | `10`    | Minimum idle time before safety check triggers    |
 | `tacos.resumeSafety.strict`      | `false` | Warn before first risky action on strong mismatch |
 
 ### Percolation (Dynamic Surface Policy)
