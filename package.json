@@ -15,7 +15,7 @@
   "homepage": "https://github.com/jkordish/vscode-tacos#readme",
   "icon": "assets/icon.png",
   "engines": {
-    "vscode": "^1.96.0"
+    "vscode": "^1.110.0"
   },
   "extensionKind": [
     "workspace"
