@@ -574,7 +574,7 @@
     "typecheck": "tsc --noEmit -p ./",
     "compile": "npm run build",
     "watch": "npm run build:watch",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "format": "prettier --write \"{src,test,scripts}/**/*.{ts,mjs}\" \"*.{json,md,yml,yaml,cjs,mjs}\"",
     "format:check": "prettier --check \"{src,test,scripts}/**/*.{ts,mjs}\" \"*.{json,md,yml,yaml,cjs,mjs}\"",
     "metrics:summary": "node ./scripts/metrics-summary.mjs",
