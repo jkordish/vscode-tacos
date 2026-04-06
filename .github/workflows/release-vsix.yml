@@ -34,7 +34,7 @@ jobs:
           echo "VSIX_FILE=$(ls -1 *.vsix | head -n 1)" >> "$GITHUB_ENV"
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.VSIX_FILE }}
           path: ${{ env.VSIX_FILE }}
