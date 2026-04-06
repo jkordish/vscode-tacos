@@ -1755,9 +1755,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await context.workspaceState.update(KEY_LAST_SUMMARY_AT, Date.now());
       await vscode.env.clipboard.writeText(markdownSummary);
       await openSummaryEditor(markdownSummary);
-      void vscode.window.showInformationMessage(
-        'TaCoS: complete summary generated, copied, and opened in a new editor tab.',
-      );
+      void vscode.window.showInformationMessage('TaCoS: summary generated, copied, and opened.');
     }),
     vscode.commands.registerCommand('tacos.copyPromptAndOpenCodex', async () => {
       const root = pickWorkspaceRoot();
@@ -1780,7 +1778,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const cached = context.workspaceState.get<ResumeSummary>(summaryCacheKey(context, root));
       if (!cached) {
         void vscode.window.showInformationMessage(
-          'TaCoS: No cached summary yet for this workspace.',
+          'TaCoS: no cached summary yet for this workspace.',
         );
         return;
       }
@@ -3905,7 +3903,6 @@ async function presentSummary(
   const choice = await vscode.window.showInformationMessage(
     `TaCoS (${summary.source}): ${notificationHeadline}`,
     'Open details',
-    'Copy prompt for Codex',
     'Copy + Open Codex',
     'Copy next steps',
     'Copy summary',
@@ -3915,13 +3912,6 @@ async function presentSummary(
   if (choice === 'Open details') {
     recordCompanionForcedOpenDetailsClick();
     await showDetailsPanel(context, summary, panelOptions);
-    return;
-  }
-
-  if (choice === 'Copy prompt for Codex') {
-    recordCompanionQuickAction();
-    await vscode.env.clipboard.writeText(summary.codexPrompt);
-    void vscode.window.showInformationMessage('TaCoS: Codex-ready prompt copied to clipboard.');
     return;
   }
 
