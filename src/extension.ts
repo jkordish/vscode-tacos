@@ -13868,15 +13868,13 @@ function buildDemoResumeSummary(now = Date.now()): ResumeSummary {
     evidenceCatalog: [
       {
         id: 'file:ranking',
-        kind: 'file',
-        label: 'src/percolation/ranking.ts',
-        target: 'src/percolation/ranking.ts',
+        kind: 'git',
+        label: 'src/percolation/ranking.ts (last edited ~42 min ago)',
       },
       {
         id: 'file:broker',
-        kind: 'file',
-        label: 'src/percolation/surfaceBroker.ts',
-        target: 'src/percolation/surfaceBroker.ts',
+        kind: 'git',
+        label: 'src/percolation/surfaceBroker.ts (stub call added)',
       },
       {
         id: 'git:ranking-diff',
@@ -13886,7 +13884,7 @@ function buildDemoResumeSummary(now = Date.now()): ResumeSummary {
       {
         id: 'branch:feat',
         kind: 'branch',
-        label: 'feat/percolation-surface-v2 → main (+7 commits ahead)',
+        label: 'main → feat/percolation-surface-v2 (+7 commits ahead)',
       },
       {
         id: 'task:verify',
@@ -13897,7 +13895,7 @@ function buildDemoResumeSummary(now = Date.now()): ResumeSummary {
     detailsMarkdown: [
       '## Resume Brief — feat/percolation-surface-v2',
       '',
-      '**Intent:** Wire percolation ranking into surface broker and add full unit coverage.',
+      '**Intent:** Wire percolation ranking into surface broker and add unit coverage.',
       '',
       '### What changed',
       '- `src/percolation/ranking.ts` — added `RankedCandidate` type, `rankCandidates()` skeleton, `scoreBySignalStrength()` complete. **`scoreByRecency` weight is the open TODO at line 94.**',
