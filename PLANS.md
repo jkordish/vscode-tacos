@@ -414,6 +414,23 @@ Status vocabulary used in this file:
   - `src/metrics.ts`
   - `src/extension.ts`
 
+### P19. Notification copy pass — verbosity and consistency
+
+- status: `done`
+- why: two notification toasts had minor copy issues: one was verbose and one had an inconsistent capitalization pattern.
+- scope: `src/extension.ts` notification strings for `tacos.slash` and `tacos.showLastSummary`.
+- dependencies: P18.
+- recent progress:
+  - `tacos.slash` success toast shortened: `"TaCoS: complete summary generated, copied, and opened in a new editor tab."` → `"TaCoS: summary generated, copied, and opened."`.
+  - `tacos.showLastSummary` no-cache toast: `"TaCoS: No cached summary yet for this workspace."` → `"TaCoS: no cached summary yet for this workspace."` (consistent lowercase after colon prefix).
+  - `verify:quick` exits 0 (56 suites / 403 tests).
+- risks/rollback:
+  - risk: none; pure copy-only changes with no behavior impact.
+  - rollback: revert strings if user research prefers the prior phrasing.
+- links:
+  - `src/extension.ts`
+  - `CHANGELOG.md`
+
 ### P18. Dialogue UX pass — notification button reduction
 
 - status: `done`

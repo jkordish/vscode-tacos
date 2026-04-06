@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.99.4] - 2026-04-06
+
+### Changed
+
+- Notification copy pass — verbosity and consistency improvements:
+  - `tacos.slash` success toast shortened: `"TaCoS: complete summary generated, copied, and opened in a new editor tab."` → `"TaCoS: summary generated, copied, and opened."` (less verbose).
+  - `tacos.showLastSummary` no-cache toast: `"TaCoS: No cached summary yet for this workspace."` → `"TaCoS: no cached summary yet for this workspace."` (consistent lowercase prefix after colon).
+
 ## [0.99.3] - 2026-04-06
 
 ### Changed
