@@ -3905,7 +3905,6 @@ async function presentSummary(
   const choice = await vscode.window.showInformationMessage(
     `TaCoS (${summary.source}): ${notificationHeadline}`,
     'Open details',
-    'Copy prompt for Codex',
     'Copy + Open Codex',
     'Copy next steps',
     'Copy summary',
@@ -3915,13 +3914,6 @@ async function presentSummary(
   if (choice === 'Open details') {
     recordCompanionForcedOpenDetailsClick();
     await showDetailsPanel(context, summary, panelOptions);
-    return;
-  }
-
-  if (choice === 'Copy prompt for Codex') {
-    recordCompanionQuickAction();
-    await vscode.env.clipboard.writeText(summary.codexPrompt);
-    void vscode.window.showInformationMessage('TaCoS: Codex-ready prompt copied to clipboard.');
     return;
   }
 

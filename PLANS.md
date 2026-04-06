@@ -414,6 +414,24 @@ Status vocabulary used in this file:
   - `src/metrics.ts`
   - `src/extension.ts`
 
+### P18. Dialogue UX pass — notification button reduction
+
+- status: `done`
+- why: reduce choice paralysis in the main summary notification; remove dead code from a prior redundant button.
+- scope: `src/extension.ts` summary notification button array and orphaned handler; success message copy for `markTaskResolvedCommand`.
+- dependencies: P15, P16.
+- recent progress:
+  - removed `Copy prompt for Codex` button from the `presentSummary()` `showInformationMessage` call (redundant with `Copy + Open Codex`); notification now has 5 buttons instead of 6.
+  - removed orphaned `if (choice === 'Copy prompt for Codex')` handler block (dead code).
+  - cleaned up `markTaskResolvedCommand` success toast: `"TaCoS: structured task checkpoint resolved."` → `"TaCoS: task marked resolved."`.
+  - `verify:quick` exits 0 (56 suites / 403 tests).
+- risks/rollback:
+  - risk: none; change is purely reductive (dead button + dead code removed).
+  - rollback: reintroduce button and handler if usage data later shows demand for a copy-only Codex prompt flow.
+- links:
+  - `src/extension.ts`
+  - `CHANGELOG.md`
+
 ## Blockers
 
 - none currently.

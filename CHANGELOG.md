@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.99.3] - 2026-04-06
+
+### Changed
+
+- Dialogue UX pass — summary notification button reduction:
+  - Main summary notification reduced from 6 to 5 buttons by removing `Copy prompt for Codex` (redundant with `Copy + Open Codex`).
+  - Removed orphaned `Copy prompt for Codex` handler branch (dead code after button removal).
+  - `TaCoS: Mark Task Resolved` success notification copy cleaned up: `"TaCoS: structured task checkpoint resolved."` → `"TaCoS: task marked resolved."` (less jargon).
+
 ## [0.99.2] - 2026-04-05
 
 ### Changed
