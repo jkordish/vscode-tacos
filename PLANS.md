@@ -414,36 +414,21 @@ Status vocabulary used in this file:
   - `src/metrics.ts`
   - `src/extension.ts`
 
-### P19. Notification copy pass — verbosity and consistency
+### P18. Dialogue UX pass — notification copy and button reduction
 
 - status: `done`
-- why: two notification toasts had minor copy issues: one was verbose and one had an inconsistent capitalization pattern.
-- scope: `src/extension.ts` notification strings for `tacos.slash` and `tacos.showLastSummary`.
-- dependencies: P18.
-- recent progress:
-  - `tacos.slash` success toast shortened: `"TaCoS: complete summary generated, copied, and opened in a new editor tab."` → `"TaCoS: summary generated, copied, and opened."`.
-  - `tacos.showLastSummary` no-cache toast: `"TaCoS: No cached summary yet for this workspace."` → `"TaCoS: no cached summary yet for this workspace."` (consistent lowercase after colon prefix).
-  - `verify:quick` exits 0 (56 suites / 403 tests).
-- risks/rollback:
-  - risk: none; pure copy-only changes with no behavior impact.
-  - rollback: revert strings if user research prefers the prior phrasing.
-- links:
-  - `src/extension.ts`
-  - `CHANGELOG.md`
-
-### P18. Dialogue UX pass — notification button reduction
-
-- status: `done`
-- why: reduce choice paralysis in the main summary notification; remove dead code from a prior redundant button.
-- scope: `src/extension.ts` summary notification button array and orphaned handler; success message copy for `markTaskResolvedCommand`.
+- why: reduce choice paralysis in the main summary notification; remove dead code from a prior redundant button; clean up verbose and inconsistent notification copy.
+- scope: `src/extension.ts` summary notification button array, orphaned handler, and success/status toast strings.
 - dependencies: P15, P16.
 - recent progress:
   - removed `Copy prompt for Codex` button from the `presentSummary()` `showInformationMessage` call (redundant with `Copy + Open Codex`); notification now has 5 buttons instead of 6.
   - removed orphaned `if (choice === 'Copy prompt for Codex')` handler block (dead code).
   - cleaned up `markTaskResolvedCommand` success toast: `"TaCoS: structured task checkpoint resolved."` → `"TaCoS: task marked resolved."`.
+  - `tacos.slash` success toast shortened: `"TaCoS: complete summary generated, copied, and opened in a new editor tab."` → `"TaCoS: summary generated, copied, and opened."`.
+  - `tacos.showLastSummary` no-cache toast: `"TaCoS: No cached summary yet for this workspace."` → `"TaCoS: no cached summary yet for this workspace."` (consistent lowercase after colon prefix).
   - `verify:quick` exits 0 (56 suites / 403 tests).
 - risks/rollback:
-  - risk: none; change is purely reductive (dead button + dead code removed).
+  - risk: none; changes are purely reductive (dead button + dead code removed) or copy-only.
   - rollback: reintroduce button and handler if usage data later shows demand for a copy-only Codex prompt flow.
 - links:
   - `src/extension.ts`

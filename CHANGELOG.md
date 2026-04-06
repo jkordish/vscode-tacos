@@ -2,22 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
-## [0.99.4] - 2026-04-06
-
-### Changed
-
-- Notification copy pass — verbosity and consistency improvements:
-  - `tacos.slash` success toast shortened: `"TaCoS: complete summary generated, copied, and opened in a new editor tab."` → `"TaCoS: summary generated, copied, and opened."` (less verbose).
-  - `tacos.showLastSummary` no-cache toast: `"TaCoS: No cached summary yet for this workspace."` → `"TaCoS: no cached summary yet for this workspace."` (consistent lowercase prefix after colon).
-
 ## [0.99.3] - 2026-04-06
 
 ### Changed
 
-- Dialogue UX pass — summary notification button reduction:
+- Dialogue UX pass — notification copy and button reduction:
   - Main summary notification reduced from 6 to 5 buttons by removing `Copy prompt for Codex` (redundant with `Copy + Open Codex`).
   - Removed orphaned `Copy prompt for Codex` handler branch (dead code after button removal).
   - `TaCoS: Mark Task Resolved` success notification copy cleaned up: `"TaCoS: structured task checkpoint resolved."` → `"TaCoS: task marked resolved."` (less jargon).
+  - `tacos.slash` success toast shortened: `"TaCoS: complete summary generated, copied, and opened in a new editor tab."` → `"TaCoS: summary generated, copied, and opened."` (less verbose).
+  - `tacos.showLastSummary` no-cache toast: `"TaCoS: No cached summary yet for this workspace."` → `"TaCoS: no cached summary yet for this workspace."` (consistent lowercase after colon prefix).
 
 ## [0.99.2] - 2026-04-05
 
