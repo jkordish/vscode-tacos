@@ -66,6 +66,7 @@ Principles:
 - Resume Safety Check uses a second short-lived status-bar annunciator so `State / Risk / Verify` can appear without forcing a new panel or modal flow.
 - Status bar semantics are compact and policy-driven (`class + reason`) so ambient state remains stable; active-mode elevation is reserved for rare high-risk blocked states.
 - Focus-triggered summary presentation now runs through a deterministic surface broker (`none` vs `statusbar` vs `panel` vs `notification`) with explicit reason enums; `tacos.uiSurface` remains a hard cap/user override.
+- The summary notification presents 5 actions (`Open Companion`, `Copy Summary`, `Copy + Open Codex`, `Open Standup`, `Refresh`); the previously separate `Copy prompt for Codex` action was removed as redundant with `Copy + Open Codex`.
 - Companion Home keeps fixed `Now/Next/Blocked/Restore` slot order while a central CTA arbiter enforces one primary action across `Next` and `Blocked`; emphasis tokens (`PRIMARY`/`ADVISORY`/`SUPPRESSED`) are motion-safe and a11y-aware.
 - Blocker detection uses a scored v2 arbitration pass (`src/blockerModel.ts`) across task/command/diagnostic/branch/confidence/trust signals and returns explicit severity/confidence/actionability metadata.
 - Companion Home includes a one-click `Why am I seeing this?` action that expands `More Context` and the nested Trust Center explainability disclosure.

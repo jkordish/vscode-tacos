@@ -433,6 +433,7 @@ Focus-triggered summary prompting relied primarily on static `tacos.uiSurface` c
 
 - Deterministic broker lives in `src/percolation/surfaceBroker.ts`.
 - `presentSummary` consumes broker output and uses explicit reason enums for surface selection classes.
+- The summary notification presents 5 actions: `Open Companion`, `Copy Summary`, `Copy + Open Codex`, `Open Standup`, `Refresh`. The formerly separate `Copy prompt for Codex` button was removed as redundant with `Copy + Open Codex`.
 - Integration probe command (`tacos.__test.getFocusSurfaceDecision`) and unit tests cover broker outcome matrix.
 
 ### Settings and commands affected
