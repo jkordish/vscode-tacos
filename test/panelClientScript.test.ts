@@ -46,6 +46,16 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain('details[data-why-surfaced-details="true"]');
     expect(script).toContain("announceStatus('Opened Why am I seeing this? details.')");
     expect(script).toContain("announceStatus('Opened evidence tray.')");
+    // Tab switching
+    expect(script).toContain('function switchToTab(tabId)');
+    expect(script).toContain('function restoreActiveTab()');
+    expect(script).toContain("'.page-tab[data-tab-id]'");
+    expect(script).toContain("'tab-panel-' + tabId");
+    expect(script).toContain('viewState.activeTabId = tabId');
+    expect(script).toContain("activeTabId: ''");
+    expect(script).toContain("switchToTab('debrief')");
+    expect(script).toContain("switchToTab('evidence')");
+    expect(script).toContain('restoreActiveTab();');
     expect(script).toContain(
       'if (!event.altKey || !event.shiftKey || event.metaKey || event.ctrlKey)',
     );

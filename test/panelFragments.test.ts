@@ -386,4 +386,49 @@ describe('panelFragments', () => {
     expect(doc).toContain('<style nonce="nonce-123">.card { color: red; }</style>');
     expect(doc).toContain('console.log("panel");');
   });
+
+  it('renders 4-tab document shell with tab nav and panels when tabs option is used', () => {
+    const doc = renderWebviewDocument({
+      cspMetaTag: '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'" />',
+      nonce: 'nonce-tab',
+      panelStyle: '.card { color: blue; }',
+      tabs: [
+        {
+          id: 'overview',
+          label: 'Overview',
+          contentTrustedHtml: '<p>overview content</p>',
+          default: true,
+        },
+        { id: 'resume', label: 'Resume', contentTrustedHtml: '<p>resume content</p>' },
+        { id: 'evidence', label: 'Evidence', contentTrustedHtml: '<p>evidence content</p>' },
+        { id: 'debrief', label: 'Debrief', contentTrustedHtml: '<p>debrief content</p>' },
+      ],
+      clientScript: 'console.log("tabs");',
+    });
+
+    expect(doc).toContain('<html lang="en">');
+    expect(doc).toContain('<nav class="page-tabs"');
+    expect(doc).toContain('role="tablist"');
+    // Tab buttons
+    expect(doc).toContain('data-tab-id="overview"');
+    expect(doc).toContain('data-tab-id="resume"');
+    expect(doc).toContain('data-tab-id="evidence"');
+    expect(doc).toContain('data-tab-id="debrief"');
+    expect(doc).toContain('aria-selected="true"');
+    expect(doc).toContain('id="tab-btn-overview"');
+    expect(doc).toContain('aria-controls="tab-panel-overview"');
+    // Tab panels
+    expect(doc).toContain('id="tab-panel-overview"');
+    expect(doc).toContain('id="tab-panel-resume"');
+    expect(doc).toContain('id="tab-panel-evidence"');
+    expect(doc).toContain('id="tab-panel-debrief"');
+    expect(doc).toContain('role="tabpanel"');
+    // Non-default panels are hidden (aria-labelledby sits between role and hidden)
+    expect(doc).toContain('role="tabpanel" aria-labelledby="tab-btn-resume" hidden');
+    // Content
+    expect(doc).toContain('<p>overview content</p>');
+    expect(doc).toContain('<p>debrief content</p>');
+    // No bodyCardsTrustedHtml path
+    expect(doc).not.toContain('undefined');
+  });
 });

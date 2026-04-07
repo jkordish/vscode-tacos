@@ -47,7 +47,7 @@ export function renderPanelClientScript(
         'restoreCopyFailingCommand'
       ]);
       const viewState = Object.assign(
-        { evidenceListExpanded: false, sectionExpanded: {}, sectionScope: '', scrollY: 0, focusToken: '' },
+        { evidenceListExpanded: false, sectionExpanded: {}, sectionScope: '', scrollY: 0, focusToken: '', activeTabId: '' },
         vscode.getState() || {},
       );
 
@@ -358,8 +358,73 @@ export function renderPanelClientScript(
         }
       }
 
+      function switchToTab(tabId) {
+        if (typeof tabId !== 'string' || !tabId) {
+          return;
+        }
+        const tabButtons = document.querySelectorAll('.page-tab[data-tab-id]');
+        const tabPanels = document.querySelectorAll('.tab-panel');
+        let matched = false;
+        for (const btn of tabButtons) {
+          if (!(btn instanceof HTMLElement)) {
+            continue;
+          }
+          const isTarget = btn.dataset.tabId === tabId;
+          btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+          if (isTarget) {
+            matched = true;
+          }
+        }
+        // If tabId not found, fall back to the first tab
+        if (!matched && tabButtons.length > 0) {
+          const first = tabButtons[0];
+          if (first instanceof HTMLElement) {
+            first.setAttribute('aria-selected', 'true');
+            tabId = first.dataset.tabId || tabId;
+          }
+        }
+        for (const panel of tabPanels) {
+          if (!(panel instanceof HTMLElement)) {
+            continue;
+          }
+          const panelId = panel.id;
+          const expectedId = 'tab-panel-' + tabId;
+          if (panelId === expectedId) {
+            panel.removeAttribute('hidden');
+          } else {
+            panel.setAttribute('hidden', '');
+          }
+        }
+        viewState.activeTabId = tabId;
+        persistViewState();
+      }
+
+      function restoreActiveTab() {
+        const tabs = document.querySelectorAll('.page-tab[data-tab-id]');
+        if (tabs.length === 0) {
+          return;
+        }
+        const saved = typeof viewState.activeTabId === 'string' ? viewState.activeTabId : '';
+        if (saved) {
+          switchToTab(saved);
+          return;
+        }
+        // No saved tab: activate whichever tab has aria-selected="true" in the HTML, or first
+        for (const btn of tabs) {
+          if (btn instanceof HTMLElement && btn.getAttribute('aria-selected') === 'true') {
+            switchToTab(btn.dataset.tabId || '');
+            return;
+          }
+        }
+        const first = tabs[0];
+        if (first instanceof HTMLElement) {
+          switchToTab(first.dataset.tabId || '');
+        }
+      }
+
       setEvidenceListExpanded(Boolean(viewState.evidenceListExpanded), false);
       restorePanelSectionExpansion();
+      restoreActiveTab();
       window.addEventListener(
         'scroll',
         () => {
@@ -531,6 +596,16 @@ export function renderPanelClientScript(
           return;
         }
 
+        // Tab bar click handling
+        const tabBtn = target.closest('.page-tab[data-tab-id]');
+        if (tabBtn instanceof HTMLElement) {
+          const tabId = tabBtn.dataset.tabId;
+          if (tabId) {
+            switchToTab(tabId);
+          }
+          return;
+        }
+
         const actionElement = target.closest('[data-action]');
         if (actionElement instanceof HTMLElement) {
           event.preventDefault();
@@ -566,6 +641,9 @@ export function renderPanelClientScript(
           }
 
           if (action === 'openWhySurfaced') {
+            // Switch to Debrief tab if the tab panel layout is present
+            switchToTab('debrief');
+
             const moreContext = document.querySelector(
               'details[data-panel-section="moreContext"]',
             );
@@ -598,6 +676,9 @@ export function renderPanelClientScript(
           }
 
           if (action === 'openEvidenceTray') {
+            // Switch to Evidence tab if the tab panel layout is present
+            switchToTab('evidence');
+
             const moreContext = document.querySelector(
               'details[data-panel-section="moreContext"]',
             );

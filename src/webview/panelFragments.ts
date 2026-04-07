@@ -610,16 +610,57 @@ export function renderCompanionNudgeCard(input: CompanionNudgeCardInput): string
     </div>`;
 }
 
+export interface TabPanelInput {
+  id: string;
+  label: string;
+  contentTrustedHtml: TrustedHtml;
+  default?: boolean;
+}
+
 export interface WebviewDocumentInput {
   cspMetaTag: TrustedHtml;
   nonce: string;
   panelStyle: string;
-  bodyCardsTrustedHtml: TrustedHtml;
+  /** @deprecated Use `tabs` instead. Kept for backward-compat with existing callers. */
+  bodyCardsTrustedHtml?: TrustedHtml;
+  tabs?: TabPanelInput[];
   clientScript: string;
 }
 
 export function renderWebviewDocument(input: WebviewDocumentInput): string {
   const escapedNonce = escapeHtml(input.nonce);
+
+  let mainContent: string;
+  if (input.tabs && input.tabs.length > 0) {
+    const tabs = input.tabs;
+    const defaultTabId = (tabs.find((t) => t.default) ?? tabs[0]).id;
+
+    const tabButtons = tabs
+      .map((tab) => {
+        const isDefault = tab.id === defaultTabId;
+        return `<button type="button" role="tab" class="page-tab" id="tab-btn-${escapeHtml(tab.id)}" aria-controls="tab-panel-${escapeHtml(tab.id)}" aria-selected="${isDefault ? 'true' : 'false'}" data-tab-id="${escapeHtml(tab.id)}">${escapeHtml(tab.label)}</button>`;
+      })
+      .join('\n        ');
+
+    const tabPanels = tabs
+      .map((tab) => {
+        const isDefault = tab.id === defaultTabId;
+        return `<section class="tab-panel" id="tab-panel-${escapeHtml(tab.id)}" role="tabpanel" aria-labelledby="tab-btn-${escapeHtml(tab.id)}"${isDefault ? '' : ' hidden'}>
+        ${tab.contentTrustedHtml}
+      </section>`;
+      })
+      .join('\n      ');
+
+    mainContent = `<nav class="page-tabs" role="tablist" aria-label="Panel sections">
+      ${tabButtons}
+    </nav>
+    <div class="tab-panels">
+      ${tabPanels}
+    </div>`;
+  } else {
+    mainContent = input.bodyCardsTrustedHtml ?? '';
+  }
+
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -634,7 +675,7 @@ export function renderWebviewDocument(input: WebviewDocumentInput): string {
     <a class="skip-link" href="#main">Skip to main content</a>
     <div id="panel-status-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <main id="main" tabindex="-1">
-      ${input.bodyCardsTrustedHtml}
+      ${mainContent}
     </main>
 
     <script nonce="${escapedNonce}">

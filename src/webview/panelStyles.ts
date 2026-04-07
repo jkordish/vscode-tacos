@@ -23,10 +23,68 @@ export const PANEL_WEBVIEW_STYLE = `
         font-size: var(--vscode-font-size);
         line-height: 1.5;
         margin: 0;
-        padding: var(--space-2) var(--space-3) var(--space-3);
+        padding: 0;
       }
       main {
         display: block;
+      }
+      /* ── Tab nav ────────────────────────────────────────────────────── */
+      .page-tabs {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        display: flex;
+        gap: 2px;
+        background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+        padding: var(--space-2) var(--space-2) 0;
+        border-bottom: 1px solid var(--surface-border);
+        flex-wrap: wrap;
+      }
+      .page-tab {
+        border: 1px solid transparent;
+        border-bottom: none;
+        border-radius: var(--radius-1) var(--radius-1) 0 0;
+        background: transparent;
+        color: var(--surface-muted);
+        min-height: 28px;
+        padding: 3px var(--space-3);
+        cursor: pointer;
+        font-size: var(--vscode-font-size);
+        font-family: var(--vscode-font-family);
+        transition: color var(--motion-quick) ease, background var(--motion-quick) ease;
+      }
+      .page-tab:hover {
+        color: var(--surface-strong);
+        background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1));
+      }
+      .page-tab[aria-selected='true'] {
+        color: var(--surface-strong);
+        background: var(--vscode-editor-background);
+        border-color: var(--surface-border);
+        border-bottom-color: var(--vscode-editor-background);
+        font-weight: 600;
+      }
+      .page-tab:focus-visible {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 2px;
+      }
+      /* ── Tab panels ─────────────────────────────────────────────────── */
+      .tab-panels {
+        padding: var(--space-2) var(--space-3) var(--space-3);
+      }
+      .tab-panel[hidden] {
+        display: none;
+      }
+      /* ── Card density tightened ~20% ────────────────────────────────── */
+      .card {
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-4);
+        padding: var(--space-2) var(--space-3);
+        margin-bottom: var(--space-2);
+        background: var(--surface-bg);
+      }
+      .card:last-child {
+        margin-bottom: 0;
       }
       .sr-only {
         position: absolute;
@@ -56,17 +114,6 @@ export const PANEL_WEBVIEW_STYLE = `
         transform: translateY(0);
         outline: 2px solid var(--vscode-focusBorder);
         outline-offset: 2px;
-      }
-      /* ── Cards ─────────────────────────────────────────────────────── */
-      .card {
-        border: 1px solid var(--surface-border);
-        border-radius: var(--radius-4);
-        padding: var(--space-3);
-        margin-bottom: var(--space-2);
-        background: var(--surface-bg);
-      }
-      .card:last-child {
-        margin-bottom: 0;
       }
       /* ── Typography ─────────────────────────────────────────────────── */
       ul {

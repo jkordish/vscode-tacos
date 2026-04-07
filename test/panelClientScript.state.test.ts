@@ -24,6 +24,7 @@ describe('panelClientScript state behavior', () => {
   function bootstrap(
     initialState: Record<string, unknown> = {},
     sectionScope = 'scope-token',
+    bodyHtml?: string,
   ): {
     postMessage: jest.Mock;
     setState: jest.Mock;
@@ -39,7 +40,9 @@ describe('panelClientScript state behavior', () => {
     (globalThis as unknown as { acquireVsCodeApi: () => VsCodeApiMock }).acquireVsCodeApi = () =>
       api;
 
-    document.body.innerHTML = `
+    document.body.innerHTML =
+      bodyHtml ??
+      `
       <a class="skip-link" href="#main">Skip to main content</a>
       <div id="panel-status-live"></div>
       <main id="main" tabindex="-1"></main>
@@ -82,7 +85,6 @@ describe('panelClientScript state behavior', () => {
 
     const script = renderPanelClientScript(280, sectionScope);
     // Execute generated webview script in the current jsdom context.
-    // eslint-disable-next-line no-new-func
     const execute = new Function(script);
     execute();
 
@@ -322,6 +324,69 @@ describe('panelClientScript state behavior', () => {
 
     expect(document.activeElement).toBe(main);
     expect(postMessage).not.toHaveBeenCalledWith({ type: 'blockedLink' });
+  });
+
+  it('switches tab panels on tab button click and persists activeTabId', () => {
+    const tabBodyHtml = `
+      <a class="skip-link" href="#main">Skip to main content</a>
+      <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
+      <ul id="evidence-list"></ul>
+      <button type="button" data-action="toggleEvidenceMore" data-hidden-count="0">Show more</button>
+      <nav class="page-tabs">
+        <button type="button" class="page-tab" data-tab-id="overview" aria-selected="true" id="tab-btn-overview">Overview</button>
+        <button type="button" class="page-tab" data-tab-id="resume" aria-selected="false" id="tab-btn-resume">Resume</button>
+      </nav>
+      <div class="tab-panels">
+        <section class="tab-panel" id="tab-panel-overview" role="tabpanel"></section>
+        <section class="tab-panel" id="tab-panel-resume" role="tabpanel" hidden></section>
+      </div>
+    `;
+
+    const { setState } = bootstrap({}, 'scope-token', tabBodyHtml);
+
+    const resumeTabBtn = document.getElementById('tab-btn-resume') as HTMLButtonElement;
+    const overviewTabBtn = document.getElementById('tab-btn-overview') as HTMLButtonElement;
+    const overviewPanel = document.getElementById('tab-panel-overview') as HTMLElement;
+    const resumePanel = document.getElementById('tab-panel-resume') as HTMLElement;
+
+    resumeTabBtn.click();
+
+    expect(resumeTabBtn.getAttribute('aria-selected')).toBe('true');
+    expect(overviewTabBtn.getAttribute('aria-selected')).toBe('false');
+    expect(resumePanel.hasAttribute('hidden')).toBe(false);
+    expect(overviewPanel.hasAttribute('hidden')).toBe(true);
+    expect(setState).toHaveBeenCalledWith(expect.objectContaining({ activeTabId: 'resume' }));
+  });
+
+  it('restores active tab from saved viewState on bootstrap', () => {
+    const tabBodyHtml = `
+      <a class="skip-link" href="#main">Skip to main content</a>
+      <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
+      <ul id="evidence-list"></ul>
+      <button type="button" data-action="toggleEvidenceMore" data-hidden-count="0">Show more</button>
+      <nav class="page-tabs">
+        <button type="button" class="page-tab" data-tab-id="overview" aria-selected="true" id="tab-btn-overview">Overview</button>
+        <button type="button" class="page-tab" data-tab-id="evidence" aria-selected="false" id="tab-btn-evidence">Evidence</button>
+      </nav>
+      <div class="tab-panels">
+        <section class="tab-panel" id="tab-panel-overview" role="tabpanel"></section>
+        <section class="tab-panel" id="tab-panel-evidence" role="tabpanel" hidden></section>
+      </div>
+    `;
+
+    bootstrap({ sectionScope: 'scope-token', activeTabId: 'evidence' }, 'scope-token', tabBodyHtml);
+
+    const overviewBtn = document.getElementById('tab-btn-overview') as HTMLButtonElement;
+    const evidenceBtn = document.getElementById('tab-btn-evidence') as HTMLButtonElement;
+    const overviewPanel = document.getElementById('tab-panel-overview') as HTMLElement;
+    const evidencePanel = document.getElementById('tab-panel-evidence') as HTMLElement;
+
+    expect(evidenceBtn.getAttribute('aria-selected')).toBe('true');
+    expect(overviewBtn.getAttribute('aria-selected')).toBe('false');
+    expect(evidencePanel.hasAttribute('hidden')).toBe(false);
+    expect(overviewPanel.hasAttribute('hidden')).toBe(true);
   });
 
   it('clears scope-bound scroll and focus state when section scope changes', () => {
