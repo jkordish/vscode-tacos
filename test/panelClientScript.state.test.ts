@@ -440,7 +440,7 @@ describe('panelClientScript state behavior', () => {
     expect(evidencePanel.hasAttribute('hidden')).toBe(true);
   });
 
-  it('clears scope-bound scroll and focus state when section scope changes', () => {
+  it('clears scope-bound scroll, focus, and tab state when section scope changes', () => {
     const { setState } = bootstrap(
       {
         sectionScope: 'old-scope',
@@ -448,6 +448,7 @@ describe('panelClientScript state behavior', () => {
         evidenceListExpanded: true,
         scrollY: 120,
         focusToken: 'id:intent-override-input',
+        activeTabId: 'evidence',
       },
       'scope-token',
     );
@@ -459,6 +460,7 @@ describe('panelClientScript state behavior', () => {
         evidenceListExpanded: false,
         scrollY: 0,
         focusToken: '',
+        activeTabId: '',
       }),
     );
   });

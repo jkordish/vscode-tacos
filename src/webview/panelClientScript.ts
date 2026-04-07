@@ -56,6 +56,7 @@ export function renderPanelClientScript(
         viewState.evidenceListExpanded = false;
         viewState.scrollY = 0;
         viewState.focusToken = '';
+        viewState.activeTabId = '';
         viewState.sectionScope = panelSectionScope;
         vscode.setState(viewState);
       }
@@ -560,6 +561,7 @@ export function renderPanelClientScript(
           vscode.postMessage({ type: 'copyNextSteps' });
           return;
         }
+        switchToTab('overview');
         const intentInput = document.getElementById('intent-override-input');
         if (intentInput instanceof HTMLInputElement) {
           intentInput.focus();
