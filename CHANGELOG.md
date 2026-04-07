@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.99.4] - 2026-04-06
+
+### Changed
+
+- Demo resume card (`buildDemoResumeSummary`) polish pass (branch `ux/demo-card-realistic-content`):
+  - Evidence items `file:ranking` and `file:broker` changed from `kind: 'file'` to `kind: 'git'` — file-kind items are clickable and fail in demo mode (no workspace root); git-kind items are non-clickable and safe.
+  - Branch label direction corrected: `feat/percolation-surface-v2 → main` → `main → feat/percolation-surface-v2`.
+  - `detailsMarkdown` intent line made consistent with the `intent` field: `"add full unit coverage"` → `"add unit coverage"`.
+
 ## [0.99.3] - 2026-04-06
 
 ### Changed
