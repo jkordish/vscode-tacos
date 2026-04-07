@@ -424,8 +424,8 @@ describe('panelFragments', () => {
     expect(doc).toContain('id="tab-panel-evidence"');
     expect(doc).toContain('id="tab-panel-debrief"');
     expect(doc).toContain('role="tabpanel"');
-    // Non-default panels are hidden (aria-labelledby sits between role and hidden)
-    expect(doc).toContain('role="tabpanel" aria-labelledby="tab-btn-resume" hidden');
+    // Non-default panels are hidden, regardless of attribute order
+    expect(doc).toMatch(/<section\b[^>]*\bid="tab-panel-resume"[^>]*\bhidden\b[^>]*>/);
     // Content
     expect(doc).toContain('<p>overview content</p>');
     expect(doc).toContain('<p>debrief content</p>');

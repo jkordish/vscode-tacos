@@ -7693,6 +7693,7 @@ function renderWebview(
     `<button type="button" class="secondary" data-action="${
       config.taskCheckpointEnabled ? 'captureStructuredCheckpoint' : 'sessionAddCheckpoint'
     }" ${demoDisabledAttr}>${config.taskCheckpointEnabled ? 'Checkpoint' : 'Add note'}</button>`,
+    `<button type="button" class="secondary" data-action="checkpointOpenList" ${demoDisabledAttr}>Notes</button>`,
     `<button type="button" class="secondary" data-action="refreshSummary" ${demoDisabledAttr}>Refresh</button>`,
   ]
     .filter(Boolean)
