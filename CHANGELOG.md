@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.99.5] - 2026-04-07
+
+### Changed
+
+- 4-tab panel redesign (branch `ux/tab-redesign`):
+  - Details panel now uses a 4-tab layout: **Overview**, **Resume**, **Evidence**, and **Debrief** — replacing the single-scroll card stack with a navigable tab interface.
+  - `renderWebviewDocument` accepts a `tabs` option to render a `<nav role="tablist">` + `<div class="tab-panels">` document shell with ARIA-compliant tab buttons (`role="tab"`, `aria-selected`, `aria-controls`) and hidden non-default panels (`hidden` attribute).
+  - `renderPageHeader` added: renders a sticky `<header class="page-header">` with intent text, status chips, optional secondary chip, and an optional actions row. Page header is emitted before the tab nav when `pageHeaderTrustedHtml` is provided to `renderWebviewDocument`.
+  - `panelClientScript.ts` additions:
+    - `updatePageHeaderHeight()` measures the rendered `.page-header` element and writes `--page-header-height` on `:root` so `.page-tabs` can use `top: var(--page-header-height, 0px)` for correct sticky positioning beneath the header.
+    - `restoreViewPosition()` now detects when a focus target is inside a hidden `.tab-panel[hidden]` and switches to that tab before attempting focus/scroll restoration.
+  - `panelStyles.ts` updates:
+    - `.header-intent` resets default `<h1>` margins (`margin: 0; padding: 0`).
+    - `.page-tabs` uses `top: var(--page-header-height, 0px)` for sticky positioning relative to the page header.
+  - Page header `checkpointOpenList` Notes button added to `pageHeaderActionButtons` array in `extension.ts`.
+  - Integration test `panelSectionPersistence.js` updated to reflect 4-tab navigation and tab-switch state persistence.
+  - Demo screenshot (`assets/demo.png`) updated to show 4-tab UI.
+
 ## [0.99.4] - 2026-04-06
 
 ### Changed
