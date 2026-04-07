@@ -28,6 +28,61 @@ export const PANEL_WEBVIEW_STYLE = `
       main {
         display: block;
       }
+      /* ── Compact sticky page header ─────────────────────────────────── */
+      .page-header {
+        position: sticky;
+        top: 0;
+        z-index: 11;
+        background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+        border-bottom: 1px solid var(--surface-border);
+        padding: var(--space-2) var(--space-3);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+      }
+      .header-title-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+      .header-intent {
+        font-size: var(--vscode-font-size);
+        font-weight: 600;
+        color: var(--surface-strong);
+        flex: 1 1 0;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .header-chip {
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        color: var(--surface-muted);
+        background: var(--vscode-badge-background, rgba(128,128,128,0.15));
+        border-radius: var(--radius-1);
+        padding: 1px var(--space-2);
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .header-chip-secondary {
+        background: transparent;
+        border: 1px solid var(--surface-border);
+      }
+      .header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1);
+        align-items: center;
+      }
+      .header-actions button {
+        font-size: 11px;
+        min-height: 22px;
+        padding: 1px var(--space-2);
+      }
       /* ── Tab nav ────────────────────────────────────────────────────── */
       .page-tabs {
         position: sticky;

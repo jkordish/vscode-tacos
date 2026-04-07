@@ -194,7 +194,6 @@ import {
   renderChangesSinceCard,
   renderDetailsCard,
   renderEvidenceCard,
-  renderQuickActionsCard,
   renderRecapCard,
   renderRestorePackCard,
   renderStatusCard,
@@ -218,6 +217,7 @@ import {
   renderTimelineGroupsHtml,
   renderTopFilesListItems,
   renderTopLinksListItems,
+  renderPageHeader,
   renderWebviewDocument,
 } from './webview/panelFragments';
 import { PANEL_WEBVIEW_STYLE } from './webview/panelStyles';
@@ -7400,34 +7400,6 @@ function renderWebview(
           .join('')}</ul></details>`
       : '';
 
-  const quickActionGroups = renderGroupedActionSections({
-    groups: [
-      {
-        label: 'Copy',
-        buttonsTrustedHtml: [
-          '<button type="button" data-action="copySummary">Copy summary</button>',
-        ],
-      },
-      {
-        label: 'Notes & Feedback',
-        buttonsTrustedHtml: [
-          `<button type="button" class="secondary" data-action="${
-            config.taskCheckpointEnabled ? 'captureStructuredCheckpoint' : 'sessionAddCheckpoint'
-          }" ${demoDisabledAttr}>${
-            config.taskCheckpointEnabled ? 'Capture checkpoint' : 'Add note'
-          }</button>`,
-          `<button type="button" class="secondary" data-action="checkpointOpenList" ${demoDisabledAttr}>List notes</button>`,
-          `<button type="button" class="secondary" data-action="showCognitiveDebrief" ${demoDisabledAttr}>Show debrief</button>`,
-          `<button type="button" data-action="rateHelpfulness" ${demoDisabledAttr}>Rate helpfulness</button>`,
-          `<button type="button" class="secondary" data-action="fixSummary" ${demoDisabledAttr}>Fix summary</button>`,
-        ],
-      },
-    ],
-    headingTag: 'h4',
-    sectionClassName: 'action-group',
-    buttonContainerClassName: 'quick-actions',
-  });
-
   const restorePackGroups = renderGroupedActionSections({
     groups: [
       {
@@ -7646,7 +7618,6 @@ function renderWebview(
     listItemsTrustedHtml: linkItems,
     emptyMessage: 'None captured',
   });
-  const quickActionsCard = renderQuickActionsCard(quickActionGroups);
   const restorePackCard = renderRestorePackCard(restorePackGroups, trusted);
   const evidenceCard = renderEvidenceCard({
     evidenceItemsTrustedHtml: evidenceItems,
@@ -7713,19 +7684,31 @@ function renderWebview(
     restoreUnavailableHintsTrustedHtml: restoreUnavailableHints,
   });
 
+  // ── Page header ─────────────────────────────────────────────────────────────
+  // Compact sticky header above the tab bar: task intent, status chips, quick actions toolbar.
+  const pageHeaderActionButtons = [
+    `<button type="button" class="secondary" data-action="copySummary">Copy summary</button>`,
+    `<button type="button" class="secondary" data-action="${
+      config.taskCheckpointEnabled ? 'captureStructuredCheckpoint' : 'sessionAddCheckpoint'
+    }" ${demoDisabledAttr}>${config.taskCheckpointEnabled ? 'Checkpoint' : 'Add note'}</button>`,
+    `<button type="button" class="secondary" data-action="refreshSummary" ${demoDisabledAttr}>Refresh</button>`,
+  ]
+    .filter(Boolean)
+    .join('');
+  const pageHeaderHtml = renderPageHeader({
+    intentTrustedHtml: escapeHtml(summary.intent),
+    statusChipLabel: sourceLabel,
+    secondaryChipLabel:
+      autoSummaryStatusLabel !== 'Auto summaries active' ? autoSummaryStatusLabel : undefined,
+    actionsTrustedHtml: pageHeaderActionButtons,
+  });
+
   // ── 4-tab layout ────────────────────────────────────────────────────────────
-  // Overview: demo banner, resume stack card (intent+now+next+blocked), status,
-  //           confidence, and quick actions toolbar
+  // Overview: demo banner, resume stack card (intent+now+next+blocked), status, confidence
   // Resume:   task state, checkpoint, resume path, restore pack, scratchpad
   // Evidence: evidence, details, timeline, recap, changes-since, top files, top links
-  // Debrief:  cognitive debrief, nudge, trust center
-  const overviewTabContent = [
-    demoCard,
-    resumeStackCardHtml,
-    confidenceCard,
-    statusCard,
-    quickActionsCard,
-  ]
+  // Debrief:  cognitive debrief, nudge, trust center, quick actions
+  const overviewTabContent = [demoCard, resumeStackCardHtml, confidenceCard, statusCard]
     .filter(Boolean)
     .join('\n\n');
 
@@ -7767,6 +7750,7 @@ function renderWebview(
     cspMetaTag,
     nonce,
     panelStyle: PANEL_WEBVIEW_STYLE,
+    pageHeaderTrustedHtml: pageHeaderHtml,
     tabs: [
       { id: 'overview', label: 'Overview', contentTrustedHtml: overviewTabContent, default: true },
       { id: 'resume', label: 'Resume', contentTrustedHtml: resumeTabContent },
