@@ -11,6 +11,7 @@
 TaCoS helps you pick up exactly where you left off. It captures what you were working on before context decays, then surfaces a calm, evidence-backed brief when you return.
 
 Built for engineers who get interrupted constantly:
+
 - SREs and on-call responders
 - Staff+ engineers carrying parallel work
 - Anyone who loses 10 minutes re-orienting after a context switch
@@ -32,17 +33,17 @@ TaCoS is **not** an AI productivity assistant. It's a local-first cognitive reco
 
 ## Core commands
 
-| Command | What it does |
-| --- | --- |
-| `TaCoS: Show Resume Brief Now` | Open your resume brief |
-| `TaCoS: Capture Task Checkpoint` | Save current task state (objective, next step, blockers, confidence) |
-| `TaCoS: Mark Task Resolved` | Close the current checkpoint cleanly |
-| `TaCoS: Show Cognitive Debrief` | Review open threads, stale state, and unresolved blockers |
-| `TaCoS: Show Resume Safety Check` | Post-resume `State / Risk / Verify` quick-check |
-| `TaCoS: Add Quick Checkpoint Note` | Fast freeform note for the current task |
-| `TaCoS: List Checkpoint Notes` | Browse and manage open notes |
-| `TaCoS: Run Setup Checklist` | Guided first-run setup |
-| `TaCoS: Set Privacy Preset` | Choose `Minimal / Balanced / Max context` |
+| Command                            | What it does                                                         |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `TaCoS: Show Resume Brief Now`     | Open your resume brief                                               |
+| `TaCoS: Capture Task Checkpoint`   | Save current task state (objective, next step, blockers, confidence) |
+| `TaCoS: Mark Task Resolved`        | Close the current checkpoint cleanly                                 |
+| `TaCoS: Show Cognitive Debrief`    | Review open threads, stale state, and unresolved blockers            |
+| `TaCoS: Show Resume Safety Check`  | Post-resume `State / Risk / Verify` quick-check                      |
+| `TaCoS: Add Quick Checkpoint Note` | Fast freeform note for the current task                              |
+| `TaCoS: List Checkpoint Notes`     | Browse and manage open notes                                         |
+| `TaCoS: Run Setup Checklist`       | Guided first-run setup                                               |
+| `TaCoS: Set Privacy Preset`        | Choose `Minimal / Balanced / Max context`                            |
 
 ---
 
@@ -93,15 +94,15 @@ TaCoS watches for conservative signals: focus return after idle, workspace root 
 
 ## Settings
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `tacos.taskCheckpoint.enabled` | `true` | Enable structured task checkpoints |
-| `tacos.taskCheckpoint.promptOnLikelySwitch` | `true` | Prompt at conservative switch boundaries |
-| `tacos.resumeSafety.enabled` | `true` | Post-resume safety check annunciator |
-| `tacos.resumeSafety.strict` | `false` | Warn before first risky action on strong mismatch |
-| `tacos.aiIncludeCheckpointNotes` | `false` | Include checkpoint notes in AI payloads |
-| `tacos.aiIncludeScratchpad` | `false` | Include scratchpad in AI payloads |
-| `tacos.percolationPolicyEnabled` | `true` | Dynamic surface arbitration |
+| Setting                                     | Default | Description                                       |
+| ------------------------------------------- | ------- | ------------------------------------------------- |
+| `tacos.taskCheckpoint.enabled`              | `true`  | Enable structured task checkpoints                |
+| `tacos.taskCheckpoint.promptOnLikelySwitch` | `true`  | Prompt at conservative switch boundaries          |
+| `tacos.resumeSafety.enabled`                | `true`  | Post-resume safety check annunciator              |
+| `tacos.resumeSafety.strict`                 | `false` | Warn before first risky action on strong mismatch |
+| `tacos.aiIncludeCheckpointNotes`            | `false` | Include checkpoint notes in AI payloads           |
+| `tacos.aiIncludeScratchpad`                 | `false` | Include scratchpad in AI payloads                 |
+| `tacos.percolationPolicyEnabled`            | `true`  | Dynamic surface arbitration                       |
 
 ---
 
