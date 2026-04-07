@@ -47,7 +47,7 @@ export function renderPanelClientScript(
         'restoreCopyFailingCommand'
       ]);
       const viewState = Object.assign(
-        { evidenceListExpanded: false, sectionExpanded: {}, sectionScope: '', scrollY: 0, focusToken: '' },
+        { evidenceListExpanded: false, sectionExpanded: {}, sectionScope: '', scrollY: 0, focusToken: '', activeTabId: '' },
         vscode.getState() || {},
       );
 
@@ -56,6 +56,7 @@ export function renderPanelClientScript(
         viewState.evidenceListExpanded = false;
         viewState.scrollY = 0;
         viewState.focusToken = '';
+        viewState.activeTabId = '';
         viewState.sectionScope = panelSectionScope;
         vscode.setState(viewState);
       }
@@ -273,6 +274,17 @@ export function renderPanelClientScript(
         }
         const restored = resolveFocusToken(viewState.focusToken);
         if (restored instanceof HTMLElement) {
+          // If the focus target lives inside a hidden tab panel, switch to that
+          // tab first so focus lands on a visible element.
+          const containingPanel = restored.closest('.tab-panel[hidden]');
+          if (containingPanel instanceof HTMLElement) {
+            const panelId = containingPanel.id;
+            // panelId is "tab-panel-<tabId>"
+            const tabId = panelId.startsWith('tab-panel-') ? panelId.slice('tab-panel-'.length) : '';
+            if (tabId) {
+              switchToTab(tabId);
+            }
+          }
           try {
             restored.focus({ preventScroll: true });
           } catch {
@@ -358,8 +370,93 @@ export function renderPanelClientScript(
         }
       }
 
+      function switchToTab(tabId) {
+        if (typeof tabId !== 'string' || !tabId) {
+          return;
+        }
+        const tabButtons = Array.from(document.querySelectorAll('.page-tab[data-tab-id]'));
+        const tabPanels = document.querySelectorAll('.tab-panel');
+        let matched = false;
+        for (const btn of tabButtons) {
+          if (!(btn instanceof HTMLElement)) {
+            continue;
+          }
+          const isTarget = btn.dataset.tabId === tabId;
+          btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+          // Roving tabindex: active tab is reachable via Tab key, others are skipped
+          btn.setAttribute('tabindex', isTarget ? '0' : '-1');
+          if (isTarget) {
+            matched = true;
+          }
+        }
+        // If tabId not found, fall back to the first tab
+        if (!matched && tabButtons.length > 0) {
+          const first = tabButtons[0];
+          if (first instanceof HTMLElement) {
+            first.setAttribute('aria-selected', 'true');
+            first.setAttribute('tabindex', '0');
+            tabId = first.dataset.tabId || tabId;
+          }
+        }
+        for (const panel of tabPanels) {
+          if (!(panel instanceof HTMLElement)) {
+            continue;
+          }
+          const panelId = panel.id;
+          const expectedId = 'tab-panel-' + tabId;
+          if (panelId === expectedId) {
+            panel.removeAttribute('hidden');
+          } else {
+            panel.setAttribute('hidden', '');
+          }
+        }
+        viewState.activeTabId = tabId;
+        persistViewState();
+      }
+
+      function restoreActiveTab() {
+        const tabs = document.querySelectorAll('.page-tab[data-tab-id]');
+        if (tabs.length === 0) {
+          return;
+        }
+        const saved = typeof viewState.activeTabId === 'string' ? viewState.activeTabId : '';
+        if (saved) {
+          switchToTab(saved);
+          return;
+        }
+        // No saved tab: activate whichever tab has aria-selected="true" in the HTML, or first
+        for (const btn of tabs) {
+          if (btn instanceof HTMLElement && btn.getAttribute('aria-selected') === 'true') {
+            switchToTab(btn.dataset.tabId || '');
+            return;
+          }
+        }
+        const first = tabs[0];
+        if (first instanceof HTMLElement) {
+          switchToTab(first.dataset.tabId || '');
+        }
+      }
+
       setEvidenceListExpanded(Boolean(viewState.evidenceListExpanded), false);
       restorePanelSectionExpansion();
+      restoreActiveTab();
+
+      // Measure the sticky page header and expose its height as a CSS custom
+      // property so the tab bar can offset itself correctly via
+      // \`top: var(--page-header-height, 0px)\`.
+      function updatePageHeaderHeight() {
+        const header = document.querySelector('.page-header');
+        const height = header instanceof HTMLElement ? header.getBoundingClientRect().height : 0;
+        document.documentElement.style.setProperty('--page-header-height', height + 'px');
+      }
+      updatePageHeaderHeight();
+      if (typeof ResizeObserver !== 'undefined') {
+        const header = document.querySelector('.page-header');
+        if (header instanceof HTMLElement) {
+          new ResizeObserver(updatePageHeaderHeight).observe(header);
+        }
+      }
+
       window.addEventListener(
         'scroll',
         () => {
@@ -492,6 +589,7 @@ export function renderPanelClientScript(
           vscode.postMessage({ type: 'copyNextSteps' });
           return;
         }
+        switchToTab('overview');
         const intentInput = document.getElementById('intent-override-input');
         if (intentInput instanceof HTMLInputElement) {
           intentInput.focus();
@@ -525,9 +623,62 @@ export function renderPanelClientScript(
         });
       });
 
+      // Tab keyboard navigation per ARIA Tabs pattern (ArrowLeft/ArrowRight/Home/End)
+      document.addEventListener('keydown', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        const tabList = target.closest('[role="tablist"]');
+        if (!(tabList instanceof HTMLElement)) {
+          return;
+        }
+        const tabButtons = Array.from(tabList.querySelectorAll('.page-tab[data-tab-id]')).filter(
+          (b) => b instanceof HTMLElement,
+        );
+        if (tabButtons.length === 0) {
+          return;
+        }
+        const currentIndex = tabButtons.indexOf(target);
+        if (currentIndex === -1) {
+          return;
+        }
+        let nextIndex = -1;
+        if (event.key === 'ArrowRight') {
+          nextIndex = (currentIndex + 1) % tabButtons.length;
+        } else if (event.key === 'ArrowLeft') {
+          nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
+        } else if (event.key === 'Home') {
+          nextIndex = 0;
+        } else if (event.key === 'End') {
+          nextIndex = tabButtons.length - 1;
+        } else {
+          return;
+        }
+        event.preventDefault();
+        const nextBtn = tabButtons[nextIndex];
+        if (nextBtn instanceof HTMLElement) {
+          const nextTabId = nextBtn.dataset.tabId;
+          if (nextTabId) {
+            switchToTab(nextTabId);
+          }
+          nextBtn.focus();
+        }
+      });
+
       document.addEventListener('click', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) {
+          return;
+        }
+
+        // Tab bar click handling
+        const tabBtn = target.closest('.page-tab[data-tab-id]');
+        if (tabBtn instanceof HTMLElement) {
+          const tabId = tabBtn.dataset.tabId;
+          if (tabId) {
+            switchToTab(tabId);
+          }
           return;
         }
 
@@ -566,6 +717,9 @@ export function renderPanelClientScript(
           }
 
           if (action === 'openWhySurfaced') {
+            // Switch to Debrief tab if the tab panel layout is present
+            switchToTab('debrief');
+
             const moreContext = document.querySelector(
               'details[data-panel-section="moreContext"]',
             );
@@ -598,6 +752,9 @@ export function renderPanelClientScript(
           }
 
           if (action === 'openEvidenceTray') {
+            // Switch to Evidence tab if the tab panel layout is present
+            switchToTab('evidence');
+
             const moreContext = document.querySelector(
               'details[data-panel-section="moreContext"]',
             );

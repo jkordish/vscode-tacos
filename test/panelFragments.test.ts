@@ -11,6 +11,7 @@ import {
   renderEvidenceListItems,
   renderGroupedActionSections,
   renderIntentEditor,
+  renderPageHeader,
   renderResumePathCard,
   renderScratchpadCard,
   renderStepEvidenceBadge,
@@ -385,5 +386,108 @@ describe('panelFragments', () => {
     expect(doc).toContain('<main id="main" tabindex="-1">');
     expect(doc).toContain('<style nonce="nonce-123">.card { color: red; }</style>');
     expect(doc).toContain('console.log("panel");');
+  });
+
+  it('renders 4-tab document shell with tab nav and panels when tabs option is used', () => {
+    const doc = renderWebviewDocument({
+      cspMetaTag: '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'" />',
+      nonce: 'nonce-tab',
+      panelStyle: '.card { color: blue; }',
+      tabs: [
+        {
+          id: 'overview',
+          label: 'Overview',
+          contentTrustedHtml: '<p>overview content</p>',
+          default: true,
+        },
+        { id: 'resume', label: 'Resume', contentTrustedHtml: '<p>resume content</p>' },
+        { id: 'evidence', label: 'Evidence', contentTrustedHtml: '<p>evidence content</p>' },
+        { id: 'debrief', label: 'Debrief', contentTrustedHtml: '<p>debrief content</p>' },
+      ],
+      clientScript: 'console.log("tabs");',
+    });
+
+    expect(doc).toContain('<html lang="en">');
+    expect(doc).toContain('<nav class="page-tabs"');
+    expect(doc).toContain('role="tablist"');
+    // Tab buttons
+    expect(doc).toContain('data-tab-id="overview"');
+    expect(doc).toContain('data-tab-id="resume"');
+    expect(doc).toContain('data-tab-id="evidence"');
+    expect(doc).toContain('data-tab-id="debrief"');
+    expect(doc).toContain('aria-selected="true"');
+    expect(doc).toContain('id="tab-btn-overview"');
+    expect(doc).toContain('aria-controls="tab-panel-overview"');
+    // Tab panels
+    expect(doc).toContain('id="tab-panel-overview"');
+    expect(doc).toContain('id="tab-panel-resume"');
+    expect(doc).toContain('id="tab-panel-evidence"');
+    expect(doc).toContain('id="tab-panel-debrief"');
+    expect(doc).toContain('role="tabpanel"');
+    // Non-default panels are hidden, regardless of attribute order
+    expect(doc).toMatch(/<section\b[^>]*\bid="tab-panel-resume"[^>]*\bhidden\b[^>]*>/);
+    // Content
+    expect(doc).toContain('<p>overview content</p>');
+    expect(doc).toContain('<p>debrief content</p>');
+    // No bodyCardsTrustedHtml path
+    expect(doc).not.toContain('undefined');
+  });
+
+  it('renderPageHeader renders intent, status chip, and no optional fields when omitted', () => {
+    const html = renderPageHeader({
+      intentTrustedHtml: 'Stabilize rollout verification',
+      statusChipLabel: 'AI-assisted',
+    });
+
+    expect(html).toContain('<header class="page-header">');
+    expect(html).toContain('Stabilize rollout verification');
+    expect(html).toContain('<span class="header-chip">AI-assisted</span>');
+    expect(html).not.toContain('header-chip-secondary');
+    expect(html).not.toContain('header-actions');
+  });
+
+  it('renderPageHeader renders secondary chip and actions row when provided', () => {
+    const html = renderPageHeader({
+      intentTrustedHtml: 'Fix flaky tests',
+      statusChipLabel: 'Manual',
+      secondaryChipLabel: 'Auto summaries off',
+      actionsTrustedHtml: '<button>Resume</button>',
+    });
+
+    expect(html).toContain('<header class="page-header">');
+    expect(html).toContain('Fix flaky tests');
+    expect(html).toContain('<span class="header-chip">Manual</span>');
+    expect(html).toContain('header-chip-secondary');
+    expect(html).toContain('Auto summaries off');
+    expect(html).toContain('<div class="header-actions">');
+    expect(html).toContain('<button>Resume</button>');
+  });
+
+  it('renderWebviewDocument emits page header before tab nav when pageHeaderTrustedHtml is provided', () => {
+    const headerHtml =
+      '<header class="page-header"><div class="header-title-row"><span class="header-intent">My Task</span></div></header>';
+    const doc = renderWebviewDocument({
+      cspMetaTag: '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'" />',
+      nonce: 'nonce-hdr',
+      panelStyle: '.card { color: green; }',
+      pageHeaderTrustedHtml: headerHtml,
+      tabs: [
+        {
+          id: 'overview',
+          label: 'Overview',
+          contentTrustedHtml: '<p>overview content</p>',
+          default: true,
+        },
+      ],
+      clientScript: 'console.log("header-test");',
+    });
+
+    expect(doc).toContain(headerHtml);
+    // Header must appear before the tab nav
+    const headerPos = doc.indexOf('page-header');
+    const tabNavPos = doc.indexOf('page-tabs');
+    expect(headerPos).toBeGreaterThanOrEqual(0);
+    expect(tabNavPos).toBeGreaterThan(headerPos);
+    expect(doc).not.toContain('undefined');
   });
 });

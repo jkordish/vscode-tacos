@@ -194,9 +194,6 @@ import {
   renderChangesSinceCard,
   renderDetailsCard,
   renderEvidenceCard,
-  renderPanelSectionEmphasisAttrs,
-  renderPanelSectionEmphasisBadge,
-  renderQuickActionsCard,
   renderRecapCard,
   renderRestorePackCard,
   renderStatusCard,
@@ -220,6 +217,7 @@ import {
   renderTimelineGroupsHtml,
   renderTopFilesListItems,
   renderTopLinksListItems,
+  renderPageHeader,
   renderWebviewDocument,
 } from './webview/panelFragments';
 import { PANEL_WEBVIEW_STYLE } from './webview/panelStyles';
@@ -7402,34 +7400,6 @@ function renderWebview(
           .join('')}</ul></details>`
       : '';
 
-  const quickActionGroups = renderGroupedActionSections({
-    groups: [
-      {
-        label: 'Copy',
-        buttonsTrustedHtml: [
-          '<button type="button" data-action="copySummary">Copy summary</button>',
-        ],
-      },
-      {
-        label: 'Notes & Feedback',
-        buttonsTrustedHtml: [
-          `<button type="button" class="secondary" data-action="${
-            config.taskCheckpointEnabled ? 'captureStructuredCheckpoint' : 'sessionAddCheckpoint'
-          }" ${demoDisabledAttr}>${
-            config.taskCheckpointEnabled ? 'Capture checkpoint' : 'Add note'
-          }</button>`,
-          `<button type="button" class="secondary" data-action="checkpointOpenList" ${demoDisabledAttr}>List notes</button>`,
-          `<button type="button" class="secondary" data-action="showCognitiveDebrief" ${demoDisabledAttr}>Show debrief</button>`,
-          `<button type="button" data-action="rateHelpfulness" ${demoDisabledAttr}>Rate helpfulness</button>`,
-          `<button type="button" class="secondary" data-action="fixSummary" ${demoDisabledAttr}>Fix summary</button>`,
-        ],
-      },
-    ],
-    headingTag: 'h4',
-    sectionClassName: 'action-group',
-    buttonContainerClassName: 'quick-actions',
-  });
-
   const restorePackGroups = renderGroupedActionSections({
     groups: [
       {
@@ -7648,7 +7618,6 @@ function renderWebview(
     listItemsTrustedHtml: linkItems,
     emptyMessage: 'None captured',
   });
-  const quickActionsCard = renderQuickActionsCard(quickActionGroups);
   const restorePackCard = renderRestorePackCard(restorePackGroups, trusted);
   const evidenceCard = renderEvidenceCard({
     evidenceItemsTrustedHtml: evidenceItems,
@@ -7661,37 +7630,6 @@ function renderWebview(
     expandedSections.has('details'),
     panelSectionEmphasis.details,
   );
-  const moreContextCards = [
-    trustCenterCard,
-    recapCard,
-    changesSinceCard,
-    nudgeCard,
-    topFilesCard,
-    topLinksCard,
-    timelineCard,
-    evidenceCard,
-    detailsCard,
-  ]
-    .filter(Boolean)
-    .join('\n\n');
-  const moreContextEmphasisAttrs = renderPanelSectionEmphasisAttrs(
-    panelSectionEmphasis.moreContext,
-  );
-  const moreContextEmphasisBadge = renderPanelSectionEmphasisBadge(
-    panelSectionEmphasis.moreContext,
-  );
-  const moreContextCard = moreContextCards
-    ? `<div class="card">
-      <details data-panel-section="moreContext" ${
-        moreContextEmphasisAttrs ? `${moreContextEmphasisAttrs} ` : ''
-      }${expandedSections.has('moreContext') ? 'open' : ''}>
-        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">More Context</span>${moreContextEmphasisBadge}</summary>
-        <div class="panel-section-body more-context-stack">
-          ${moreContextCards}
-        </div>
-      </details>
-    </div>`
-    : '';
   const demoCard = demoMode
     ? `<div class="card" data-demo-resume-card="true">
       <h3>Sample Resume Card</h3>
@@ -7704,61 +7642,105 @@ function renderWebview(
       </div>
     </div>`
     : '';
-  const bodyCards = [
-    demoCard,
-    renderResumeStackCard({
-      intent: summary.intent,
-      intentOverridden: summary.intentOverridden,
-      intentEditorTrustedHtml: intentEditorHtml,
-      mode,
-      nowSlotSourceClass: companionSlotSources.now,
-      nowCheckpointLineTrustedHtml: nowCheckpointLine,
-      lastActionLabel,
-      lastActionContext,
-      lastActionActionTrustedHtml: lastActionActionHtml,
-      nextSlotSourceClass: companionSlotSources.next,
-      nextSafeActionSummary:
-        primaryNextActionSummary || 'Refresh summary to regenerate first-action guidance.',
-      hasPrimaryNextAction,
-      nextPrimaryCtaSourceClass: hasPrimaryNextAction ? companionSlotSources.primaryCta : undefined,
-      nextEmphasisToken: primaryCtaDecision.nextToken,
-      primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
-      whySurfacedActionTrustedHtml: rolloutFlags.explainabilityEnabled
-        ? '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>'
-        : '',
-      aiPayloadPreviewActionTrustedHtml: companionHomeAiPayloadPreviewAction,
-      evidenceTrayActionTrustedHtml: evidenceTrayActionHtml,
-      nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
-      nextStepsListTrustedHtml: companionNextSteps,
-      hasBlocker: blockerDecision.hasBlocker,
-      blockedSlotSourceClass: companionSlotSources.blocked,
-      hasPrimaryBlockedAction,
-      blockedPrimaryCtaSourceClass: hasPrimaryBlockedAction
-        ? companionSlotSources.primaryCta
-        : undefined,
-      blockedEmphasisToken: primaryCtaDecision.blockedToken,
-      blockerTitle,
-      blockerDetail,
-      blockerMetaTrustedHtml: blockerMetaHtml,
-      blockerDisabledReasonTrustedHtml: blockerDisabledReasonHtml,
-      blockerActionTrustedHtml: blockerActionHtml,
-      restoreSlotSourceClass: companionSlotSources.restore,
-      restoreSectionsTrustedHtml: companionRestoreSections,
-      restoreUnavailableHintsTrustedHtml: restoreUnavailableHints,
-    }),
-    resumePathCard,
-    confidenceCard,
-    statusCard,
+
+  const resumeStackCardHtml = renderResumeStackCard({
+    intent: summary.intent,
+    intentOverridden: summary.intentOverridden,
+    intentEditorTrustedHtml: intentEditorHtml,
+    mode,
+    nowSlotSourceClass: companionSlotSources.now,
+    nowCheckpointLineTrustedHtml: nowCheckpointLine,
+    lastActionLabel,
+    lastActionContext,
+    lastActionActionTrustedHtml: lastActionActionHtml,
+    nextSlotSourceClass: companionSlotSources.next,
+    nextSafeActionSummary:
+      primaryNextActionSummary || 'Refresh summary to regenerate first-action guidance.',
+    hasPrimaryNextAction,
+    nextPrimaryCtaSourceClass: hasPrimaryNextAction ? companionSlotSources.primaryCta : undefined,
+    nextEmphasisToken: primaryCtaDecision.nextToken,
+    primaryNextActionTrustedHtml: companionPrimaryNextActionButton,
+    whySurfacedActionTrustedHtml: rolloutFlags.explainabilityEnabled
+      ? '<button type="button" class="secondary" data-action="openWhySurfaced">Why am I seeing this?</button>'
+      : '',
+    aiPayloadPreviewActionTrustedHtml: companionHomeAiPayloadPreviewAction,
+    evidenceTrayActionTrustedHtml: evidenceTrayActionHtml,
+    nextStepRationaleTrustedHtml: primaryNextStepRationaleHtml,
+    nextStepsListTrustedHtml: companionNextSteps,
+    hasBlocker: blockerDecision.hasBlocker,
+    blockedSlotSourceClass: companionSlotSources.blocked,
+    hasPrimaryBlockedAction,
+    blockedPrimaryCtaSourceClass: hasPrimaryBlockedAction
+      ? companionSlotSources.primaryCta
+      : undefined,
+    blockedEmphasisToken: primaryCtaDecision.blockedToken,
+    blockerTitle,
+    blockerDetail,
+    blockerMetaTrustedHtml: blockerMetaHtml,
+    blockerDisabledReasonTrustedHtml: blockerDisabledReasonHtml,
+    blockerActionTrustedHtml: blockerActionHtml,
+    restoreSlotSourceClass: companionSlotSources.restore,
+    restoreSectionsTrustedHtml: companionRestoreSections,
+    restoreUnavailableHintsTrustedHtml: restoreUnavailableHints,
+  });
+
+  // ── Page header ─────────────────────────────────────────────────────────────
+  // Compact sticky header above the tab bar: task intent, status chips, quick actions toolbar.
+  const pageHeaderActionButtons = [
+    `<button type="button" class="secondary" data-action="copySummary">Copy summary</button>`,
+    `<button type="button" class="secondary" data-action="fixSummary" ${demoDisabledAttr}>Fix summary</button>`,
+    `<button type="button" class="secondary" data-action="rateHelpfulness" ${demoDisabledAttr}>Rate</button>`,
+    `<button type="button" class="secondary" data-action="${
+      config.taskCheckpointEnabled ? 'captureStructuredCheckpoint' : 'sessionAddCheckpoint'
+    }" ${demoDisabledAttr}>${config.taskCheckpointEnabled ? 'Checkpoint' : 'Add note'}</button>`,
+    `<button type="button" class="secondary" data-action="checkpointOpenList" ${demoDisabledAttr}>Notes</button>`,
+    `<button type="button" class="secondary" data-action="refreshSummary" ${demoDisabledAttr}>Refresh</button>`,
+  ]
+    .filter(Boolean)
+    .join('');
+  const pageHeaderHtml = renderPageHeader({
+    intentTrustedHtml: escapeHtml(summary.intent),
+    statusChipLabel: sourceLabel,
+    secondaryChipLabel:
+      autoSummaryStatusLabel !== 'Auto summaries active' ? autoSummaryStatusLabel : undefined,
+    actionsTrustedHtml: pageHeaderActionButtons,
+  });
+
+  // ── 4-tab layout ────────────────────────────────────────────────────────────
+  // Overview: demo banner, resume stack card (intent+now+next+blocked), status, confidence
+  // Resume:   task state, checkpoint, resume path, restore pack, scratchpad
+  // Evidence: evidence, details, timeline, recap, changes-since, top files, top links
+  // Debrief:  cognitive debrief, nudge, trust center
+  const overviewTabContent = [demoCard, resumeStackCardHtml, confidenceCard, statusCard]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const resumeTabContent = [
     taskStateCard,
     checkpointCard,
-    cognitiveDebriefCard,
-    scratchpadCard,
-    quickActionsCard,
+    resumePathCard,
     restorePackCard,
-    moreContextCard,
+    scratchpadCard,
   ]
     .filter(Boolean)
     .join('\n\n');
+
+  const evidenceTabContent = [
+    evidenceCard,
+    detailsCard,
+    timelineCard,
+    recapCard,
+    changesSinceCard,
+    topFilesCard,
+    topLinksCard,
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const debriefTabContent = [cognitiveDebriefCard, nudgeCard, trustCenterCard]
+    .filter(Boolean)
+    .join('\n\n');
+
   const panelSectionScopeToken =
     activeExtensionContext && panelWorkspaceRoot
       ? Buffer.from(partitionScope(activeExtensionContext, panelWorkspaceRoot)).toString(
@@ -7771,7 +7753,13 @@ function renderWebview(
     cspMetaTag,
     nonce,
     panelStyle: PANEL_WEBVIEW_STYLE,
-    bodyCardsTrustedHtml: bodyCards,
+    pageHeaderTrustedHtml: pageHeaderHtml,
+    tabs: [
+      { id: 'overview', label: 'Overview', contentTrustedHtml: overviewTabContent, default: true },
+      { id: 'resume', label: 'Resume', contentTrustedHtml: resumeTabContent },
+      { id: 'evidence', label: 'Evidence', contentTrustedHtml: evidenceTabContent },
+      { id: 'debrief', label: 'Debrief', contentTrustedHtml: debriefTabContent },
+    ],
     clientScript,
   });
 }
