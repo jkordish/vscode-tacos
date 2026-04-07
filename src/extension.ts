@@ -7689,6 +7689,7 @@ function renderWebview(
   const pageHeaderActionButtons = [
     `<button type="button" class="secondary" data-action="copySummary">Copy summary</button>`,
     `<button type="button" class="secondary" data-action="fixSummary" ${demoDisabledAttr}>Fix summary</button>`,
+    `<button type="button" class="secondary" data-action="rateHelpfulness" ${demoDisabledAttr}>Rate</button>`,
     `<button type="button" class="secondary" data-action="${
       config.taskCheckpointEnabled ? 'captureStructuredCheckpoint' : 'sessionAddCheckpoint'
     }" ${demoDisabledAttr}>${config.taskCheckpointEnabled ? 'Checkpoint' : 'Add note'}</button>`,

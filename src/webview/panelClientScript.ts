@@ -429,6 +429,23 @@ export function renderPanelClientScript(
       setEvidenceListExpanded(Boolean(viewState.evidenceListExpanded), false);
       restorePanelSectionExpansion();
       restoreActiveTab();
+
+      // Measure the sticky page header and expose its height as a CSS custom
+      // property so the tab bar can offset itself correctly via
+      // \`top: var(--page-header-height, 0px)\`.
+      function updatePageHeaderHeight() {
+        const header = document.querySelector('.page-header');
+        const height = header instanceof HTMLElement ? header.getBoundingClientRect().height : 0;
+        document.documentElement.style.setProperty('--page-header-height', height + 'px');
+      }
+      updatePageHeaderHeight();
+      if (typeof ResizeObserver !== 'undefined') {
+        const header = document.querySelector('.page-header');
+        if (header instanceof HTMLElement) {
+          new ResizeObserver(updatePageHeaderHeight).observe(header);
+        }
+      }
+
       window.addEventListener(
         'scroll',
         () => {

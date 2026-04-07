@@ -56,6 +56,8 @@ export const PANEL_WEBVIEW_STYLE = `
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        margin: 0;
+        padding: 0;
       }
       .header-chip {
         font-size: 10px;
