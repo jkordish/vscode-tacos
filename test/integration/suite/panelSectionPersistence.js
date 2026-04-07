@@ -54,8 +54,9 @@ async function run() {
     }
 
     assert.ok(
-      (baseline?.panelEmphasisBadgeCount ?? 0) >= 0,
-      'Expected policy-driven section emphasis badge count to be non-negative.',
+      Number.isFinite(baseline?.panelEmphasisBadgeCount ?? 0) &&
+        (baseline?.panelEmphasisBadgeCount ?? 0) >= 0,
+      'Expected policy-driven section emphasis badge count to be a finite non-negative number.',
     );
 
     if (baseline?.hasTimelineSection) {

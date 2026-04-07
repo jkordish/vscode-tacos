@@ -86,7 +86,7 @@ export const PANEL_WEBVIEW_STYLE = `
       /* ── Tab nav ────────────────────────────────────────────────────── */
       .page-tabs {
         position: sticky;
-        top: 0;
+        top: var(--page-header-height, 0px);
         z-index: 10;
         display: flex;
         gap: 2px;
@@ -97,7 +97,7 @@ export const PANEL_WEBVIEW_STYLE = `
       }
       .page-tab {
         border: 1px solid transparent;
-        border-bottom: none;
+        border-bottom: 1px solid transparent;
         border-radius: var(--radius-1) var(--radius-1) 0 0;
         background: transparent;
         color: var(--surface-muted);

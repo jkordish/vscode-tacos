@@ -7707,7 +7707,7 @@ function renderWebview(
   // Overview: demo banner, resume stack card (intent+now+next+blocked), status, confidence
   // Resume:   task state, checkpoint, resume path, restore pack, scratchpad
   // Evidence: evidence, details, timeline, recap, changes-since, top files, top links
-  // Debrief:  cognitive debrief, nudge, trust center, quick actions
+  // Debrief:  cognitive debrief, nudge, trust center
   const overviewTabContent = [demoCard, resumeStackCardHtml, confidenceCard, statusCard]
     .filter(Boolean)
     .join('\n\n');

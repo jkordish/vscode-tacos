@@ -670,7 +670,7 @@ export function renderWebviewDocument(input: WebviewDocumentInput): string {
     const tabButtons = tabs
       .map((tab) => {
         const isDefault = tab.id === defaultTabId;
-        return `<button type="button" role="tab" class="page-tab" id="tab-btn-${escapeHtml(tab.id)}" aria-controls="tab-panel-${escapeHtml(tab.id)}" aria-selected="${isDefault ? 'true' : 'false'}" data-tab-id="${escapeHtml(tab.id)}">${escapeHtml(tab.label)}</button>`;
+        return `<button type="button" role="tab" class="page-tab" id="tab-btn-${escapeHtml(tab.id)}" aria-controls="tab-panel-${escapeHtml(tab.id)}" aria-selected="${isDefault ? 'true' : 'false'}" tabindex="${isDefault ? '0' : '-1'}" data-tab-id="${escapeHtml(tab.id)}">${escapeHtml(tab.label)}</button>`;
       })
       .join('\n        ');
 
