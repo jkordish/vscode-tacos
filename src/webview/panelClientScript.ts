@@ -274,6 +274,17 @@ export function renderPanelClientScript(
         }
         const restored = resolveFocusToken(viewState.focusToken);
         if (restored instanceof HTMLElement) {
+          // If the focus target lives inside a hidden tab panel, switch to that
+          // tab first so focus lands on a visible element.
+          const containingPanel = restored.closest('.tab-panel[hidden]');
+          if (containingPanel instanceof HTMLElement) {
+            const panelId = containingPanel.id;
+            // panelId is "tab-panel-<tabId>"
+            const tabId = panelId.startsWith('tab-panel-') ? panelId.slice('tab-panel-'.length) : '';
+            if (tabId) {
+              switchToTab(tabId);
+            }
+          }
           try {
             restored.focus({ preventScroll: true });
           } catch {
