@@ -42,8 +42,8 @@ async function run() {
 
     if (trustCenterIndex >= 0 && evidenceIndex >= 0) {
       assert.ok(
-        evidenceIndex > trustCenterIndex,
-        'Expected Evidence section to stay after Trust Center in stable order.',
+        trustCenterIndex > evidenceIndex,
+        'Expected Trust Center section to appear after Evidence in stable order (Evidence tab renders before Debrief).',
       );
     }
     if (evidenceIndex >= 0 && detailsIndex >= 0) {

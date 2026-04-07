@@ -641,7 +641,7 @@ export function renderPageHeader(input: PageHeaderInput): string {
     : '';
   return `<header class="page-header">
       <div class="header-title-row">
-        <span class="header-intent">${input.intentTrustedHtml}</span>
+        <h1 class="header-intent">${input.intentTrustedHtml}</h1>
         <span class="header-chip">${escapeHtml(input.statusChipLabel)}</span>${secondaryChip}
       </div>${actionsRow}
     </header>`;

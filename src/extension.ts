@@ -7688,6 +7688,7 @@ function renderWebview(
   // Compact sticky header above the tab bar: task intent, status chips, quick actions toolbar.
   const pageHeaderActionButtons = [
     `<button type="button" class="secondary" data-action="copySummary">Copy summary</button>`,
+    `<button type="button" class="secondary" data-action="fixSummary" ${demoDisabledAttr}>Fix summary</button>`,
     `<button type="button" class="secondary" data-action="${
       config.taskCheckpointEnabled ? 'captureStructuredCheckpoint' : 'sessionAddCheckpoint'
     }" ${demoDisabledAttr}>${config.taskCheckpointEnabled ? 'Checkpoint' : 'Add note'}</button>`,
