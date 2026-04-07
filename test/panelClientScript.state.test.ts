@@ -389,6 +389,57 @@ describe('panelClientScript state behavior', () => {
     expect(overviewPanel.hasAttribute('hidden')).toBe(true);
   });
 
+  it('switches to the requested tab when deep-link actions are clicked in the tab layout', () => {
+    const tabBodyHtml = `
+      <a class="skip-link" href="#main">Skip to main content</a>
+      <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
+      <ul id="evidence-list"></ul>
+      <button type="button" data-action="toggleEvidenceMore" data-hidden-count="0">Show more</button>
+      <button type="button" data-action="openEvidenceTray" id="open-evidence-tray">Open evidence</button>
+      <button type="button" data-action="openWhySurfaced" id="open-why-surfaced">Open why surfaced</button>
+      <nav class="page-tabs" role="tablist">
+        <button type="button" class="page-tab" data-tab-id="overview" aria-selected="true" id="tab-btn-overview">Overview</button>
+        <button type="button" class="page-tab" data-tab-id="evidence" aria-selected="false" id="tab-btn-evidence">Evidence</button>
+        <button type="button" class="page-tab" data-tab-id="debrief" aria-selected="false" id="tab-btn-debrief">Debrief</button>
+      </nav>
+      <div class="tab-panels">
+        <section class="tab-panel" id="tab-panel-overview" role="tabpanel"></section>
+        <section class="tab-panel" id="tab-panel-evidence" role="tabpanel" hidden></section>
+        <section class="tab-panel" id="tab-panel-debrief" role="tabpanel" hidden></section>
+      </div>
+    `;
+
+    bootstrap({ sectionScope: 'scope-token' }, 'scope-token', tabBodyHtml);
+
+    const overviewBtn = document.getElementById('tab-btn-overview') as HTMLButtonElement;
+    const evidenceBtn = document.getElementById('tab-btn-evidence') as HTMLButtonElement;
+    const debriefBtn = document.getElementById('tab-btn-debrief') as HTMLButtonElement;
+    const overviewPanel = document.getElementById('tab-panel-overview') as HTMLElement;
+    const evidencePanel = document.getElementById('tab-panel-evidence') as HTMLElement;
+    const debriefPanel = document.getElementById('tab-panel-debrief') as HTMLElement;
+    const openEvidenceTrayBtn = document.getElementById('open-evidence-tray') as HTMLButtonElement;
+    const openWhySurfacedBtn = document.getElementById('open-why-surfaced') as HTMLButtonElement;
+
+    openEvidenceTrayBtn.click();
+
+    expect(evidenceBtn.getAttribute('aria-selected')).toBe('true');
+    expect(overviewBtn.getAttribute('aria-selected')).toBe('false');
+    expect(debriefBtn.getAttribute('aria-selected')).toBe('false');
+    expect(evidencePanel.hasAttribute('hidden')).toBe(false);
+    expect(overviewPanel.hasAttribute('hidden')).toBe(true);
+    expect(debriefPanel.hasAttribute('hidden')).toBe(true);
+
+    openWhySurfacedBtn.click();
+
+    expect(debriefBtn.getAttribute('aria-selected')).toBe('true');
+    expect(overviewBtn.getAttribute('aria-selected')).toBe('false');
+    expect(evidenceBtn.getAttribute('aria-selected')).toBe('false');
+    expect(debriefPanel.hasAttribute('hidden')).toBe(false);
+    expect(overviewPanel.hasAttribute('hidden')).toBe(true);
+    expect(evidencePanel.hasAttribute('hidden')).toBe(true);
+  });
+
   it('clears scope-bound scroll and focus state when section scope changes', () => {
     const { setState } = bootstrap(
       {

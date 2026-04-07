@@ -362,7 +362,7 @@ export function renderPanelClientScript(
         if (typeof tabId !== 'string' || !tabId) {
           return;
         }
-        const tabButtons = document.querySelectorAll('.page-tab[data-tab-id]');
+        const tabButtons = Array.from(document.querySelectorAll('.page-tab[data-tab-id]'));
         const tabPanels = document.querySelectorAll('.tab-panel');
         let matched = false;
         for (const btn of tabButtons) {
@@ -371,6 +371,8 @@ export function renderPanelClientScript(
           }
           const isTarget = btn.dataset.tabId === tabId;
           btn.setAttribute('aria-selected', isTarget ? 'true' : 'false');
+          // Roving tabindex: active tab is reachable via Tab key, others are skipped
+          btn.setAttribute('tabindex', isTarget ? '0' : '-1');
           if (isTarget) {
             matched = true;
           }
@@ -380,6 +382,7 @@ export function renderPanelClientScript(
           const first = tabButtons[0];
           if (first instanceof HTMLElement) {
             first.setAttribute('aria-selected', 'true');
+            first.setAttribute('tabindex', '0');
             tabId = first.dataset.tabId || tabId;
           }
         }
@@ -588,6 +591,49 @@ export function renderPanelClientScript(
           type: 'setIntentOverride',
           intent,
         });
+      });
+
+      // Tab keyboard navigation per ARIA Tabs pattern (ArrowLeft/ArrowRight/Home/End)
+      document.addEventListener('keydown', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+          return;
+        }
+        const tabList = target.closest('[role="tablist"]');
+        if (!(tabList instanceof HTMLElement)) {
+          return;
+        }
+        const tabButtons = Array.from(tabList.querySelectorAll('.page-tab[data-tab-id]')).filter(
+          (b) => b instanceof HTMLElement,
+        );
+        if (tabButtons.length === 0) {
+          return;
+        }
+        const currentIndex = tabButtons.indexOf(target);
+        if (currentIndex === -1) {
+          return;
+        }
+        let nextIndex = -1;
+        if (event.key === 'ArrowRight') {
+          nextIndex = (currentIndex + 1) % tabButtons.length;
+        } else if (event.key === 'ArrowLeft') {
+          nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
+        } else if (event.key === 'Home') {
+          nextIndex = 0;
+        } else if (event.key === 'End') {
+          nextIndex = tabButtons.length - 1;
+        } else {
+          return;
+        }
+        event.preventDefault();
+        const nextBtn = tabButtons[nextIndex];
+        if (nextBtn instanceof HTMLElement) {
+          const nextTabId = nextBtn.dataset.tabId;
+          if (nextTabId) {
+            switchToTab(nextTabId);
+          }
+          nextBtn.focus();
+        }
       });
 
       document.addEventListener('click', (event) => {

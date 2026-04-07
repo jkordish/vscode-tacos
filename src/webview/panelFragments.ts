@@ -617,6 +617,36 @@ export interface TabPanelInput {
   default?: boolean;
 }
 
+export interface PageHeaderInput {
+  /** Task intent / title line (already escaped). */
+  intentTrustedHtml: TrustedHtml;
+  /** Short status chip text (e.g. "Local summary (instant)"). */
+  statusChipLabel: string;
+  /** Optional secondary chip (e.g. auto-summary state). */
+  secondaryChipLabel?: string;
+  /** Compact toolbar buttons HTML (already trusted). */
+  actionsTrustedHtml?: TrustedHtml;
+}
+
+/**
+ * Renders the compact sticky page header that sits above the tab bar.
+ * Contains: task intent, status chips, and a compact action toolbar row.
+ */
+export function renderPageHeader(input: PageHeaderInput): string {
+  const secondaryChip = input.secondaryChipLabel
+    ? ` <span class="header-chip header-chip-secondary">${escapeHtml(input.secondaryChipLabel)}</span>`
+    : '';
+  const actionsRow = input.actionsTrustedHtml
+    ? `\n      <div class="header-actions">${input.actionsTrustedHtml}</div>`
+    : '';
+  return `<header class="page-header">
+      <div class="header-title-row">
+        <span class="header-intent">${input.intentTrustedHtml}</span>
+        <span class="header-chip">${escapeHtml(input.statusChipLabel)}</span>${secondaryChip}
+      </div>${actionsRow}
+    </header>`;
+}
+
 export interface WebviewDocumentInput {
   cspMetaTag: TrustedHtml;
   nonce: string;
@@ -624,6 +654,8 @@ export interface WebviewDocumentInput {
   /** @deprecated Use `tabs` instead. Kept for backward-compat with existing callers. */
   bodyCardsTrustedHtml?: TrustedHtml;
   tabs?: TabPanelInput[];
+  /** Optional compact sticky header rendered above the tab bar. */
+  pageHeaderTrustedHtml?: TrustedHtml;
   clientScript: string;
 }
 
@@ -651,14 +683,19 @@ export function renderWebviewDocument(input: WebviewDocumentInput): string {
       })
       .join('\n      ');
 
-    mainContent = `<nav class="page-tabs" role="tablist" aria-label="Panel sections">
+    const pageHeaderHtml = input.pageHeaderTrustedHtml
+      ? `${input.pageHeaderTrustedHtml}\n    `
+      : '';
+    mainContent = `${pageHeaderHtml}<nav class="page-tabs" role="tablist" aria-label="Panel sections">
       ${tabButtons}
     </nav>
     <div class="tab-panels">
       ${tabPanels}
     </div>`;
   } else {
-    mainContent = input.bodyCardsTrustedHtml ?? '';
+    mainContent = `<div class="tab-panels">
+      ${input.bodyCardsTrustedHtml ?? ''}
+    </div>`;
   }
 
   return `<!doctype html>
