@@ -531,6 +531,8 @@ interface RuntimeState {
   lastRedactionPatternWarningSignature?: string;
   panelDismissUndoBuffer?: { note: CheckpointNote; expiresAt: number };
   panelDismissUndoTimer?: ReturnType<typeof setTimeout>;
+  /** User edits from the cockpit inline-edit fields, keyed by CockpitField. */
+  panelCockpitOverrides?: { verifyFirst?: string; nextStep?: string };
 }
 
 interface ProviderModeSnapshot {
@@ -6199,6 +6201,7 @@ async function showDetailsPanel(
     );
   }
   state.panelSummary = summary;
+  state.panelCockpitOverrides = undefined;
   state.panelBaseSummary = options.panelBaseSummary ?? stripStructuredTaskStateFromSummary(summary);
   state.panelWorkspaceRoot = workspaceRoot;
   state.panelProviderModeSnapshot = options.providerModeSnapshot;
@@ -6264,6 +6267,7 @@ async function showDetailsPanel(
       state.panelScratchpadScopeLabel = undefined;
       state.panelSectionState = undefined;
       state.panelSectionScope = undefined;
+      state.panelCockpitOverrides = undefined;
     });
 
     state.panel.webview.onDidReceiveMessage(async (rawMessage: unknown) => {
@@ -6502,12 +6506,20 @@ async function showDetailsPanel(
         }
         if (Date.now() > buffer.expiresAt) {
           state.panelDismissUndoBuffer = undefined;
+          if (state.panelDismissUndoTimer !== undefined) {
+            clearTimeout(state.panelDismissUndoTimer);
+            state.panelDismissUndoTimer = undefined;
+          }
           return;
         }
         if (buffer.note.id !== message.noteId) {
           return;
         }
         state.panelDismissUndoBuffer = undefined;
+        if (state.panelDismissUndoTimer !== undefined) {
+          clearTimeout(state.panelDismissUndoTimer);
+          state.panelDismissUndoTimer = undefined;
+        }
         await updateCheckpointNoteById(context, workspaceRoot, buffer.note.id, (current) => ({
           ...buffer.note,
           id: current.id,
@@ -6906,8 +6918,18 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'updateProspective') {
-        // Cockpit inline-edit autosave: field + value already validated by parseWebviewMessage.
-        // State is prospective (webview-driven); no server-side persistence required.
+        // Cockpit inline-edit autosave: persist the user's edit into extension state
+        // so it survives panel rerenders.  The client shows 'Saved' only after this
+        // message is round-tripped through the extension, so we do not need to reply
+        // with an explicit ack — the existing panelClientScript flow handles it.
+        if (!state.panelCockpitOverrides) {
+          state.panelCockpitOverrides = {};
+        }
+        if (message.field === 'verifyFirst') {
+          state.panelCockpitOverrides.verifyFirst = message.value;
+        } else if (message.field === 'nextStep') {
+          state.panelCockpitOverrides.nextStep = message.value;
+        }
         return;
       }
 
@@ -7039,6 +7061,7 @@ function updateSummaryScratchpad(
   }
 
   state.panelSummary = summary;
+  state.panelCockpitOverrides = undefined;
   if (panelBaseSummary) {
     state.panelBaseSummary = panelBaseSummary;
   }
@@ -8018,8 +8041,9 @@ function renderWebview(
     ? ''
     : `<button type="button" class="secondary" data-action="sessionAddCheckpoint" ${demoDisabledAttr}>Add note</button>`;
   const resumeCockpitCard = renderResumeCockpitCard({
-    verifyFirst: summary.recommendedFirstAction?.trim() ?? '',
-    nextStep: summary.nextSteps[0]?.trim() ?? '',
+    verifyFirst:
+      state.panelCockpitOverrides?.verifyFirst ?? summary.recommendedFirstAction?.trim() ?? '',
+    nextStep: state.panelCockpitOverrides?.nextStep ?? summary.nextSteps[0]?.trim() ?? '',
     blocker: blockerDecision.hasBlocker ? blockerDecision.title : undefined,
     anchors: cockpitAnchors,
     actionButtonsTrustedHtml: cockpitActionButtonsHtml,
