@@ -831,7 +831,7 @@ export function renderWebviewDocument(input: WebviewDocumentInput): string {
   <body>
     <a class="skip-link" href="#main">Skip to main content</a>
     <div id="panel-status-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
-    <div id="toast-region" role="status" aria-live="assertive" aria-atomic="true" class="toast-region"></div>
+    <div id="toast-region" role="alert" aria-live="assertive" aria-atomic="true" class="toast-region"></div>
     <main id="main" tabindex="-1">
       ${mainContent}
     </main>

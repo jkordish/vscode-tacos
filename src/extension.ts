@@ -6412,6 +6412,13 @@ async function showDetailsPanel(
 
         await refreshPanelCheckpointState(context, workspaceRoot);
         rerenderPanel();
+        if (message.type === 'checkpointDismiss') {
+          void state.panel?.webview.postMessage({
+            type: 'showUndoToast',
+            noteId: note.id,
+            timeoutMs: 30000,
+          });
+        }
         return;
       }
 
@@ -6430,7 +6437,8 @@ async function showDetailsPanel(
         }
         state.panelDismissUndoBuffer = undefined;
         await updateCheckpointNoteById(context, workspaceRoot, buffer.note.id, (current) => ({
-          ...current,
+          ...buffer.note,
+          id: current.id,
           status: 'open',
         }));
         if (state.metricSession) {

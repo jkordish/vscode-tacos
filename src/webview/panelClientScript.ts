@@ -484,6 +484,20 @@ export function renderPanelClientScript(
         if (!payload || typeof payload !== 'object') {
           return;
         }
+        if (payload.type === 'showUndoToast') {
+          const noteId = (typeof payload.noteId === 'string' ? payload.noteId : '').trim();
+          const timeoutMs = typeof payload.timeoutMs === 'number' ? payload.timeoutMs : 30000;
+          if (noteId) {
+            showToast('Note dismissed.', {
+              actionText: 'Undo',
+              timeoutMs,
+              onAction: () => {
+                vscode.postMessage({ type: 'undoDeleteNote', noteId });
+              },
+            });
+          }
+          return;
+        }
         if (payload.type !== 'panelStatus' || typeof payload.message !== 'string') {
           return;
         }
