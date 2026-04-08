@@ -249,6 +249,78 @@ export function renderEvidenceCard(input: EvidenceCardInput): string {
     </div>`;
 }
 
+export interface ResumeCockpitAnchor {
+  label: string;
+  kind: string;
+  id: string;
+  clickable: boolean;
+}
+
+export interface ResumeCockpitCardInput {
+  verifyFirst: string;
+  nextStep: string;
+  blocker?: string;
+  anchors: ResumeCockpitAnchor[];
+  actionButtonsTrustedHtml: string;
+}
+
+export function renderResumeCockpitCard(input: ResumeCockpitCardInput): string {
+  const topAnchors = input.anchors.slice(0, 3);
+  const blockerHtml = input.blocker
+    ? `<details class="cockpit-blocker-details">
+        <summary class="panel-disclosure-summary cockpit-blocker-summary"><span class="cockpit-field-label cockpit-blocker-label">Blocker</span></summary>
+        <div class="cockpit-blocker-body">${escapeHtml(input.blocker)}</div>
+      </details>`
+    : '';
+  const anchorsHtml =
+    topAnchors.length > 0
+      ? `<div class="cockpit-anchors">
+        <span class="cockpit-field-label">Recent anchors</span>
+        <ul class="cockpit-anchor-list">${topAnchors
+          .map((a) =>
+            a.clickable
+              ? `<li><button type="button" class="text-link-button cockpit-anchor-btn badge kind-${escapeHtml(a.kind)}" data-action="openEvidence" data-evidence-id="${escapeHtml(a.id)}">${escapeHtml(a.label)}</button></li>`
+              : `<li><span class="badge kind-${escapeHtml(a.kind)}">${escapeHtml(a.label)}</span></li>`,
+          )
+          .join('')}</ul>
+      </div>`
+      : '';
+  return `<div class="card cockpit-card">
+    <div class="cockpit-field-row">
+      <label class="cockpit-field-label" for="cockpit-verify-first">Verify first</label>
+      <input
+        id="cockpit-verify-first"
+        class="cockpit-input"
+        type="text"
+        maxlength="280"
+        autocomplete="off"
+        spellcheck="false"
+        value="${escapeHtml(input.verifyFirst)}"
+        placeholder="What to confirm before diving in…"
+        aria-label="Verify first — what to check before starting"
+      />
+    </div>
+    <div class="cockpit-field-row">
+      <label class="cockpit-field-label" for="cockpit-next-step">Next step</label>
+      <input
+        id="cockpit-next-step"
+        class="cockpit-input"
+        type="text"
+        maxlength="280"
+        autocomplete="off"
+        spellcheck="false"
+        value="${escapeHtml(input.nextStep)}"
+        placeholder="Immediate next action…"
+        aria-label="Next step — immediate next action"
+      />
+    </div>
+    ${blockerHtml}
+    ${anchorsHtml}
+    <div class="cockpit-save-state sr-only" id="cockpit-save-state" aria-live="polite" aria-atomic="true"></div>
+    ${input.actionButtonsTrustedHtml ? `<div class="cockpit-action-row status-actions">${input.actionButtonsTrustedHtml}</div>` : ''}
+  </div>`;
+}
+
 export function renderDetailsCard(
   detailsTrustedHtml: string,
   expanded: boolean,
