@@ -326,6 +326,21 @@ describe('groupTimelineByTimeBucket', () => {
     expect(groupTimelineByTimeBucket([], bucket, 4, now)).toHaveLength(0);
   });
 
+  it('places a boundary-timestamp item in exactly one bucket (no duplicates)', () => {
+    // An item at exactly now - bucketSizeMs sits on the shared boundary between
+    // bucket 0 (Last 5 min) and bucket 1 (5–10 min ago). It should appear only
+    // in bucket 1 (the older bucket) because bucket 0 uses exclusive lower bound
+    // and bucket 1 uses inclusive lower bound with exclusive upper bound.
+    const boundaryTs = now - bucket; // exactly now - 5 min
+    const entries: SummaryEvidenceItem[] = [
+      { id: 'boundary', kind: 'file', label: 'b.ts', target: '/b.ts', capturedAt: boundaryTs },
+    ];
+    const buckets = groupTimelineByTimeBucket(entries, bucket, 4, now);
+    const allRows = buckets.flatMap((bkt) => bkt.rows);
+    // The item must appear exactly once across all buckets.
+    expect(allRows.filter((r) => r.evidenceId === 'boundary')).toHaveLength(1);
+  });
+
   it('labels first bucket as "Last N min" and subsequent buckets as ranges', () => {
     const entries: SummaryEvidenceItem[] = [
       { id: 'a', kind: 'file', label: 'a.ts', target: '/a.ts', capturedAt: now - 60_000 },

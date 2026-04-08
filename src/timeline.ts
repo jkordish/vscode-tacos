@@ -351,8 +351,11 @@ export function groupTimelineByTimeBucket(
       rows: [],
     });
 
+    // Bucket 0 uses inclusive upper bound (ts <= now) so timestamps equal to now
+    // are captured. All other buckets use an exclusive upper bound (ts < endMs)
+    // so items on a shared boundary are assigned to exactly one bucket.
     for (const { item, ts } of withTs) {
-      if (ts >= startMs && ts <= endMs) {
+      if (ts >= startMs && (b === 0 ? ts <= endMs : ts < endMs)) {
         buckets[b]!.rows.push({
           evidenceId: item.id,
           kind: item.kind,
