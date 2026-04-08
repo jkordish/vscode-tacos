@@ -486,7 +486,10 @@ export function renderPanelClientScript(
         }
         if (payload.type === 'showUndoToast') {
           const noteId = (typeof payload.noteId === 'string' ? payload.noteId : '').trim();
-          const timeoutMs = typeof payload.timeoutMs === 'number' ? payload.timeoutMs : 30000;
+          const rawTimeoutMs = typeof payload.timeoutMs === 'number' ? payload.timeoutMs : 30000;
+          const timeoutMs = Number.isFinite(rawTimeoutMs) && rawTimeoutMs > 0
+            ? Math.min(Math.max(rawTimeoutMs, 1000), 60000)
+            : 30000;
           if (noteId) {
             showToast('Note dismissed.', {
               actionText: 'Undo',
@@ -596,8 +599,16 @@ export function renderPanelClientScript(
       function sendCockpitUpdate(field, rawValue) {
         const value = normalizeCockpitValue(rawValue);
         vscode.postMessage({ type: 'updateProspective', field, value });
-        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        setCockpitSaveState('Saved \u2022 ' + now);
+        // Only mark Saved when every pending debounce timer has flushed.
+        // At call-time the current field's timer has already been deleted, so
+        // a non-empty cockpitTimers means at least one other field is still pending.
+        if (Object.keys(cockpitTimers).length === 0) {
+          const _d = new Date();
+          const hh = String(_d.getHours()).padStart(2, '0');
+          const mm = String(_d.getMinutes()).padStart(2, '0');
+          setCockpitSaveState('Saved \u2022 ' + hh + ':' + mm);
+        }
+        // else: keep 'Saving…' — another field's timer is still pending
       }
 
       function scheduleCockpitUpdate(field, rawValue) {
