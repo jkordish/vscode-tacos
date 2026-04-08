@@ -60,6 +60,8 @@ type ResumePathStepId = 'confirmIntent' | 'runNextSafeAction' | 'clearBlocker';
 type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details' | 'moreContext';
 export type AiPayloadPreviewEntrypoint = 'trust-center' | 'why-surfaced' | 'companion-home';
 
+export type CockpitField = 'verifyFirst' | 'nextStep';
+
 export type WebviewMessage =
   | { type: SimpleWebviewMessageType }
   | { type: 'openAiPayloadPreview'; entrypoint?: AiPayloadPreviewEntrypoint }
@@ -69,6 +71,7 @@ export type WebviewMessage =
   | { type: 'resumePathToggle'; stepId: ResumePathStepId; completed: boolean }
   | { type: 'setPanelSectionExpanded'; sectionId: PanelSectionId; expanded: boolean }
   | { type: 'setIntentOverride'; intent: string }
+  | { type: 'updateProspective'; field: CockpitField; value: string }
   | { type: 'openEvidence'; evidenceId: string }
   | { type: 'openTopFile'; index: number }
   | { type: 'openLink'; index: number };
@@ -247,6 +250,25 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
     return {
       type: 'setIntentOverride',
       intent,
+    };
+  }
+
+  if (raw.type === 'updateProspective') {
+    const field = raw.field;
+    if (field !== 'verifyFirst' && field !== 'nextStep') {
+      return undefined;
+    }
+
+    if (typeof raw.value !== 'string') {
+      return undefined;
+    }
+
+    const value = raw.value.replace(/\r?\n/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 280);
+
+    return {
+      type: 'updateProspective',
+      field,
+      value,
     };
   }
 

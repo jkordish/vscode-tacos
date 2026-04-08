@@ -515,6 +515,119 @@ export function renderPanelClientScript(
         return normalized || undefined;
       }
 
+      // ── Cockpit inline-edit autosave ────────────────────────────────
+      const COCKPIT_DEBOUNCE_MS = 600;
+      const cockpitTimers = {};
+      let cockpitSaveStateTimer = undefined;
+
+      function normalizeCockpitValue(rawValue) {
+        if (typeof rawValue !== 'string') {
+          return '';
+        }
+        return rawValue.replace(/\\r?\\n/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 280);
+      }
+
+      function setCockpitSaveState(message) {
+        const saveState = document.getElementById('cockpit-save-state');
+        if (saveState instanceof HTMLElement) {
+          saveState.textContent = '';
+          if (cockpitSaveStateTimer !== undefined) {
+            window.clearTimeout(cockpitSaveStateTimer);
+          }
+          cockpitSaveStateTimer = window.setTimeout(() => {
+            cockpitSaveStateTimer = undefined;
+            saveState.textContent = typeof message === 'string' ? message : '';
+          }, 15);
+        }
+      }
+
+      function sendCockpitUpdate(field, rawValue) {
+        const value = normalizeCockpitValue(rawValue);
+        vscode.postMessage({ type: 'updateProspective', field, value });
+        setCockpitSaveState('Saved.');
+      }
+
+      function scheduleCockpitUpdate(field, rawValue) {
+        if (cockpitTimers[field] !== undefined) {
+          window.clearTimeout(cockpitTimers[field]);
+        }
+        setCockpitSaveState('Saving…');
+        cockpitTimers[field] = window.setTimeout(() => {
+          delete cockpitTimers[field];
+          sendCockpitUpdate(field, rawValue);
+        }, COCKPIT_DEBOUNCE_MS);
+      }
+
+      document.addEventListener('input', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+          return;
+        }
+        if (target.id === 'cockpit-verify-first') {
+          scheduleCockpitUpdate('verifyFirst', target.value);
+          return;
+        }
+        if (target.id === 'cockpit-next-step') {
+          scheduleCockpitUpdate('nextStep', target.value);
+          return;
+        }
+      });
+
+      // Flush pending cockpit timers on blur so edits survive panel rerenders
+      // that tear down the document before the debounce fires.
+      document.addEventListener('focusout', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+          return;
+        }
+        if (target.id === 'cockpit-verify-first' && cockpitTimers['verifyFirst'] !== undefined) {
+          window.clearTimeout(cockpitTimers['verifyFirst']);
+          delete cockpitTimers['verifyFirst'];
+          sendCockpitUpdate('verifyFirst', target.value);
+          return;
+        }
+        if (target.id === 'cockpit-next-step' && cockpitTimers['nextStep'] !== undefined) {
+          window.clearTimeout(cockpitTimers['nextStep']);
+          delete cockpitTimers['nextStep'];
+          sendCockpitUpdate('nextStep', target.value);
+          return;
+        }
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') {
+          return;
+        }
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+          return;
+        }
+        if (target.id === 'cockpit-verify-first') {
+          event.preventDefault();
+          if (cockpitTimers['verifyFirst'] !== undefined) {
+            window.clearTimeout(cockpitTimers['verifyFirst']);
+            delete cockpitTimers['verifyFirst'];
+          }
+          sendCockpitUpdate('verifyFirst', target.value);
+          // Move focus to next-step input for efficient keyboard flow
+          const nextInput = document.getElementById('cockpit-next-step');
+          if (nextInput instanceof HTMLInputElement) {
+            nextInput.focus();
+            nextInput.select();
+          }
+          return;
+        }
+        if (target.id === 'cockpit-next-step') {
+          event.preventDefault();
+          if (cockpitTimers['nextStep'] !== undefined) {
+            window.clearTimeout(cockpitTimers['nextStep']);
+            delete cockpitTimers['nextStep'];
+          }
+          sendCockpitUpdate('nextStep', target.value);
+          return;
+        }
+      });
+
       document.addEventListener('change', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) {

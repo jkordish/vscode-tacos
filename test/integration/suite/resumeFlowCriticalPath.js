@@ -290,6 +290,27 @@ async function run() {
     3,
     'Expected Resume Path checklist to render exactly three toggle steps.',
   );
+  // P19 cockpit layout assertions
+  assert.equal(
+    resumeFlow?.hasCockpitCard,
+    true,
+    'Expected Resume cockpit card (.cockpit-card) marker in panel render output.',
+  );
+  assert.equal(
+    resumeFlow?.hasCockpitVerifyFirstInput,
+    true,
+    'Expected cockpit verify-first input (#cockpit-verify-first) in panel render output.',
+  );
+  assert.equal(
+    resumeFlow?.hasCockpitNextStepInput,
+    true,
+    'Expected cockpit next-step input (#cockpit-next-step) in panel render output.',
+  );
+  assert.equal(
+    resumeFlow?.hasCockpitSaveStateRegion,
+    true,
+    'Expected cockpit autosave aria-live region (#cockpit-save-state) in panel render output.',
+  );
 
     if ((resumeFlow?.nextStepsCount ?? 0) > 0) {
       assert.equal(

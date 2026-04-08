@@ -1001,6 +1001,95 @@ export const PANEL_WEBVIEW_STYLE = `
           grid-template-columns: 56px 1fr;
         }
       }
+      /* ── Resume Cockpit card ────────────────────────────────────────── */
+      .cockpit-card {
+        padding: var(--space-2) var(--space-3);
+      }
+      .cockpit-field-row {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        margin-bottom: var(--space-2);
+      }
+      .cockpit-field-row:last-child {
+        margin-bottom: 0;
+      }
+      .cockpit-field-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--surface-muted);
+      }
+      .cockpit-blocker-label {
+        color: var(--vscode-testing-iconQueued, #cca700);
+      }
+      .cockpit-input {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 5px var(--space-2);
+        border-radius: var(--radius-1);
+        border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+        background: var(--vscode-input-background);
+        color: var(--vscode-input-foreground);
+        font-family: var(--vscode-font-family);
+        font-size: var(--vscode-font-size);
+      }
+      .cockpit-input:focus-visible {
+        outline: 2px solid var(--vscode-focusBorder);
+        outline-offset: 1px;
+      }
+      .cockpit-blocker-details {
+        margin-bottom: var(--space-2);
+      }
+      .cockpit-blocker-summary {
+        font-size: 12px;
+      }
+      .cockpit-blocker-body {
+        margin-top: var(--space-1);
+        margin-left: var(--space-3);
+        font-size: 12px;
+        color: var(--vscode-testing-iconQueued, #cca700);
+        overflow-wrap: anywhere;
+      }
+      .cockpit-anchors {
+        margin-top: var(--space-2);
+        margin-bottom: var(--space-2);
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+      }
+      .cockpit-anchor-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1);
+      }
+      .cockpit-anchor-list li {
+        margin: 0;
+      }
+      .cockpit-anchor-btn {
+        text-decoration: none;
+      }
+      .cockpit-action-row {
+        margin-top: var(--space-2);
+      }
+      /* ── Compact density mode ───────────────────────────────────────── */
+      .tacos-root[data-density='compact'] {
+        --space-1: 2px;
+        --space-2: 5px;
+        --space-3: 8px;
+        --space-4: 12px;
+      }
+      .tacos-root[data-density='compact'] .card {
+        padding: var(--space-1) var(--space-2);
+        margin-bottom: var(--space-1);
+      }
+      .tacos-root[data-density='compact'] .cockpit-input {
+        padding: 3px var(--space-2);
+      }
       /* ── Reduced motion ─────────────────────────────────────────────── */
       @media (prefers-reduced-motion: reduce) {
         .card > details[data-panel-section] > summary::before,

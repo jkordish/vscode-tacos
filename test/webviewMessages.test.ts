@@ -338,6 +338,50 @@ describe('parseWebviewMessage', () => {
     expect(parseWebviewMessage({ type: 'openEvidence', evidenceId: 123 })).toBeUndefined();
   });
 
+  it('validates updateProspective payload shape', () => {
+    expect(
+      parseWebviewMessage({
+        type: 'updateProspective',
+        field: 'verifyFirst',
+        value: 'Check auth tests',
+      }),
+    ).toEqual({ type: 'updateProspective', field: 'verifyFirst', value: 'Check auth tests' });
+
+    expect(
+      parseWebviewMessage({ type: 'updateProspective', field: 'nextStep', value: 'Open the PR' }),
+    ).toEqual({ type: 'updateProspective', field: 'nextStep', value: 'Open the PR' });
+
+    // value is trimmed and clamped to 280 chars
+    const longValue = 'a'.repeat(400);
+    const parsed = parseWebviewMessage({
+      type: 'updateProspective',
+      field: 'verifyFirst',
+      value: longValue,
+    });
+    expect(parsed).toBeDefined();
+    expect((parsed as { value: string }).value.length).toBeLessThanOrEqual(280);
+
+    // value normalises newlines to spaces
+    expect(
+      parseWebviewMessage({ type: 'updateProspective', field: 'nextStep', value: 'line1\nline2' }),
+    ).toEqual({ type: 'updateProspective', field: 'nextStep', value: 'line1 line2' });
+
+    // invalid field
+    expect(
+      parseWebviewMessage({ type: 'updateProspective', field: 'unknown', value: 'x' }),
+    ).toBeUndefined();
+
+    // missing value
+    expect(
+      parseWebviewMessage({ type: 'updateProspective', field: 'verifyFirst' }),
+    ).toBeUndefined();
+
+    // non-string value
+    expect(
+      parseWebviewMessage({ type: 'updateProspective', field: 'nextStep', value: 42 }),
+    ).toBeUndefined();
+  });
+
   it('drops invalid payload objects', () => {
     expect(parseWebviewMessage(undefined)).toBeUndefined();
     expect(parseWebviewMessage('openLink')).toBeUndefined();

@@ -434,6 +434,231 @@ Status vocabulary used in this file:
   - `src/extension.ts`
   - `CHANGELOG.md`
 
+### P19. Resume tab cockpit layout — no-scroll combination cue
+
+- status: `done`
+- why: the TaCoS ICSE'26 paper's strongest finding is that a **combination cue** (summary + prospective next step + most recent timeline entry, expandable) produces the best task success rates. The current Resume card stack requires scrolling and does not privilege prospective/verify-first fields as first-class visible elements. This is the highest-leverage UI alignment gap between the research and the shipped product.
+- scope: restructure the Resume tab panel in `panelFragments.ts` and `panelCards.ts` so that above the fold (no scroll required in the common case) users see: (1) `Verify first` — inline editable single-line field; (2) `Next step` — inline editable single-line field; (3) `Blocker` — collapsible, only shown when non-empty; (4) `Recent anchors` — top 3 evidence items pulled from timeline, each expandable; (5) a compact action row: `Capture checkpoint` / `Mark resolved`. Everything else moves behind expanders or to other tabs.
+- dependencies: P15 (UX polish), P16 (prospective intent), P18 (dialogue UX).
+- recent progress:
+  - added `renderResumeCockpitCard()` to `src/webview/panelCards.ts` — accepts `ResumeCockpitCardInput` with `verifyFirst`, `nextStep`, `blocker?`, `anchors[]` (max 3), `actionButtonsTrustedHtml`; renders `.cockpit-card` with inline editable inputs, collapsible blocker, anchor badges, and `aria-live="polite"` autosave region.
+  - added `CockpitField` type and `updateProspective` message variant + parser to `src/webviewMessages.ts` (field validated as `verifyFirst | nextStep`, value clamped to 280 chars).
+  - added cockpit CSS block and compact density mode (`[data-density='compact']`) to `src/webview/panelStyles.ts`.
+  - wired debounced 600 ms `input` handlers for `#cockpit-verify-first` / `#cockpit-next-step` in `src/webview/panelClientScript.ts`; `Enter` key flushes immediately and advances focus to next field; autosave indicator updates via `#cockpit-save-state` live region.
+  - all tests pass clean; typecheck and lint clean.
+- risks/rollback:
+  - risk: inline editing in the webview introduces save-state complexity that could silently drop prospective fields on panel reload.
+  - rollback: revert to read-only cockpit display with an `Edit` button that opens the existing `InputBox` flow; safe and already tested.
+- links:
+  - `src/webview/panelFragments.ts`
+  - `src/webview/panelCards.ts`
+  - `src/webview/panelStyles.ts`
+  - `src/webview/panelClientScript.ts`
+  - `src/taskState.ts` (prospectiveNextVerification field)
+  - `deep-research-report.md` (§ "Make Resume a no-scroll cockpit")
+  - https://github.com/jkordish/vscode-tacos/issues/309
+
+### P20. Provenance header badges — always-visible local/AI status
+
+- status: `queued`
+- why: "AI optional" is a core product promise, but users only trust it if the UI has **always-visible provenance**. Currently the privacy preset exists in settings, but the webview header does not surface a persistent badge showing current data posture. Without it, users assume AI is running even when it isn't, and conversely may not realize when it is. The TaCoS research grounding and `docs/PRIVACY_AND_SAFETY.md` demand this for first-class trust.
+- scope: add a persistent provenance badge row to the `panelFragments.ts` header fragment that renders: `● Local-only` (default) or `● AI used · <provider> · <model> · payload: <field list>` when AI is active. Add a `Preview payload` affordance (link/button) that opens the existing AI payload preview. Badge updates on every webview state push.
+- dependencies: P15, P7 (explainability), P13x (payload preview deep-links).
+- immediate next actions:
+  - add `provenanceBadge` field to webview bindings type (the object passed to `renderWebviewDocument`).
+  - render badge in header fragment with two variants: `local-only` class and `ai-active` class; style in `panelStyles.ts` with `badge-local` (green) and `badge-ai` (amber) visual tokens.
+  - wire state push in `extension.ts` to always include current privacy preset + active provider identity in bindings.
+  - add unit test in `panelFragments.test.ts` asserting badge renders in both variants.
+  - update `docs/PRIVACY_AND_SAFETY.md` to document the always-visible provenance badge as a shipped UI guarantee.
+- risks/rollback:
+  - risk: badge adds visual noise in the header and competes with primary resume content for attention.
+  - rollback: collapse badge to a small icon-only indicator with tooltip; keep the data wiring in place.
+- links:
+  - `src/webview/panelFragments.ts`
+  - `src/webview/panelStyles.ts`
+  - `src/extension.ts`
+  - `docs/PRIVACY_AND_SAFETY.md`
+  - `deep-research-report.md` (§ "Provenance badges everywhere")
+  - https://github.com/jkordish/vscode-tacos/issues/310
+
+### P21. Evidence tab — recent anchors default with grouping and expand
+
+- status: `queued`
+- why: the TaCoS paper found timeline cues produced the highest task success but were also frequently described as **noisy and overwhelming**. Participants explicitly requested grouping, collapsing, filtering, and granularity controls. The current Evidence tab renders timeline as a flat list, which replicates the overwhelm problem the paper documented. Fixing this is directly research-mandated, not taste.
+- scope: restructure the Evidence tab panel to default to a `Recent anchors` view (last 5–10 min, top 10 events, grouped by file). Add toggle controls: `By time / By file / By action`. Provide an `Expand full timeline` affordance that reveals the full log in collapsible sections. Add optional granularity slider (coarse/medium/fine) as a setting (`tacos.evidence.granularity`).
+- dependencies: P15, P19 (cockpit anchors slot pulls from same data).
+- immediate next actions:
+  - define `groupTimelineByFile(entries, windowMs)` and `groupTimelineByTimeBucket(entries, bucketSizeMs)` pure functions in `src/timeline.ts` (fully unit-testable).
+  - define `selectRecentAnchors(entries, count, windowMs)` for the top-N recent anchors used by both the cockpit (P19) and the Evidence tab.
+  - add `EvidenceGroupMode` type (`'recent' | 'by-file' | 'by-time' | 'by-action'`) to `src/types.ts` and thread through webview bindings.
+  - render grouped evidence card in `panelCards.ts` with collapsible file groups and `expand full timeline` toggle.
+  - add `tacos.evidence.granularity` setting (`coarse` / `medium` / `fine`) to `package.json` manifest and wire into `selectRecentAnchors` window.
+  - update unit tests for grouping/anchor-selection pure functions.
+  - update integration coverage for Evidence tab rendering with grouped output.
+  - update `SPECS.md` and `docs/DESIGN_AND_IMPLEMENTATION.md` with Evidence tab behavior contract.
+- risks/rollback:
+  - risk: grouping logic that buckets events incorrectly could hide relevant context during a resumed session.
+  - rollback: revert Evidence tab to flat list (current behavior) and keep grouping behind a new `tacos.evidence.grouping` flag while iterating.
+- links:
+  - `src/timeline.ts`
+  - `src/types.ts`
+  - `src/webview/panelCards.ts`
+  - `src/webview/panelFragments.ts`
+  - `package.json`
+  - `SPECS.md`
+  - `deep-research-report.md` (§ "Evidence tab: default to Recent with grouping")
+  - https://github.com/jkordish/vscode-tacos/issues/311
+
+### P22. Inline editing with autosave indicator and undo for destructive actions
+
+- status: `queued`
+- why: cognitive recovery is a trust-sensitive workflow. Silent data loss after a destructive action (deleting a note, clearing a field) is catastrophic — it undermines user confidence and causes churn. The product promises "local-first" and "no hidden behavior," but without visible save state and reversible deletes, users cannot verify those promises in-the-moment. This is also demanded by the research: TaCoS participants used manual notes for prospective next steps (80/87 notes contained an immediate next step), making note fidelity safety-critical.
+- scope:
+  - **Autosave indicator**: scratchpad, verify-first, and next-step fields in the cockpit (P19) show `Saved • HH:MM` after debounced save; transient `Unsaved…` state during edit; rendered in a persistent `aria-live="polite"` region so keyboard-only users receive confirmation.
+  - **Undo toast for note deletion**: deleting a checkpoint note or scratchpad item shows a `Note deleted · Undo` toast (5–10s timeout); `Undo` posts `undoDeleteNote` message back to extension and re-inserts the item; metric counter `noteDeleteUndoCount` added to `MetricRecord`.
+  - **Undo toast for task resolve**: `Mark resolved` shows `Task marked resolved · Undo` toast with a narrow 15s window; undo re-opens the task in active state.
+- dependencies: P19 (cockpit inline fields), P15.
+- immediate next actions:
+  - implement `showToast(message, { actionText, onAction, timeoutMs })` helper in `panelClientScript.ts` using a persistent toast region in the webview DOM.
+  - wire `onInputDebounced()` for verify-first and next-step cockpit fields; post `updateProspective` on flush; update save-state indicator.
+  - wire `deleteNote` action to toast + undo via `undoDeleteNote` message; add extension-side undo buffer (last deleted note, TTL 30s).
+  - add `noteDeleteUndoCount` to `src/metrics.ts` schema and test suite.
+  - update `panelClientScript.test.ts` for save-state indicator state machine.
+  - add integration assertion: delete note → toast visible → undo → note re-appears.
+- risks/rollback:
+  - risk: undo buffer in extension state could grow unbounded if users rapidly delete many notes.
+  - rollback: cap undo buffer at 1 item with a clear TTL; no persistence across panel sessions.
+- links:
+  - `src/webview/panelClientScript.ts`
+  - `src/webview/panelFragments.ts`
+  - `src/checkpoint.ts`
+  - `src/metrics.ts`
+  - `src/extension.ts`
+  - `deep-research-report.md` (§ "Save/undo semantics")
+  - https://github.com/jkordish/vscode-tacos/issues/312
+
+### P23. ARIA completion — full keyboard navigation, tab focus, and live regions
+
+- status: `queued`
+- why: the extension targets developers who may rely on keyboard navigation or assistive technologies. The current tab strip has partial ARIA, but the deep research report identified gaps in keyboard focus management (`tabindex="-1"` on inactive tabs, `ArrowLeft/Right/Home/End` tab switching, focus return to the active panel after switching). Additionally, save-state announcements (from P22) require `aria-live` regions to be meaningful for non-visual users.
+- scope:
+  - Tab strip: inactive tabs get `tabindex="-1"`; active tab gets `tabindex="0"`; `ArrowLeft` / `ArrowRight` cycle focus through tabs; `Home` / `End` jump to first/last tab; `Enter` / `Space` activate; focus moves to the first focusable element in the newly activated panel.
+  - Save state: `aria-live="polite"` region for `Saved • HH:MM` / `Unsaved…` announcements (shared with P22).
+  - Toast region: `aria-live="assertive"` for undo toasts (time-sensitive) (shared with P22).
+  - Confirm all tab panels have correct `role="tabpanel"`, `aria-labelledby`, `hidden` attribute toggling.
+  - Run `panelA11y.test.ts` extended assertions for all new ARIA attributes and keyboard interaction contract.
+- dependencies: P19 (cockpit panel), P22 (save state / toast regions).
+- immediate next actions:
+  - audit `panelClientScript.ts` current tab keyboard handler and identify gaps vs. ARIA APG Tabs pattern.
+  - update tab strip keyboard handler to emit full `ArrowLeft/Right/Home/End` navigation with focus management.
+  - add `aria-live="polite"` save-state region and `aria-live="assertive"` toast region to `panelFragments.ts` header/footer.
+  - extend `panelA11y.test.ts` unit assertions for `tabindex`, `aria-selected`, `role`, `aria-labelledby`, and panel `hidden` state across all tab combinations.
+  - manual smoke check per `docs/manual-smoke-runbook.md` with keyboard-only navigation.
+- risks/rollback:
+  - risk: focus management changes can create focus traps in edge cases (e.g. panel content is empty or not yet rendered).
+  - rollback: revert keyboard handler to current behavior and ship ARIA attribute fixes independently as a safe subset.
+- links:
+  - `src/webview/panelClientScript.ts`
+  - `src/webview/panelFragments.ts`
+  - `test/panelA11y.test.ts`
+  - `docs/manual-smoke-runbook.md`
+  - `deep-research-report.md` (§ "ARIA tweaks for tabs and announcements")
+  - https://github.com/jkordish/vscode-tacos/issues/313
+
+### P24. Task/checkpoint naming rationalization and schema v2 migration
+
+- status: `queued`
+- why: the deep research report identifies "checkpoint vs task" ontology confusion as a pure adoption blocker. Internally the split is meaningful (`taskState` = rich structured state, `checkpoint` = note/annotation layer), but externally users see both terms used interchangeably across commands, cards, and docs. This creates confusion about what to capture, when, and why. Additionally, the data model is ready for a `schemaVersion: 2` bump that formalizes `tasks` as the top-level concept with `notes` as a child collection — consistent with what `src/taskState.ts` already models internally.
+- scope:
+  - **User-facing copy**: converge all user-visible strings on `task state` (not `structured task checkpoint`) and `task notes` (not `checkpoint notes`). Commands: `Capture task state`, `Update task state`, `Task notes`. Cards: `Task State`, `Task Notes`.
+  - **Schema v2**: introduce `schemaVersion: 2` key in `workspaceState`. Write a `migrateV1toV2()` function in `src/taskState.ts` that reads legacy `checkpoints` key and writes normalized `tasks` shape. Keep compat read for one release cycle. Write only new keys after migration.
+  - **Storage key audit**: enumerate all `context.workspaceState.get/update` call sites for checkpoint/task keys across `src/checkpoint.ts`, `src/taskState.ts`, `src/extension.ts` and confirm migration covers all of them.
+  - **Docs**: update `SPECS.md`, `README.md`, `docs/DESIGN_AND_IMPLEMENTATION.md`, `CHANGELOG.md` with new user-facing terminology and schema v2 contract.
+- dependencies: P15, P19, P22 (all depend on stable card/field naming).
+- immediate next actions:
+  - enumerate all user-facing strings containing `checkpoint` (case-insensitive) across `src/webview/*`, `src/extension.ts`, `package.json` (command titles), and `README.md`.
+  - define migration contract: `schemaVersion` key, `migrateV1toV2()` signature, compat read window.
+  - implement migration in `src/taskState.ts` with full unit test coverage (idempotent, handles missing fields, handles empty store).
+  - update command titles in `package.json` and all string literals in the webview layer.
+  - update `panelFragments.test.ts`, `panelCards.test.ts`, and `taskState.test.ts` for new strings and migration behavior.
+  - update all affected docs in a single PR.
+- risks/rollback:
+  - risk: storage key migration could lose task state if a user downgrades the extension between schema v1 and v2 write cycles.
+  - rollback: keep compat read for both key shapes for two releases; never delete v1 key until v2 is confirmed present.
+- links:
+  - `src/taskState.ts`
+  - `src/checkpoint.ts`
+  - `src/extension.ts`
+  - `src/webview/panelFragments.ts`
+  - `src/webview/panelCards.ts`
+  - `package.json`
+  - `README.md`
+  - `SPECS.md`
+  - `deep-research-report.md` (§ "Rename checkpoint notes → task notes" and § "Migration plan")
+  - https://github.com/jkordish/vscode-tacos/issues/314
+
+### P25. Evidence as feature-traceability matrix in docs/references.md
+
+- status: `queued`
+- why: `docs/references.md` is currently a literature anchor only — it lists the TaCoS paper and adjacent work but does not map research findings to shipped features or outstanding gaps. The deep research report calls this out explicitly: without a traceability matrix, it is impossible to audit whether the product's UI/UX decisions are actually grounded in the cited evidence. This is low-effort but high documentation value, especially as the project approaches v1.0.
+- scope: extend `docs/references.md` with a **Feature Traceability Matrix** section that maps each key TaCoS research finding to: (a) the shipped TaCoS feature implementing it, (b) the PLANS.md item that delivered it, and (c) any remaining gap or aspiration. Findings to map: combination cue recommendation, timeline noise findings, prospective intent value, manual note proximity value, nested/hierarchical task future direction.
+- dependencies: P19, P21 (gaps being closed by those items should be reflected).
+- immediate next actions:
+  - draft traceability table in `docs/references.md` under a new `## Feature Traceability` section.
+  - cross-reference each finding against current SPECS.md feature list, PLANS.md items, and `deep-research-report.md` gap analysis.
+  - mark findings as `✓ Implemented`, `⚑ Partial`, or `○ Aspirational` with links to relevant source files or plan items.
+  - no code changes required; doc-only PR.
+- risks/rollback:
+  - risk: traceability table drifts from implementation as new features ship.
+  - rollback: none needed; keep table behind a clearly dated heading (`As of v0.99`) and update with each release cycle.
+- links:
+  - `docs/references.md`
+  - `deep-research-report.md` (§ "Alignment with research and gaps")
+  - `SPECS.md`
+  - https://github.com/jkordish/vscode-tacos/issues/315
+
+### P26. Hierarchical / nested task support — research-grounded future direction
+
+- status: `queued`
+- why: the TaCoS ICSE'26 paper's discussion section explicitly calls out "nested and interdependent tasks" as a direction future systems should address. Real-world engineering work — especially for Staff+ engineers and on-call responders — involves a tree of tasks (e.g. investigating an incident triggers a sub-task to check a service, which triggers another to read a runbook). The current TaCoS model treats task state as flat (one active structured task per partition). This plan item sequences the design and prototyping work.
+- scope: this is a design-first item before any code. Deliverables: (a) a `docs/task-hierarchy-design.md` spike document exploring the data model extension (parent/child task IDs, lineage chain, sub-task promotion/demotion), (b) user story sketches for the two primary use cases (incident investigation, PR review with sub-tasks), (c) an assessment of which existing storage/rendering surfaces need to change, and (d) a go/no-go recommendation for including in v1.x.
+- dependencies: P24 (schema v2 must be stable before extending the task model further).
+- immediate next actions:
+  - draft `docs/task-hierarchy-design.md` covering: data model extension sketch, UI surface implications (how would the cockpit P19 render a task tree?), migration path from flat to hierarchical, and open questions.
+  - review against `src/taskState.ts` current shape and identify minimal schema additions.
+  - circulate for review before any implementation work begins.
+- risks/rollback:
+  - risk: hierarchical tasks add significant model complexity that could destabilize the clean local-first single-task mental model that makes TaCoS approachable.
+  - rollback: keep as a design spike only; do not merge any code changes until the design doc is approved.
+- links:
+  - `src/taskState.ts`
+  - `docs/references.md` (TaCoS paper nested-tasks direction)
+  - `deep-research-report.md` (§ "Hierarchical / nested dependent tasks")
+  - https://github.com/jkordish/vscode-tacos/issues/316
+
+### P27. v1.0 release preparation
+
+- status: `queued`
+- why: `v0.99.0` is the last pre-v1.0 feature-complete milestone. P19–P25 represent the final research-alignment and UX polish work required to reach a v1.0 quality bar. P27 sequences the release prep after those items land.
+- scope: version bump to `1.0.0`, `CHANGELOG.md` `[1.0.0]` stamp, final `README.md` refresh, `docs/quickstart.md` accuracy check, Marketplace publish prerequisite documentation and decision point (does `VSCE_PAT` get added to the release workflow?), final `npm run verify` + `npm run package:vsix` regression pass.
+- dependencies: P19, P20, P21, P22, P23, P24, P25 (all research-alignment items done or explicitly deferred to v1.x).
+- immediate next actions:
+  - confirm all P19–P25 items are `done` or explicitly `blocked`/`deferred` with documented rationale.
+  - decide Marketplace publish policy for v1.0 (add `VSCE_PAT` to workflow or remain VSIX-only).
+  - run full `npm run verify` + `npm run package:vsix` clean pass.
+  - bump `package.json` to `1.0.0` and stamp `CHANGELOG.md`.
+- risks/rollback:
+  - risk: shipping v1.0 with unresolved ARIA or naming gaps creates a trust deficit with early adopters.
+  - rollback: release as `v0.99.x` patch until blocking items are resolved.
+- links:
+  - `package.json`
+  - `CHANGELOG.md`
+  - `README.md`
+  - `docs/quickstart.md`
+  - `.github/workflows/release-vsix.yml`
+  - `AGENTS.md`
+  - https://github.com/jkordish/vscode-tacos/issues/317
+
 ## Blockers
 
 - none currently.

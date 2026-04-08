@@ -4,6 +4,7 @@ import {
   renderEvidenceCard,
   renderQuickActionsCard,
   renderRecapCard,
+  renderResumeCockpitCard,
   renderRestorePackCard,
   renderStatusCard,
   renderTimelineCard,
@@ -126,6 +127,103 @@ describe('panelCards', () => {
     expect(restore).toContain('Restricted Mode');
     expect(restore).toContain('execution actions disabled');
     expect(changes).toContain('<h3>What Changed</h3>');
+  });
+
+  it('renderResumeCockpitCard — renders verify-first and next-step inline inputs', () => {
+    const card = renderResumeCockpitCard({
+      verifyFirst: 'Check that auth tests pass',
+      nextStep: 'Open PR for login module',
+      anchors: [],
+      actionButtonsTrustedHtml: '',
+    });
+
+    expect(card).toContain('class="card cockpit-card"');
+    expect(card).toContain('id="cockpit-verify-first"');
+    expect(card).toContain('id="cockpit-next-step"');
+    expect(card).toContain('value="Check that auth tests pass"');
+    expect(card).toContain('value="Open PR for login module"');
+    expect(card).toContain('maxlength="280"');
+    expect(card).toContain('aria-label="Verify first');
+    expect(card).toContain('aria-label="Next step');
+    expect(card).toContain('id="cockpit-save-state"');
+    expect(card).toContain('aria-live="polite"');
+    expect(card).toContain('aria-atomic="true"');
+  });
+
+  it('renderResumeCockpitCard — renders collapsible blocker only when non-empty', () => {
+    const withBlocker = renderResumeCockpitCard({
+      verifyFirst: '',
+      nextStep: '',
+      blocker: 'CI is red on main',
+      anchors: [],
+      actionButtonsTrustedHtml: '',
+    });
+    const withoutBlocker = renderResumeCockpitCard({
+      verifyFirst: '',
+      nextStep: '',
+      anchors: [],
+      actionButtonsTrustedHtml: '',
+    });
+
+    expect(withBlocker).toContain('class="cockpit-blocker-details"');
+    expect(withBlocker).toContain('CI is red on main');
+    expect(withoutBlocker).not.toContain('cockpit-blocker-details');
+  });
+
+  it('renderResumeCockpitCard — renders up to 3 anchor badges, clickable and static', () => {
+    const card = renderResumeCockpitCard({
+      verifyFirst: '',
+      nextStep: '',
+      anchors: [
+        { label: 'src/extension.ts', kind: 'file', id: 'file:src/extension.ts', clickable: true },
+        { label: 'https://docs.example.com', kind: 'url', id: 'url:0', clickable: true },
+        { label: 'README.md', kind: 'file', id: 'file:README.md', clickable: false },
+        // 4th anchor should be silently dropped
+        { label: 'extra.ts', kind: 'file', id: 'file:extra.ts', clickable: true },
+      ],
+      actionButtonsTrustedHtml: '',
+    });
+
+    expect(card).toContain('class="cockpit-anchors"');
+    expect(card).toContain('data-evidence-id="file:src/extension.ts"');
+    expect(card).toContain('data-evidence-id="url:0"');
+    expect(card).toContain('class="badge kind-file"');
+    // 4th anchor must not appear
+    expect(card).not.toContain('file:extra.ts');
+  });
+
+  it('renderResumeCockpitCard — escapes HTML in field values', () => {
+    const card = renderResumeCockpitCard({
+      verifyFirst: '<script>alert(1)</script>',
+      nextStep: '"quoted" & \'apos\'',
+      anchors: [],
+      actionButtonsTrustedHtml: '',
+    });
+
+    expect(card).not.toContain('<script>');
+    expect(card).toContain('&lt;script&gt;');
+    expect(card).toContain('&quot;quoted&quot;');
+    expect(card).toContain('&#39;apos&#39;');
+  });
+
+  it('renderResumeCockpitCard — renders action row only when actionButtonsTrustedHtml is non-empty', () => {
+    const withActions = renderResumeCockpitCard({
+      verifyFirst: '',
+      nextStep: '',
+      anchors: [],
+      actionButtonsTrustedHtml:
+        '<button type="button" data-action="sessionAddCheckpoint">Capture</button>',
+    });
+    const withoutActions = renderResumeCockpitCard({
+      verifyFirst: '',
+      nextStep: '',
+      anchors: [],
+      actionButtonsTrustedHtml: '',
+    });
+
+    expect(withActions).toContain('class="cockpit-action-row status-actions"');
+    expect(withActions).toContain('data-action="sessionAddCheckpoint"');
+    expect(withoutActions).not.toContain('cockpit-action-row');
   });
 
   it('renders evidence card show-more control with stable hidden-count metadata', () => {
