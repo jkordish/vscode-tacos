@@ -332,10 +332,17 @@ export function groupTimelineByTimeBucket(
   bucketCount = 4,
   now = Date.now(),
 ): EvidenceTimeBucket[] {
+  // Precompute timestamps once (using original index for fallback).
+  const withTs = entries.map((item, index) => ({
+    item,
+    ts: resolveEvidenceTimestamp(item, now, index),
+  }));
+
   const buckets: EvidenceTimeBucket[] = [];
   for (let b = 0; b < bucketCount; b++) {
     const startMs = now - (b + 1) * bucketSizeMs;
-    const endMs = now - b * bucketSizeMs;
+    // Newest bucket uses inclusive upper bound so ts === now is captured.
+    const endMs = b === 0 ? now : now - b * bucketSizeMs;
     const bucketMinStart = b * Math.floor(bucketSizeMs / 60_000);
     const bucketMinEnd = (b + 1) * Math.floor(bucketSizeMs / 60_000);
     buckets.push({
@@ -344,10 +351,8 @@ export function groupTimelineByTimeBucket(
       rows: [],
     });
 
-    for (let i = 0; i < entries.length; i++) {
-      const item = entries[i]!;
-      const ts = resolveEvidenceTimestamp(item, now, i);
-      if (ts >= startMs && ts < endMs) {
+    for (const { item, ts } of withTs) {
+      if (ts >= startMs && ts <= endMs) {
         buckets[b]!.rows.push({
           evidenceId: item.id,
           kind: item.kind,

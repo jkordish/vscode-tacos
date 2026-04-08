@@ -4,6 +4,7 @@ import {
   selectRecentAnchors,
   groupTimelineByFile,
   groupTimelineByTimeBucket,
+  groupTimelineByAction,
 } from '../src/timeline';
 import type { SummaryEvidenceItem } from '../src/types';
 
@@ -313,7 +314,8 @@ describe('groupTimelineByTimeBucket', () => {
         kind: 'file',
         label: 'x.ts',
         target: '/x.ts',
-        capturedAt: now - 9999 * 60_000,
+        // 5 buckets back — outside the 4-bucket window but still a positive timestamp
+        capturedAt: now - 5 * bucket,
       },
     ];
     const buckets = groupTimelineByTimeBucket(entries, bucket, 4, now);
@@ -335,5 +337,71 @@ describe('groupTimelineByTimeBucket', () => {
     expect(labels[0]).toBe('Last 5 min');
     expect(labels[1]).toBe('5–10 min ago');
     expect(labels[2]).toBe('10–15 min ago');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P21: groupTimelineByAction
+// ---------------------------------------------------------------------------
+describe('groupTimelineByAction', () => {
+  const now = 4_000_000;
+  const windowMs = 5 * 60_000; // 5 min
+
+  it('returns empty array for empty input', () => {
+    expect(groupTimelineByAction([], windowMs, now)).toHaveLength(0);
+  });
+
+  it('excludes items older than the window', () => {
+    const entries: SummaryEvidenceItem[] = [
+      {
+        id: 'old',
+        kind: 'file',
+        label: 'old.ts',
+        target: '/old.ts',
+        capturedAt: now - 10 * 60_000,
+      },
+      { id: 'new', kind: 'file', label: 'new.ts', target: '/new.ts', capturedAt: now - 60_000 },
+    ];
+    const groups = groupTimelineByAction(entries, windowMs, now);
+    const allIds = groups.flatMap((g) => g.rows.map((r) => r.evidenceId));
+    expect(allIds).toContain('new');
+    expect(allIds).not.toContain('old');
+  });
+
+  it('groups items by kind into separate action groups', () => {
+    const entries: SummaryEvidenceItem[] = [
+      { id: 'file:a', kind: 'file', label: 'a.ts', target: '/a.ts', capturedAt: now - 30_000 },
+      { id: 'term:1', kind: 'terminal', label: 'npm test', capturedAt: now - 60_000 },
+      { id: 'term:2', kind: 'terminal', label: 'npm build', capturedAt: now - 90_000 },
+    ];
+    const groups = groupTimelineByAction(entries, windowMs, now);
+    const fileGroup = groups.find((g) => g.kind === 'file');
+    const termGroup = groups.find((g) => g.kind === 'terminal');
+    expect(fileGroup?.rows).toHaveLength(1);
+    expect(termGroup?.rows).toHaveLength(2);
+  });
+
+  it('returns groups in canonical kind order (file before terminal before branch)', () => {
+    const entries: SummaryEvidenceItem[] = [
+      { id: 'branch:x', kind: 'branch', label: 'feat/x', capturedAt: now - 30_000 },
+      { id: 'term:1', kind: 'terminal', label: 'npm test', capturedAt: now - 60_000 },
+      { id: 'file:a', kind: 'file', label: 'a.ts', target: '/a.ts', capturedAt: now - 90_000 },
+    ];
+    const groups = groupTimelineByAction(entries, windowMs, now);
+    const kinds = groups.map((g) => g.kind);
+    const fileIdx = kinds.indexOf('file');
+    const termIdx = kinds.indexOf('terminal');
+    const branchIdx = kinds.indexOf('branch');
+    expect(fileIdx).toBeLessThan(termIdx);
+    expect(termIdx).toBeLessThan(branchIdx);
+  });
+
+  it('omits kinds that have no in-window items', () => {
+    const entries: SummaryEvidenceItem[] = [
+      { id: 'file:a', kind: 'file', label: 'a.ts', target: '/a.ts', capturedAt: now - 30_000 },
+    ];
+    const groups = groupTimelineByAction(entries, windowMs, now);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]?.kind).toBe('file');
   });
 });

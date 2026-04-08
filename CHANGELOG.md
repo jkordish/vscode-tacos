@@ -13,12 +13,12 @@ All notable changes to this project are documented in this file.
   - `tacos.evidence.granularity` setting added (`coarse` = 10 min, `medium` = 5 min, `fine` = 2 min window; default `medium`).
   - `EvidenceGroupMode = 'recent' | 'by-file' | 'by-time' | 'by-action'` type exported from `src/timeline.ts`.
   - `EvidenceGranularity = 'coarse' | 'medium' | 'fine'` type and `evidenceGranularity` field added to `ExtensionConfig` in `src/types.ts`.
-  - Pure functions added to `src/timeline.ts`: `selectRecentAnchors`, `groupTimelineByFile`, `groupTimelineByTimeBucket`.
+  - Pure functions added to `src/timeline.ts`: `selectRecentAnchors`, `groupTimelineByFile`, `groupTimelineByTimeBucket`, `groupTimelineByAction`.
   - `renderGroupedEvidenceTab` card renderer added to `src/webview/panelCards.ts`.
-  - Fragment renderers `renderRecentAnchorsHtml`, `renderEvidenceFileGroupsHtml`, `renderEvidenceTimeBucketsHtml` added to `src/webview/panelFragments.ts`.
+  - Fragment renderers `renderRecentAnchorsHtml`, `renderEvidenceFileGroupsHtml`, `renderEvidenceTimeBucketsHtml`, `renderEvidenceActionGroupsHtml` added to `src/webview/panelFragments.ts`.
   - CSS classes for grouped evidence UI added to `src/webview/panelStyles.ts`.
   - `panelEvidenceGroupMode: EvidenceGroupMode` runtime state field added to `src/extension.ts` (default `'recent'`).
-  - 22 unit tests added to `test/timeline.test.ts` covering all three grouping/anchor-selection functions.
+  - 22 unit tests added to `test/timeline.test.ts` covering the grouping and anchor-selection functions.
 
 - **P20: Provenance header badges** — always-visible local/AI status badge row in the sticky page header:
   - `● Local-only` (green `badge-local`) renders when the active provider is local, Restricted Mode is active, or companion surfacing is disabled.

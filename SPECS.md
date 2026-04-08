@@ -501,10 +501,10 @@ Companion Home top-card content and CTA priority were previously composed from s
   - `recent` — `selectRecentAnchors(entries, 10, windowMs, now)`: at most 10 items from within `windowMs` before now, sorted newest-first.
   - `by-file` — `groupTimelineByFile(entries, windowMs, now)`: items within `windowMs` grouped under their file label; non-file items under a bracketed kind key (e.g. `[terminal]`); groups sorted by most-recent row descending.
   - `by-time` — `groupTimelineByTimeBucket(entries, bucketSizeMs, 4, now)`: items slotted into up to 4 equal time buckets; first bucket labelled `Last N min`, subsequent buckets labelled `M–N min ago`; empty buckets omitted.
-  - `by-action` — renders using `groupTimelineByTimeBucket` (same shape; action-filtered variant reserved for future).
+  - `by-action` — `groupTimelineByAction(entries, windowMs, now)`: items within `windowMs` grouped by action category and rendered via the dedicated action-group renderer.
 - `Expand full timeline` affordance is wired into the grouped evidence card and expands the full timeline log in collapsible sections.
 - `setEvidenceGroupMode` webview message updates `state.panelEvidenceGroupMode` and triggers a re-render; demo mode ignores this message.
-- `tacos.evidence.granularity` setting (`coarse` = 10 min, `medium` = 5 min, `fine` = 2 min) controls the `windowMs` passed to all three functions. Default is `medium`.
+- `tacos.evidence.granularity` setting (`coarse` = 10 min, `medium` = 5 min, `fine` = 2 min) controls the `windowMs` passed to the grouped evidence selectors/renderers. Default is `medium`.
 
 ### Type contracts
 

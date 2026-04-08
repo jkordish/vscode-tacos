@@ -7725,7 +7725,7 @@ function renderWebview(
     activeMode: evidenceGroupMode,
     contentTrustedHtml: evidenceGroupedContentHtml,
     totalCount: evidenceCatalog.length,
-    showExpandTimeline: hiddenEvidenceCount > 0,
+    showExpandTimeline: config.showTimeline && hiddenEvidenceCount > 0,
     expanded: expandedSections.has('evidence'),
     emphasis: panelSectionEmphasis.evidence,
   });

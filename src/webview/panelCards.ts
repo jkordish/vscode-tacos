@@ -1,4 +1,5 @@
 import { escapeHtml } from '../webviewSecurity';
+import type { EvidenceGroupMode } from '../timeline';
 
 export type PanelSectionEmphasisLevel = 'elevated' | 'critical';
 
@@ -251,15 +252,15 @@ export function renderEvidenceCard(input: EvidenceCardInput): string {
 
 export type EvidenceGroupModeLabel = 'Recent' | 'By file' | 'By time' | 'By action';
 
-const EVIDENCE_GROUP_MODE_LABELS: Record<string, EvidenceGroupModeLabel> = {
+const EVIDENCE_GROUP_MODE_LABELS: Record<EvidenceGroupMode, EvidenceGroupModeLabel> = {
   recent: 'Recent',
   'by-file': 'By file',
   'by-time': 'By time',
   'by-action': 'By action',
 };
 
-const EVIDENCE_GROUP_MODE_EMPTY_STATE: Record<string, string> = {
-  recent: 'No recent anchors captured yet.',
+const EVIDENCE_GROUP_MODE_EMPTY_STATE: Record<EvidenceGroupMode, string> = {
+  recent: 'No recent anchors in the current granularity window.',
   'by-file': 'No activity in the current granularity window.',
   'by-time': 'No activity in the current granularity window.',
   'by-action': 'No activity in the current granularity window.',
@@ -267,7 +268,7 @@ const EVIDENCE_GROUP_MODE_EMPTY_STATE: Record<string, string> = {
 
 export interface GroupedEvidenceTabInput {
   /** Current active group mode. */
-  activeMode: string;
+  activeMode: EvidenceGroupMode;
   /** Pre-rendered content for the active mode. */
   contentTrustedHtml: string;
   /** Total evidence items (for the "expand full timeline" affordance). */

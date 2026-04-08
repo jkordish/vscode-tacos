@@ -1207,6 +1207,27 @@ export const PANEL_WEBVIEW_STYLE = `
       .evidence-file-group-label {
         overflow-wrap: anywhere;
       }
+      /* ── Evidence action groups (By action view) ────────────────────── */
+      .evidence-action-group {
+        list-style: none;
+        margin-bottom: var(--space-2);
+      }
+      .evidence-action-group:last-child {
+        margin-bottom: 0;
+      }
+      .evidence-action-group-summary {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--surface-strong);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+        padding: 2px 0;
+      }
+      .evidence-action-group-label {
+        overflow-wrap: anywhere;
+      }
       /* ── Evidence time bucket headings ──────────────────────────────── */
       .evidence-time-bucket {
         list-style: none;
