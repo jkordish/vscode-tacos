@@ -195,6 +195,7 @@ import {
   renderDetailsCard,
   renderEvidenceCard,
   renderRecapCard,
+  renderResumeCockpitCard,
   renderRestorePackCard,
   renderStatusCard,
   renderTimelineCard,
@@ -354,6 +355,7 @@ const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>(
   'openAiPayloadPreview',
   'revokeAiPayloadConsent',
   'rateHelpfulness',
+  'updateProspective',
 ]);
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const MAX_NUDGE_FEEDBACK_ENTRIES_PER_SCOPE = 40;
@@ -1439,6 +1441,10 @@ export function activate(context: vscode.ExtensionContext): void {
         hasDisabledRateHelpfulnessAction,
         hasDisabledFixSummaryAction,
         hasDisabledToggleAutoSummariesAction,
+        hasCockpitCard: panelHtml.includes('class="card cockpit-card"'),
+        hasCockpitVerifyFirstInput: panelHtml.includes('id="cockpit-verify-first"'),
+        hasCockpitNextStepInput: panelHtml.includes('id="cockpit-next-step"'),
+        hasCockpitSaveStateRegion: panelHtml.includes('id="cockpit-save-state"'),
       };
     }),
     vscode.commands.registerCommand('tacos.__test.getResumePathSnapshot', async () => {
@@ -6723,6 +6729,12 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'updateProspective') {
+        // Cockpit inline-edit autosave: field + value already validated by parseWebviewMessage.
+        // State is prospective (webview-driven); no server-side persistence required.
+        return;
+      }
+
       if (message.type !== 'openLink') {
         return;
       }
@@ -7715,7 +7727,28 @@ function renderWebview(
     .filter(Boolean)
     .join('\n\n');
 
+  const cockpitAnchors = (summary.evidenceCatalog ?? [])
+    .filter((item) => item.kind === 'file' || item.kind === 'url')
+    .slice(0, 3)
+    .map((item) => ({
+      label: item.label,
+      kind: item.kind,
+      id: item.id,
+      clickable: true,
+    }));
+  const cockpitActionButtonsHtml = demoMode
+    ? ''
+    : `<button type="button" class="secondary" data-action="sessionAddCheckpoint" ${demoDisabledAttr}>Add note</button>`;
+  const resumeCockpitCard = renderResumeCockpitCard({
+    verifyFirst: summary.recommendedFirstAction?.trim() ?? '',
+    nextStep: summary.nextSteps[0]?.trim() ?? '',
+    blocker: blockerDecision.hasBlocker ? blockerDecision.title : undefined,
+    anchors: cockpitAnchors,
+    actionButtonsTrustedHtml: cockpitActionButtonsHtml,
+  });
+
   const resumeTabContent = [
+    resumeCockpitCard,
     taskStateCard,
     checkpointCard,
     resumePathCard,
