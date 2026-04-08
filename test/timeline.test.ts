@@ -328,9 +328,9 @@ describe('groupTimelineByTimeBucket', () => {
 
   it('places a boundary-timestamp item in exactly one bucket (no duplicates)', () => {
     // An item at exactly now - bucketSizeMs sits on the shared boundary between
-    // bucket 0 (Last 5 min) and bucket 1 (5–10 min ago). It should appear only
-    // in bucket 1 (the older bucket) because bucket 0 uses exclusive lower bound
-    // and bucket 1 uses inclusive lower bound with exclusive upper bound.
+    // bucket 0 (Last 5 min) and bucket 1 (5–10 min ago). Under the current
+    // implementation semantics, that boundary timestamp is assigned to bucket 0
+    // (the newer bucket), and it must still appear in exactly one bucket overall.
     const boundaryTs = now - bucket; // exactly now - 5 min
     const entries: SummaryEvidenceItem[] = [
       { id: 'boundary', kind: 'file', label: 'b.ts', target: '/b.ts', capturedAt: boundaryTs },

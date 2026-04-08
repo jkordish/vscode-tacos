@@ -258,7 +258,7 @@ export function selectRecentAnchors(
       break;
     }
     if (ts < cutoff) {
-      continue;
+      break;
     }
     result.push({
       evidenceId: item.id,
@@ -296,7 +296,7 @@ export function groupTimelineByFile(
 
   for (const { item, ts } of withTs) {
     if (ts < cutoff) {
-      continue;
+      break;
     }
 
     const fileKey = item.kind === 'file' ? item.label : `[${item.kind}]`;
@@ -417,7 +417,7 @@ export function groupTimelineByAction(
 
   for (const { item, ts } of withTs) {
     if (ts < cutoff) {
-      continue;
+      break;
     }
     const existing = kindGroupMap.get(item.kind) ?? [];
     existing.push({

@@ -515,7 +515,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 
 ### Pure functions (src/timeline.ts)
 
-- `selectRecentAnchors(entries, count, windowMs, now)` — returns `RecentAnchorRow[]` capped at `count`, sorted descending by timestamp, limited to `[now - windowMs, now)`.
+- `selectRecentAnchors(entries, count, windowMs, now)` — returns `RecentAnchorRow[]` capped at `count`, sorted descending by timestamp, limited to the recent window relative to `now`, including entries at `now`.
 - `groupTimelineByFile(entries, windowMs, now)` — returns `EvidenceFileGroup[]` sorted by most-recent row descending; items outside window are excluded.
 - `groupTimelineByTimeBucket(entries, bucketSizeMs, bucketCount, now)` — returns `EvidenceTimeBucket[]` with only non-empty buckets; rows within each bucket sorted newest-first.
 
