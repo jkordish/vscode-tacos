@@ -626,11 +626,55 @@ export interface PageHeaderInput {
   secondaryChipLabel?: string;
   /** Compact toolbar buttons HTML (already trusted). */
   actionsTrustedHtml?: TrustedHtml;
+  /** Provenance badge row HTML (already trusted). Omit to hide the row. */
+  provenanceBadgeTrustedHtml?: TrustedHtml;
+}
+
+/** Input for the always-visible provenance badge row (local-only variant). */
+export interface ProvenanceBadgeLocalInput {
+  isLocal: true;
+}
+
+/** Input for the always-visible provenance badge row (AI-active variant). */
+export interface ProvenanceBadgeAiInput {
+  isLocal: false;
+  /** Human-readable provider label, e.g. "VS Code LM". */
+  providerLabel: string;
+  /** Human-readable active model label, e.g. "copilot-gpt-4o". */
+  modelLabel?: string;
+  /** List of AI payload field names included in the send, e.g. ["summary", "notes"]. */
+  payloadFields?: string[];
+  /** When true, show the "Preview payload" affordance link. */
+  showPreviewLink?: boolean;
+}
+
+/** Discriminated union for the always-visible provenance badge row. */
+export type ProvenanceBadgeInput = ProvenanceBadgeLocalInput | ProvenanceBadgeAiInput;
+
+/**
+ * Renders the always-visible provenance badge for the page header.
+ * Local-only: green `● Local-only` badge.
+ * AI active:  amber `● AI used · <provider> · <model> · payload: <fields>` badge + optional Preview link.
+ */
+export function renderProvenanceBadge(input: ProvenanceBadgeInput): string {
+  if (input.isLocal) {
+    return `<div class="header-provenance"><span class="badge-local">● Local&#x2011;only</span></div>`;
+  }
+  const providerPart = input.providerLabel ? ` · ${escapeHtml(input.providerLabel)}` : '';
+  const modelPart = input.modelLabel ? ` · ${escapeHtml(input.modelLabel)}` : '';
+  const payloadPart =
+    input.payloadFields && input.payloadFields.length > 0
+      ? ` · payload: ${input.payloadFields.map(escapeHtml).join(', ')}`
+      : '';
+  const previewLink = input.showPreviewLink
+    ? ` <button type="button" class="provenance-preview-link" data-action="openAiPayloadPreview" data-ai-payload-entrypoint="provenance-badge">Preview payload ↗</button>`
+    : '';
+  return `<div class="header-provenance"><span class="badge-ai">● AI used${providerPart}${modelPart}${payloadPart}</span>${previewLink}</div>`;
 }
 
 /**
  * Renders the compact sticky page header that sits above the tab bar.
- * Contains: task intent, status chips, and a compact action toolbar row.
+ * Contains: task intent, status chips, provenance badge, and a compact action toolbar row.
  */
 export function renderPageHeader(input: PageHeaderInput): string {
   const secondaryChip = input.secondaryChipLabel
@@ -639,11 +683,14 @@ export function renderPageHeader(input: PageHeaderInput): string {
   const actionsRow = input.actionsTrustedHtml
     ? `\n      <div class="header-actions">${input.actionsTrustedHtml}</div>`
     : '';
+  const provenanceRow = input.provenanceBadgeTrustedHtml
+    ? `\n      ${input.provenanceBadgeTrustedHtml}`
+    : '';
   return `<header class="page-header">
       <div class="header-title-row">
         <h1 class="header-intent">${input.intentTrustedHtml}</h1>
         <span class="header-chip">${escapeHtml(input.statusChipLabel)}</span>${secondaryChip}
-      </div>${actionsRow}
+      </div>${provenanceRow}${actionsRow}
     </header>`;
 }
 

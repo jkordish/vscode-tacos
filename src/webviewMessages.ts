@@ -58,7 +58,11 @@ type BlockedPrimaryActionSurface = 'blocked';
 type PrimaryNextSafeActionSurface = 'home';
 type ResumePathStepId = 'confirmIntent' | 'runNextSafeAction' | 'clearBlocker';
 type PanelSectionId = 'trustCenter' | 'timeline' | 'evidence' | 'details' | 'moreContext';
-export type AiPayloadPreviewEntrypoint = 'trust-center' | 'why-surfaced' | 'companion-home';
+export type AiPayloadPreviewEntrypoint =
+  | 'trust-center'
+  | 'why-surfaced'
+  | 'companion-home'
+  | 'provenance-badge';
 
 export type CockpitField = 'verifyFirst' | 'nextStep';
 
@@ -98,7 +102,8 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
     if (
       entrypoint !== 'trust-center' &&
       entrypoint !== 'why-surfaced' &&
-      entrypoint !== 'companion-home'
+      entrypoint !== 'companion-home' &&
+      entrypoint !== 'provenance-badge'
     ) {
       return undefined;
     }

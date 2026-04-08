@@ -219,6 +219,7 @@ import {
   renderTopFilesListItems,
   renderTopLinksListItems,
   renderPageHeader,
+  renderProvenanceBadge,
   renderWebviewDocument,
 } from './webview/panelFragments';
 import { PANEL_WEBVIEW_STYLE } from './webview/panelStyles';
@@ -4745,6 +4746,7 @@ function recordMetricCounter(
     | 'aiPayloadPreviewOpensTrustCenter'
     | 'aiPayloadPreviewOpensWhySurfaced'
     | 'aiPayloadPreviewOpensCompanionHome'
+    | 'aiPayloadPreviewOpensProvenanceBadge'
     | 'percolationSuppressedQuietHours'
     | 'percolationSuppressedCooldown'
     | 'percolationSuppressedNoChange'
@@ -7496,10 +7498,14 @@ function renderWebview(
     ? 'Sample mode'
     : RETENTION_POLICY_LABELS[config.retentionPolicy];
   const providerModeSnapshot = demoMode ? undefined : state.panelProviderModeSnapshot;
+  // Use 'local' when providerModeSnapshot is absent: it is cleared on cached/fallback paths,
+  // meaning no AI call was actually made for the currently-displayed summary.
   const activeAiProviderForConsent: SummaryProvider =
     companionRuntimeMode === 'restricted' || companionRuntimeMode === 'disabled'
       ? 'local'
-      : (providerModeSnapshot?.activeProvider ?? config.summaryProvider);
+      : providerModeSnapshot !== undefined
+        ? providerModeSnapshot.activeProvider
+        : 'local';
   const aiProviderModeLabel = demoMode
     ? 'Demo mode (no provider sends).'
     : resolveAiProviderModeLabel(config, companionRuntimeMode, providerModeSnapshot);
@@ -7710,12 +7716,54 @@ function renderWebview(
   ]
     .filter(Boolean)
     .join('');
+  const provenanceIsLocal =
+    demoMode ||
+    companionRuntimeMode === 'restricted' ||
+    companionRuntimeMode === 'disabled' ||
+    activeAiProviderForConsent === 'local';
+  const provenanceModelLabel: string | undefined =
+    !provenanceIsLocal && activeAiProviderForConsent === 'vscode-lm' && state.vscodeLmModel
+      ? modelLabel(state.vscodeLmModel)
+      : !provenanceIsLocal && activeAiProviderForConsent === 'openai' && config.openaiModel
+        ? config.openaiModel
+        : undefined;
+  // Derive payload field labels from the same state that prepareTriggerSummary
+  // uses to build aiPayloadCheckpointNotes / aiPayloadScratchpadExcerpt, so the
+  // badge never claims a field is sent when it is absent from the real payload.
+  // - notes: sent when aiIncludeCheckpointNotes is on AND either a structured
+  //   task state OR an open checkpoint note is present (mirrors prepareTriggerSummary).
+  // - scratchpad: sent when aiIncludeScratchpad is on AND a prior excerpt exists
+  //   (mirrors `scratchpadPrior.excerpt` truthiness in prepareTriggerSummary).
+  const provenancePayloadFields: string[] = provenanceIsLocal
+    ? []
+    : [
+        'summary',
+        ...(config.aiIncludeCheckpointNotes &&
+        (state.panelTaskState !== undefined || state.panelPrimaryCheckpointNote?.status === 'open')
+          ? ['notes']
+          : []),
+        ...(config.aiIncludeScratchpad && Boolean(state.panelScratchpadPriorExcerpt)
+          ? ['scratchpad']
+          : []),
+      ];
+  const provenanceBadgeHtml = renderProvenanceBadge(
+    provenanceIsLocal
+      ? { isLocal: true }
+      : {
+          isLocal: false,
+          providerLabel: summaryProviderLabel(activeAiProviderForConsent),
+          modelLabel: provenanceModelLabel,
+          payloadFields: provenancePayloadFields,
+          showPreviewLink: !demoMode,
+        },
+  );
   const pageHeaderHtml = renderPageHeader({
     intentTrustedHtml: escapeHtml(summary.intent),
     statusChipLabel: sourceLabel,
     secondaryChipLabel:
       autoSummaryStatusLabel !== 'Auto summaries active' ? autoSummaryStatusLabel : undefined,
     actionsTrustedHtml: pageHeaderActionButtons,
+    provenanceBadgeTrustedHtml: provenanceBadgeHtml,
   });
 
   // ── 4-tab layout ────────────────────────────────────────────────────────────
@@ -10486,6 +10534,9 @@ async function setAiPayloadConsent(
 }
 
 function describeAiPayloadPreviewEntrypoint(entrypoint: AiPayloadPreviewEntrypoint): string {
+  if (entrypoint === 'provenance-badge') {
+    return 'Provenance Badge';
+  }
   if (entrypoint === 'companion-home') {
     return 'Companion Home';
   }
@@ -10498,6 +10549,10 @@ function describeAiPayloadPreviewEntrypoint(entrypoint: AiPayloadPreviewEntrypoi
 function recordAiPayloadPreviewEntrypointMetric(entrypoint: AiPayloadPreviewEntrypoint): void {
   if (entrypoint === 'companion-home') {
     recordMetricCounter('aiPayloadPreviewOpensCompanionHome');
+    return;
+  }
+  if (entrypoint === 'provenance-badge') {
+    recordMetricCounter('aiPayloadPreviewOpensProvenanceBadge');
     return;
   }
   if (entrypoint === 'why-surfaced') {

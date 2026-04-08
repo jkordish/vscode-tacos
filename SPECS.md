@@ -1348,3 +1348,72 @@ Automated summaries reliably capture what happened but miss **prospective inform
 
 - Plan: `PLANS.md` item `P16`.
 - Research map: `docs/references.md`.
+
+## Feature: Provenance Header Badges (P20)
+
+### Problem
+
+Users cannot tell at a glance whether the currently displayed Companion panel content was produced purely by local deterministic logic or by an AI provider. Without a persistent, always-visible indicator the privacy/trust posture of the active surface is invisible between interactions with Trust Center.
+
+### Goals
+
+- Render an always-visible, non-interactive status badge in the Companion panel header that communicates the current provenance posture.
+- Distinguish two states: **Local-only** (no AI provider active) and **AI used** (provider active, with optional one-click payload preview deep-link).
+- Integrate cleanly with existing Trust Center and AI Payload Preview flows.
+- Keep the indicator cost-free: no network, no new settings, no new commands.
+
+### Non-goals
+
+- Per-card or per-section provenance granularity.
+- Historical provenance audit log.
+- New settings or commands for badge visibility.
+- Any remote telemetry from badge interactions.
+
+### User-facing behavior
+
+- A provenance badge row appears in the Companion panel header, beneath the title row and above action buttons.
+- **Local-only state**: `● Local-only` badge in green — rendered when demo mode is active, the provider mode is `restricted` or `disabled`, or the active AI provider for consent is `local`.
+- **AI-used state**: `● AI used · <provider> · <model> · payload: <field list>` badge in amber — rendered in all other active-provider states. `<model>` is the active vscode-lm model label or openai model name; `<field list>` enumerates the fields included in the AI prompt (e.g. `summary`, `notes`, `scratchpad`).
+- When AI is active, a `Preview payload ↗` link appears inline beside the badge. Clicking it opens the AI Payload Preview panel (same flow as the Trust Center deep-link).
+- The badge is always visible; it does not require any user interaction to appear and cannot be dismissed.
+
+### Technical shape / architecture notes
+
+- `ProvenanceBadgeInput` interface and `renderProvenanceBadge(input: ProvenanceBadgeInput): string` added to `src/webview/panelFragments.ts`.
+- `provenanceBadgeTrustedHtml?: TrustedHtml` added to `PageHeaderInput` in `src/webview/panelFragments.ts`; `renderPageHeader()` inserts the badge row between the title row and the actions row.
+- `provenanceIsLocal` is computed in `renderWebview()` in `src/extension.ts`:
+  `demoMode || companionRuntimeMode === 'restricted' || companionRuntimeMode === 'disabled' || activeAiProviderForConsent === 'local'`.
+- Badge CSS (`.header-provenance`, `.badge-local`, `.badge-ai`, `.provenance-preview-link`) added to `src/webview/panelStyles.ts`.
+- `provenance-badge` entrypoint added to the valid-entrypoints guard in the `openAiPayloadPreview` handler in `src/webview/panelClientScript.ts`.
+- The `Preview payload` button uses `data-action="openAiPayloadPreview" data-ai-payload-entrypoint="provenance-badge"` — consistent with the existing Trust Center and Why-surfaced entrypoint pattern. Local AI payload preview open counts are incremented by entrypoint for adoption tracking without remote telemetry.
+
+### Settings and commands affected
+
+- No new settings.
+- No new commands.
+- Existing command affected: `tacos.openAiPayloadPreview` (reachable via badge preview link when AI is active).
+
+### Acceptance criteria
+
+- Badge renders deterministically in both local and AI-used states for all valid `ProvenanceBadgeInput` combinations.
+- XSS injection in `providerLabel`, `modelLabel`, and each `payloadFields` entry is escaped before render.
+- `renderPageHeader` includes the badge row when `provenanceBadgeTrustedHtml` is provided.
+- `provenance-badge` is accepted as a valid entrypoint in the `openAiPayloadPreview` handler.
+- CSS classes `.badge-local` and `.badge-ai` are present in `panelStyles.ts`.
+- `renderProvenanceBadge` and `renderPageHeader` badge-row behavior are covered by unit tests.
+- All `verify:quick` gates pass (lint, typecheck, format check, unit tests).
+
+### Risks / failure modes
+
+- Badge could drift out of sync with actual provider state if `provenanceIsLocal` logic is not updated when new provider modes are added.
+- `showPreviewLink` flag must remain false in local-only state to avoid surfacing a non-functional link.
+
+### Open questions
+
+- Should future versions track per-entrypoint payload preview open counts in the diagnostics snapshot by default?
+- Should the badge become interactive (toggle Trust Center) in a future slice?
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P20`.
+- Issue: https://github.com/jkordish/vscode-tacos/issues/310

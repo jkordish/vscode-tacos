@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **P20: Provenance header badges** — always-visible local/AI status badge row in the sticky page header:
+  - `● Local-only` (green `badge-local`) renders when the active provider is local, Restricted Mode is active, or companion surfacing is disabled.
+  - `● AI used · <provider>` (amber `badge-ai`) renders when an AI provider (`vscode-lm` or `openai`) is active; includes a `Preview payload` button that opens the AI payload preview from the header.
+  - `renderProvenanceBadge(input: ProvenanceBadgeInput): string` added to `src/webview/panelFragments.ts`; `provenanceBadgeTrustedHtml` field added to `PageHeaderInput`.
+  - CSS classes `.header-provenance`, `.badge-local`, `.badge-ai`, `.provenance-preview-link` added to `src/webview/panelStyles.ts`.
+  - `provenance-badge` entrypoint wired in `panelClientScript.ts` for the AI payload preview message path.
+  - `docs/PRIVACY_AND_SAFETY.md` updated with the always-visible provenance badge as a shipped UI guarantee.
+  - Unit tests added to `test/panelFragments.test.ts`: both badge variants, XSS escaping, `Preview payload` link presence/absence, and provenance row position in `renderPageHeader`.
+
 ## [0.99.5] - 2026-04-07
 
 ### Changed

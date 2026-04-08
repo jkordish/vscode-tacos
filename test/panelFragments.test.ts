@@ -12,6 +12,7 @@ import {
   renderGroupedActionSections,
   renderIntentEditor,
   renderPageHeader,
+  renderProvenanceBadge,
   renderResumePathCard,
   renderScratchpadCard,
   renderStepEvidenceBadge,
@@ -461,6 +462,123 @@ describe('panelFragments', () => {
     expect(html).toContain('Auto summaries off');
     expect(html).toContain('<div class="header-actions">');
     expect(html).toContain('<button>Resume</button>');
+  });
+
+  it('renderProvenanceBadge renders local-only badge when isLocal is true', () => {
+    const html = renderProvenanceBadge({ isLocal: true });
+
+    expect(html).toContain('class="header-provenance"');
+    expect(html).toContain('class="badge-local"');
+    expect(html).toContain('Local');
+    expect(html).not.toContain('badge-ai');
+    expect(html).not.toContain('AI used');
+    expect(html).not.toContain('previewAiPayload');
+    expect(html).not.toContain('openAiPayloadPreview');
+  });
+
+  it('renderProvenanceBadge renders AI-active badge with provider label and preview link when showPreviewLink is true', () => {
+    const html = renderProvenanceBadge({
+      isLocal: false,
+      providerLabel: 'VS Code LM',
+      modelLabel: 'copilot-gpt-4o',
+      showPreviewLink: true,
+    });
+
+    expect(html).toContain('class="header-provenance"');
+    expect(html).toContain('class="badge-ai"');
+    expect(html).toContain('AI used');
+    expect(html).toContain('VS Code LM');
+    expect(html).toContain('copilot-gpt-4o');
+    expect(html).not.toContain('badge-local');
+    expect(html).not.toContain('Local');
+    expect(html).toContain('data-action="openAiPayloadPreview"');
+    expect(html).toContain('data-ai-payload-entrypoint="provenance-badge"');
+    expect(html).toContain('Preview payload ↗');
+  });
+
+  it('renderProvenanceBadge renders AI-active badge with payload fields', () => {
+    const html = renderProvenanceBadge({
+      isLocal: false,
+      providerLabel: 'OpenAI',
+      modelLabel: 'gpt-4o',
+      payloadFields: ['summary', 'notes', 'scratchpad'],
+      showPreviewLink: false,
+    });
+
+    expect(html).toContain('class="badge-ai"');
+    expect(html).toContain('AI used');
+    expect(html).toContain('OpenAI');
+    expect(html).toContain('gpt-4o');
+    expect(html).toContain('payload: summary, notes, scratchpad');
+    expect(html).not.toContain('Preview payload');
+  });
+
+  it('renderProvenanceBadge renders AI-active badge without model or payload when omitted', () => {
+    const html = renderProvenanceBadge({
+      isLocal: false,
+      providerLabel: 'OpenAI',
+      showPreviewLink: false,
+    });
+
+    expect(html).toContain('class="badge-ai"');
+    expect(html).toContain('AI used');
+    expect(html).toContain('OpenAI');
+    expect(html).not.toContain('payload:');
+    expect(html).not.toContain('Preview payload');
+  });
+
+  it('renderProvenanceBadge renders AI-active badge without preview link when showPreviewLink is false', () => {
+    const html = renderProvenanceBadge({
+      isLocal: false,
+      providerLabel: 'OpenAI',
+      modelLabel: 'gpt-4o',
+      payloadFields: ['summary'],
+      showPreviewLink: false,
+    });
+
+    expect(html).toContain('class="badge-ai"');
+    expect(html).toContain('AI used');
+    expect(html).toContain('OpenAI');
+    expect(html).toContain('gpt-4o');
+    expect(html).toContain('payload: summary');
+    expect(html).not.toContain('Preview payload');
+    expect(html).not.toContain('openAiPayloadPreview');
+  });
+
+  it('renderProvenanceBadge escapes XSS in providerLabel, modelLabel, and payloadFields', () => {
+    const html = renderProvenanceBadge({
+      isLocal: false,
+      providerLabel: '<script>alert(1)</script>',
+      modelLabel: '<img src=x>',
+      payloadFields: ['<b>bad</b>'],
+      showPreviewLink: false,
+    });
+
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('<b>');
+    expect(html).toContain('&lt;b&gt;');
+  });
+
+  it('renderPageHeader renders provenance badge row when provenanceBadgeTrustedHtml is provided', () => {
+    const badge = renderProvenanceBadge({ isLocal: true });
+    const html = renderPageHeader({
+      intentTrustedHtml: 'Verify rollout stability',
+      statusChipLabel: 'Local summary (instant)',
+      provenanceBadgeTrustedHtml: badge,
+    });
+
+    expect(html).toContain('class="header-provenance"');
+    expect(html).toContain('badge-local');
+    // Provenance row must appear between title row and actions row
+    const titlePos = html.indexOf('header-title-row');
+    const provenancePos = html.indexOf('header-provenance');
+    const actionsPos = html.indexOf('header-actions');
+    expect(titlePos).toBeGreaterThanOrEqual(0);
+    expect(provenancePos).toBeGreaterThan(titlePos);
+    // No actions row present, but provenance row is there
+    expect(actionsPos).toBe(-1);
   });
 
   it('renderWebviewDocument emits page header before tab nav when pageHeaderTrustedHtml is provided', () => {

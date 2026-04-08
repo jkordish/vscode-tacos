@@ -87,6 +87,7 @@ TaCoS watches for conservative signals: focus return after idle, workspace root 
 - **No cloud backend.** No account, no sync, no backend.
 - **AI is optional.** You choose if and when to involve a model.
 - **Restricted Mode** fully suppresses risky collection and execution actions.
+- **Always-visible provenance badge.** The panel header shows `● Local-only` (green) or `● AI used · <provider>` (amber) on every render — no scrolling required to confirm your data posture.
 
 → [Privacy and Safety docs](https://github.com/jkordish/vscode-tacos/blob/main/docs/PRIVACY_AND_SAFETY.md)
 

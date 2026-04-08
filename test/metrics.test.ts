@@ -118,6 +118,17 @@ describe('hasAnyRecordedMetric', () => {
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
 
+  it('treats aiPayloadPreviewOpensProvenanceBadge as recorded metric activity', () => {
+    const metric = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      aiPayloadPreviewOpensProvenanceBadge: 1,
+    } as unknown as MetricRecord;
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
+
   it('treats blocker-promotion counters as recorded metric activity', () => {
     const metric = {
       startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
@@ -288,6 +299,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('aiPayloadPreviewOpensTrustCenter');
     expect(lines[0]).toContain('aiPayloadPreviewOpensWhySurfaced');
     expect(lines[0]).toContain('aiPayloadPreviewOpensCompanionHome');
+    expect(lines[0]).toContain('aiPayloadPreviewOpensProvenanceBadge');
     expect(lines[0]).toContain('resumePathCompletions');
     expect(lines[0]).toContain('companionPrimaryCtaClickThroughRate');
     expect(lines[0]).toContain('companionPrimaryCtaCompletionRate');
