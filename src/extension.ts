@@ -7225,7 +7225,8 @@ function renderWebview(
         : 5 * 60_000;
   const evidenceNow = Date.now();
   const evidenceGroupMode = demoMode ? 'recent' : state.panelEvidenceGroupMode;
-  const hiddenEvidenceCount = Math.max(0, evidenceCatalog.length - 5);
+  // Compute per-mode displayed count so showExpandTimeline is accurate.
+  const EVIDENCE_RECENT_LIMIT = 10;
   const evidenceGroupedContentHtml =
     evidenceGroupMode === 'by-file'
       ? renderEvidenceFileGroupsHtml(
@@ -7235,9 +7236,26 @@ function renderWebview(
         ? renderEvidenceTimeBucketsHtml(
             groupTimelineByTimeBucket(evidenceCatalog, evidenceGranularityWindowMs, 4, evidenceNow),
           )
-        : renderRecentAnchorsHtml(
-            selectRecentAnchors(evidenceCatalog, 10, evidenceGranularityWindowMs, evidenceNow),
-          );
+        : evidenceGroupMode === 'by-action'
+          ? renderEvidenceFileGroupsHtml(
+              // Group by action/kind using file-group renderer with kind as the key.
+              // Each kind becomes a named section (e.g. "[file]", "[terminal]", "[git]").
+              groupTimelineByFile(evidenceCatalog, evidenceGranularityWindowMs, evidenceNow),
+            )
+          : renderRecentAnchorsHtml(
+              selectRecentAnchors(
+                evidenceCatalog,
+                EVIDENCE_RECENT_LIMIT,
+                evidenceGranularityWindowMs,
+                evidenceNow,
+              ),
+            );
+  // Show expand affordance only when there are more items than the active mode displays.
+  const evidenceDisplayedCount =
+    evidenceGroupMode === 'recent'
+      ? Math.min(evidenceCatalog.length, EVIDENCE_RECENT_LIMIT)
+      : evidenceCatalog.length;
+  const hiddenEvidenceCount = Math.max(0, evidenceCatalog.length - evidenceDisplayedCount);
   const recapDoneItems = summary.doneSinceLastResume?.slice(0, 3) ?? [];
   const recapPendingItems = summary.pendingBlocked?.slice(0, 3) ?? [];
   const recapDoneList = recapDoneItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');

@@ -948,6 +948,21 @@ export function renderPanelClientScript(
             return;
           }
 
+          if (action === 'setEvidenceGroupMode') {
+            const mode = actionElement.dataset.evidenceMode;
+            if (
+              mode === 'recent' ||
+              mode === 'by-file' ||
+              mode === 'by-time' ||
+              mode === 'by-action'
+            ) {
+              vscode.postMessage({ type: 'setEvidenceGroupMode', mode });
+            } else {
+              vscode.postMessage({ type: 'blockedLink' });
+            }
+            return;
+          }
+
           if (hostActions.has(action)) {
             if (actionElement.dataset.blockerPrimaryAction === 'true') {
               vscode.postMessage({ type: action, primarySurface: 'blocked' });
