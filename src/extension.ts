@@ -530,6 +530,7 @@ interface RuntimeState {
   applyingPrivacyPreset: boolean;
   lastRedactionPatternWarningSignature?: string;
   panelDismissUndoBuffer?: { note: CheckpointNote; expiresAt: number };
+  panelDismissUndoTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface ProviderModeSnapshot {
@@ -1804,6 +1805,67 @@ export function activate(context: vscode.ExtensionContext): void {
         panelHasNoteIdAttr: primary ? panelHtml.includes(`data-note-id="${primary.id}"`) : false,
       };
     }),
+    vscode.commands.registerCommand('tacos.__test.dismissCheckpointNote', async () => {
+      const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+      const note = state.panelPrimaryCheckpointNote;
+      if (!workspaceRoot || !note) {
+        return { ok: false, reason: 'no-note' };
+      }
+      if (state.panelDismissUndoTimer !== undefined) {
+        clearTimeout(state.panelDismissUndoTimer);
+        state.panelDismissUndoTimer = undefined;
+      }
+      state.panelDismissUndoBuffer = { note, expiresAt: Date.now() + 30_000 };
+      state.panelDismissUndoTimer = setTimeout(() => {
+        state.panelDismissUndoBuffer = undefined;
+        state.panelDismissUndoTimer = undefined;
+      }, 30_000);
+      await updateCheckpointNoteById(context, workspaceRoot, note.id, (current) => ({
+        ...current,
+        status: 'dismissed',
+        pinned: undefined,
+      }));
+      await refreshPanelCheckpointState(context, workspaceRoot);
+      rerenderPanel();
+      return { ok: true, noteId: note.id };
+    }),
+    vscode.commands.registerCommand(
+      'tacos.__test.undoCheckpointNoteDismiss',
+      async (rawInput?: unknown) => {
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        const buffer = state.panelDismissUndoBuffer;
+        if (!workspaceRoot || !buffer) {
+          return { ok: false, reason: 'no-buffer' };
+        }
+        if (Date.now() > buffer.expiresAt) {
+          state.panelDismissUndoBuffer = undefined;
+          return { ok: false, reason: 'expired' };
+        }
+        const input =
+          rawInput && typeof rawInput === 'object' ? (rawInput as Record<string, unknown>) : {};
+        const noteId = typeof input.noteId === 'string' ? input.noteId : buffer.note.id;
+        if (buffer.note.id !== noteId) {
+          return { ok: false, reason: 'id-mismatch' };
+        }
+        state.panelDismissUndoBuffer = undefined;
+        if (state.panelDismissUndoTimer !== undefined) {
+          clearTimeout(state.panelDismissUndoTimer);
+          state.panelDismissUndoTimer = undefined;
+        }
+        await updateCheckpointNoteById(context, workspaceRoot, buffer.note.id, (current) => ({
+          ...buffer.note,
+          id: current.id,
+          status: 'open',
+        }));
+        if (state.metricSession) {
+          state.metricSession.noteDeleteUndoCount =
+            (state.metricSession.noteDeleteUndoCount ?? 0) + 1;
+        }
+        await refreshPanelCheckpointState(context, workspaceRoot);
+        rerenderPanel();
+        return { ok: true, noteId: buffer.note.id };
+      },
+    ),
     vscode.commands.registerCommand('tacos.__test.runActionSafetyNoopChecks', async () => {
       return runActionSafetyNoopChecks(context);
     }),
@@ -6402,7 +6464,17 @@ async function showDetailsPanel(
           recordMetricCounter('noteMarkedDone');
         } else if (message.type === 'checkpointDismiss') {
           // Save note into undo buffer before dismissing (30s TTL).
+          // Schedule a timer to proactively clear the buffer when the TTL elapses so
+          // stale note content does not linger in memory across panel lifetimes.
+          if (state.panelDismissUndoTimer !== undefined) {
+            clearTimeout(state.panelDismissUndoTimer);
+            state.panelDismissUndoTimer = undefined;
+          }
           state.panelDismissUndoBuffer = { note, expiresAt: Date.now() + 30_000 };
+          state.panelDismissUndoTimer = setTimeout(() => {
+            state.panelDismissUndoBuffer = undefined;
+            state.panelDismissUndoTimer = undefined;
+          }, 30_000);
           await updateCheckpointNoteById(context, workspaceRoot, note.id, (current) => ({
             ...current,
             status: 'dismissed',

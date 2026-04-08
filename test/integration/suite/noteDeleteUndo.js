@@ -59,32 +59,81 @@ async function run() {
     'Expected panel HTML to contain data-note-id attribute for the seeded note.',
   );
 
-  // 4. Simulate checkpointDismiss via the webview message handler path
-  //    by triggering it through the extension's test command surface.
-  //    The dismiss wires through the panelWebview.onDidReceiveMessage handler,
-  //    which we cannot call directly; instead we verify the undo buffer state
-  //    by seeding and checking after the note is dismissed via the command path.
-  //
-  //    We verify the full extension-side undo buffer contract by calling the
-  //    public tacos.listCheckpointNotes dismiss path indirectly — but since
-  //    listCheckpointNotes requires UI interaction, we instead validate via
-  //    the updateCheckpointNoteById path used by the message handler:
-  //    seed → check open → (the panel's dismiss action sets status 'dismissed'
-  //    and fills panelDismissUndoBuffer) → verify buffer → undo → verify open.
-  //
-  //    Since integration tests cannot fire webview messages directly, we
-  //    validate that: the panel renders with dismiss action wired and note id
-  //    present, and the undo buffer is cleared on re-open. The full
-  //    dismiss→undo cycle is covered by panelClientScript unit tests.
-  //
-  //    Assert: undo buffer is null before any dismiss.
+  // 4. Assert: undo buffer is null before any dismiss.
   assert.equal(
     beforeDismiss.undoBufferNoteId,
     null,
     'Expected undo buffer to be null before any dismiss.',
   );
 
-  // 5. Reset runtime state to confirm a clean teardown path.
+  // 5. Dismiss the note via the test command surface (exercises extension-side dismiss logic
+  //    including undo buffer population and TTL timer setup — same code path as the webview
+  //    checkpointDismiss message handler).
+  const dismissResult = await vscode.commands.executeCommand(
+    'tacos.__test.dismissCheckpointNote',
+  );
+  assert.ok(dismissResult, 'Expected dismissCheckpointNote to return a result.');
+  assert.equal(dismissResult.ok, true, 'Expected dismiss to succeed.');
+  assert.equal(dismissResult.noteId, seeded.id, 'Expected dismissed note id to match seeded id.');
+
+  await wait(50);
+
+  // 6. Assert: undo buffer is now populated with the dismissed note id.
+  const afterDismiss = await vscode.commands.executeCommand(
+    'tacos.__test.getPanelCheckpointSnapshot',
+  );
+  assert.ok(afterDismiss, 'Expected getPanelCheckpointSnapshot after dismiss to return a snapshot.');
+  assert.equal(
+    afterDismiss.undoBufferNoteId,
+    seeded.id,
+    'Expected undo buffer note id to match the dismissed note id.',
+  );
+  assert.equal(
+    afterDismiss.undoBufferExpired,
+    false,
+    'Expected undo buffer to not be expired immediately after dismiss.',
+  );
+  // The dismissed note should no longer be the primary open note.
+  assert.equal(
+    afterDismiss.primaryNoteId,
+    null,
+    'Expected primary note to be cleared after dismiss.',
+  );
+
+  // 7. Undo the dismiss via the test command surface (exercises extension-side undoDeleteNote logic
+  //    including buffer consumption, note restoration to open status, and metric increment).
+  const undoResult = await vscode.commands.executeCommand(
+    'tacos.__test.undoCheckpointNoteDismiss',
+    { noteId: seeded.id },
+  );
+  assert.ok(undoResult, 'Expected undoCheckpointNoteDismiss to return a result.');
+  assert.equal(undoResult.ok, true, 'Expected undo to succeed.');
+  assert.equal(undoResult.noteId, seeded.id, 'Expected undone note id to match seeded id.');
+
+  await wait(50);
+
+  // 8. Assert: note is restored to open status and undo buffer is cleared.
+  const afterUndo = await vscode.commands.executeCommand(
+    'tacos.__test.getPanelCheckpointSnapshot',
+  );
+  assert.ok(afterUndo, 'Expected getPanelCheckpointSnapshot after undo to return a snapshot.');
+  assert.equal(
+    afterUndo.undoBufferNoteId,
+    null,
+    'Expected undo buffer to be cleared after undo.',
+  );
+  assert.equal(
+    afterUndo.primaryNoteId,
+    seeded.id,
+    'Expected restored note to be the primary note again.',
+  );
+  assert.equal(
+    afterUndo.primaryNoteStatus,
+    'open',
+    'Expected restored note status to be open.',
+  );
+
+  // 9. Reset runtime state to confirm a clean teardown path.
   await vscode.commands.executeCommand('tacos.__test.resetRuntimeWorkspaceState');
   await wait(50);
 

@@ -1060,6 +1060,9 @@ export function renderPanelClientScript(
 
           if (action === 'taskStateResolve') {
             vscode.postMessage({ type: 'taskStateResolve' });
+            // Toast is shown optimistically; the host will rerender on success.
+            // TODO(p22): move this to a host-confirmation message once the
+            // taskStateResolve path gains a reply message.
             showToast('Task state marked resolved.', { timeoutMs: 5000 });
             return;
           }

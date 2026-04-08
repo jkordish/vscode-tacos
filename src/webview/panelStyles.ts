@@ -1316,4 +1316,40 @@ export const PANEL_WEBVIEW_STYLE = `
           outline-offset: 2px;
         }
       }
+      /* === Toast region === */
+      .toast-region {
+        position: fixed;
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        background: var(--vscode-editorWidget-background, #252526);
+        border: 1px solid var(--vscode-editorWidget-border, #454545);
+        border-radius: var(--radius-1);
+        padding: var(--space-2) var(--space-3);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        font-size: 0.875rem;
+        color: var(--vscode-foreground);
+        pointer-events: all;
+        white-space: nowrap;
+      }
+      .toast-region:empty {
+        display: none;
+      }
+      .toast-message {
+        flex: 1;
+      }
+      .toast-action {
+        flex-shrink: 0;
+      }
+      /* === Cockpit save state === */
+      .cockpit-save-state {
+        margin-top: var(--space-1);
+        min-height: 1.25rem;
+        font-size: 0.8125rem;
+        color: var(--vscode-descriptionForeground);
+      }
 `;
