@@ -1374,7 +1374,7 @@ Users cannot tell at a glance whether the currently displayed Companion panel co
 - A provenance badge row appears in the Companion panel header, beneath the title row and above action buttons.
 - **Local-only state**: `● Local-only` badge in green — rendered when demo mode is active, the provider mode is `restricted` or `disabled`, or the active AI provider for consent is `local`.
 - **AI-used state**: `● AI used · <provider> · <model> · payload: <field list>` badge in amber — rendered in all other active-provider states. `<model>` is the active vscode-lm model label or openai model name; `<field list>` enumerates the fields included in the AI prompt (e.g. `summary`, `notes`, `scratchpad`).
-- When AI is active and the user has previously opened the AI payload preview, a `Preview payload ↗` link appears inline beside the badge. Clicking it opens the AI Payload Preview panel (same flow as the Trust Center deep-link).
+- When AI is active, a `Preview payload ↗` link appears inline beside the badge. Clicking it opens the AI Payload Preview panel (same flow as the Trust Center deep-link).
 - The badge is always visible; it does not require any user interaction to appear and cannot be dismissed.
 
 ### Technical shape / architecture notes
