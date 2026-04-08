@@ -24,6 +24,12 @@ export interface EvidenceTimeBucket {
   rows: RecentAnchorRow[];
 }
 
+export interface EvidenceActionGroup {
+  kind: SummaryEvidenceItem['kind'];
+  label: string;
+  rows: RecentAnchorRow[];
+}
+
 export type EvidenceRelevanceGroupKey = 'primary' | 'openable' | 'context';
 
 export interface TimelineRow {
@@ -229,6 +235,7 @@ export function buildEvidenceRelevanceGroups(
 /**
  * Returns at most `count` evidence items from within the last `windowMs` milliseconds,
  * sorted by timestamp descending (most recent first).
+ * Uses resolveEvidenceTimestamp() for consistent ordering with buildTimelineGroups().
  */
 export function selectRecentAnchors(
   entries: SummaryEvidenceItem[],
@@ -237,22 +244,21 @@ export function selectRecentAnchors(
   now = Date.now(),
 ): RecentAnchorRow[] {
   const cutoff = now - windowMs;
+
+  // Resolve timestamps first (using original index for fallback), then sort.
+  const withTs = entries.map((item, index) => ({
+    item,
+    ts: resolveEvidenceTimestamp(item, now, index),
+  }));
+  withTs.sort((a, b) => b.ts - a.ts);
+
   const result: RecentAnchorRow[] = [];
-
-  const sorted = [...entries].sort((a, b) => {
-    const ta = typeof a.capturedAt === 'number' && a.capturedAt > 0 ? a.capturedAt : 0;
-    const tb = typeof b.capturedAt === 'number' && b.capturedAt > 0 ? b.capturedAt : 0;
-    return tb - ta;
-  });
-
-  for (let i = 0; i < sorted.length && result.length < count; i++) {
-    const item = sorted[i]!;
-    const ts =
-      typeof item.capturedAt === 'number' && item.capturedAt > 0
-        ? item.capturedAt
-        : now - i * 30_000;
-    if (ts < cutoff) {
+  for (const { item, ts } of withTs) {
+    if (result.length >= count) {
       break;
+    }
+    if (ts < cutoff) {
+      continue;
     }
     result.push({
       evidenceId: item.id,
@@ -271,6 +277,7 @@ export function selectRecentAnchors(
 /**
  * Groups evidence items by their base file path within a time window.
  * Non-file items appear under the label of their kind (e.g. "terminal").
+ * Uses resolveEvidenceTimestamp() for consistent ordering with buildTimelineGroups().
  */
 export function groupTimelineByFile(
   entries: SummaryEvidenceItem[],
@@ -280,18 +287,14 @@ export function groupTimelineByFile(
   const cutoff = now - windowMs;
   const fileGroupMap = new Map<string, RecentAnchorRow[]>();
 
-  const sorted = [...entries].sort((a, b) => {
-    const ta = typeof a.capturedAt === 'number' && a.capturedAt > 0 ? a.capturedAt : 0;
-    const tb = typeof b.capturedAt === 'number' && b.capturedAt > 0 ? b.capturedAt : 0;
-    return tb - ta;
-  });
+  // Resolve timestamps first (using original index for fallback), then sort.
+  const withTs = entries.map((item, index) => ({
+    item,
+    ts: resolveEvidenceTimestamp(item, now, index),
+  }));
+  withTs.sort((a, b) => b.ts - a.ts);
 
-  for (let i = 0; i < sorted.length; i++) {
-    const item = sorted[i]!;
-    const ts =
-      typeof item.capturedAt === 'number' && item.capturedAt > 0
-        ? item.capturedAt
-        : now - i * 30_000;
+  for (const { item, ts } of withTs) {
     if (ts < cutoff) {
       continue;
     }
@@ -321,6 +324,7 @@ export function groupTimelineByFile(
 
 /**
  * Groups evidence items into fixed time buckets (e.g. "0–5 min ago", "5–10 min ago").
+ * Uses resolveEvidenceTimestamp() for consistent ordering with buildTimelineGroups().
  */
 export function groupTimelineByTimeBucket(
   entries: SummaryEvidenceItem[],
@@ -342,10 +346,7 @@ export function groupTimelineByTimeBucket(
 
     for (let i = 0; i < entries.length; i++) {
       const item = entries[i]!;
-      const ts =
-        typeof item.capturedAt === 'number' && item.capturedAt > 0
-          ? item.capturedAt
-          : now - i * 30_000;
+      const ts = resolveEvidenceTimestamp(item, now, i);
       if (ts >= startMs && ts < endMs) {
         buckets[b]!.rows.push({
           evidenceId: item.id,
@@ -362,4 +363,76 @@ export function groupTimelineByTimeBucket(
     buckets[b]!.rows.sort((a, b) => b.timestamp - a.timestamp);
   }
   return buckets.filter((bkt) => bkt.rows.length > 0);
+}
+
+const ACTION_KIND_ORDER: SummaryEvidenceItem['kind'][] = [
+  'file',
+  'terminal',
+  'debug',
+  'task',
+  'url',
+  'branch',
+  'commit',
+  'git',
+];
+
+const ACTION_KIND_LABELS: Partial<Record<SummaryEvidenceItem['kind'], string>> = {
+  file: 'Files',
+  terminal: 'Terminal',
+  debug: 'Debug',
+  task: 'Tasks',
+  url: 'URLs',
+  branch: 'Git branches',
+  commit: 'Git commits',
+  git: 'Git',
+};
+
+/**
+ * Groups evidence items by their action kind within a time window.
+ * Each kind (file, terminal, debug, task, url, git, etc.) becomes its own section.
+ * Uses resolveEvidenceTimestamp() for consistent ordering with buildTimelineGroups().
+ */
+export function groupTimelineByAction(
+  entries: SummaryEvidenceItem[],
+  windowMs = 5 * 60_000,
+  now = Date.now(),
+): EvidenceActionGroup[] {
+  const cutoff = now - windowMs;
+  const kindGroupMap = new Map<SummaryEvidenceItem['kind'], RecentAnchorRow[]>();
+
+  // Resolve timestamps first (using original index for fallback), then sort.
+  const withTs = entries.map((item, index) => ({
+    item,
+    ts: resolveEvidenceTimestamp(item, now, index),
+  }));
+  withTs.sort((a, b) => b.ts - a.ts);
+
+  for (const { item, ts } of withTs) {
+    if (ts < cutoff) {
+      continue;
+    }
+    const existing = kindGroupMap.get(item.kind) ?? [];
+    existing.push({
+      evidenceId: item.id,
+      kind: item.kind,
+      label: item.label,
+      detail: resolveEvidenceDetail(item),
+      timestamp: ts,
+      relativeTime: formatRelativeTime(ts, now),
+      clickable: isEvidenceTimelineClickable(item),
+    });
+    kindGroupMap.set(item.kind, existing);
+  }
+
+  // Emit groups in canonical kind order, then any remaining kinds alphabetically.
+  const orderedKinds = [
+    ...ACTION_KIND_ORDER.filter((k) => kindGroupMap.has(k)),
+    ...[...kindGroupMap.keys()].filter((k) => !ACTION_KIND_ORDER.includes(k)).sort(),
+  ];
+
+  return orderedKinds.map((kind) => ({
+    kind,
+    label: ACTION_KIND_LABELS[kind] ?? `[${kind}]`,
+    rows: kindGroupMap.get(kind)!,
+  }));
 }

@@ -258,6 +258,13 @@ const EVIDENCE_GROUP_MODE_LABELS: Record<string, EvidenceGroupModeLabel> = {
   'by-action': 'By action',
 };
 
+const EVIDENCE_GROUP_MODE_EMPTY_STATE: Record<string, string> = {
+  recent: 'No recent anchors captured yet.',
+  'by-file': 'No activity in the current granularity window.',
+  'by-time': 'No activity in the current granularity window.',
+  'by-action': 'No activity in the current granularity window.',
+};
+
 export interface GroupedEvidenceTabInput {
   /** Current active group mode. */
   activeMode: string;
@@ -286,13 +293,21 @@ export function renderGroupedEvidenceTab(input: GroupedEvidenceTabInput): string
     ? `<div class="evidence-expand-full"><button type="button" class="text-link-button evidence-expand-btn" data-action="setPanelSectionExpanded" data-section-id="timeline" data-section-expanded="true">Expand full timeline ↗</button></div>`
     : '';
 
+  // Use a mode-specific empty state so users understand why no items appear
+  // (e.g., evidence exists but none fall within the granularity window).
+  const emptyState =
+    input.totalCount > 0
+      ? (EVIDENCE_GROUP_MODE_EMPTY_STATE[input.activeMode] ??
+        'No activity in the current granularity window.')
+      : 'No evidence captured yet.';
+
   return `<div class="card">
       <details data-panel-section="evidence" ${emphasisAttrs ? `${emphasisAttrs} ` : ''}${input.expanded ? 'open' : ''}>
         <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Evidence</span>${emphasisBadge}</summary>
         <div class="panel-section-body">
           <div class="evidence-group-mode-bar" role="group" aria-label="Evidence view mode">${toggleButtons}</div>
           <ul class="evidence-list evidence-grouped-list" id="evidence-list">${
-            input.contentTrustedHtml || '<li class="muted">No evidence captured yet.</li>'
+            input.contentTrustedHtml || `<li class="muted">${escapeHtml(emptyState)}</li>`
           }</ul>
           ${expandTimeline}
         </div>

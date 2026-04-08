@@ -3,6 +3,7 @@ import type { CheckpointNote } from '../checkpoint';
 import type { NextStepAction } from '../nextStepActions';
 import type { TaskStateFreshness } from '../taskState';
 import type {
+  EvidenceActionGroup,
   EvidenceFileGroup,
   EvidenceRelevanceGroup,
   EvidenceTimeBucket,
@@ -508,6 +509,22 @@ export function renderEvidenceTimeBucketsHtml(buckets: EvidenceTimeBucket[]): st
     .map((bucket) => {
       const rows = bucket.rows.map((row) => renderRecentAnchorRow(row)).join('');
       return `<li class="evidence-time-bucket"><h4 class="evidence-time-bucket-label">${escapeHtml(bucket.label)}</h4><ul class="evidence-sublist">${rows}</ul></li>`;
+    })
+    .join('');
+}
+
+/**
+ * Renders the "By action" grouped view for the Evidence tab.
+ * Each action kind (file, terminal, debug, etc.) becomes its own collapsible section.
+ */
+export function renderEvidenceActionGroupsHtml(groups: EvidenceActionGroup[]): string {
+  if (groups.length === 0) {
+    return '';
+  }
+  return groups
+    .map((group) => {
+      const rows = group.rows.map((row) => renderRecentAnchorRow(row)).join('');
+      return `<li class="evidence-action-group" data-evidence-action-group="${escapeHtml(group.kind)}"><details open><summary class="evidence-action-group-summary"><span class="evidence-action-group-label">${escapeHtml(group.label)}</span> <span class="evidence-kind">(${escapeHtml(String(group.rows.length))})</span></summary><ul class="evidence-sublist">${rows}</ul></details></li>`;
     })
     .join('');
 }

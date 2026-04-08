@@ -496,7 +496,7 @@ Companion Home top-card content and CTA priority were previously composed from s
 
 ### Behavior contract
 
-- The Evidence tab defaults to `recent` group mode on every panel open: top-10 events within the configured granularity window, grouped by file, newest-first.
+- The Evidence tab defaults to `recent` group mode on every panel open: top-10 events within the configured granularity window, rendered as a newest-first flat list.
 - Four group modes are supported via toggle controls rendered in the Evidence card header:
   - `recent` — `selectRecentAnchors(entries, 10, windowMs, now)`: at most 10 items from within `windowMs` before now, sorted newest-first.
   - `by-file` — `groupTimelineByFile(entries, windowMs, now)`: items within `windowMs` grouped under their file label; non-file items under a bracketed kind key (e.g. `[terminal]`); groups sorted by most-recent row descending.

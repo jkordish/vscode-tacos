@@ -223,6 +223,7 @@ import {
   renderRecentAnchorsHtml,
   renderEvidenceFileGroupsHtml,
   renderEvidenceTimeBucketsHtml,
+  renderEvidenceActionGroupsHtml,
 } from './webview/panelFragments';
 import { PANEL_WEBVIEW_STYLE } from './webview/panelStyles';
 import {
@@ -243,6 +244,7 @@ import {
   buildTimelineGroups,
   groupTimelineByFile,
   groupTimelineByTimeBucket,
+  groupTimelineByAction,
   selectRecentAnchors,
   type EvidenceGroupMode,
 } from './timeline';
@@ -7225,36 +7227,53 @@ function renderWebview(
         : 5 * 60_000;
   const evidenceNow = Date.now();
   const evidenceGroupMode = demoMode ? 'recent' : state.panelEvidenceGroupMode;
-  // Compute per-mode displayed count so showExpandTimeline is accurate.
   const EVIDENCE_RECENT_LIMIT = 10;
+
+  // Pre-compute all grouped outputs so we can count displayed items accurately.
+  const evidenceFileGroups = groupTimelineByFile(
+    evidenceCatalog,
+    evidenceGranularityWindowMs,
+    evidenceNow,
+  );
+  const evidenceTimeBuckets = groupTimelineByTimeBucket(
+    evidenceCatalog,
+    evidenceGranularityWindowMs,
+    4,
+    evidenceNow,
+  );
+  const evidenceActionGroups = groupTimelineByAction(
+    evidenceCatalog,
+    evidenceGranularityWindowMs,
+    evidenceNow,
+  );
+  const recentEvidence = selectRecentAnchors(
+    evidenceCatalog,
+    EVIDENCE_RECENT_LIMIT,
+    evidenceGranularityWindowMs,
+    evidenceNow,
+  );
+
   const evidenceGroupedContentHtml =
     evidenceGroupMode === 'by-file'
-      ? renderEvidenceFileGroupsHtml(
-          groupTimelineByFile(evidenceCatalog, evidenceGranularityWindowMs, evidenceNow),
-        )
+      ? renderEvidenceFileGroupsHtml(evidenceFileGroups)
       : evidenceGroupMode === 'by-time'
-        ? renderEvidenceTimeBucketsHtml(
-            groupTimelineByTimeBucket(evidenceCatalog, evidenceGranularityWindowMs, 4, evidenceNow),
-          )
+        ? renderEvidenceTimeBucketsHtml(evidenceTimeBuckets)
         : evidenceGroupMode === 'by-action'
-          ? renderEvidenceFileGroupsHtml(
-              // Group by action/kind using file-group renderer with kind as the key.
-              // Each kind becomes a named section (e.g. "[file]", "[terminal]", "[git]").
-              groupTimelineByFile(evidenceCatalog, evidenceGranularityWindowMs, evidenceNow),
-            )
-          : renderRecentAnchorsHtml(
-              selectRecentAnchors(
-                evidenceCatalog,
-                EVIDENCE_RECENT_LIMIT,
-                evidenceGranularityWindowMs,
-                evidenceNow,
-              ),
-            );
-  // Show expand affordance only when there are more items than the active mode displays.
+          ? renderEvidenceActionGroupsHtml(evidenceActionGroups)
+          : renderRecentAnchorsHtml(recentEvidence);
+
+  // Count only items actually rendered in the active mode to determine
+  // whether the "Expand full timeline" affordance should be shown.
+  const countGroupedRows = (groups: readonly { rows: readonly unknown[] }[]): number =>
+    groups.reduce((n, g) => n + g.rows.length, 0);
   const evidenceDisplayedCount =
-    evidenceGroupMode === 'recent'
-      ? Math.min(evidenceCatalog.length, EVIDENCE_RECENT_LIMIT)
-      : evidenceCatalog.length;
+    evidenceGroupMode === 'by-file'
+      ? countGroupedRows(evidenceFileGroups)
+      : evidenceGroupMode === 'by-time'
+        ? countGroupedRows(evidenceTimeBuckets)
+        : evidenceGroupMode === 'by-action'
+          ? countGroupedRows(evidenceActionGroups)
+          : recentEvidence.length;
   const hiddenEvidenceCount = Math.max(0, evidenceCatalog.length - evidenceDisplayedCount);
   const recapDoneItems = summary.doneSinceLastResume?.slice(0, 3) ?? [];
   const recapPendingItems = summary.pendingBlocked?.slice(0, 3) ?? [];

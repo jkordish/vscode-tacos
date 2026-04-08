@@ -7,7 +7,7 @@ All notable changes to this project are documented in this file.
 ### Added
 
 - **P21: Evidence tab — recent anchors default with grouping and expand** — Evidence tab now defaults to a `Recent anchors` view:
-  - Evidence tab defaults to `recent` mode: top-10 events within the last 5 min (medium granularity), grouped by file, newest-first.
+  - Evidence tab defaults to `recent` mode: top-10 events within the last 5 min (medium granularity), rendered as a newest-first flat list.
   - Toggle controls added: `Recent / By file / By time / By action` — each mode re-renders the Evidence tab via `setEvidenceGroupMode` webview message.
   - `Expand full timeline` affordance wired into the evidence card for revealing the full log.
   - `tacos.evidence.granularity` setting added (`coarse` = 10 min, `medium` = 5 min, `fine` = 2 min window; default `medium`).
