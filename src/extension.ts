@@ -7716,12 +7716,27 @@ function renderWebview(
     companionRuntimeMode === 'restricted' ||
     companionRuntimeMode === 'disabled' ||
     activeAiProviderForConsent === 'local';
+  const provenanceModelLabel: string | undefined =
+    !provenanceIsLocal && activeAiProviderForConsent === 'vscode-lm' && state.vscodeLmModel
+      ? modelLabel(state.vscodeLmModel)
+      : !provenanceIsLocal && activeAiProviderForConsent === 'openai' && config.openaiModel
+        ? config.openaiModel
+        : undefined;
+  const provenancePayloadFields: string[] = provenanceIsLocal
+    ? []
+    : [
+        'summary',
+        ...(config.aiIncludeCheckpointNotes ? ['notes'] : []),
+        ...(config.aiIncludeScratchpad ? ['scratchpad'] : []),
+      ];
   const provenanceBadgeHtml = renderProvenanceBadge(
     provenanceIsLocal
       ? { isLocal: true }
       : {
           isLocal: false,
           providerLabel: summaryProviderLabel(activeAiProviderForConsent),
+          modelLabel: provenanceModelLabel,
+          payloadFields: provenancePayloadFields,
           showPreviewLink: !demoMode,
         },
   );

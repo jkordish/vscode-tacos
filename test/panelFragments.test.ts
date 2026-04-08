@@ -479,14 +479,16 @@ describe('panelFragments', () => {
   it('renderProvenanceBadge renders AI-active badge with provider label and preview link when showPreviewLink is true', () => {
     const html = renderProvenanceBadge({
       isLocal: false,
-      providerLabel: 'vscode-lm · copilot-gpt-4o',
+      providerLabel: 'VS Code LM',
+      modelLabel: 'copilot-gpt-4o',
       showPreviewLink: true,
     });
 
     expect(html).toContain('class="header-provenance"');
     expect(html).toContain('class="badge-ai"');
     expect(html).toContain('AI used');
-    expect(html).toContain('vscode-lm · copilot-gpt-4o');
+    expect(html).toContain('VS Code LM');
+    expect(html).toContain('copilot-gpt-4o');
     expect(html).not.toContain('badge-local');
     expect(html).not.toContain('Local');
     expect(html).toContain('data-action="openAiPayloadPreview"');
@@ -494,29 +496,69 @@ describe('panelFragments', () => {
     expect(html).toContain('Preview payload');
   });
 
-  it('renderProvenanceBadge renders AI-active badge without preview link when showPreviewLink is false', () => {
+  it('renderProvenanceBadge renders AI-active badge with payload fields', () => {
     const html = renderProvenanceBadge({
       isLocal: false,
-      providerLabel: 'openai · gpt-4o',
+      providerLabel: 'OpenAI',
+      modelLabel: 'gpt-4o',
+      payloadFields: ['summary', 'notes', 'scratchpad'],
       showPreviewLink: false,
     });
 
     expect(html).toContain('class="badge-ai"');
     expect(html).toContain('AI used');
-    expect(html).toContain('openai · gpt-4o');
+    expect(html).toContain('OpenAI');
+    expect(html).toContain('gpt-4o');
+    expect(html).toContain('payload: summary, notes, scratchpad');
+    expect(html).not.toContain('Preview payload');
+  });
+
+  it('renderProvenanceBadge renders AI-active badge without model or payload when omitted', () => {
+    const html = renderProvenanceBadge({
+      isLocal: false,
+      providerLabel: 'OpenAI',
+      showPreviewLink: false,
+    });
+
+    expect(html).toContain('class="badge-ai"');
+    expect(html).toContain('AI used');
+    expect(html).toContain('OpenAI');
+    expect(html).not.toContain('payload:');
+    expect(html).not.toContain('Preview payload');
+  });
+
+  it('renderProvenanceBadge renders AI-active badge without preview link when showPreviewLink is false', () => {
+    const html = renderProvenanceBadge({
+      isLocal: false,
+      providerLabel: 'OpenAI',
+      modelLabel: 'gpt-4o',
+      payloadFields: ['summary'],
+      showPreviewLink: false,
+    });
+
+    expect(html).toContain('class="badge-ai"');
+    expect(html).toContain('AI used');
+    expect(html).toContain('OpenAI');
+    expect(html).toContain('gpt-4o');
+    expect(html).toContain('payload: summary');
     expect(html).not.toContain('Preview payload');
     expect(html).not.toContain('openAiPayloadPreview');
   });
 
-  it('renderProvenanceBadge escapes XSS in providerLabel', () => {
+  it('renderProvenanceBadge escapes XSS in providerLabel, modelLabel, and payloadFields', () => {
     const html = renderProvenanceBadge({
       isLocal: false,
       providerLabel: '<script>alert(1)</script>',
+      modelLabel: '<img src=x>',
+      payloadFields: ['<b>bad</b>'],
       showPreviewLink: false,
     });
 
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;script&gt;');
+    expect(html).not.toContain('<img');
+    expect(html).not.toContain('<b>');
+    expect(html).toContain('&lt;b&gt;');
   });
 
   it('renderPageHeader renders provenance badge row when provenanceBadgeTrustedHtml is provided', () => {

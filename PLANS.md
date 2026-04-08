@@ -462,7 +462,7 @@ Status vocabulary used in this file:
 
 - status: `doing`
 - why: "AI optional" is a core product promise, but users only trust it if the UI has **always-visible provenance**. Currently the privacy preset exists in settings, but the webview header does not surface a persistent badge showing current data posture. Without it, users assume AI is running even when it isn't, and conversely may not realize when it is. The TaCoS research grounding and `docs/PRIVACY_AND_SAFETY.md` demand this for first-class trust.
-- scope: add a persistent provenance badge row to the `panelFragments.ts` header fragment that renders: `● Local-only` (default) or `● AI used · <provider>` when AI is active. Add a `Preview payload` affordance (link/button) that opens the existing AI payload preview. Badge updates on every webview state push.
+- scope: add a persistent provenance badge row to the `panelFragments.ts` header fragment that renders: `● Local-only` (default) or `● AI used · <provider> · <model> · payload: <field list>` when AI is active. Add a `Preview payload` affordance (link/button) that opens the existing AI payload preview. Badge updates on every webview state push.
 - dependencies: P15, P7 (explainability), P13x (payload preview deep-links).
 - recent progress:
   - added `renderProvenanceBadge(input: ProvenanceBadgeInput): string` to `src/webview/panelFragments.ts` with `local-only` and `ai-active` variants.
