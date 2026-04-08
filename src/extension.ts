@@ -7727,8 +7727,8 @@ function renderWebview(
     ? []
     : [
         'summary',
-        ...(config.aiIncludeCheckpointNotes ? ['notes'] : []),
-        ...(config.aiIncludeScratchpad ? ['scratchpad'] : []),
+        ...(config.aiIncludeCheckpointNotes && openCheckpointNotes.length > 0 ? ['notes'] : []),
+        ...(config.aiIncludeScratchpad && state.panelScratchpadHasContent ? ['scratchpad'] : []),
       ];
   const provenanceBadgeHtml = renderProvenanceBadge(
     provenanceIsLocal
