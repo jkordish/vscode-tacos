@@ -10,15 +10,15 @@ Where it still needs tightening is interaction and language consistency:
 
 - The repo’s conceptual model is basically “tasks + structured checkpoint + lightweight notes + evidence,” but the UI/command vocabulary still blends **checkpoint vs task** in ways that will confuse adoption (especially for first-time users). The README itself already shows this tension (“Task checkpoints” but also “Checkpoint Notes”). fileciteturn40file0L1-L1
 - TaCoS research found the **timeline cue had the highest task success** but could be overwhelming, and that manual notes often contained the **prospective next step** missing from generated summaries. citeturn24view0 citeturn27view0
-  Your repo *claims* the right response (prospective intent / verify-first cues, layered surfaces, deep evidence) but the webview should more aggressively reflect the paper’s “best combined cue” recommendation: **summary + next step note + most-recent timeline entry, expandable**. fileciteturn40file0L1-L1 citeturn27view0
+  Your repo _claims_ the right response (prospective intent / verify-first cues, layered surfaces, deep evidence) but the webview should more aggressively reflect the paper’s “best combined cue” recommendation: **summary + next step note + most-recent timeline entry, expandable**. fileciteturn40file0L1-L1 citeturn27view0
 
-Strong position: keep the tabbed layout, but make the **Resume tab a “single-screen cockpit”** that (a) never forces scrolling for the top 80% cases, (b) privileges *verify-first* prospective cues, and (c) treats evidence as first-class with an explicit “show me the recent anchors” control. Everything else can stay behind expansion affordances.
+Strong position: keep the tabbed layout, but make the **Resume tab a “single-screen cockpit”** that (a) never forces scrolling for the top 80% cases, (b) privileges _verify-first_ prospective cues, and (c) treats evidence as first-class with an explicit “show me the recent anchors” control. Everything else can stay behind expansion affordances.
 
 Confidence: high on UI structure + research alignment themes (directly supported by repo docs and the TaCoS paper); medium on precise backend storage details because the prompt asked me to assume local-first unless code shows otherwise, and the repo’s public docs emphasize local-first but details may live outside the inspected webview files. fileciteturn40file0L1-L1
 
 ## What’s in the repository and what the redesign changes
 
-The repository, hosted on entity["company","GitHub","code hosting platform"], presents *vscode-tacos* as “TaCoS Resume Brief,” a VS Code extension intended to reduce re-orientation cost after interruptions by capturing pre-decay task state and surfacing an “evidence-backed brief” when you return. fileciteturn40file0L1-L1
+The repository, hosted on entity["company","GitHub","code hosting platform"], presents _vscode-tacos_ as “TaCoS Resume Brief,” a VS Code extension intended to reduce re-orientation cost after interruptions by capturing pre-decay task state and surfacing an “evidence-backed brief” when you return. fileciteturn40file0L1-L1
 
 Key product promises, per README:
 
@@ -61,49 +61,57 @@ This mapping is organized around the user-visible elements you listed, and ties 
 
 ### Structural elements
 
-**Header**  
-- **Code location:** `panelFragments.ts` (header fragment) fileciteturn34file0L1-L1  
-- **Behavior:** static rendering of title/subtitle + action affordances; should remain visually stable across tabs to reduce re-orientation cost.  
+**Header**
+
+- **Code location:** `panelFragments.ts` (header fragment) fileciteturn34file0L1-L1
+- **Behavior:** static rendering of title/subtitle + action affordances; should remain visually stable across tabs to reduce re-orientation cost.
 - **Data flow:** rendered from a bindings/state object (implied by the renderer design and tab metadata imports). fileciteturn34file0L1-L1
 
-**Tabs (Overview / Resume / Evidence / Debrief)**  
-- **Code location:** tab strip + panels in `panelFragments.ts`; styling in `panelStyles.ts`; switching logic in `panelClientScript.ts`. fileciteturn34file0L1-L1 fileciteturn36file0L1-L1 fileciteturn33file0L1-L1  
-- **Behavior:** tab selection should (a) update visible panel, (b) manage focus/keyboard navigation, and (c) preserve last-selected tab per workspace (recommended).  
+**Tabs (Overview / Resume / Evidence / Debrief)**
+
+- **Code location:** tab strip + panels in `panelFragments.ts`; styling in `panelStyles.ts`; switching logic in `panelClientScript.ts`. fileciteturn34file0L1-L1 fileciteturn36file0L1-L1 fileciteturn33file0L1-L1
+- **Behavior:** tab selection should (a) update visible panel, (b) manage focus/keyboard navigation, and (c) preserve last-selected tab per workspace (recommended).
 - **Data flow:** tab content is rendered; the client script toggles active tab and likely posts “tab changed” to extension or persists in webview state (common). fileciteturn33file0L1-L1
 
 ### Task and resumption elements
 
-**Checkpoint/task list**  
-- **Code location:** card renderers in `panelCards.ts` (the “card” model) plus tab panel composition in `panelFragments.ts`. fileciteturn35file0L1-L1 fileciteturn34file0L1-L1  
-- **Likely behavior:** list of current open checkpoint(s) or notes, with actions (mark resolved, pin/dismiss, open list). The README’s command set supports these flows. fileciteturn40file0L1-L1  
+**Checkpoint/task list**
+
+- **Code location:** card renderers in `panelCards.ts` (the “card” model) plus tab panel composition in `panelFragments.ts`. fileciteturn35file0L1-L1 fileciteturn34file0L1-L1
+- **Likely behavior:** list of current open checkpoint(s) or notes, with actions (mark resolved, pin/dismiss, open list). The README’s command set supports these flows. fileciteturn40file0L1-L1
 - **Data flow:** originates from local task checkpoint storage (local-first per README), rendered into webview; actions routed through VS Code commands. fileciteturn40file0L1-L1 fileciteturn38file0L1-L1
 
-**Resume brief**  
-- **Code location:** card renderers (`panelCards.ts`) and resume panel composition (`panelFragments.ts`). fileciteturn35file0L1-L1 fileciteturn34file0L1-L1  
-- **Behavior goal:** answer the four questions listed in README, with emphasis on verify-first and unresolved items. fileciteturn40file0L1-L1  
+**Resume brief**
+
+- **Code location:** card renderers (`panelCards.ts`) and resume panel composition (`panelFragments.ts`). fileciteturn35file0L1-L1 fileciteturn34file0L1-L1
+- **Behavior goal:** answer the four questions listed in README, with emphasis on verify-first and unresolved items. fileciteturn40file0L1-L1
 - **Data flow:** assembled from (a) last captured structured checkpoint (prospective intent), (b) evidence/timeline deltas, and optionally (c) AI refinement knobs. fileciteturn40file0L1-L1
 
-**Scratch pad**  
-- **Code location:** likely rendered as a text area/card in the tab content (cards/fragments), with save behavior in `panelClientScript.ts`. fileciteturn33file0L1-L1 fileciteturn35file0L1-L1  
-- **Behavior goal:** “manual note” analog from the literature—low effort, high value for prospective cues (next step, reminders). TaCoS participants valued IDE-integrated notes for retrieval proximity. citeturn27view0  
+**Scratch pad**
+
+- **Code location:** likely rendered as a text area/card in the tab content (cards/fragments), with save behavior in `panelClientScript.ts`. fileciteturn33file0L1-L1 fileciteturn35file0L1-L1
+- **Behavior goal:** “manual note” analog from the literature—low effort, high value for prospective cues (next step, reminders). TaCoS participants valued IDE-integrated notes for retrieval proximity. citeturn27view0
 - **Data flow:** local-first storage; optionally excluded from AI payload by default (README mentions AI inclusion toggles). fileciteturn40file0L1-L1
 
 ### Evidence elements
 
-**Timeline/evidence**  
-- **Code location:** card renderers (`panelCards.ts`) + tab content (`panelFragments.ts`); interaction affordances potentially handled in `panelClientScript.ts`. fileciteturn35file0L1-L1 fileciteturn34file0L1-L1 fileciteturn33file0L1-L1  
-- **Behavior goal:** provide “recent anchors” and expandable history without overwhelming the user. In TaCoS, timeline produced the highest task success but was often described as noisy, with explicit recommendations for grouping/collapsing/filtering and a “granularity slider.” citeturn27view0  
+**Timeline/evidence**
+
+- **Code location:** card renderers (`panelCards.ts`) + tab content (`panelFragments.ts`); interaction affordances potentially handled in `panelClientScript.ts`. fileciteturn35file0L1-L1 fileciteturn34file0L1-L1 fileciteturn33file0L1-L1
+- **Behavior goal:** provide “recent anchors” and expandable history without overwhelming the user. In TaCoS, timeline produced the highest task success but was often described as noisy, with explicit recommendations for grouping/collapsing/filtering and a “granularity slider.” citeturn27view0
 - **Data flow:** derived from editor events (file edits, selections, saves) and possibly other sources; rendered grouped by time or artifact; expansions should be client-side toggles.
 
-**Restore pack**  
-- **Code location:** likely a card in Evidence tab built from working context artifacts (open files, branches, etc.). The README’s “deep” layer includes “evidence, timeline, AI payload drill-down,” implying a restore artifact set. fileciteturn40file0L1-L1  
+**Restore pack**
+
+- **Code location:** likely a card in Evidence tab built from working context artifacts (open files, branches, etc.). The README’s “deep” layer includes “evidence, timeline, AI payload drill-down,” implying a restore artifact set. fileciteturn40file0L1-L1
 - **Behavior goal:** one-click “reopen the work context,” but with conservative default (preview before destructive actions).
 
 ### Debrief elements
 
-**Debrief / Cognitive debrief**  
-- **Code location:** Debrief tab content in fragments/cards; command surface in repo commands. fileciteturn34file0L1-L1 fileciteturn40file0L1-L1 fileciteturn38file0L1-L1  
-- **Behavior goal:** review open threads, stale state, unresolved blockers (per README command list). fileciteturn40file0L1-L1  
+**Debrief / Cognitive debrief**
+
+- **Code location:** Debrief tab content in fragments/cards; command surface in repo commands. fileciteturn34file0L1-L1 fileciteturn40file0L1-L1 fileciteturn38file0L1-L1
+- **Behavior goal:** review open threads, stale state, unresolved blockers (per README command list). fileciteturn40file0L1-L1
 - **Data flow:** computed from task checkpoints + evidence deltas + “staleness” thresholds.
 
 ### End-to-end interaction/data flow diagram
@@ -138,7 +146,7 @@ This ambiguity will reduce adoption more than any CSS issue. It’s a pure namin
 
 ### Add/edit/delete flows, inline editing, and keyboard
 
-TaCoS findings strongly favor minimal-effort capture (automation principle) *and* IDE-integrated manual notes for prospective intent. In the paper, manual notes are widely used to record next steps (80/87 notes included immediate next step) and “being inside the IDE” makes retrieval easier. citeturn27view0
+TaCoS findings strongly favor minimal-effort capture (automation principle) _and_ IDE-integrated manual notes for prospective intent. In the paper, manual notes are widely used to record next steps (80/87 notes included immediate next step) and “being inside the IDE” makes retrieval easier. citeturn27view0
 
 So the interaction priority should be:
 
@@ -199,8 +207,8 @@ Your README already encodes the “hybrid cue” response in a pragmatic way:
 
 These are the gaps I’d prioritize because they directly follow from TaCoS evidence:
 
-- **Evidence-first defaults:** TaCoS shows that timeline and summary cues have different strengths. Your UI should default to “recent anchors” (evidence) *without* dumping full history. If Evidence tab currently behaves like a long log, it’s misaligned with the paper’s “overwhelming timeline” feedback. citeturn27view0
-- **Combination cue as a first-class composition:** The paper argues the *combination* is best. In your UI, that should be a deliberate layout rule: Resume tab always includes (a) prospective next step, (b) top 1–3 evidence anchors, (c) brief summary of what changed, with expanders. citeturn27view0
+- **Evidence-first defaults:** TaCoS shows that timeline and summary cues have different strengths. Your UI should default to “recent anchors” (evidence) _without_ dumping full history. If Evidence tab currently behaves like a long log, it’s misaligned with the paper’s “overwhelming timeline” feedback. citeturn27view0
+- **Combination cue as a first-class composition:** The paper argues the _combination_ is best. In your UI, that should be a deliberate layout rule: Resume tab always includes (a) prospective next step, (b) top 1–3 evidence anchors, (c) brief summary of what changed, with expanders. citeturn27view0
 - **Hierarchical / nested dependent tasks:** The TaCoS discussion calls out “nested and interdependent tasks” and suggests future systems should capture task hierarchy/lineage. If vscode-tacos currently treats checkpoints as flat, you’re missing the “tree of things I’m working on” reality for Staff+ and on-call. citeturn27view0
 - **Noise gating and filtering:** Filtering collapses and granularity controls are not optional polish—they’re directly demanded by the timeline overwhelm finding. citeturn27view0
 
@@ -277,8 +285,12 @@ renderResumeCockpitCard({
 
 ```ts
 // panelClientScript.ts (conceptual)
-onInputDebounced("#verify-first", (text) => post({type:"updateProspective", field:"verifyFirst", text}))
-onInputDebounced("#next-step", (text) => post({type:"updateProspective", field:"nextStep", text}))
+onInputDebounced('#verify-first', (text) =>
+  post({ type: 'updateProspective', field: 'verifyFirst', text }),
+);
+onInputDebounced('#next-step', (text) =>
+  post({ type: 'updateProspective', field: 'nextStep', text }),
+);
 ```
 
 **Add “Undo” for destructive actions**
@@ -286,9 +298,9 @@ onInputDebounced("#next-step", (text) => post({type:"updateProspective", field:"
 ```ts
 // panelClientScript.ts (conceptual)
 onClick("[data-action='deleteNote']", (id) => {
-  post({type:"deleteNote", id})
-  showToast("Note deleted", { actionText:"Undo", onAction: () => post({type:"undo"}) })
-})
+  post({ type: 'deleteNote', id });
+  showToast('Note deleted', { actionText: 'Undo', onAction: () => post({ type: 'undo' }) });
+});
 ```
 
 **ARIA tweaks for tabs and announcements**
@@ -316,6 +328,7 @@ Assumption: storage is local-first (per README), likely using VS Code extension 
 **Schema diff sketch**
 
 Before (conceptual):
+
 ```json
 {
   "schemaVersion": 1,
@@ -326,6 +339,7 @@ Before (conceptual):
 ```
 
 After (conceptual):
+
 ```json
 {
   "schemaVersion": 2,
@@ -334,7 +348,7 @@ After (conceptual):
       "id": "t1",
       "title": "…",
       "state": { "objective": "...", "verifyFirst": "...", "nextStep": "...", "blockers": [] },
-      "notes": [ { "id": "n1", "kind": "quick", "text": "...", "createdAt": "…" } ],
+      "notes": [{ "id": "n1", "kind": "quick", "text": "...", "createdAt": "…" }],
       "status": "open"
     }
   ]
@@ -349,34 +363,36 @@ function migrateV1toV2(v1: any): V2 {
     schemaVersion: 2,
     tasks: (v1.checkpoints ?? []).map((c: any) => ({
       id: `t_${c.id}`,
-      title: c.objective?.slice(0, 80) ?? "Untitled task",
+      title: c.objective?.slice(0, 80) ?? 'Untitled task',
       state: {
-        objective: c.objective ?? "",
-        verifyFirst: c.verifyFirst ?? "",
-        nextStep: c.nextStep ?? "",
-        blockers: c.blockers ?? []
+        objective: c.objective ?? '',
+        verifyFirst: c.verifyFirst ?? '',
+        nextStep: c.nextStep ?? '',
+        blockers: c.blockers ?? [],
       },
-      notes: (c.notes ?? []).map((n: any) => ({ ...n, kind: n.kind ?? "quick" })),
-      status: c.resolved ? "resolved" : "open"
-    }))
-  }
+      notes: (c.notes ?? []).map((n: any) => ({ ...n, kind: n.kind ?? 'quick' })),
+      status: c.resolved ? 'resolved' : 'open',
+    })),
+  };
 }
 ```
 
 ### Developer checklist
 
-- Confirm tab switching works with mouse + keyboard, including focus return to the active panel. fileciteturn33file0L1-L1 fileciteturn34file0L1-L1  
-- Confirm scratchpad/verify/next-step fields save locally and never silently drop text. fileciteturn40file0L1-L1  
-- Confirm privacy preset toggles actually change what appears in “Preview AI payload,” and default is minimal. fileciteturn40file0L1-L1  
-- Confirm Evidence tab defaults to a non-overwhelming “recent anchors” view and expands on demand (aligned with TaCoS timeline feedback). citeturn27view0  
+- Confirm tab switching works with mouse + keyboard, including focus return to the active panel. fileciteturn33file0L1-L1 fileciteturn34file0L1-L1
+- Confirm scratchpad/verify/next-step fields save locally and never silently drop text. fileciteturn40file0L1-L1
+- Confirm privacy preset toggles actually change what appears in “Preview AI payload,” and default is minimal. fileciteturn40file0L1-L1
+- Confirm Evidence tab defaults to a non-overwhelming “recent anchors” view and expands on demand (aligned with TaCoS timeline feedback). citeturn27view0
 
 ### Tests: minimal but high-signal
 
 Unit tests (pure functions):
+
 - `migrateV1toV2` converts legacy shapes correctly and is idempotent.
 - Evidence grouping/collapsing logic: “by file,” “by time bucket,” and “recent top 3 anchors” selection.
 
 Integration tests (VS Code harness):
+
 - Open Resume Brief webview → click through tabs → verify correct tabpanel visibility + ARIA `aria-selected`.
 - Edit verify-first field → blur → verify local store updated and UI reflects “Saved.”
 - Delete note → toast undo → note returns.
@@ -384,15 +400,14 @@ Integration tests (VS Code harness):
 
 ## Current vs proposed behavior table
 
-| Element | Current behavior (from repo + inspected UI layer) | Why it’s a problem | Proposed behavior | Implementation notes |
-|---|---|---|---|---|
-| Header | Persistent header + actions in the webview layout. fileciteturn34file0L1-L1 | If header doesn’t show provenance, users won’t trust “AI optional.” fileciteturn40file0L1-L1 | Always-visible badges: Local-only / AI used / payload fields | Render in header fragment; update from state |
-| Tabs | Top-level tabs exist with centralized script + CSS. fileciteturn34file0L1-L1 fileciteturn33file0L1-L1 | Tabs alone don’t prevent scrolling; keyboard/focus must be perfect | “Resume = cockpit,” other tabs can scroll | Add dense mode + sticky cockpit section |
-| Overview | General status + entry points (implied by tab structure). fileciteturn34file0L1-L1 | If it becomes a junk drawer, users ignore it | Keep Overview minimal: status + 2–3 primary actions | Reduce cards, increase clarity |
-| Resume brief | Resume brief exists conceptually & via commands. fileciteturn40file0L1-L1 | Needs to embody combination cue explicitly | Always show Verify-first + Next-step + top evidence anchors | Inline edit + autosave indicator |
-| Checkpoint/task list | “Task checkpoints” plus “checkpoint notes” terminology. fileciteturn40file0L1-L1 | Ontology confusion hurts adoption | Rename to “task state” + “task notes”; migrate storage | Schema bump + compat read |
-| Scratch pad | Present as a concept; AI inclusion toggles exist. fileciteturn40file0L1-L1 | If hidden, you lose the strongest prospective cue | Put scratchpad/notes alongside verify-first | Debounced save; show last saved |
-| Evidence/timeline | Evidence/timeline is part of “deep” layer. fileciteturn40file0L1-L1 | Timelines are overwhelming without grouping (paper finding) citeturn27view0 | Default to “recent anchors,” expandable full timeline | Group/collapse/filter/granularity |
-| Restore pack | Implied as part of deep drill-down. fileciteturn40file0L1-L1 | Risky if it performs actions without preview | “Restore pack preview” first; explicit apply | Make actions reversible |
-| Debrief | Cognitive debrief exists as a top-level command. fileciteturn40file0L1-L1 | Debrief is only valuable if it’s succinct | Summarize stale items + open blockers + unresolved threads | Use staleness thresholds + collapse |
-
+| Element              | Current behavior (from repo + inspected UI layer)                                                             | Why it’s a problem                                                                               | Proposed behavior                                            | Implementation notes                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | -------------------------------------------- |
+| Header               | Persistent header + actions in the webview layout. fileciteturn34file0L1-L1                               | If header doesn’t show provenance, users won’t trust “AI optional.” fileciteturn40file0L1-L1 | Always-visible badges: Local-only / AI used / payload fields | Render in header fragment; update from state |
+| Tabs                 | Top-level tabs exist with centralized script + CSS. fileciteturn34file0L1-L1 fileciteturn33file0L1-L1 | Tabs alone don’t prevent scrolling; keyboard/focus must be perfect                               | “Resume = cockpit,” other tabs can scroll                    | Add dense mode + sticky cockpit section      |
+| Overview             | General status + entry points (implied by tab structure). fileciteturn34file0L1-L1                        | If it becomes a junk drawer, users ignore it                                                     | Keep Overview minimal: status + 2–3 primary actions          | Reduce cards, increase clarity               |
+| Resume brief         | Resume brief exists conceptually & via commands. fileciteturn40file0L1-L1                                 | Needs to embody combination cue explicitly                                                       | Always show Verify-first + Next-step + top evidence anchors  | Inline edit + autosave indicator             |
+| Checkpoint/task list | “Task checkpoints” plus “checkpoint notes” terminology. fileciteturn40file0L1-L1                          | Ontology confusion hurts adoption                                                                | Rename to “task state” + “task notes”; migrate storage       | Schema bump + compat read                    |
+| Scratch pad          | Present as a concept; AI inclusion toggles exist. fileciteturn40file0L1-L1                                | If hidden, you lose the strongest prospective cue                                                | Put scratchpad/notes alongside verify-first                  | Debounced save; show last saved              |
+| Evidence/timeline    | Evidence/timeline is part of “deep” layer. fileciteturn40file0L1-L1                                       | Timelines are overwhelming without grouping (paper finding) citeturn27view0                   | Default to “recent anchors,” expandable full timeline        | Group/collapse/filter/granularity            |
+| Restore pack         | Implied as part of deep drill-down. fileciteturn40file0L1-L1                                              | Risky if it performs actions without preview                                                     | “Restore pack preview” first; explicit apply                 | Make actions reversible                      |
+| Debrief              | Cognitive debrief exists as a top-level command. fileciteturn40file0L1-L1                                 | Debrief is only valuable if it’s succinct                                                        | Summarize stale items + open blockers + unresolved threads   | Use staleness thresholds + collapse          |

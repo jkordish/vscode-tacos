@@ -211,7 +211,8 @@ describe('panelCards', () => {
       verifyFirst: '',
       nextStep: '',
       anchors: [],
-      actionButtonsTrustedHtml: '<button type="button" data-action="sessionAddCheckpoint">Capture</button>',
+      actionButtonsTrustedHtml:
+        '<button type="button" data-action="sessionAddCheckpoint">Capture</button>',
     });
     const withoutActions = renderResumeCockpitCard({
       verifyFirst: '',

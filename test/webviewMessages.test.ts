@@ -340,7 +340,11 @@ describe('parseWebviewMessage', () => {
 
   it('validates updateProspective payload shape', () => {
     expect(
-      parseWebviewMessage({ type: 'updateProspective', field: 'verifyFirst', value: 'Check auth tests' }),
+      parseWebviewMessage({
+        type: 'updateProspective',
+        field: 'verifyFirst',
+        value: 'Check auth tests',
+      }),
     ).toEqual({ type: 'updateProspective', field: 'verifyFirst', value: 'Check auth tests' });
 
     expect(
@@ -349,7 +353,11 @@ describe('parseWebviewMessage', () => {
 
     // value is trimmed and clamped to 280 chars
     const longValue = 'a'.repeat(400);
-    const parsed = parseWebviewMessage({ type: 'updateProspective', field: 'verifyFirst', value: longValue });
+    const parsed = parseWebviewMessage({
+      type: 'updateProspective',
+      field: 'verifyFirst',
+      value: longValue,
+    });
     expect(parsed).toBeDefined();
     expect((parsed as { value: string }).value.length).toBeLessThanOrEqual(280);
 
