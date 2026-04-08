@@ -445,7 +445,7 @@ Status vocabulary used in this file:
   - added `CockpitField` type and `updateProspective` message variant + parser to `src/webviewMessages.ts` (field validated as `verifyFirst | nextStep`, value clamped to 280 chars).
   - added cockpit CSS block and compact density mode (`[data-density='compact']`) to `src/webview/panelStyles.ts`.
   - wired debounced 600 ms `input` handlers for `#cockpit-verify-first` / `#cockpit-next-step` in `src/webview/panelClientScript.ts`; `Enter` key flushes immediately and advances focus to next field; autosave indicator updates via `#cockpit-save-state` live region.
-  - all 56 test suites, 410 tests pass clean; typecheck and lint clean.
+  - all tests pass clean; typecheck and lint clean.
 - risks/rollback:
   - risk: inline editing in the webview introduces save-state complexity that could silently drop prospective fields on panel reload.
   - rollback: revert to read-only cockpit display with an `Edit` button that opens the existing `InputBox` flow; safe and already tested.

@@ -518,6 +518,7 @@ export function renderPanelClientScript(
       // ── Cockpit inline-edit autosave ────────────────────────────────
       const COCKPIT_DEBOUNCE_MS = 600;
       const cockpitTimers = {};
+      let cockpitSaveStateTimer = undefined;
 
       function normalizeCockpitValue(rawValue) {
         if (typeof rawValue !== 'string') {
@@ -530,7 +531,11 @@ export function renderPanelClientScript(
         const saveState = document.getElementById('cockpit-save-state');
         if (saveState instanceof HTMLElement) {
           saveState.textContent = '';
-          window.setTimeout(() => {
+          if (cockpitSaveStateTimer !== undefined) {
+            window.clearTimeout(cockpitSaveStateTimer);
+          }
+          cockpitSaveStateTimer = window.setTimeout(() => {
+            cockpitSaveStateTimer = undefined;
             saveState.textContent = typeof message === 'string' ? message : '';
           }, 15);
         }
