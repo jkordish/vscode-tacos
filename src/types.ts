@@ -4,6 +4,7 @@ export type CompanionNudgeAggressiveness = 'low' | 'balanced' | 'high';
 export type UiSurface = 'statusbar' | 'notification' | 'silent';
 export type PrivacyPreset = 'minimal' | 'balanced' | 'max-context';
 export type RetentionPolicy = '1d' | '7d' | '30d' | 'forever';
+export type EvidenceGranularity = 'coarse' | 'medium' | 'fine';
 
 export interface ExtensionConfig {
   enabled: boolean;
@@ -45,6 +46,7 @@ export interface ExtensionConfig {
   aiIncludeCheckpointNotes: boolean;
   aiIncludeScratchpad: boolean;
   codexOpenCommand: string;
+  evidenceGranularity: EvidenceGranularity;
 }
 
 export interface GitSnapshot {

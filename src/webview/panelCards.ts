@@ -249,6 +249,57 @@ export function renderEvidenceCard(input: EvidenceCardInput): string {
     </div>`;
 }
 
+export type EvidenceGroupModeLabel = 'Recent' | 'By file' | 'By time' | 'By action';
+
+const EVIDENCE_GROUP_MODE_LABELS: Record<string, EvidenceGroupModeLabel> = {
+  recent: 'Recent',
+  'by-file': 'By file',
+  'by-time': 'By time',
+  'by-action': 'By action',
+};
+
+export interface GroupedEvidenceTabInput {
+  /** Current active group mode. */
+  activeMode: string;
+  /** Pre-rendered content for the active mode. */
+  contentTrustedHtml: string;
+  /** Total evidence items (for the "expand full timeline" affordance). */
+  totalCount: number;
+  /** Whether the full timeline expand affordance should be shown. */
+  showExpandTimeline: boolean;
+  expanded: boolean;
+  emphasis?: PanelSectionEmphasis;
+}
+
+export function renderGroupedEvidenceTab(input: GroupedEvidenceTabInput): string {
+  const emphasisAttrs = renderPanelSectionEmphasisAttrs(input.emphasis);
+  const emphasisBadge = renderPanelSectionEmphasisBadge(input.emphasis);
+
+  const toggleButtons = Object.entries(EVIDENCE_GROUP_MODE_LABELS)
+    .map(([mode, label]) => {
+      const isActive = mode === input.activeMode;
+      return `<button type="button" class="evidence-group-btn${isActive ? ' evidence-group-btn-active' : ''}" data-action="setEvidenceGroupMode" data-evidence-mode="${escapeHtml(mode)}" aria-pressed="${isActive ? 'true' : 'false'}">${escapeHtml(label)}</button>`;
+    })
+    .join('');
+
+  const expandTimeline = input.showExpandTimeline
+    ? `<div class="evidence-expand-full"><button type="button" class="text-link-button evidence-expand-btn" data-action="setPanelSectionExpanded" data-section-id="timeline" data-section-expanded="true">Expand full timeline ↗</button></div>`
+    : '';
+
+  return `<div class="card">
+      <details data-panel-section="evidence" ${emphasisAttrs ? `${emphasisAttrs} ` : ''}${input.expanded ? 'open' : ''}>
+        <summary class="panel-disclosure-summary"><span class="section-heading" role="heading" aria-level="3">Evidence</span>${emphasisBadge}</summary>
+        <div class="panel-section-body">
+          <div class="evidence-group-mode-bar" role="group" aria-label="Evidence view mode">${toggleButtons}</div>
+          <ul class="evidence-list evidence-grouped-list" id="evidence-list">${
+            input.contentTrustedHtml || '<li class="muted">No evidence captured yet.</li>'
+          }</ul>
+          ${expandTimeline}
+        </div>
+      </details>
+    </div>`;
+}
+
 export type ResumeCockpitAnchorKind = 'file' | 'url';
 
 export interface ResumeCockpitAnchor {

@@ -488,7 +488,7 @@ Status vocabulary used in this file:
 
 ### P21. Evidence tab — recent anchors default with grouping and expand
 
-- status: `queued`
+- status: `done`
 - why: the TaCoS paper found timeline cues produced the highest task success but were also frequently described as **noisy and overwhelming**. Participants explicitly requested grouping, collapsing, filtering, and granularity controls. The current Evidence tab renders timeline as a flat list, which replicates the overwhelm problem the paper documented. Fixing this is directly research-mandated, not taste.
 - scope: restructure the Evidence tab panel to default to a `Recent anchors` view (last 5–10 min, top 10 events, grouped by file). Add toggle controls: `By time / By file / By action`. Provide an `Expand full timeline` affordance that reveals the full log in collapsible sections. Add optional granularity slider (coarse/medium/fine) as a setting (`tacos.evidence.granularity`).
 - dependencies: P15, P19 (cockpit anchors slot pulls from same data).

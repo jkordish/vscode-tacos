@@ -564,6 +564,16 @@
           "type": "string",
           "default": "",
           "description": "Optional VS Code command id to open the Codex panel (used by Copy + Open flow)."
+        },
+        "tacos.evidence.granularity": {
+          "type": "string",
+          "enum": [
+            "coarse",
+            "medium",
+            "fine"
+          ],
+          "default": "medium",
+          "description": "Time window for the Evidence tab Recent anchors default view. `coarse` = last 10 min, `medium` = last 5 min (default), `fine` = last 2 min."
         }
       }
     }

@@ -1136,6 +1136,105 @@ export const PANEL_WEBVIEW_STYLE = `
       .tacos-root[data-density='compact'] .cockpit-input {
         padding: 3px var(--space-2);
       }
+      /* ── Evidence group mode bar ────────────────────────────────────── */
+      .evidence-group-mode-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1);
+        margin-bottom: var(--space-2);
+      }
+      .evidence-group-btn {
+        background: transparent;
+        color: var(--surface-muted);
+        border: 1px solid var(--vscode-widget-border);
+        border-radius: var(--radius-1);
+        min-height: 22px;
+        padding: 1px var(--space-2);
+        font-size: 11px;
+        font-family: var(--vscode-font-family);
+        cursor: pointer;
+        transition: background var(--motion-quick) ease, color var(--motion-quick) ease;
+      }
+      .evidence-group-btn:hover {
+        background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.1));
+        color: var(--surface-strong);
+      }
+      .evidence-group-btn-active {
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        border-color: var(--vscode-button-background);
+        font-weight: 600;
+      }
+      .evidence-group-btn-active:hover {
+        background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+        color: var(--vscode-button-foreground);
+      }
+      /* ── Evidence recent anchor row ─────────────────────────────────── */
+      .evidence-recent-anchor {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-2);
+      }
+      .evidence-anchor-time {
+        font-size: 11px;
+        color: var(--surface-muted);
+        white-space: nowrap;
+        min-width: 52px;
+        padding-top: 3px;
+      }
+      .evidence-kind-inline {
+        color: var(--surface-muted);
+        font-size: 11px;
+      }
+      /* ── Evidence file groups (By file view) ────────────────────────── */
+      .evidence-file-group {
+        list-style: none;
+        margin-bottom: var(--space-2);
+      }
+      .evidence-file-group:last-child {
+        margin-bottom: 0;
+      }
+      .evidence-file-group-summary {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--surface-strong);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+        padding: 2px 0;
+      }
+      .evidence-file-group-label {
+        overflow-wrap: anywhere;
+      }
+      /* ── Evidence time bucket headings ──────────────────────────────── */
+      .evidence-time-bucket {
+        list-style: none;
+        margin-bottom: var(--space-2);
+      }
+      .evidence-time-bucket:last-child {
+        margin-bottom: 0;
+      }
+      .evidence-time-bucket-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--surface-muted);
+        margin: 0 0 var(--space-1) 0;
+      }
+      /* ── Expand full timeline affordance ────────────────────────────── */
+      .evidence-expand-full {
+        margin-top: var(--space-2);
+        text-align: right;
+      }
+      .evidence-expand-btn {
+        font-size: 11px;
+        color: var(--surface-muted);
+      }
+      .evidence-expand-btn:hover {
+        color: var(--vscode-textLink-activeForeground);
+      }
       /* ── Reduced motion ─────────────────────────────────────────────── */
       @media (prefers-reduced-motion: reduce) {
         .card > details[data-panel-section] > summary::before,
@@ -1147,6 +1246,15 @@ export const PANEL_WEBVIEW_STYLE = `
       /* ── Forced colors (Windows High Contrast) ──────────────────────── */
       @media (forced-colors: active) {
         button,
+        /* === Evidence group mode bar (forced-colors) === */
+        .evidence-group-btn {
+          forced-color-adjust: auto;
+          border-color: ButtonText;
+        }
+        .evidence-group-btn-active {
+          background: Highlight;
+          color: HighlightText;
+        }
         .badge,
         .badge.kind-url,
         .badge.kind-file,

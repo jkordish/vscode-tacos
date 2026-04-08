@@ -1457,7 +1457,22 @@ export function activate(context: vscode.ExtensionContext): void {
         hasCockpitVerifyFirstInput: panelHtml.includes('id="cockpit-verify-first"'),
         hasCockpitNextStepInput: panelHtml.includes('id="cockpit-next-step"'),
         hasCockpitSaveStateRegion: panelHtml.includes('id="cockpit-save-state"'),
+        evidenceGroupMode: state.panelEvidenceGroupMode,
+        hasEvidenceGroupModeBar: panelHtml.includes('class="evidence-group-mode-bar"'),
+        evidenceGroupModeBarActiveMode:
+          panelHtml.match(/data-evidence-mode="([^"]+)"[^>]*aria-pressed="true"/u)?.[1] ?? '',
+        evidenceGroupModeBtnCount: (panelHtml.match(/data-action="setEvidenceGroupMode"/gu) ?? [])
+          .length,
       };
+    }),
+    vscode.commands.registerCommand('tacos.__test.setEvidenceGroupMode', async (mode?: string) => {
+      const validModes = ['recent', 'by-file', 'by-time', 'by-action'];
+      if (!mode || !validModes.includes(mode)) {
+        throw new Error(
+          `tacos.__test.setEvidenceGroupMode: invalid mode "${mode}". Expected one of: ${validModes.join(', ')}`,
+        );
+      }
+      state.panelEvidenceGroupMode = mode as EvidenceGroupMode;
     }),
     vscode.commands.registerCommand('tacos.__test.getResumePathSnapshot', async () => {
       const contextRef = activeExtensionContext;
@@ -6125,6 +6140,9 @@ async function showDetailsPanel(
         localResourceRoots: [],
       },
     );
+
+    // Reset Evidence tab group mode to default on each new panel open (SPECS.md §panelEvidenceGroupMode).
+    state.panelEvidenceGroupMode = 'recent';
 
     state.panel.onDidDispose(() => {
       state.panel = undefined;

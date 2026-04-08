@@ -1,4 +1,5 @@
 import { normalizeIntentOverrideText } from './intentOverride';
+import type { EvidenceGroupMode } from './timeline';
 
 const SIMPLE_MESSAGE_TYPES = [
   'fixSummary',
@@ -78,7 +79,8 @@ export type WebviewMessage =
   | { type: 'updateProspective'; field: CockpitField; value: string }
   | { type: 'openEvidence'; evidenceId: string }
   | { type: 'openTopFile'; index: number }
-  | { type: 'openLink'; index: number };
+  | { type: 'openLink'; index: number }
+  | { type: 'setEvidenceGroupMode'; mode: EvidenceGroupMode };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object';
@@ -275,6 +277,15 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
       field,
       value,
     };
+  }
+
+  if (raw.type === 'setEvidenceGroupMode') {
+    const mode = raw.mode;
+    if (mode !== 'recent' && mode !== 'by-file' && mode !== 'by-time' && mode !== 'by-action') {
+      return undefined;
+    }
+
+    return { type: 'setEvidenceGroupMode', mode };
   }
 
   return undefined;

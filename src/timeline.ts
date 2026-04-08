@@ -1,6 +1,29 @@
 import type { SummaryEvidenceItem } from './types';
 
 export type TimelineGroupKey = 'files' | 'terminal' | 'debugTasks' | 'urls' | 'git';
+export type EvidenceGroupMode = 'recent' | 'by-file' | 'by-time' | 'by-action';
+
+export interface RecentAnchorRow {
+  evidenceId: string;
+  kind: SummaryEvidenceItem['kind'];
+  label: string;
+  detail?: string;
+  timestamp: number;
+  relativeTime: string;
+  clickable: boolean;
+}
+
+export interface EvidenceFileGroup {
+  filePath: string;
+  rows: RecentAnchorRow[];
+}
+
+export interface EvidenceTimeBucket {
+  label: string;
+  startMs: number;
+  rows: RecentAnchorRow[];
+}
+
 export type EvidenceRelevanceGroupKey = 'primary' | 'openable' | 'context';
 
 export interface TimelineRow {
@@ -201,4 +224,142 @@ export function buildEvidenceRelevanceGroups(
   }
 
   return groups;
+}
+
+/**
+ * Returns at most `count` evidence items from within the last `windowMs` milliseconds,
+ * sorted by timestamp descending (most recent first).
+ */
+export function selectRecentAnchors(
+  entries: SummaryEvidenceItem[],
+  count = 10,
+  windowMs = 5 * 60_000,
+  now = Date.now(),
+): RecentAnchorRow[] {
+  const cutoff = now - windowMs;
+  const result: RecentAnchorRow[] = [];
+
+  const sorted = [...entries].sort((a, b) => {
+    const ta = typeof a.capturedAt === 'number' && a.capturedAt > 0 ? a.capturedAt : 0;
+    const tb = typeof b.capturedAt === 'number' && b.capturedAt > 0 ? b.capturedAt : 0;
+    return tb - ta;
+  });
+
+  for (let i = 0; i < sorted.length && result.length < count; i++) {
+    const item = sorted[i]!;
+    const ts =
+      typeof item.capturedAt === 'number' && item.capturedAt > 0
+        ? item.capturedAt
+        : now - i * 30_000;
+    if (ts < cutoff) {
+      break;
+    }
+    result.push({
+      evidenceId: item.id,
+      kind: item.kind,
+      label: item.label,
+      detail: resolveEvidenceDetail(item),
+      timestamp: ts,
+      relativeTime: formatRelativeTime(ts, now),
+      clickable: isEvidenceTimelineClickable(item),
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Groups evidence items by their base file path within a time window.
+ * Non-file items appear under the label of their kind (e.g. "terminal").
+ */
+export function groupTimelineByFile(
+  entries: SummaryEvidenceItem[],
+  windowMs = 5 * 60_000,
+  now = Date.now(),
+): EvidenceFileGroup[] {
+  const cutoff = now - windowMs;
+  const fileGroupMap = new Map<string, RecentAnchorRow[]>();
+
+  const sorted = [...entries].sort((a, b) => {
+    const ta = typeof a.capturedAt === 'number' && a.capturedAt > 0 ? a.capturedAt : 0;
+    const tb = typeof b.capturedAt === 'number' && b.capturedAt > 0 ? b.capturedAt : 0;
+    return tb - ta;
+  });
+
+  for (let i = 0; i < sorted.length; i++) {
+    const item = sorted[i]!;
+    const ts =
+      typeof item.capturedAt === 'number' && item.capturedAt > 0
+        ? item.capturedAt
+        : now - i * 30_000;
+    if (ts < cutoff) {
+      continue;
+    }
+
+    const fileKey = item.kind === 'file' ? item.label : `[${item.kind}]`;
+    const existing = fileGroupMap.get(fileKey) ?? [];
+    existing.push({
+      evidenceId: item.id,
+      kind: item.kind,
+      label: item.label,
+      detail: resolveEvidenceDetail(item),
+      timestamp: ts,
+      relativeTime: formatRelativeTime(ts, now),
+      clickable: isEvidenceTimelineClickable(item),
+    });
+    fileGroupMap.set(fileKey, existing);
+  }
+
+  const groups: EvidenceFileGroup[] = [];
+  for (const [filePath, rows] of fileGroupMap) {
+    groups.push({ filePath, rows });
+  }
+  // Sort groups by the most recent row in each group
+  groups.sort((a, b) => (b.rows[0]?.timestamp ?? 0) - (a.rows[0]?.timestamp ?? 0));
+  return groups;
+}
+
+/**
+ * Groups evidence items into fixed time buckets (e.g. "0–5 min ago", "5–10 min ago").
+ */
+export function groupTimelineByTimeBucket(
+  entries: SummaryEvidenceItem[],
+  bucketSizeMs = 5 * 60_000,
+  bucketCount = 4,
+  now = Date.now(),
+): EvidenceTimeBucket[] {
+  const buckets: EvidenceTimeBucket[] = [];
+  for (let b = 0; b < bucketCount; b++) {
+    const startMs = now - (b + 1) * bucketSizeMs;
+    const endMs = now - b * bucketSizeMs;
+    const bucketMinStart = b * Math.floor(bucketSizeMs / 60_000);
+    const bucketMinEnd = (b + 1) * Math.floor(bucketSizeMs / 60_000);
+    buckets.push({
+      label: b === 0 ? `Last ${bucketMinEnd} min` : `${bucketMinStart}–${bucketMinEnd} min ago`,
+      startMs,
+      rows: [],
+    });
+
+    for (let i = 0; i < entries.length; i++) {
+      const item = entries[i]!;
+      const ts =
+        typeof item.capturedAt === 'number' && item.capturedAt > 0
+          ? item.capturedAt
+          : now - i * 30_000;
+      if (ts >= startMs && ts < endMs) {
+        buckets[b]!.rows.push({
+          evidenceId: item.id,
+          kind: item.kind,
+          label: item.label,
+          detail: resolveEvidenceDetail(item),
+          timestamp: ts,
+          relativeTime: formatRelativeTime(ts, now),
+          clickable: isEvidenceTimelineClickable(item),
+        });
+      }
+    }
+    // Sort each bucket newest-first
+    buckets[b]!.rows.sort((a, b) => b.timestamp - a.timestamp);
+  }
+  return buckets.filter((bkt) => bkt.rows.length > 0);
 }

@@ -189,6 +189,13 @@ async function main() {
       [multiRootWorkspace, '--disable-extensions'],
       vscodeExecutablePath,
     );
+
+    await runSuite(
+      'evidence-tab-grouping',
+      path.resolve(__dirname, 'suite', 'evidenceTabGrouping.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
   } finally {
     fs.rmSync(restrictedUserDataDir, { recursive: true, force: true });
   }
