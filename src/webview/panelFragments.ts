@@ -660,7 +660,7 @@ export function renderProvenanceBadge(input: ProvenanceBadgeInput): string {
       ? ` · payload: ${input.payloadFields.map(escapeHtml).join(', ')}`
       : '';
   const previewLink = input.showPreviewLink
-    ? ` <button type="button" class="provenance-preview-link" data-action="openAiPayloadPreview" data-ai-payload-entrypoint="provenance-badge">Preview payload</button>`
+    ? ` <button type="button" class="provenance-preview-link" data-action="openAiPayloadPreview" data-ai-payload-entrypoint="provenance-badge">Preview payload ↗</button>`
     : '';
   return `<div class="header-provenance"><span class="badge-ai">● AI used${providerPart}${modelPart}${payloadPart}</span>${previewLink}</div>`;
 }

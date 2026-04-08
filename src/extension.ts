@@ -10517,6 +10517,9 @@ async function setAiPayloadConsent(
 }
 
 function describeAiPayloadPreviewEntrypoint(entrypoint: AiPayloadPreviewEntrypoint): string {
+  if (entrypoint === 'provenance-badge') {
+    return 'provenance badge';
+  }
   if (entrypoint === 'companion-home') {
     return 'Companion Home';
   }
@@ -10529,6 +10532,10 @@ function describeAiPayloadPreviewEntrypoint(entrypoint: AiPayloadPreviewEntrypoi
 function recordAiPayloadPreviewEntrypointMetric(entrypoint: AiPayloadPreviewEntrypoint): void {
   if (entrypoint === 'companion-home') {
     recordMetricCounter('aiPayloadPreviewOpensCompanionHome');
+    return;
+  }
+  if (entrypoint === 'provenance-badge') {
+    recordMetricCounter('aiPayloadPreviewOpensTrustCenter');
     return;
   }
   if (entrypoint === 'why-surfaced') {

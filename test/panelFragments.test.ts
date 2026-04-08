@@ -493,7 +493,7 @@ describe('panelFragments', () => {
     expect(html).not.toContain('Local');
     expect(html).toContain('data-action="openAiPayloadPreview"');
     expect(html).toContain('data-ai-payload-entrypoint="provenance-badge"');
-    expect(html).toContain('Preview payload');
+    expect(html).toContain('Preview payload ↗');
   });
 
   it('renderProvenanceBadge renders AI-active badge with payload fields', () => {

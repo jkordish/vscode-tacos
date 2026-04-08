@@ -83,6 +83,12 @@ describe('parseWebviewMessage', () => {
       entrypoint: 'companion-home',
     });
     expect(
+      parseWebviewMessage({ type: 'openAiPayloadPreview', entrypoint: 'provenance-badge' }),
+    ).toEqual({
+      type: 'openAiPayloadPreview',
+      entrypoint: 'provenance-badge',
+    });
+    expect(
       parseWebviewMessage({ type: 'openAiPayloadPreview', entrypoint: 'unknown-entrypoint' }),
     ).toBeUndefined();
     expect(
