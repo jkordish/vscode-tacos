@@ -668,14 +668,14 @@ Status vocabulary used in this file:
 
 - status: `queued`
 - why: engineers interrupted mid-task need to re-anchor spatially, not just temporally. Existing edit/timeline signals already capture visit frequency and recency; what is missing is a **visual encoding layer** that maps those signals to a perceptual gradient. The result is a passive heat-map breadcrumb: color depth alone lets someone manually recreate their work path without reading raw timestamps or counts. This is directly grounded in TaCoS ICSE'26 qualitative feedback: participants wanted to know not just what they did but how much they cared about it at the time.
-- scope: add a `scoreAnchorHeat(entries, filePath, nowMs): number` pure function to `src/timeline.ts`; add `.heat-0`–`.heat-4` CSS classes to `src/webview/panelStyles.ts` using the existing `--tacos-accent` token (forced-colors and reduced-motion safe); apply heat classes to anchor badges in the Evidence tab and cockpit anchors slot (`panelCards.ts`); add ARIA label tier text (`— low/medium/high activity`) for accessibility; add unit tests for the heat scoring function; document encoding contract in `SPECS.md`.
+- scope: add a `scoreAnchorHeat(entries, filePath, nowMs): number` pure function to `src/timeline.ts`; add `.heat-0`–`.heat-4` CSS classes to `src/webview/panelStyles.ts` using the existing `--tacos-accent` token (forced-colors and reduced-motion safe); apply heat classes to anchor badges in the Evidence tab and cockpit anchors slot (`panelCards.ts`); expose both the raw numeric heat score and a human-friendly tier label in tooltip/ARIA text (for example `Heat 0.72 — high activity`) for accessibility; add unit tests for the heat scoring function; document encoding contract in `SPECS.md`.
 - dependencies: P19 (cockpit anchors slot — first consumer), P21 (Evidence tab grouping — shares the same anchor data layer).
 - immediate next actions:
-  - implement `scoreAnchorHeat()` in `src/timeline.ts` as a pure, fully unit-testable function using `heat = clamp(visitCount × recencyDecayFactor, 0, 1)` with a configurable half-life.
+  - implement `scoreAnchorHeat()` in `src/timeline.ts` as a pure, fully unit-testable function using a configurable half-life plus a normalized frequency term (capped/log-scaled `visitCount`) so `heat = clamp(normalizedVisitScore × recencyDecayFactor, 0, 1)` preserves the distinction between "visited once recently" (`heat-1`) and "visited many times recently" (`heat-4`).
   - add five heat-tier CSS classes to `panelStyles.ts` keyed to `--tacos-accent` opacity/saturation steps.
-  - wire heat class selection into anchor badge rendering in `panelCards.ts`.
-  - extend `test/timeline.test.ts` with heat-scoring edge cases (zero visits, single visit, high-frequency recent, high-frequency stale).
-  - update `SPECS.md` with the heat-map encoding contract.
+  - wire heat class selection into anchor badge rendering in `panelCards.ts`, including tooltip/ARIA text containing both numeric heat score and tier label (e.g. `Heat 0.72 — high activity`).
+  - extend `test/timeline.test.ts` with heat-scoring edge cases (zero visits, single visit, repeated recent visits scoring above a single recent visit, high-frequency stale).
+  - update `SPECS.md` with the heat-map encoding contract, including the accessibility requirement to expose raw score plus tier text.
 - risks/rollback:
   - risk: overly aggressive saturation steps make the panel feel visually noisy and distract from primary resume content.
   - rollback: reduce to three tiers (`heat-0` / `heat-2` / `heat-4`) or collapse to a single accent-intensity class and iterate.
