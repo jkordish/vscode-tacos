@@ -7498,10 +7498,14 @@ function renderWebview(
     ? 'Sample mode'
     : RETENTION_POLICY_LABELS[config.retentionPolicy];
   const providerModeSnapshot = demoMode ? undefined : state.panelProviderModeSnapshot;
+  // Use 'local' when providerModeSnapshot is absent: it is cleared on cached/fallback paths,
+  // meaning no AI call was actually made for the currently-displayed summary.
   const activeAiProviderForConsent: SummaryProvider =
     companionRuntimeMode === 'restricted' || companionRuntimeMode === 'disabled'
       ? 'local'
-      : (providerModeSnapshot?.activeProvider ?? config.summaryProvider);
+      : providerModeSnapshot !== undefined
+        ? providerModeSnapshot.activeProvider
+        : 'local';
   const aiProviderModeLabel = demoMode
     ? 'Demo mode (no provider sends).'
     : resolveAiProviderModeLabel(config, companionRuntimeMode, providerModeSnapshot);
@@ -7723,12 +7727,24 @@ function renderWebview(
       : !provenanceIsLocal && activeAiProviderForConsent === 'openai' && config.openaiModel
         ? config.openaiModel
         : undefined;
+  // Derive payload field labels from the same state that prepareTriggerSummary
+  // uses to build aiPayloadCheckpointNotes / aiPayloadScratchpadExcerpt, so the
+  // badge never claims a field is sent when it is absent from the real payload.
+  // - notes: sent when aiIncludeCheckpointNotes is on AND either a structured
+  //   task state OR an open checkpoint note is present (mirrors prepareTriggerSummary).
+  // - scratchpad: sent when aiIncludeScratchpad is on AND a prior excerpt exists
+  //   (mirrors `scratchpadPrior.excerpt` truthiness in prepareTriggerSummary).
   const provenancePayloadFields: string[] = provenanceIsLocal
     ? []
     : [
         'summary',
-        ...(config.aiIncludeCheckpointNotes && openCheckpointNotes.length > 0 ? ['notes'] : []),
-        ...(config.aiIncludeScratchpad && state.panelScratchpadHasContent ? ['scratchpad'] : []),
+        ...(config.aiIncludeCheckpointNotes &&
+        (state.panelTaskState !== undefined || state.panelPrimaryCheckpointNote?.status === 'open')
+          ? ['notes']
+          : []),
+        ...(config.aiIncludeScratchpad && Boolean(state.panelScratchpadPriorExcerpt)
+          ? ['scratchpad']
+          : []),
       ];
   const provenanceBadgeHtml = renderProvenanceBadge(
     provenanceIsLocal
