@@ -62,5 +62,12 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain("if (!['r', 'n', 'i'].includes(key))");
     expect(script).toContain("vscode.postMessage({ type: 'refreshSummary' });");
     expect(script).toContain("vscode.postMessage({ type: 'copyNextSteps' });");
+    // setPanelSectionExpanded click handler
+    expect(script).toContain("if (action === 'setPanelSectionExpanded')");
+    expect(script).toContain('actionElement.dataset.sectionId');
+    expect(script).toContain('panelSectionIds.has(sectionId)');
+    expect(script).toContain("actionElement.dataset.sectionExpanded !== 'false'");
+    expect(script).toContain('persistPanelSectionExpanded(sectionId, expanded)');
+    expect(script).toContain("(expanded ? 'Expanded ' : 'Collapsed ') + sectionId + ' section.'");
   });
 });

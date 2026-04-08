@@ -95,15 +95,16 @@ TaCoS watches for conservative signals: focus return after idle, workspace root 
 
 ## Settings
 
-| Setting                                     | Default | Description                                       |
-| ------------------------------------------- | ------- | ------------------------------------------------- |
-| `tacos.taskCheckpoint.enabled`              | `true`  | Enable structured task checkpoints                |
-| `tacos.taskCheckpoint.promptOnLikelySwitch` | `true`  | Prompt at conservative switch boundaries          |
-| `tacos.resumeSafety.enabled`                | `true`  | Post-resume safety check annunciator              |
-| `tacos.resumeSafety.strict`                 | `false` | Warn before first risky action on strong mismatch |
-| `tacos.aiIncludeCheckpointNotes`            | `false` | Include checkpoint notes in AI payloads           |
-| `tacos.aiIncludeScratchpad`                 | `false` | Include scratchpad in AI payloads                 |
-| `tacos.percolationPolicyEnabled`            | `true`  | Dynamic surface arbitration                       |
+| Setting                                     | Default  | Description                                                                                  |
+| ------------------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `tacos.taskCheckpoint.enabled`              | `true`   | Enable structured task checkpoints                                                           |
+| `tacos.taskCheckpoint.promptOnLikelySwitch` | `true`   | Prompt at conservative switch boundaries                                                     |
+| `tacos.resumeSafety.enabled`                | `true`   | Post-resume safety check annunciator                                                         |
+| `tacos.resumeSafety.strict`                 | `false`  | Warn before first risky action on strong mismatch                                            |
+| `tacos.aiIncludeCheckpointNotes`            | `false`  | Include checkpoint notes in AI payloads                                                      |
+| `tacos.aiIncludeScratchpad`                 | `false`  | Include scratchpad in AI payloads                                                            |
+| `tacos.percolationPolicyEnabled`            | `true`   | Dynamic surface arbitration                                                                  |
+| `tacos.evidence.granularity`                | `medium` | Evidence tab time window: `coarse` = last 10 min, `medium` = last 5 min, `fine` = last 2 min |
 
 ---
 

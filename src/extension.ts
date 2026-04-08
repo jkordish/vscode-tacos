@@ -193,7 +193,6 @@ import { renderPanelClientScript } from './webview/panelClientScript';
 import {
   renderChangesSinceCard,
   renderDetailsCard,
-  renderEvidenceCard,
   renderRecapCard,
   renderResumeCockpitCard,
   renderRestorePackCard,
@@ -201,6 +200,7 @@ import {
   renderTimelineCard,
   renderTitledListCard,
   renderTrustCenterCard,
+  renderGroupedEvidenceTab,
   type PanelSectionEmphasis,
 } from './webview/panelCards';
 import {
@@ -210,7 +210,6 @@ import {
   renderCompanionNudgeCard,
   renderConfidenceCard,
   renderTaskStateCard,
-  renderGroupedEvidenceListItems,
   renderGroupedActionSections,
   renderIntentEditor,
   renderResumePathCard,
@@ -221,6 +220,10 @@ import {
   renderPageHeader,
   renderProvenanceBadge,
   renderWebviewDocument,
+  renderRecentAnchorsHtml,
+  renderEvidenceFileGroupsHtml,
+  renderEvidenceTimeBucketsHtml,
+  renderEvidenceActionGroupsHtml,
 } from './webview/panelFragments';
 import { PANEL_WEBVIEW_STYLE } from './webview/panelStyles';
 import {
@@ -237,7 +240,14 @@ import { renderResumeStackCard } from './resumeStackCard';
 import { resolveScopeBranch as resolveScopeBranchFromInputs } from './scopeBranch';
 import { applyIntentOverrideToSummary, buildResumeSummary } from './summary';
 import { buildStandupUpdate } from './standup';
-import { buildEvidenceRelevanceGroups, buildTimelineGroups } from './timeline';
+import {
+  buildTimelineGroups,
+  groupTimelineByFile,
+  groupTimelineByTimeBucket,
+  groupTimelineByAction,
+  selectRecentAnchors,
+  type EvidenceGroupMode,
+} from './timeline';
 import { buildTrustCue } from './trustCue';
 import { chooseWorkspaceRoot } from './workspaceRoot';
 import type {
@@ -357,6 +367,7 @@ const DEMO_MODE_IGNORED_WEBVIEW_MESSAGE_TYPES = new Set<WebviewMessage['type']>(
   'revokeAiPayloadConsent',
   'rateHelpfulness',
   'updateProspective',
+  'setEvidenceGroupMode',
 ]);
 const MAX_CHECKPOINT_NOTES_PER_SCOPE = 50;
 const MAX_NUDGE_FEEDBACK_ENTRIES_PER_SCOPE = 40;
@@ -470,6 +481,7 @@ interface RuntimeState {
   panelResumePathScope?: string;
   panelSectionState?: PanelSectionState;
   panelSectionScope?: string;
+  panelEvidenceGroupMode: EvidenceGroupMode;
   lastTaskName?: string;
   lastTaskWorkspaceRoot?: string;
   lastTaskExitCode?: number;
@@ -691,6 +703,7 @@ export function activate(context: vscode.ExtensionContext): void {
     panelResumePathScope: undefined,
     panelSectionState: undefined,
     panelSectionScope: undefined,
+    panelEvidenceGroupMode: 'recent',
     lastTaskName: persistedTaskMetadata?.taskName,
     lastTaskWorkspaceRoot: persistedTaskMetadata?.workspaceRoot,
     lastTaskExitCode: persistedTaskMetadata?.exitCode,
@@ -1446,7 +1459,22 @@ export function activate(context: vscode.ExtensionContext): void {
         hasCockpitVerifyFirstInput: panelHtml.includes('id="cockpit-verify-first"'),
         hasCockpitNextStepInput: panelHtml.includes('id="cockpit-next-step"'),
         hasCockpitSaveStateRegion: panelHtml.includes('id="cockpit-save-state"'),
+        evidenceGroupMode: state.panelEvidenceGroupMode,
+        hasEvidenceGroupModeBar: panelHtml.includes('class="evidence-group-mode-bar"'),
+        evidenceGroupModeBarActiveMode:
+          panelHtml.match(/data-evidence-mode="([^"]+)"[^>]*aria-pressed="true"/u)?.[1] ?? '',
+        evidenceGroupModeBtnCount: (panelHtml.match(/data-action="setEvidenceGroupMode"/gu) ?? [])
+          .length,
       };
+    }),
+    vscode.commands.registerCommand('tacos.__test.setEvidenceGroupMode', async (mode?: string) => {
+      const validModes = ['recent', 'by-file', 'by-time', 'by-action'];
+      if (!mode || !validModes.includes(mode)) {
+        throw new Error(
+          `tacos.__test.setEvidenceGroupMode: invalid mode "${mode}". Expected one of: ${validModes.join(', ')}`,
+        );
+      }
+      state.panelEvidenceGroupMode = mode as EvidenceGroupMode;
     }),
     vscode.commands.registerCommand('tacos.__test.getResumePathSnapshot', async () => {
       const contextRef = activeExtensionContext;
@@ -6115,6 +6143,9 @@ async function showDetailsPanel(
       },
     );
 
+    // Reset Evidence tab group mode to default on each new panel open (SPECS.md §panelEvidenceGroupMode).
+    state.panelEvidenceGroupMode = 'recent';
+
     state.panel.onDidDispose(() => {
       state.panel = undefined;
       state.panelSummary = undefined;
@@ -6737,6 +6768,12 @@ async function showDetailsPanel(
         return;
       }
 
+      if (message.type === 'setEvidenceGroupMode') {
+        state.panelEvidenceGroupMode = message.mode;
+        rerenderPanel();
+        return;
+      }
+
       if (message.type !== 'openLink') {
         return;
       }
@@ -7182,15 +7219,62 @@ function renderWebview(
   });
   const topFiles = renderTopFilesListItems(summary.topFiles);
   const evidenceCatalog = summary.evidenceCatalog ?? [];
-  const evidenceGroups = buildEvidenceRelevanceGroups(
+  const evidenceGranularityWindowMs =
+    config.evidenceGranularity === 'coarse'
+      ? 10 * 60_000
+      : config.evidenceGranularity === 'fine'
+        ? 2 * 60_000
+        : 5 * 60_000;
+  const evidenceNow = Date.now();
+  const evidenceGroupMode = demoMode ? 'recent' : state.panelEvidenceGroupMode;
+  const EVIDENCE_RECENT_LIMIT = 10;
+
+  // Pre-compute all grouped outputs so we can count displayed items accurately.
+  const evidenceFileGroups = groupTimelineByFile(
     evidenceCatalog,
-    rankedPrimaryCandidate?.evidenceIds ?? [],
+    evidenceGranularityWindowMs,
+    evidenceNow,
   );
-  const evidenceItems =
-    evidenceGroups.length > 0
-      ? renderGroupedEvidenceListItems(evidenceGroups)
-      : '<li>None captured</li>';
-  const hiddenEvidenceCount = Math.max(0, evidenceCatalog.length - 5);
+  const evidenceTimeBuckets = groupTimelineByTimeBucket(
+    evidenceCatalog,
+    evidenceGranularityWindowMs,
+    4,
+    evidenceNow,
+  );
+  const evidenceActionGroups = groupTimelineByAction(
+    evidenceCatalog,
+    evidenceGranularityWindowMs,
+    evidenceNow,
+  );
+  const recentEvidence = selectRecentAnchors(
+    evidenceCatalog,
+    EVIDENCE_RECENT_LIMIT,
+    evidenceGranularityWindowMs,
+    evidenceNow,
+  );
+
+  const evidenceGroupedContentHtml =
+    evidenceGroupMode === 'by-file'
+      ? renderEvidenceFileGroupsHtml(evidenceFileGroups)
+      : evidenceGroupMode === 'by-time'
+        ? renderEvidenceTimeBucketsHtml(evidenceTimeBuckets)
+        : evidenceGroupMode === 'by-action'
+          ? renderEvidenceActionGroupsHtml(evidenceActionGroups)
+          : renderRecentAnchorsHtml(recentEvidence);
+
+  // Count only items actually rendered in the active mode to determine
+  // whether the "Expand full timeline" affordance should be shown.
+  const countGroupedRows = (groups: readonly { rows: readonly unknown[] }[]): number =>
+    groups.reduce((n, g) => n + g.rows.length, 0);
+  const evidenceDisplayedCount =
+    evidenceGroupMode === 'by-file'
+      ? countGroupedRows(evidenceFileGroups)
+      : evidenceGroupMode === 'by-time'
+        ? countGroupedRows(evidenceTimeBuckets)
+        : evidenceGroupMode === 'by-action'
+          ? countGroupedRows(evidenceActionGroups)
+          : recentEvidence.length;
+  const hiddenEvidenceCount = Math.max(0, evidenceCatalog.length - evidenceDisplayedCount);
   const recapDoneItems = summary.doneSinceLastResume?.slice(0, 3) ?? [];
   const recapPendingItems = summary.pendingBlocked?.slice(0, 3) ?? [];
   const recapDoneList = recapDoneItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
@@ -7637,9 +7721,11 @@ function renderWebview(
     emptyMessage: 'None captured',
   });
   const restorePackCard = renderRestorePackCard(restorePackGroups, trusted);
-  const evidenceCard = renderEvidenceCard({
-    evidenceItemsTrustedHtml: evidenceItems,
-    hiddenEvidenceCount,
+  const evidenceCard = renderGroupedEvidenceTab({
+    activeMode: evidenceGroupMode,
+    contentTrustedHtml: evidenceGroupedContentHtml,
+    totalCount: evidenceCatalog.length,
+    showExpandTimeline: config.showTimeline && hiddenEvidenceCount > 0,
     expanded: expandedSections.has('evidence'),
     emphasis: panelSectionEmphasis.evidence,
   });
@@ -10798,6 +10884,10 @@ function getConfig(): ExtensionConfig {
     aiIncludeCheckpointNotes: config.get<boolean>('aiIncludeCheckpointNotes', false),
     aiIncludeScratchpad: config.get<boolean>('aiIncludeScratchpad', false),
     codexOpenCommand: config.get<string>('codexOpenCommand', ''),
+    evidenceGranularity: config.get<ExtensionConfig['evidenceGranularity']>(
+      'evidence.granularity',
+      'medium',
+    ),
   };
 }
 

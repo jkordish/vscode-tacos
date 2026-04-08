@@ -6,6 +6,20 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **P21: Evidence tab — recent anchors default with grouping and expand** — Evidence tab now defaults to a `Recent anchors` view:
+  - Evidence tab defaults to `recent` mode: top-10 events within the last 5 min (medium granularity), rendered as a newest-first flat list.
+  - Toggle controls added: `Recent / By file / By time / By action` — each mode re-renders the Evidence tab via `setEvidenceGroupMode` webview message.
+  - `Expand full timeline` affordance wired into the evidence card for revealing the full log.
+  - `tacos.evidence.granularity` setting added (`coarse` = 10 min, `medium` = 5 min, `fine` = 2 min window; default `medium`).
+  - `EvidenceGroupMode = 'recent' | 'by-file' | 'by-time' | 'by-action'` type exported from `src/timeline.ts`.
+  - `EvidenceGranularity = 'coarse' | 'medium' | 'fine'` type and `evidenceGranularity` field added to `ExtensionConfig` in `src/types.ts`.
+  - Pure functions added to `src/timeline.ts`: `selectRecentAnchors`, `groupTimelineByFile`, `groupTimelineByTimeBucket`, `groupTimelineByAction`.
+  - `renderGroupedEvidenceTab` card renderer added to `src/webview/panelCards.ts`.
+  - Fragment renderers `renderRecentAnchorsHtml`, `renderEvidenceFileGroupsHtml`, `renderEvidenceTimeBucketsHtml`, `renderEvidenceActionGroupsHtml` added to `src/webview/panelFragments.ts`.
+  - CSS classes for grouped evidence UI added to `src/webview/panelStyles.ts`.
+  - `panelEvidenceGroupMode: EvidenceGroupMode` runtime state field added to `src/extension.ts` (default `'recent'`).
+  - 22 unit tests added to `test/timeline.test.ts` covering the grouping and anchor-selection functions.
+
 - **P20: Provenance header badges** — always-visible local/AI status badge row in the sticky page header:
   - `● Local-only` (green `badge-local`) renders when the active provider is local, Restricted Mode is active, or companion surfacing is disabled.
   - `● AI used · <provider>` (amber `badge-ai`) renders when an AI provider (`vscode-lm` or `openai`) is active; includes a `Preview payload` button that opens the AI payload preview from the header.

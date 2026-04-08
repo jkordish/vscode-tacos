@@ -491,6 +491,41 @@ Companion Home top-card content and CTA priority were previously composed from s
 - Top-card actions include `Review AI payload preview` so the current surfaced decision can deep-link into consent context in one click.
 - Top-card `Open evidence tray` action opens `More Context` and expands the `Evidence` tray in one click.
 - Evidence tray groups items by relevance: surfaced-decision evidence, other openable evidence, then context-only evidence.
+
+## Feature: Evidence Tab — Grouped Recent Anchors (P21)
+
+### Behavior contract
+
+- The Evidence tab defaults to `recent` group mode on every panel open: top-10 events within the configured granularity window, rendered as a newest-first flat list.
+- Four group modes are supported via toggle controls rendered in the Evidence card header:
+  - `recent` — `selectRecentAnchors(entries, 10, windowMs, now)`: at most 10 items from within `windowMs` before now, sorted newest-first.
+  - `by-file` — `groupTimelineByFile(entries, windowMs, now)`: items within `windowMs` grouped under their file label; non-file items under a bracketed kind key (e.g. `[terminal]`); groups sorted by most-recent row descending.
+  - `by-time` — `groupTimelineByTimeBucket(entries, bucketSizeMs, 4, now)`: items slotted into up to 4 equal time buckets; first bucket labelled `Last N min`, subsequent buckets labelled `M–N min ago`; empty buckets omitted.
+  - `by-action` — `groupTimelineByAction(entries, windowMs, now)`: items within `windowMs` grouped by action category and rendered via the dedicated action-group renderer.
+- `Expand full timeline` affordance is wired into the grouped evidence card and expands the full timeline log in collapsible sections.
+- `setEvidenceGroupMode` webview message updates `state.panelEvidenceGroupMode` and triggers a re-render; demo mode ignores this message.
+- `tacos.evidence.granularity` setting (`coarse` = 10 min, `medium` = 5 min, `fine` = 2 min) controls the `windowMs` passed to the grouped evidence selectors/renderers. Default is `medium`.
+
+### Type contracts
+
+- `EvidenceGroupMode = 'recent' | 'by-file' | 'by-time' | 'by-action'` exported from `src/timeline.ts`.
+- `EvidenceGranularity = 'coarse' | 'medium' | 'fine'` exported from `src/types.ts`.
+- `ExtensionConfig.evidenceGranularity: EvidenceGranularity` is read at render time via `getConfig()`.
+- `RuntimeState.panelEvidenceGroupMode: EvidenceGroupMode` persists group mode across re-renders within a panel session; resets to `'recent'` on panel open.
+
+### Pure functions (src/timeline.ts)
+
+- `selectRecentAnchors(entries, count, windowMs, now)` — returns `RecentAnchorRow[]` capped at `count`, sorted descending by timestamp, limited to the recent window relative to `now`, including entries at `now`.
+- `groupTimelineByFile(entries, windowMs, now)` — returns `EvidenceFileGroup[]` sorted by most-recent row descending; items outside window are excluded.
+- `groupTimelineByTimeBucket(entries, bucketSizeMs, bucketCount, now)` — returns `EvidenceTimeBucket[]` with only non-empty buckets; rows within each bucket sorted newest-first.
+
+### Acceptance criteria
+
+- Evidence tab renders in `recent` mode by default on every panel open.
+- Toggling any of the four mode buttons updates the tab content without a full extension reload.
+- `tacos.evidence.granularity` changes are reflected on the next render; no restart required.
+- All three pure functions pass unit tests for: window filtering, count capping, sort order, empty input, and correct bucket label format.
+- Empty state is graceful: zero items in any mode renders a `No recent anchors` / `No activity in this window` placeholder rather than an empty container.
 - Trust Center exposes a concise Trust & Privacy tray including `privacy preset`, `retention policy`, `AI provider mode`, and consent status for current workspace context.
 - Trust Center actions include `Review AI payload preview`, `Revoke AI payload consent`, and `Open Privacy & Safety`; the nested `Why am I seeing this?` panel also includes a direct payload-preview deep-link for that decision context.
 - Restricted Mode rendering explicitly marks filtered execution affordances as `SUPPRESSED` and calls out filtered signal classes (`git execution`, `terminal command collection`) in Trust Center/explainability copy.

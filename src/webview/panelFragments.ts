@@ -2,7 +2,14 @@ import type { CompanionNudge } from '../companionNudges';
 import type { CheckpointNote } from '../checkpoint';
 import type { NextStepAction } from '../nextStepActions';
 import type { TaskStateFreshness } from '../taskState';
-import type { EvidenceRelevanceGroup, TimelineGroup } from '../timeline';
+import type {
+  EvidenceActionGroup,
+  EvidenceFileGroup,
+  EvidenceRelevanceGroup,
+  EvidenceTimeBucket,
+  RecentAnchorRow,
+  TimelineGroup,
+} from '../timeline';
 import type { SummaryEvidenceItem, SummaryLink } from '../types';
 import { escapeHtml } from '../webviewSecurity';
 
@@ -454,6 +461,71 @@ export function renderGroupedEvidenceListItems(groups: EvidenceRelevanceGroup[])
       return `<li class="evidence-group${hiddenGroupClass}" data-evidence-group="${escapeHtml(group.key)}"><h4 class="section-heading-inline evidence-group-heading">${escapeHtml(group.label)}</h4><ul class="evidence-sublist">${rows}</ul></li>`;
     })
     .filter(Boolean)
+    .join('');
+}
+
+function renderRecentAnchorRow(row: RecentAnchorRow): string {
+  const labelControl = row.clickable
+    ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}" aria-label="${escapeHtml(row.label)} - Opens validated evidence" title="Opens validated evidence">${escapeHtml(row.label)}</button>`
+    : `<span class="evidence-label" aria-label="${escapeHtml(row.label)} - Static validated evidence" title="Static validated evidence">${escapeHtml(row.label)}</span>`;
+  const kindBadge = `<span class="evidence-kind evidence-kind-inline">[${escapeHtml(row.kind)}]</span>`;
+  const timeStamp = `<span class="evidence-anchor-time">${escapeHtml(row.relativeTime)}</span>`;
+  return `<li class="evidence-item evidence-recent-anchor">${timeStamp}<div class="evidence-row">${labelControl}${kindBadge}</div></li>`;
+}
+
+/**
+ * Renders the "Recent anchors" flat list for the Evidence tab default view.
+ */
+export function renderRecentAnchorsHtml(rows: RecentAnchorRow[]): string {
+  if (rows.length === 0) {
+    return '';
+  }
+  return rows.map((row) => renderRecentAnchorRow(row)).join('');
+}
+
+/**
+ * Renders the "By file" grouped view for the Evidence tab.
+ */
+export function renderEvidenceFileGroupsHtml(groups: EvidenceFileGroup[]): string {
+  if (groups.length === 0) {
+    return '';
+  }
+  return groups
+    .map((group) => {
+      const rows = group.rows.map((row) => renderRecentAnchorRow(row)).join('');
+      return `<li class="evidence-file-group" data-evidence-file-group="${escapeHtml(group.filePath)}"><details open><summary class="evidence-file-group-summary"><span class="evidence-file-group-label">${escapeHtml(group.filePath)}</span> <span class="evidence-kind">(${escapeHtml(String(group.rows.length))})</span></summary><ul class="evidence-sublist">${rows}</ul></details></li>`;
+    })
+    .join('');
+}
+
+/**
+ * Renders the "By time" bucket view for the Evidence tab.
+ */
+export function renderEvidenceTimeBucketsHtml(buckets: EvidenceTimeBucket[]): string {
+  if (buckets.length === 0) {
+    return '';
+  }
+  return buckets
+    .map((bucket) => {
+      const rows = bucket.rows.map((row) => renderRecentAnchorRow(row)).join('');
+      return `<li class="evidence-time-bucket"><h4 class="evidence-time-bucket-label">${escapeHtml(bucket.label)}</h4><ul class="evidence-sublist">${rows}</ul></li>`;
+    })
+    .join('');
+}
+
+/**
+ * Renders the "By action" grouped view for the Evidence tab.
+ * Each action kind (file, terminal, debug, etc.) becomes its own collapsible section.
+ */
+export function renderEvidenceActionGroupsHtml(groups: EvidenceActionGroup[]): string {
+  if (groups.length === 0) {
+    return '';
+  }
+  return groups
+    .map((group) => {
+      const rows = group.rows.map((row) => renderRecentAnchorRow(row)).join('');
+      return `<li class="evidence-action-group" data-evidence-action-group="${escapeHtml(group.kind)}"><details open><summary class="evidence-action-group-summary"><span class="evidence-action-group-label">${escapeHtml(group.label)}</span> <span class="evidence-kind">(${escapeHtml(String(group.rows.length))})</span></summary><ul class="evidence-sublist">${rows}</ul></details></li>`;
+    })
     .join('');
 }
 
