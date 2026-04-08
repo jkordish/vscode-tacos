@@ -292,6 +292,11 @@ export interface MetricRecord {
    * Session friction summary was opened by the user.
    */
   sessionFrictionSummaryOpened?: number;
+  /**
+   * Number of times the user clicked "Undo" on a note-dismiss or task-resolve
+   * toast to recover the item within the 30 s undo window.
+   */
+  noteDeleteUndoCount?: number;
 }
 
 export interface VscodeLmModelSelector {

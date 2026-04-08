@@ -516,7 +516,7 @@ Status vocabulary used in this file:
 
 ### P22. Inline editing with autosave indicator and undo for destructive actions
 
-- status: `queued`
+- status: `done`
 - why: cognitive recovery is a trust-sensitive workflow. Silent data loss after a destructive action (deleting a note, clearing a field) is catastrophic — it undermines user confidence and causes churn. The product promises "local-first" and "no hidden behavior," but without visible save state and reversible deletes, users cannot verify those promises in-the-moment. This is also demanded by the research: TaCoS participants used manual notes for prospective next steps (80/87 notes contained an immediate next step), making note fidelity safety-critical.
 - scope:
   - **Autosave indicator**: scratchpad, verify-first, and next-step fields in the cockpit (P19) show `Saved • HH:MM` after debounced save; transient `Unsaved…` state during edit; rendered in a persistent `aria-live="polite"` region so keyboard-only users receive confirmation.

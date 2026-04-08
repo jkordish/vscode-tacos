@@ -529,6 +529,7 @@ interface RuntimeState {
   vscodeLmUnavailableNotified: boolean;
   applyingPrivacyPreset: boolean;
   lastRedactionPatternWarningSignature?: string;
+  panelDismissUndoBuffer?: { note: CheckpointNote; expiresAt: number };
 }
 
 interface ProviderModeSnapshot {
@@ -6367,6 +6368,8 @@ async function showDetailsPanel(
           }));
           recordMetricCounter('noteMarkedDone');
         } else if (message.type === 'checkpointDismiss') {
+          // Save note into undo buffer before dismissing (30s TTL).
+          state.panelDismissUndoBuffer = { note, expiresAt: Date.now() + 30_000 };
           await updateCheckpointNoteById(context, workspaceRoot, note.id, (current) => ({
             ...current,
             status: 'dismissed',
@@ -6374,6 +6377,33 @@ async function showDetailsPanel(
           }));
         }
 
+        await refreshPanelCheckpointState(context, workspaceRoot);
+        rerenderPanel();
+        return;
+      }
+
+      if (message.type === 'undoDeleteNote') {
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        const buffer = state.panelDismissUndoBuffer;
+        if (!workspaceRoot || !buffer) {
+          return;
+        }
+        if (Date.now() > buffer.expiresAt) {
+          state.panelDismissUndoBuffer = undefined;
+          return;
+        }
+        if (buffer.note.id !== message.noteId) {
+          return;
+        }
+        state.panelDismissUndoBuffer = undefined;
+        await updateCheckpointNoteById(context, workspaceRoot, buffer.note.id, (current) => ({
+          ...current,
+          status: 'open',
+        }));
+        if (state.metricSession) {
+          state.metricSession.noteDeleteUndoCount =
+            (state.metricSession.noteDeleteUndoCount ?? 0) + 1;
+        }
         await refreshPanelCheckpointState(context, workspaceRoot);
         rerenderPanel();
         return;
@@ -7024,6 +7054,7 @@ function renderWebview(
       ? ''
       : renderCheckpointCard({
           openCheckpointCount,
+          currentCheckpointNoteId: currentCheckpointNote?.id,
           currentCheckpointNote: currentCheckpointNote
             ? {
                 text: currentCheckpointNote.text,

@@ -440,6 +440,117 @@ describe('panelClientScript state behavior', () => {
     expect(evidencePanel.hasAttribute('hidden')).toBe(true);
   });
 
+  it('posts updateProspective and updates cockpit save-state indicator on debounced input', () => {
+    const cockpitBodyHtml = `
+      <a class="skip-link" href="#main">Skip to main content</a>
+      <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
+      <ul id="evidence-list"></ul>
+      <button type="button" data-action="toggleEvidenceMore" data-hidden-count="0">Show more</button>
+      <div id="toast-region"></div>
+      <div id="cockpit-save-state" aria-live="polite"></div>
+      <input id="cockpit-verify-first" type="text" value="" />
+      <input id="cockpit-next-step" type="text" value="" />
+    `;
+    const { postMessage } = bootstrap({}, 'scope-token', cockpitBodyHtml);
+
+    const verifyInput = document.getElementById('cockpit-verify-first') as HTMLInputElement;
+    const saveState = document.getElementById('cockpit-save-state') as HTMLElement;
+
+    verifyInput.value = 'Check auth tests pass';
+    verifyInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    // Saving… appears after the 15ms announce-timer fires
+    jest.advanceTimersByTime(20);
+    expect(saveState.textContent).toMatch(/Saving/);
+
+    // After debounce flush (600ms), updateProspective should be posted
+    jest.advanceTimersByTime(600);
+
+    expect(postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'updateProspective', field: 'verifyFirst' }),
+    );
+    expect(saveState.textContent).toMatch(/Saved/);
+  });
+
+  it('shows checkpointDismiss undo toast and posts undoDeleteNote on undo click', () => {
+    const cockpitBodyHtml = `
+      <a class="skip-link" href="#main">Skip to main content</a>
+      <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
+      <ul id="evidence-list"></ul>
+      <button type="button" data-action="toggleEvidenceMore" data-hidden-count="0">Show more</button>
+      <div id="toast-region"></div>
+      <button type="button" data-action="checkpointDismiss" data-note-id="note-abc-123">Dismiss</button>
+    `;
+    const { postMessage } = bootstrap({}, 'scope-token', cockpitBodyHtml);
+
+    const dismissBtn = document.querySelector(
+      '[data-action="checkpointDismiss"]',
+    ) as HTMLButtonElement;
+    dismissBtn.click();
+
+    expect(postMessage).toHaveBeenCalledWith({ type: 'checkpointDismiss' });
+
+    // Toast should be visible
+    const toastRegion = document.getElementById('toast-region') as HTMLElement;
+    expect(toastRegion.textContent).toContain('Note dismissed');
+
+    // Click the Undo action button
+    const undoBtn = toastRegion.querySelector('.toast-action') as HTMLButtonElement | null;
+    expect(undoBtn).not.toBeNull();
+    undoBtn!.click();
+
+    expect(postMessage).toHaveBeenCalledWith({ type: 'undoDeleteNote', noteId: 'note-abc-123' });
+  });
+
+  it('auto-dismisses the undo toast after its timeout expires', () => {
+    const cockpitBodyHtml = `
+      <a class="skip-link" href="#main">Skip to main content</a>
+      <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
+      <ul id="evidence-list"></ul>
+      <button type="button" data-action="toggleEvidenceMore" data-hidden-count="0">Show more</button>
+      <div id="toast-region"></div>
+      <button type="button" data-action="checkpointDismiss" data-note-id="note-xyz">Dismiss</button>
+    `;
+    bootstrap({}, 'scope-token', cockpitBodyHtml);
+
+    const dismissBtn = document.querySelector(
+      '[data-action="checkpointDismiss"]',
+    ) as HTMLButtonElement;
+    dismissBtn.click();
+
+    const toastRegion = document.getElementById('toast-region') as HTMLElement;
+    expect(toastRegion.children.length).toBeGreaterThan(0);
+
+    jest.advanceTimersByTime(31000);
+    expect(toastRegion.children.length).toBe(0);
+  });
+
+  it('shows taskStateResolve toast on resolve click', () => {
+    const cockpitBodyHtml = `
+      <a class="skip-link" href="#main">Skip to main content</a>
+      <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
+      <ul id="evidence-list"></ul>
+      <button type="button" data-action="toggleEvidenceMore" data-hidden-count="0">Show more</button>
+      <div id="toast-region"></div>
+      <button type="button" data-action="taskStateResolve">Mark resolved</button>
+    `;
+    const { postMessage } = bootstrap({}, 'scope-token', cockpitBodyHtml);
+
+    const resolveBtn = document.querySelector(
+      '[data-action="taskStateResolve"]',
+    ) as HTMLButtonElement;
+    resolveBtn.click();
+
+    expect(postMessage).toHaveBeenCalledWith({ type: 'taskStateResolve' });
+
+    const toastRegion = document.getElementById('toast-region') as HTMLElement;
+    expect(toastRegion.textContent).toContain('Task state marked resolved');
+  });
+
   it('clears scope-bound scroll, focus, and tab state when section scope changes', () => {
     const { setState } = bootstrap(
       {

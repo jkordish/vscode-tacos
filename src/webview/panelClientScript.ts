@@ -541,10 +541,49 @@ export function renderPanelClientScript(
         }
       }
 
+      let toastDismissTimer = undefined;
+      function showToast(message, opts) {
+        const region = document.getElementById('toast-region');
+        if (!(region instanceof HTMLElement)) {
+          return;
+        }
+        if (toastDismissTimer !== undefined) {
+          window.clearTimeout(toastDismissTimer);
+          toastDismissTimer = undefined;
+        }
+        // Build toast content
+        const msgSpan = document.createElement('span');
+        msgSpan.className = 'toast-message';
+        msgSpan.textContent = typeof message === 'string' ? message : '';
+        region.textContent = '';
+        region.appendChild(msgSpan);
+        if (opts && typeof opts.actionText === 'string' && typeof opts.onAction === 'function') {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'toast-action secondary';
+          btn.textContent = opts.actionText;
+          btn.addEventListener('click', () => {
+            if (toastDismissTimer !== undefined) {
+              window.clearTimeout(toastDismissTimer);
+              toastDismissTimer = undefined;
+            }
+            region.textContent = '';
+            opts.onAction();
+          });
+          region.appendChild(btn);
+        }
+        const timeoutMs = (opts && typeof opts.timeoutMs === 'number') ? opts.timeoutMs : 5000;
+        toastDismissTimer = window.setTimeout(() => {
+          toastDismissTimer = undefined;
+          region.textContent = '';
+        }, timeoutMs);
+      }
+
       function sendCockpitUpdate(field, rawValue) {
         const value = normalizeCockpitValue(rawValue);
         vscode.postMessage({ type: 'updateProspective', field, value });
-        setCockpitSaveState('Saved.');
+        const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setCockpitSaveState('Saved \u2022 ' + now);
       }
 
       function scheduleCockpitUpdate(field, rawValue) {
@@ -987,6 +1026,27 @@ export function renderPanelClientScript(
             } else {
               vscode.postMessage({ type: 'blockedLink' });
             }
+            return;
+          }
+
+          if (action === 'checkpointDismiss') {
+            const noteId = (actionElement.dataset.noteId || '').trim();
+            vscode.postMessage({ type: 'checkpointDismiss' });
+            if (noteId) {
+              showToast('Note dismissed.', {
+                actionText: 'Undo',
+                timeoutMs: 30000,
+                onAction: () => {
+                  vscode.postMessage({ type: 'undoDeleteNote', noteId });
+                },
+              });
+            }
+            return;
+          }
+
+          if (action === 'taskStateResolve') {
+            vscode.postMessage({ type: 'taskStateResolve' });
+            showToast('Task state marked resolved.', { timeoutMs: 5000 });
             return;
           }
 

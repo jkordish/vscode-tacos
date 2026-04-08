@@ -6,6 +6,17 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **P22: Inline editing with autosave indicator and undo for destructive actions**:
+  - `showToast(message, { actionText, onAction, timeoutMs })` helper added to `panelClientScript.ts`; renders a persistent `#toast-region` DOM element with an optional action button that self-dismisses after its timeout.
+  - Cockpit fields (`#cockpit-verify-first`, `#cockpit-next-step`) now show a transient `Saving…` indicator in `#cockpit-save-state` during the 600 ms debounce window, then `Saved • HH:MM` after `updateProspective` is posted.
+  - `checkpointDismiss` action now shows a `Note dismissed.` toast with an `Undo` button (30 s TTL); clicking `Undo` posts `undoDeleteNote` with the note's `data-note-id` back to the extension.
+  - `taskStateResolve` action now shows a `Task state marked resolved.` toast (5 s TTL).
+  - `undoDeleteNote` message variant added to the `WebviewMessage` union type and `parseWebviewMessage` validator in `src/webviewMessages.ts`.
+  - `noteDeleteUndoCount` field added to `MetricRecord` in `src/metrics.ts`; included in CSV headers, row builder, `buildMetricsBaselineSnapshotMarkdown`, and `hasAnyRecordedMetric`.
+  - 4 new state-machine unit tests added to `test/panelClientScript.state.test.ts` covering: cockpit save-state indicator (debounced input → `Saving…` → `Saved •`), `checkpointDismiss` undo toast with `undoDeleteNote` postMessage, auto-dismiss after 30 s TTL, and `taskStateResolve` toast visibility.
+  - String-presence assertions added to `test/panelClientScript.test.ts` for toast helper, save-state, and undo message strings.
+  - Metrics unit tests in `test/metrics.test.ts` extended with `noteDeleteUndoCount` CSV header, markdown snapshot row, and `hasAnyRecordedMetric` coverage.
+
 - **P21: Evidence tab — recent anchors default with grouping and expand** — Evidence tab now defaults to a `Recent anchors` view:
   - Evidence tab defaults to `recent` mode: top-10 events within the last 5 min (medium granularity), rendered as a newest-first flat list.
   - Toggle controls added: `Recent / By file / By time / By action` — each mode re-renders the Evidence tab via `setEvidenceGroupMode` webview message.
