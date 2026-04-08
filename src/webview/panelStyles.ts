@@ -74,6 +74,52 @@ export const PANEL_WEBVIEW_STYLE = `
         background: transparent;
         border: 1px solid var(--surface-border);
       }
+      /* ── Provenance badge row ───────────────────────────────────────── */
+      .header-provenance {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .badge-local {
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        color: var(--vscode-testing-iconPassed, #4caf50);
+        background: transparent;
+        border: 1px solid var(--vscode-testing-iconPassed, #4caf50);
+        border-radius: var(--radius-1);
+        padding: 1px var(--space-2);
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .badge-ai {
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.04em;
+        color: var(--vscode-editorWarning-foreground, #e8a030);
+        background: transparent;
+        border: 1px solid var(--vscode-editorWarning-foreground, #e8a030);
+        border-radius: var(--radius-1);
+        padding: 1px var(--space-2);
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .provenance-preview-link {
+        font-size: 10px;
+        font-weight: 400;
+        color: var(--vscode-textLink-foreground, var(--accent));
+        background: none;
+        border: none;
+        padding: 0;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        flex-shrink: 0;
+      }
+      .provenance-preview-link:hover {
+        color: var(--vscode-textLink-activeForeground, var(--accent));
+      }
       .header-actions {
         display: flex;
         flex-wrap: wrap;

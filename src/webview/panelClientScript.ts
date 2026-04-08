@@ -938,7 +938,8 @@ export function renderPanelClientScript(
             if (
               entrypoint === 'trust-center' ||
               entrypoint === 'why-surfaced' ||
-              entrypoint === 'companion-home'
+              entrypoint === 'companion-home' ||
+              entrypoint === 'provenance-badge'
             ) {
               vscode.postMessage({ type: 'openAiPayloadPreview', entrypoint });
               return;

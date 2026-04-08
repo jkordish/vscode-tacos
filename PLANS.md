@@ -460,16 +460,20 @@ Status vocabulary used in this file:
 
 ### P20. Provenance header badges — always-visible local/AI status
 
-- status: `queued`
+- status: `doing`
 - why: "AI optional" is a core product promise, but users only trust it if the UI has **always-visible provenance**. Currently the privacy preset exists in settings, but the webview header does not surface a persistent badge showing current data posture. Without it, users assume AI is running even when it isn't, and conversely may not realize when it is. The TaCoS research grounding and `docs/PRIVACY_AND_SAFETY.md` demand this for first-class trust.
-- scope: add a persistent provenance badge row to the `panelFragments.ts` header fragment that renders: `● Local-only` (default) or `● AI used · <provider> · <model> · payload: <field list>` when AI is active. Add a `Preview payload` affordance (link/button) that opens the existing AI payload preview. Badge updates on every webview state push.
+- scope: add a persistent provenance badge row to the `panelFragments.ts` header fragment that renders: `● Local-only` (default) or `● AI used · <provider>` when AI is active. Add a `Preview payload` affordance (link/button) that opens the existing AI payload preview. Badge updates on every webview state push.
 - dependencies: P15, P7 (explainability), P13x (payload preview deep-links).
-- immediate next actions:
-  - add `provenanceBadge` field to webview bindings type (the object passed to `renderWebviewDocument`).
-  - render badge in header fragment with two variants: `local-only` class and `ai-active` class; style in `panelStyles.ts` with `badge-local` (green) and `badge-ai` (amber) visual tokens.
-  - wire state push in `extension.ts` to always include current privacy preset + active provider identity in bindings.
-  - add unit test in `panelFragments.test.ts` asserting badge renders in both variants.
-  - update `docs/PRIVACY_AND_SAFETY.md` to document the always-visible provenance badge as a shipped UI guarantee.
+- recent progress:
+  - added `renderProvenanceBadge(input: ProvenanceBadgeInput): string` to `src/webview/panelFragments.ts` with `local-only` and `ai-active` variants.
+  - added `provenanceBadgeTrustedHtml` field to `PageHeaderInput` and wired into `renderPageHeader()`.
+  - added CSS classes `.header-provenance`, `.badge-local`, `.badge-ai`, `.provenance-preview-link` to `src/webview/panelStyles.ts`.
+  - wired provenance badge computation and `provenanceBadgeTrustedHtml` binding in `renderWebview()` in `src/extension.ts`.
+  - `Preview payload` button uses `data-action="openAiPayloadPreview" data-ai-payload-entrypoint="provenance-badge"` — routes through the existing payload-preview handler.
+  - `provenance-badge` added as a valid entrypoint in `panelClientScript.ts` so the preview message is dispatched correctly.
+  - unit tests added to `test/panelFragments.test.ts`: both badge variants, XSS escaping, preview-link presence/absence, provenance row position in `renderPageHeader`.
+  - `docs/PRIVACY_AND_SAFETY.md` updated with the always-visible provenance badge as a shipped UI guarantee.
+  - `CHANGELOG.md` `[Unreleased]` entries written.
 - risks/rollback:
   - risk: badge adds visual noise in the header and competes with primary resume content for attention.
   - rollback: collapse badge to a small icon-only indicator with tooltip; keep the data wiring in place.
@@ -477,6 +481,7 @@ Status vocabulary used in this file:
   - `src/webview/panelFragments.ts`
   - `src/webview/panelStyles.ts`
   - `src/extension.ts`
+  - `src/webview/panelClientScript.ts`
   - `docs/PRIVACY_AND_SAFETY.md`
   - `deep-research-report.md` (§ "Provenance badges everywhere")
   - https://github.com/jkordish/vscode-tacos/issues/310

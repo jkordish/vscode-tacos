@@ -219,6 +219,7 @@ import {
   renderTopFilesListItems,
   renderTopLinksListItems,
   renderPageHeader,
+  renderProvenanceBadge,
   renderWebviewDocument,
 } from './webview/panelFragments';
 import { PANEL_WEBVIEW_STYLE } from './webview/panelStyles';
@@ -7710,12 +7711,27 @@ function renderWebview(
   ]
     .filter(Boolean)
     .join('');
+  const provenanceIsLocal =
+    demoMode ||
+    companionRuntimeMode === 'restricted' ||
+    companionRuntimeMode === 'disabled' ||
+    activeAiProviderForConsent === 'local';
+  const provenanceBadgeHtml = renderProvenanceBadge(
+    provenanceIsLocal
+      ? { isLocal: true }
+      : {
+          isLocal: false,
+          providerLabel: summaryProviderLabel(activeAiProviderForConsent),
+          showPreviewLink: !demoMode,
+        },
+  );
   const pageHeaderHtml = renderPageHeader({
     intentTrustedHtml: escapeHtml(summary.intent),
     statusChipLabel: sourceLabel,
     secondaryChipLabel:
       autoSummaryStatusLabel !== 'Auto summaries active' ? autoSummaryStatusLabel : undefined,
     actionsTrustedHtml: pageHeaderActionButtons,
+    provenanceBadgeTrustedHtml: provenanceBadgeHtml,
   });
 
   // ── 4-tab layout ────────────────────────────────────────────────────────────
