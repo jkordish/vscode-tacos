@@ -948,6 +948,33 @@ export function renderPanelClientScript(
             return;
           }
 
+          if (action === 'setPanelSectionExpanded') {
+            const sectionId = actionElement.dataset.sectionId;
+            if (typeof sectionId !== 'string' || !panelSectionIds.has(sectionId)) {
+              vscode.postMessage({ type: 'blockedLink' });
+              return;
+            }
+            const expanded = actionElement.dataset.sectionExpanded !== 'false';
+            const details = document.querySelector(
+              'details[data-panel-section="' + sectionId + '"]',
+            );
+            if (details instanceof HTMLDetailsElement) {
+              details.open = expanded;
+              const summary = details.querySelector('summary');
+              if (summary instanceof HTMLElement) {
+                summary.focus();
+                if (typeof summary.scrollIntoView === 'function') {
+                  summary.scrollIntoView({ block: 'start' });
+                }
+              }
+            }
+            persistPanelSectionExpanded(sectionId, expanded);
+            announceStatus(
+              (expanded ? 'Expanded ' : 'Collapsed ') + sectionId + ' section.',
+            );
+            return;
+          }
+
           if (action === 'setEvidenceGroupMode') {
             const mode = actionElement.dataset.evidenceMode;
             if (
