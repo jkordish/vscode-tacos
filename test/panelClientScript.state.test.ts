@@ -490,10 +490,23 @@ describe('panelClientScript state behavior', () => {
     ) as HTMLButtonElement;
     dismissBtn.click();
 
-    expect(postMessage).toHaveBeenCalledWith({ type: 'checkpointDismiss' });
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'checkpointDismiss',
+      noteId: 'note-abc-123',
+    });
 
-    // Toast should be visible
+    // Toast is deferred — the extension posts showUndoToast after the dismiss write completes.
     const toastRegion = document.getElementById('toast-region') as HTMLElement;
+    expect(toastRegion.textContent).toBe('');
+
+    // Simulate the host confirmation message
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'showUndoToast', noteId: 'note-abc-123', timeoutMs: 30000 },
+      }),
+    );
+    jest.advanceTimersByTime(1);
+
     expect(toastRegion.textContent).toContain('Note dismissed');
 
     // Click the Undo action button
@@ -516,10 +529,13 @@ describe('panelClientScript state behavior', () => {
     `;
     bootstrap({}, 'scope-token', cockpitBodyHtml);
 
-    const dismissBtn = document.querySelector(
-      '[data-action="checkpointDismiss"]',
-    ) as HTMLButtonElement;
-    dismissBtn.click();
+    // Toast is deferred — trigger via the host confirmation message.
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: { type: 'showUndoToast', noteId: 'note-xyz', timeoutMs: 30000 },
+      }),
+    );
+    jest.advanceTimersByTime(1);
 
     const toastRegion = document.getElementById('toast-region') as HTMLElement;
     expect(toastRegion.children.length).toBeGreaterThan(0);

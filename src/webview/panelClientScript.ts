@@ -1044,17 +1044,13 @@ export function renderPanelClientScript(
           }
 
           if (action === 'checkpointDismiss') {
+            // Read the note id so we can forward it to the extension. The
+            // extension will post a showUndoToast message after the dismiss
+            // write completes — that message is the single authoritative place
+            // the toast is shown. Showing it optimistically here would allow
+            // undoDeleteNote to race the in-flight dismiss write.
             const noteId = (actionElement.dataset.noteId || '').trim();
-            vscode.postMessage({ type: 'checkpointDismiss' });
-            if (noteId) {
-              showToast('Note dismissed.', {
-                actionText: 'Undo',
-                timeoutMs: 30000,
-                onAction: () => {
-                  vscode.postMessage({ type: 'undoDeleteNote', noteId });
-                },
-              });
-            }
+            vscode.postMessage({ type: 'checkpointDismiss', noteId: noteId || undefined });
             return;
           }
 
