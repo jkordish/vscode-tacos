@@ -7732,7 +7732,7 @@ function renderWebview(
     .slice(0, 3)
     .map((item) => ({
       label: item.label,
-      kind: item.kind,
+      kind: item.kind as 'file' | 'url',
       id: item.id,
       clickable: true,
     }));

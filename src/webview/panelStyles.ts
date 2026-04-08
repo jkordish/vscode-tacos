@@ -1011,7 +1011,7 @@ export const PANEL_WEBVIEW_STYLE = `
         gap: 3px;
         margin-bottom: var(--space-2);
       }
-      .cockpit-field-row:last-of-type {
+      .cockpit-field-row:last-child {
         margin-bottom: 0;
       }
       .cockpit-field-label {

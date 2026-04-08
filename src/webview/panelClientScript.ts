@@ -568,6 +568,27 @@ export function renderPanelClientScript(
         }
       });
 
+      // Flush pending cockpit timers on blur so edits survive panel rerenders
+      // that tear down the document before the debounce fires.
+      document.addEventListener('focusout', (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLInputElement)) {
+          return;
+        }
+        if (target.id === 'cockpit-verify-first' && cockpitTimers['verifyFirst'] !== undefined) {
+          window.clearTimeout(cockpitTimers['verifyFirst']);
+          delete cockpitTimers['verifyFirst'];
+          sendCockpitUpdate('verifyFirst', target.value);
+          return;
+        }
+        if (target.id === 'cockpit-next-step' && cockpitTimers['nextStep'] !== undefined) {
+          window.clearTimeout(cockpitTimers['nextStep']);
+          delete cockpitTimers['nextStep'];
+          sendCockpitUpdate('nextStep', target.value);
+          return;
+        }
+      });
+
       document.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter') {
           return;

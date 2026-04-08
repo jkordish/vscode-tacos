@@ -249,9 +249,11 @@ export function renderEvidenceCard(input: EvidenceCardInput): string {
     </div>`;
 }
 
+export type ResumeCockpitAnchorKind = 'file' | 'url';
+
 export interface ResumeCockpitAnchor {
   label: string;
-  kind: string;
+  kind: ResumeCockpitAnchorKind;
   id: string;
   clickable: boolean;
 }
