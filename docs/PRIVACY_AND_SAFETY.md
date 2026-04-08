@@ -72,7 +72,7 @@ TaCoS does not implement an automatic remote telemetry pipeline.
 
 The Companion panel header displays a **persistent provenance badge** on every render:
 
-- `● Local-only` (green) — when the active provider is local, Restricted Mode is active, or companion surfacing is disabled.
+- `● Local-only` (green) — when the active provider is local, Restricted Mode is active, demo mode is active, or companion surfacing is disabled.
 - `● AI used · <provider>` (amber) — when an AI provider (`vscode-lm` or `openai`) is active. Includes a `Preview payload` affordance that opens the AI payload preview directly.
 
 The badge is always visible without scrolling and updates on every webview state push. It is the canonical in-panel confirmation of the current data-posture. Users who see `● Local-only` can be certain no data is being sent to an AI provider for that session.

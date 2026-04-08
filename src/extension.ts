@@ -10519,7 +10519,7 @@ async function setAiPayloadConsent(
 
 function describeAiPayloadPreviewEntrypoint(entrypoint: AiPayloadPreviewEntrypoint): string {
   if (entrypoint === 'provenance-badge') {
-    return 'provenance badge';
+    return 'Provenance Badge';
   }
   if (entrypoint === 'companion-home') {
     return 'Companion Home';

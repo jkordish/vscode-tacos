@@ -630,19 +630,26 @@ export interface PageHeaderInput {
   provenanceBadgeTrustedHtml?: TrustedHtml;
 }
 
-/** Input for the always-visible provenance badge row. */
-export interface ProvenanceBadgeInput {
-  /** True when the active provider is local-only (no AI send). */
-  isLocal: boolean;
-  /** Human-readable provider label, e.g. "VS Code LM". Only used when !isLocal. */
-  providerLabel?: string;
-  /** Human-readable active model label, e.g. "copilot-gpt-4o". Only used when !isLocal. */
+/** Input for the always-visible provenance badge row (local-only variant). */
+export interface ProvenanceBadgeLocalInput {
+  isLocal: true;
+}
+
+/** Input for the always-visible provenance badge row (AI-active variant). */
+export interface ProvenanceBadgeAiInput {
+  isLocal: false;
+  /** Human-readable provider label, e.g. "VS Code LM". */
+  providerLabel: string;
+  /** Human-readable active model label, e.g. "copilot-gpt-4o". */
   modelLabel?: string;
-  /** List of AI payload field names included in the send, e.g. ["summary", "notes"]. Only used when !isLocal. */
+  /** List of AI payload field names included in the send, e.g. ["summary", "notes"]. */
   payloadFields?: string[];
-  /** When true, show the "Preview payload" affordance link. Only used when !isLocal. */
+  /** When true, show the "Preview payload" affordance link. */
   showPreviewLink?: boolean;
 }
+
+/** Discriminated union for the always-visible provenance badge row. */
+export type ProvenanceBadgeInput = ProvenanceBadgeLocalInput | ProvenanceBadgeAiInput;
 
 /**
  * Renders the always-visible provenance badge for the page header.
