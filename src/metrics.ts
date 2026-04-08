@@ -53,6 +53,7 @@ const CSV_HEADERS = [
   'aiPayloadPreviewOpensTrustCenter',
   'aiPayloadPreviewOpensWhySurfaced',
   'aiPayloadPreviewOpensCompanionHome',
+  'aiPayloadPreviewOpensProvenanceBadge',
   'percolationSuppressedQuietHours',
   'percolationSuppressedCooldown',
   'percolationSuppressedNoChange',
@@ -453,6 +454,10 @@ export function buildMetricsBaselineSnapshotMarkdown(
     metrics,
     'aiPayloadPreviewOpensCompanionHome',
   );
+  const aiPayloadPreviewOpensProvenanceBadge = summarizeTotal(
+    metrics,
+    'aiPayloadPreviewOpensProvenanceBadge',
+  );
   const sessionsWithNote = metrics.filter((metric) => metric.resumeWithNote === 1).length;
   const lagActionWithNote = summarizeLag(
     metrics.filter((metric) => metric.resumeWithNote === 1),
@@ -607,6 +612,7 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| aiPayloadPreviewOpensTrustCenter (total) | ${aiPayloadPreviewOpensTrustCenter} |`,
     `| aiPayloadPreviewOpensWhySurfaced (total) | ${aiPayloadPreviewOpensWhySurfaced} |`,
     `| aiPayloadPreviewOpensCompanionHome (total) | ${aiPayloadPreviewOpensCompanionHome} |`,
+    `| aiPayloadPreviewOpensProvenanceBadge (total) | ${aiPayloadPreviewOpensProvenanceBadge} |`,
     `| summaryQuietActions (total) | ${summarizeTotal(metrics, 'summaryQuietActions')} |`,
     `| prospectiveIntentCaptureCount (total) | ${summarizeTotal(metrics, 'prospectiveIntentCaptureCount')} |`,
     `| checkpointPromptSuppressedHighLoad (total) | ${summarizeTotal(metrics, 'checkpointPromptSuppressedHighLoad')} |`,
@@ -727,6 +733,7 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.aiPayloadPreviewOpensTrustCenter ?? 0) > 0 ||
     (metric.aiPayloadPreviewOpensWhySurfaced ?? 0) > 0 ||
     (metric.aiPayloadPreviewOpensCompanionHome ?? 0) > 0 ||
+    (metric.aiPayloadPreviewOpensProvenanceBadge ?? 0) > 0 ||
     (metric.percolationSuppressedQuietHours ?? 0) > 0 ||
     (metric.percolationSuppressedCooldown ?? 0) > 0 ||
     (metric.percolationSuppressedNoChange ?? 0) > 0 ||
@@ -846,6 +853,7 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.aiPayloadPreviewOpensTrustCenter),
       toOptionalNumber(metric.aiPayloadPreviewOpensWhySurfaced),
       toOptionalNumber(metric.aiPayloadPreviewOpensCompanionHome),
+      toOptionalNumber(metric.aiPayloadPreviewOpensProvenanceBadge),
       toOptionalNumber(metric.percolationSuppressedQuietHours),
       toOptionalNumber(metric.percolationSuppressedCooldown),
       toOptionalNumber(metric.percolationSuppressedNoChange),

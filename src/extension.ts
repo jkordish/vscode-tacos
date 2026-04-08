@@ -4746,6 +4746,7 @@ function recordMetricCounter(
     | 'aiPayloadPreviewOpensTrustCenter'
     | 'aiPayloadPreviewOpensWhySurfaced'
     | 'aiPayloadPreviewOpensCompanionHome'
+    | 'aiPayloadPreviewOpensProvenanceBadge'
     | 'percolationSuppressedQuietHours'
     | 'percolationSuppressedCooldown'
     | 'percolationSuppressedNoChange'
@@ -10535,7 +10536,7 @@ function recordAiPayloadPreviewEntrypointMetric(entrypoint: AiPayloadPreviewEntr
     return;
   }
   if (entrypoint === 'provenance-badge') {
-    recordMetricCounter('aiPayloadPreviewOpensTrustCenter');
+    recordMetricCounter('aiPayloadPreviewOpensProvenanceBadge');
     return;
   }
   if (entrypoint === 'why-surfaced') {

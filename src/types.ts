@@ -228,6 +228,7 @@ export interface MetricRecord {
   aiPayloadPreviewOpensTrustCenter?: number;
   aiPayloadPreviewOpensWhySurfaced?: number;
   aiPayloadPreviewOpensCompanionHome?: number;
+  aiPayloadPreviewOpensProvenanceBadge?: number;
   percolationSuppressedQuietHours?: number;
   percolationSuppressedCooldown?: number;
   percolationSuppressedNoChange?: number;
