@@ -1771,6 +1771,39 @@ export function activate(context: vscode.ExtensionContext): void {
       await applyTaskPartitionSwitch(context, workspaceRoot, nextValue);
       return true;
     }),
+    vscode.commands.registerCommand(
+      'tacos.__test.seedCheckpointNote',
+      async (rawInput?: unknown) => {
+        const workspaceRoot = pickWorkspaceRoot();
+        if (!workspaceRoot) {
+          return undefined;
+        }
+        const input =
+          rawInput && typeof rawInput === 'object' ? (rawInput as Record<string, unknown>) : {};
+        const text =
+          typeof input.text === 'string' && input.text.trim() ? input.text.trim() : 'Test note';
+        const note = await appendCheckpointNote(context, workspaceRoot, text, {
+          scope: 'partition',
+        });
+        await refreshPanelCheckpointState(context, workspaceRoot);
+        rerenderPanel();
+        return note ? { id: note.id, text: note.text, status: note.status } : undefined;
+      },
+    ),
+    vscode.commands.registerCommand('tacos.__test.getPanelCheckpointSnapshot', async () => {
+      const primary = state.panelPrimaryCheckpointNote;
+      const buffer = state.panelDismissUndoBuffer;
+      const panelHtml = state.panel?.webview.html ?? '';
+      return {
+        primaryNoteId: primary?.id ?? null,
+        primaryNoteStatus: primary?.status ?? null,
+        primaryNoteText: primary?.text ?? null,
+        undoBufferNoteId: buffer?.note.id ?? null,
+        undoBufferExpired: buffer ? Date.now() > buffer.expiresAt : null,
+        panelHasCheckpointDismissAction: panelHtml.includes('data-action="checkpointDismiss"'),
+        panelHasNoteIdAttr: primary ? panelHtml.includes(`data-note-id="${primary.id}"`) : false,
+      };
+    }),
     vscode.commands.registerCommand('tacos.__test.runActionSafetyNoopChecks', async () => {
       return runActionSafetyNoopChecks(context);
     }),
