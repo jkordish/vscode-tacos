@@ -610,7 +610,7 @@ Status vocabulary used in this file:
 
 ### P25. Evidence as feature-traceability matrix in docs/references.md
 
-- status: `queued`
+- status: `done`
 - why: `docs/references.md` is currently a literature anchor only — it lists the TaCoS paper and adjacent work but does not map research findings to shipped features or outstanding gaps. The deep research report calls this out explicitly: without a traceability matrix, it is impossible to audit whether the product's UI/UX decisions are actually grounded in the cited evidence. This is low-effort but high documentation value, especially as the project approaches v1.0.
 - scope: extend `docs/references.md` with a **Feature Traceability Matrix** section that maps each key TaCoS research finding to: (a) the shipped TaCoS feature implementing it, (b) the PLANS.md item that delivered it, and (c) any remaining gap or aspiration. Findings to map: combination cue recommendation, timeline noise findings, prospective intent value, manual note proximity value, nested/hierarchical task future direction.
 - dependencies: P19, P21 (gaps being closed by those items should be reflected).

@@ -157,6 +157,45 @@ Implemented mapping:
 - Gonçalves et al. (ICSE'24): high-dominance interruptions inflate comprehension time; corroborates conservative mid-task suppression and reinforces quiet-by-default posture.
 - SPACE (2021): supports multi-dimensional local metrics exports (lag, friction, follow-through, suppression health) as first-class product concerns rather than vanity metrics.
 
+## Feature Traceability Matrix
+
+> **As of v0.99.0** — update this section with each release cycle. Findings from the TaCoS ICSE'26 paper and adjacent research are mapped to shipped features, the PLANS.md item that delivered them, and any outstanding gap.
+>
+> Status key: `✓ Implemented` · `⚑ Partial` · `○ Aspirational`
+
+### TaCoS ICSE'26 — Core Findings
+
+| # | Research Finding | Status | Shipped Feature | PLANS.md Item | Gap / Aspiration |
+|---|-----------------|--------|-----------------|---------------|-----------------|
+| F1 | **Combination cue** (summary + prospective next step + most recent timeline entry) produces the best task-success rates | `✓ Implemented` | Resume Cockpit (`renderResumeCockpitCard`) — above-the-fold layout with `Verify first`, `Next step`, and `Recent anchors` (top 3) | P19 | Visual heat encoding on anchor badges is aspirational (P28) |
+| F2 | **Timeline cues** can outperform pure summary but are frequently described as **noisy and overwhelming**; participants requested grouping and collapsing | `✓ Implemented` | Evidence tab with grouped recent anchors, `By time / By file / By action` toggle, expand-full-timeline affordance, `tacos.evidence.granularity` setting | P21 | Per-file heat-map gradient on anchor badges (P28) is aspirational |
+| F3 | **Prospective intent** (the intended next step captured at switch time) is the single highest-value field for resumption — participants who captured it resumed faster and with fewer wrong-first-actions | `✓ Implemented` | `prospectiveNextVerification` field in `StructuredTaskState`; dedicated InputBox step in `TaCoS: Capture Task State`; cockpit `Verify first` inline editable field (P19) | P16, P19 | None — field is captured, surfaced, and editable |
+| F4 | **Manual notes captured close to switch time** contain the most actionable resumption information (80/87 notes in the study contained an immediate next step) | `✓ Implemented` | Task Notes system (`src/checkpoint.ts`); `Add Task Note`, `Add Quick Task Note`, `List Task Notes`; note delete + undo toast (P22) | P13, P22, P24 | Integration with percolation ranking as a prior is implemented (P8 DP-404) |
+| F5 | **Nested and interdependent tasks** are a future direction explicitly called out in the paper's discussion — real-world engineering work involves task trees, not flat state | `○ Aspirational` | Current model is flat (one active structured task per partition) | P26 (design spike, not yet started) | `docs/task-hierarchy-design.md` spike is the sequenced deliverable |
+| F6 | **Save-state and live-region feedback** are necessary for keyboard-only and AT users who cannot verify silent saves visually | `✓ Implemented` | `aria-live="polite"` `#cockpit-save-state` region; `Saved • HH:MM` / `Unsaved…` indicator; `#toast-region` with `role="alert"` and `aria-live="assertive"` | P22, P23 | None |
+| F7 | **Full keyboard navigation** (Enter/Space activate tab and transfer focus into panel; ArrowLeft/Right/Home/End cycle through tabs) is required for accessibility completeness | `✓ Implemented` | ARIA APG Tabs pattern in `panelClientScript.ts`; `focusFirstPanelElement(tabId)` helper; roving tabindex on tab strip | P23 | None |
+
+### Supporting Research Findings
+
+| # | Research Finding | Status | Shipped Feature | PLANS.md Item | Gap / Aspiration |
+|---|-----------------|--------|-----------------|---------------|-----------------|
+| S1 | **Attention residue** (Leroy 2009): unfinished tasks contaminate the next task — explicit closure reduces carryover | `✓ Implemented` | `TaCoS: Mark Task Resolved` command; cognitive debrief surfaces abandoned/stale tasks for explicit closure | P13, P2a | None |
+| S2 | **Goal decay** (Altmann & Trafton 2002/2007): prospective goal state decays quickly after interruption — capture must happen close to switch time | `✓ Implemented` | Breakpoint-aware checkpoint prompt policy; `shouldDeferCheckpointPromptHighLoad` suppresses only under active high-load, not at boundaries | P13, P16 | None |
+| S3 | **Interruption timing** (Adamczyk & Bailey 2004; Iqbal & Bailey 2008): prompts must occur at likely boundaries, not mid-flow | `✓ Implemented` | Focus-return idle, workspace, partition, branch, and manual-confirm signals; `Capture / Skip / Snooze / Dismiss` | P13c | None |
+| S4 | **Automation level** (Parasuraman et al.): automate retrieval and orientation, not engineering judgment or execution | `✓ Implemented` | Optional AI refinement; explicit payload preview and consent; model output is untrusted; no autonomous execution runner; Restricted Mode | P3, P7 | None |
+| S5 | **Human-AI interaction** (Amershi et al. 2019): AI output must be explainable, correctable, dismissible, and user-controlled | `✓ Implemented` | One-click `Why am I seeing this?` path; Trust Center with revoke controls; payload preview deep-links from all provenance surfaces; always-visible provenance badge (P20) | P7, P13x, P20 | None |
+| S6 | **Provenance visibility**: users assume AI is running even when it is not; explicit local-vs-AI provenance is required for trust | `✓ Implemented` | Always-visible `● Local-only` / `● AI used · <provider> · <model>` provenance badge in panel header | P20 | None |
+| S7 | **Friction scoring** (Meyer et al. 2019; SPACE 2021): more-interruptions-than-usual is a reliable negative productivity signal | `✓ Implemented` | `TaCoS: Show Session Friction Summary`; local-only metrics CSV with `prospectiveIntentCaptureCount`, `checkpointPromptSuppressedHighLoad`, `sessionFrictionSummaryOpened` | P16 | None |
+| S8 | **Noise and over-automation** (Parasuraman & Riley 1997; Gonçalves ICSE'24): high-dominance interruptions increase comprehension time; conservative suppression is necessary | `✓ Implemented` | Quiet hours, cooldown, noise budget; percolation suppression with explicit reason codes; `tacos.evidence.granularity` coarse/fine controls | P8, P10, P21 | None |
+
+### Visual Encoding — Aspirational
+
+| # | Research Grounding | Status | Planned Feature | PLANS.md Item |
+|---|-------------------|--------|----------------|---------------|
+| V1 | TaCoS qualitative feedback: participants wanted to know not just **what** they did but **how much they cared about it at the time** — frequency × recency encoding | `○ Aspirational` | `scoreAnchorHeat()` function; `.heat-0`–`.heat-4` CSS classes applied to anchor badges in Evidence tab and cockpit; tooltip/ARIA text with numeric heat score and tier label | P28 |
+
+---
+
 ## Maintainer Notes
 
 - Prefer stable DOI, ACM, arXiv, or publisher links.
