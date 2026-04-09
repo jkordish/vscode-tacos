@@ -69,5 +69,24 @@ describe('renderPanelClientScript', () => {
     expect(script).toContain("actionElement.dataset.sectionExpanded !== 'false'");
     expect(script).toContain('persistPanelSectionExpanded(sectionId, expanded)');
     expect(script).toContain("(expanded ? 'Expanded ' : 'Collapsed ') + sectionId + ' section.'");
+    // Cockpit autosave indicator
+    expect(script).toContain("document.getElementById('cockpit-save-state')");
+    expect(script).toContain("setCockpitSaveState('Saving\u2026')");
+    expect(script).toContain("'Saved \u2022 '");
+    expect(script).toContain("type: 'updateProspective'");
+    expect(script).toContain("'cockpit-verify-first'");
+    expect(script).toContain("'cockpit-next-step'");
+    // Toast helper
+    expect(script).toContain('function showToast(message, opts)');
+    expect(script).toContain("document.getElementById('toast-region')");
+    expect(script).toContain("'toast-message'");
+    expect(script).toContain("'toast-action secondary'");
+    // checkpointDismiss undo toast
+    expect(script).toContain("if (action === 'checkpointDismiss')");
+    expect(script).toContain("type: 'undoDeleteNote'");
+    expect(script).toContain('actionElement.dataset.noteId');
+    // taskStateResolve toast
+    expect(script).toContain("if (action === 'taskStateResolve')");
+    expect(script).toContain("'Task state marked resolved.'");
   });
 });

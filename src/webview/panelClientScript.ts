@@ -484,6 +484,23 @@ export function renderPanelClientScript(
         if (!payload || typeof payload !== 'object') {
           return;
         }
+        if (payload.type === 'showUndoToast') {
+          const noteId = (typeof payload.noteId === 'string' ? payload.noteId : '').trim();
+          const rawTimeoutMs = typeof payload.timeoutMs === 'number' ? payload.timeoutMs : 30000;
+          const timeoutMs = Number.isFinite(rawTimeoutMs) && rawTimeoutMs > 0
+            ? Math.min(Math.max(rawTimeoutMs, 1000), 60000)
+            : 30000;
+          if (noteId) {
+            showToast('Note dismissed.', {
+              actionText: 'Undo',
+              timeoutMs,
+              onAction: () => {
+                vscode.postMessage({ type: 'undoDeleteNote', noteId });
+              },
+            });
+          }
+          return;
+        }
         if (payload.type !== 'panelStatus' || typeof payload.message !== 'string') {
           return;
         }
@@ -541,10 +558,60 @@ export function renderPanelClientScript(
         }
       }
 
+      let toastDismissTimer = undefined;
+      function showToast(message, opts) {
+        const region = document.getElementById('toast-region');
+        if (!(region instanceof HTMLElement)) {
+          return;
+        }
+        if (toastDismissTimer !== undefined) {
+          window.clearTimeout(toastDismissTimer);
+          toastDismissTimer = undefined;
+        }
+        // Build toast content
+        const msgSpan = document.createElement('span');
+        msgSpan.className = 'toast-message';
+        msgSpan.textContent = typeof message === 'string' ? message : '';
+        region.textContent = '';
+        region.appendChild(msgSpan);
+        if (opts && typeof opts.actionText === 'string' && typeof opts.onAction === 'function') {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'toast-action secondary';
+          btn.textContent = opts.actionText;
+          btn.addEventListener('click', () => {
+            if (toastDismissTimer !== undefined) {
+              window.clearTimeout(toastDismissTimer);
+              toastDismissTimer = undefined;
+            }
+            region.textContent = '';
+            opts.onAction();
+          });
+          region.appendChild(btn);
+        }
+        const rawTimeoutMs = opts && typeof opts.timeoutMs === 'number' ? opts.timeoutMs : 5000;
+        const timeoutMs = Number.isFinite(rawTimeoutMs) && rawTimeoutMs > 0
+          ? Math.min(Math.max(rawTimeoutMs, 100), 60000)
+          : 5000;
+        toastDismissTimer = window.setTimeout(() => {
+          toastDismissTimer = undefined;
+          region.textContent = '';
+        }, timeoutMs);
+      }
+
       function sendCockpitUpdate(field, rawValue) {
         const value = normalizeCockpitValue(rawValue);
         vscode.postMessage({ type: 'updateProspective', field, value });
-        setCockpitSaveState('Saved.');
+        // Only mark Saved when every pending debounce timer has flushed.
+        // At call-time the current field's timer has already been deleted, so
+        // a non-empty cockpitTimers means at least one other field is still pending.
+        if (Object.keys(cockpitTimers).length === 0) {
+          const _d = new Date();
+          const hh = String(_d.getHours()).padStart(2, '0');
+          const mm = String(_d.getMinutes()).padStart(2, '0');
+          setCockpitSaveState('Saved \u2022 ' + hh + ':' + mm);
+        }
+        // else: keep 'Saving…' — another field's timer is still pending
       }
 
       function scheduleCockpitUpdate(field, rawValue) {
@@ -987,6 +1054,26 @@ export function renderPanelClientScript(
             } else {
               vscode.postMessage({ type: 'blockedLink' });
             }
+            return;
+          }
+
+          if (action === 'checkpointDismiss') {
+            // Read the note id so we can forward it to the extension. The
+            // extension will post a showUndoToast message after the dismiss
+            // write completes — that message is the single authoritative place
+            // the toast is shown. Showing it optimistically here would allow
+            // undoDeleteNote to race the in-flight dismiss write.
+            const noteId = (actionElement.dataset.noteId || '').trim();
+            vscode.postMessage({ type: 'checkpointDismiss' });
+            return;
+          }
+
+          if (action === 'taskStateResolve') {
+            vscode.postMessage({ type: 'taskStateResolve' });
+            // Toast is shown optimistically; the host will rerender on success.
+            // TODO(p22): move this to a host-confirmation message once the
+            // taskStateResolve path gains a reply message.
+            showToast('Task state marked resolved.', { timeoutMs: 5000 });
             return;
           }
 

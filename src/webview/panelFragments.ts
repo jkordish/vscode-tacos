@@ -31,6 +31,7 @@ interface CheckpointNoteView {
 export interface CheckpointCardInput {
   openCheckpointCount: number;
   currentCheckpointNote?: CheckpointNoteView;
+  currentCheckpointNoteId?: string;
 }
 
 export function renderCheckpointCard(input: CheckpointCardInput): string {
@@ -65,7 +66,7 @@ export function renderCheckpointCard(input: CheckpointCardInput): string {
         <button type="button" class="secondary" data-action="checkpointPinToggle">${
           input.currentCheckpointNote.pinned ? 'Unpin' : 'Pin'
         }</button>
-        <button type="button" class="secondary" data-action="checkpointDismiss">Dismiss</button>
+        <button type="button" class="secondary" data-action="checkpointDismiss" data-note-id="${escapeHtml(String(input.currentCheckpointNoteId ?? ''))}">Dismiss</button>
         <button type="button" class="secondary" data-action="checkpointOpenList">All notes</button>
       </div>
     </div>`;
@@ -830,6 +831,7 @@ export function renderWebviewDocument(input: WebviewDocumentInput): string {
   <body>
     <a class="skip-link" href="#main">Skip to main content</a>
     <div id="panel-status-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+    <div id="toast-region" role="alert" aria-live="assertive" aria-atomic="true" class="toast-region"></div>
     <main id="main" tabindex="-1">
       ${mainContent}
     </main>

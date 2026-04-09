@@ -529,6 +529,10 @@ interface RuntimeState {
   vscodeLmUnavailableNotified: boolean;
   applyingPrivacyPreset: boolean;
   lastRedactionPatternWarningSignature?: string;
+  panelDismissUndoBuffer?: { note: CheckpointNote; expiresAt: number };
+  panelDismissUndoTimer?: ReturnType<typeof setTimeout>;
+  /** User edits from the cockpit inline-edit fields, keyed by CockpitField. */
+  panelCockpitOverrides?: { verifyFirst?: string; nextStep?: string };
 }
 
 interface ProviderModeSnapshot {
@@ -1770,6 +1774,100 @@ export function activate(context: vscode.ExtensionContext): void {
       await applyTaskPartitionSwitch(context, workspaceRoot, nextValue);
       return true;
     }),
+    vscode.commands.registerCommand(
+      'tacos.__test.seedCheckpointNote',
+      async (rawInput?: unknown) => {
+        const workspaceRoot = pickWorkspaceRoot();
+        if (!workspaceRoot) {
+          return undefined;
+        }
+        const input =
+          rawInput && typeof rawInput === 'object' ? (rawInput as Record<string, unknown>) : {};
+        const text =
+          typeof input.text === 'string' && input.text.trim() ? input.text.trim() : 'Test note';
+        const note = await appendCheckpointNote(context, workspaceRoot, text, {
+          scope: 'partition',
+        });
+        await refreshPanelCheckpointState(context, workspaceRoot);
+        rerenderPanel();
+        return note ? { id: note.id, text: note.text, status: note.status } : undefined;
+      },
+    ),
+    vscode.commands.registerCommand('tacos.__test.getPanelCheckpointSnapshot', async () => {
+      const primary = state.panelPrimaryCheckpointNote;
+      const buffer = state.panelDismissUndoBuffer;
+      const panelHtml = state.panel?.webview.html ?? '';
+      return {
+        primaryNoteId: primary?.id ?? null,
+        primaryNoteStatus: primary?.status ?? null,
+        primaryNoteText: primary?.text ?? null,
+        undoBufferNoteId: buffer?.note.id ?? null,
+        undoBufferExpired: buffer ? Date.now() > buffer.expiresAt : null,
+        panelHasCheckpointDismissAction: panelHtml.includes('data-action="checkpointDismiss"'),
+        panelHasNoteIdAttr: primary ? panelHtml.includes(`data-note-id="${primary.id}"`) : false,
+      };
+    }),
+    vscode.commands.registerCommand('tacos.__test.dismissCheckpointNote', async () => {
+      const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+      const note = state.panelPrimaryCheckpointNote;
+      if (!workspaceRoot || !note) {
+        return { ok: false, reason: 'no-note' };
+      }
+      if (state.panelDismissUndoTimer !== undefined) {
+        clearTimeout(state.panelDismissUndoTimer);
+        state.panelDismissUndoTimer = undefined;
+      }
+      state.panelDismissUndoBuffer = { note, expiresAt: Date.now() + 30_000 };
+      state.panelDismissUndoTimer = setTimeout(() => {
+        state.panelDismissUndoBuffer = undefined;
+        state.panelDismissUndoTimer = undefined;
+      }, 30_000);
+      await updateCheckpointNoteById(context, workspaceRoot, note.id, (current) => ({
+        ...current,
+        status: 'dismissed',
+        pinned: undefined,
+      }));
+      await refreshPanelCheckpointState(context, workspaceRoot);
+      rerenderPanel();
+      return { ok: true, noteId: note.id };
+    }),
+    vscode.commands.registerCommand(
+      'tacos.__test.undoCheckpointNoteDismiss',
+      async (rawInput?: unknown) => {
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        const buffer = state.panelDismissUndoBuffer;
+        if (!workspaceRoot || !buffer) {
+          return { ok: false, reason: 'no-buffer' };
+        }
+        if (Date.now() > buffer.expiresAt) {
+          state.panelDismissUndoBuffer = undefined;
+          return { ok: false, reason: 'expired' };
+        }
+        const input =
+          rawInput && typeof rawInput === 'object' ? (rawInput as Record<string, unknown>) : {};
+        const noteId = typeof input.noteId === 'string' ? input.noteId : buffer.note.id;
+        if (buffer.note.id !== noteId) {
+          return { ok: false, reason: 'id-mismatch' };
+        }
+        state.panelDismissUndoBuffer = undefined;
+        if (state.panelDismissUndoTimer !== undefined) {
+          clearTimeout(state.panelDismissUndoTimer);
+          state.panelDismissUndoTimer = undefined;
+        }
+        await updateCheckpointNoteById(context, workspaceRoot, buffer.note.id, (current) => ({
+          ...buffer.note,
+          id: current.id,
+          status: 'open',
+        }));
+        if (state.metricSession) {
+          state.metricSession.noteDeleteUndoCount =
+            (state.metricSession.noteDeleteUndoCount ?? 0) + 1;
+        }
+        await refreshPanelCheckpointState(context, workspaceRoot);
+        rerenderPanel();
+        return { ok: true, noteId: buffer.note.id };
+      },
+    ),
     vscode.commands.registerCommand('tacos.__test.runActionSafetyNoopChecks', async () => {
       return runActionSafetyNoopChecks(context);
     }),
@@ -6103,6 +6201,7 @@ async function showDetailsPanel(
     );
   }
   state.panelSummary = summary;
+  state.panelCockpitOverrides = undefined;
   state.panelBaseSummary = options.panelBaseSummary ?? stripStructuredTaskStateFromSummary(summary);
   state.panelWorkspaceRoot = workspaceRoot;
   state.panelProviderModeSnapshot = options.providerModeSnapshot;
@@ -6168,6 +6267,12 @@ async function showDetailsPanel(
       state.panelScratchpadScopeLabel = undefined;
       state.panelSectionState = undefined;
       state.panelSectionScope = undefined;
+      state.panelCockpitOverrides = undefined;
+      state.panelDismissUndoBuffer = undefined;
+      if (state.panelDismissUndoTimer) {
+        clearTimeout(state.panelDismissUndoTimer);
+        state.panelDismissUndoTimer = undefined;
+      }
     });
 
     state.panel.webview.onDidReceiveMessage(async (rawMessage: unknown) => {
@@ -6367,6 +6472,18 @@ async function showDetailsPanel(
           }));
           recordMetricCounter('noteMarkedDone');
         } else if (message.type === 'checkpointDismiss') {
+          // Save note into undo buffer before dismissing (30s TTL).
+          // Schedule a timer to proactively clear the buffer when the TTL elapses so
+          // stale note content does not linger in memory across panel lifetimes.
+          if (state.panelDismissUndoTimer !== undefined) {
+            clearTimeout(state.panelDismissUndoTimer);
+            state.panelDismissUndoTimer = undefined;
+          }
+          state.panelDismissUndoBuffer = { note, expiresAt: Date.now() + 30_000 };
+          state.panelDismissUndoTimer = setTimeout(() => {
+            state.panelDismissUndoBuffer = undefined;
+            state.panelDismissUndoTimer = undefined;
+          }, 30_000);
           await updateCheckpointNoteById(context, workspaceRoot, note.id, (current) => ({
             ...current,
             status: 'dismissed',
@@ -6374,6 +6491,49 @@ async function showDetailsPanel(
           }));
         }
 
+        await refreshPanelCheckpointState(context, workspaceRoot);
+        rerenderPanel();
+        if (message.type === 'checkpointDismiss') {
+          void state.panel?.webview.postMessage({
+            type: 'showUndoToast',
+            noteId: note.id,
+            timeoutMs: 30000,
+          });
+        }
+        return;
+      }
+
+      if (message.type === 'undoDeleteNote') {
+        const workspaceRoot = pickWorkspaceRoot(state.panelWorkspaceRoot);
+        const buffer = state.panelDismissUndoBuffer;
+        if (!workspaceRoot || !buffer) {
+          return;
+        }
+        if (Date.now() > buffer.expiresAt) {
+          state.panelDismissUndoBuffer = undefined;
+          if (state.panelDismissUndoTimer !== undefined) {
+            clearTimeout(state.panelDismissUndoTimer);
+            state.panelDismissUndoTimer = undefined;
+          }
+          return;
+        }
+        if (buffer.note.id !== message.noteId) {
+          return;
+        }
+        state.panelDismissUndoBuffer = undefined;
+        if (state.panelDismissUndoTimer !== undefined) {
+          clearTimeout(state.panelDismissUndoTimer);
+          state.panelDismissUndoTimer = undefined;
+        }
+        await updateCheckpointNoteById(context, workspaceRoot, buffer.note.id, (current) => ({
+          ...buffer.note,
+          id: current.id,
+          status: 'open',
+        }));
+        if (state.metricSession) {
+          state.metricSession.noteDeleteUndoCount =
+            (state.metricSession.noteDeleteUndoCount ?? 0) + 1;
+        }
         await refreshPanelCheckpointState(context, workspaceRoot);
         rerenderPanel();
         return;
@@ -6763,8 +6923,18 @@ async function showDetailsPanel(
       }
 
       if (message.type === 'updateProspective') {
-        // Cockpit inline-edit autosave: field + value already validated by parseWebviewMessage.
-        // State is prospective (webview-driven); no server-side persistence required.
+        // Cockpit inline-edit autosave: persist the user's edit into extension state
+        // so it survives panel rerenders.  The client shows 'Saved' only after this
+        // message is round-tripped through the extension, so we do not need to reply
+        // with an explicit ack — the existing panelClientScript flow handles it.
+        if (!state.panelCockpitOverrides) {
+          state.panelCockpitOverrides = {};
+        }
+        if (message.field === 'verifyFirst') {
+          state.panelCockpitOverrides.verifyFirst = message.value;
+        } else if (message.field === 'nextStep') {
+          state.panelCockpitOverrides.nextStep = message.value;
+        }
         return;
       }
 
@@ -6896,6 +7066,7 @@ function updateSummaryScratchpad(
   }
 
   state.panelSummary = summary;
+  state.panelCockpitOverrides = undefined;
   if (panelBaseSummary) {
     state.panelBaseSummary = panelBaseSummary;
   }
@@ -6946,6 +7117,21 @@ function rerenderPanel(): void {
     PERF_PANEL_RERENDER_SLOW_MS,
     `evidence=${state.panelSummary.evidenceCatalog?.length ?? 0}`,
   );
+  // Re-post the undo toast after every rerender that replaces webview.html.
+  // Replacing the HTML clears #toast-region, so the Undo affordance is lost
+  // for any rerender that occurs during the 30 s undo window. Re-send the
+  // message with the remaining TTL so the client can restore it.
+  const undoBuffer = state.panelDismissUndoBuffer;
+  if (undoBuffer) {
+    const remainingMs = undoBuffer.expiresAt - Date.now();
+    if (remainingMs > 0) {
+      void state.panel.webview.postMessage({
+        type: 'showUndoToast',
+        noteId: undoBuffer.note.id,
+        timeoutMs: remainingMs,
+      });
+    }
+  }
 }
 
 function postPanelStatus(message: string): void {
@@ -7024,6 +7210,7 @@ function renderWebview(
       ? ''
       : renderCheckpointCard({
           openCheckpointCount,
+          currentCheckpointNoteId: currentCheckpointNote?.id,
           currentCheckpointNote: currentCheckpointNote
             ? {
                 text: currentCheckpointNote.text,
@@ -7874,8 +8061,9 @@ function renderWebview(
     ? ''
     : `<button type="button" class="secondary" data-action="sessionAddCheckpoint" ${demoDisabledAttr}>Add note</button>`;
   const resumeCockpitCard = renderResumeCockpitCard({
-    verifyFirst: summary.recommendedFirstAction?.trim() ?? '',
-    nextStep: summary.nextSteps[0]?.trim() ?? '',
+    verifyFirst:
+      state.panelCockpitOverrides?.verifyFirst ?? summary.recommendedFirstAction?.trim() ?? '',
+    nextStep: state.panelCockpitOverrides?.nextStep ?? summary.nextSteps[0]?.trim() ?? '',
     blocker: blockerDecision.hasBlocker ? blockerDecision.title : undefined,
     anchors: cockpitAnchors,
     actionButtonsTrustedHtml: cockpitActionButtonsHtml,

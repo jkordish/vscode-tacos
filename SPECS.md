@@ -1452,3 +1452,66 @@ Users cannot tell at a glance whether the currently displayed Companion panel co
 
 - Plan: `PLANS.md` item `P20`.
 - Issue: https://github.com/jkordish/vscode-tacos/issues/310
+
+## Feature: Inline Editing with Autosave Indicator and Undo for Destructive Actions (P22)
+
+### Problem
+
+Cognitive recovery is a trust-sensitive workflow. Silent data loss after a destructive action (deleting a note, resolving a task) undermines user confidence in the "local-first" and "no hidden behavior" promises. Without visible save state and reversible actions, users cannot verify those promises in the moment. TaCoS research found 80/87 manual notes contained an immediate next step, making note fidelity safety-critical.
+
+### Goals
+
+- Show users when a field save is pending and when it completed.
+- Make note deletion and task resolution reversible for a short window.
+- Keep toast behavior deterministic and test-covered.
+- Add a local metric counter for undo usage.
+
+### Non-goals
+
+- Server-side or cross-session undo history.
+- Undo for non-destructive actions (view changes, navigation).
+- Persistent undo buffer beyond a single in-flight operation.
+
+### User-facing behavior
+
+- **Autosave indicator**: while typing in `#cockpit-verify-first` or `#cockpit-next-step`, the `#cockpit-save-state` element shows `Saving…`; after the 600 ms debounce flushes and `updateProspective` is posted, it shows `Saved • HH:MM`. The region is `aria-live="polite"` so screen reader users receive the confirmation without interruption.
+- **Note deletion undo**: clicking `checkpointDismiss` on a note with a `data-note-id` attribute shows a `Note dismissed.` toast with an `Undo` button; TTL is 30 s. Clicking `Undo` posts `undoDeleteNote` back to the extension.
+- **Task resolve undo**: clicking `taskStateResolve` shows a `Task state marked resolved.` toast; TTL is 5 s. No undo action is attached (the short TTL is the signal that this is a softer destructive action).
+- Toasts self-dismiss after their TTL; a new toast replaces any existing one.
+
+### Technical shape / architecture notes
+
+- `showToast(message, opts)` helper added to the generated script in `src/webview/panelClientScript.ts`; `opts.actionText` / `opts.onAction` wires the optional undo button; `opts.timeoutMs` controls TTL.
+- `setCockpitSaveState(message)` helper applies a 15 ms announce-timer before setting `textContent` so the same flush cycle that triggers the live region does not race with DOM layout.
+- `undoDeleteNote` message variant (`{ type: 'undoDeleteNote', noteId: string }`) added to the `WebviewMessage` union type and `parseWebviewMessage` validator in `src/webviewMessages.ts`.
+- `noteDeleteUndoCount` counter field added to `MetricRecord` in `src/metrics.ts`; included in CSV headers, row builder, `buildMetricsBaselineSnapshotMarkdown`, and `hasAnyRecordedMetric`.
+
+### Settings and commands affected
+
+- No new settings.
+- No new commands.
+
+### Acceptance criteria
+
+- `#cockpit-save-state` shows `Saving…` within 20 ms of an `input` event on `#cockpit-verify-first` or `#cockpit-next-step`.
+- `#cockpit-save-state` shows `Saved •` after the 600 ms debounce + 15 ms announce timer.
+- `updateProspective` message is posted with the correct `field` after the debounce.
+- `checkpointDismiss` with a `data-note-id` shows a toast containing `Note dismissed` with an `Undo` button that posts `undoDeleteNote`.
+- Toast auto-clears after its TTL.
+- `taskStateResolve` shows a toast containing `Task state marked resolved`.
+- `noteDeleteUndoCount` appears in CSV headers and markdown baseline snapshot.
+- All 4 new state-machine tests pass; `npm test` exits 0 (464 tests).
+
+### Risks / failure modes
+
+- Undo buffer capped at 1 item with a clear TTL; rapid note deletion can only undo the most recent dismiss.
+- `setCockpitSaveState` uses a 15 ms `setTimeout` to defer the live-region update; tests must advance fake timers past this threshold before asserting `textContent`.
+
+### Open questions
+
+- Should a future slice add extension-side note restoration logic when `undoDeleteNote` is received, or is the toast sufficient as a visible affordance placeholder?
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P22`.
+- Issue: https://github.com/jkordish/vscode-tacos/issues/312

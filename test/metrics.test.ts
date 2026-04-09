@@ -216,6 +216,17 @@ describe('hasAnyRecordedMetric', () => {
 
     expect(hasAnyRecordedMetric(metric)).toBe(true);
   });
+
+  it('treats noteDeleteUndoCount as recorded metric activity', () => {
+    const metric: MetricRecord = {
+      startedAt: Date.UTC(2026, 1, 1, 12, 0, 0),
+      workspaceRoot: '/workspace/repo',
+      trigger: 'manual',
+      noteDeleteUndoCount: 1,
+    };
+
+    expect(hasAnyRecordedMetric(metric)).toBe(true);
+  });
 });
 
 describe('buildMetricsCsv', () => {
@@ -329,6 +340,7 @@ describe('buildMetricsCsv', () => {
     expect(lines[0]).toContain('prospectiveIntentCaptureCount');
     expect(lines[0]).toContain('checkpointPromptSuppressedHighLoad');
     expect(lines[0]).toContain('sessionFrictionSummaryOpened');
+    expect(lines[0]).toContain('noteDeleteUndoCount');
     expect(lines).toHaveLength(2);
     expect(lines[1]).toContain('"/workspace/repo,feature"');
     expect(lines[1]).toContain(',statusbar,');
@@ -491,6 +503,7 @@ describe('buildMetricsBaselineSnapshotMarkdown', () => {
     expect(markdown).toContain('| prospectiveIntentCaptureCount (total) | 0 |');
     expect(markdown).toContain('| checkpointPromptSuppressedHighLoad (total) | 0 |');
     expect(markdown).toContain('| sessionFrictionSummaryOpened (total) | 0 |');
+    expect(markdown).toContain('| noteDeleteUndoCount (total) | 0 |');
     expect(markdown).toContain('| boundary | 1 | 0.3333 |');
     expect(markdown).toContain('| mid-activity | 1 | 0.3333 |');
     expect(markdown).toContain('| unknown | 1 | 0.3333 |');

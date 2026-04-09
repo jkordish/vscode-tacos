@@ -385,7 +385,7 @@ export function renderResumeCockpitCard(input: ResumeCockpitCardInput): string {
     </div>
     ${blockerHtml}
     ${anchorsHtml}
-    <div class="cockpit-save-state sr-only" id="cockpit-save-state" aria-live="polite" aria-atomic="true"></div>
+    <div class="cockpit-save-state" id="cockpit-save-state" aria-live="polite" aria-atomic="true"></div>
     ${input.actionButtonsTrustedHtml ? `<div class="cockpit-action-row status-actions">${input.actionButtonsTrustedHtml}</div>` : ''}
   </div>`;
 }

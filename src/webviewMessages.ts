@@ -77,6 +77,7 @@ export type WebviewMessage =
   | { type: 'setPanelSectionExpanded'; sectionId: PanelSectionId; expanded: boolean }
   | { type: 'setIntentOverride'; intent: string }
   | { type: 'updateProspective'; field: CockpitField; value: string }
+  | { type: 'undoDeleteNote'; noteId: string }
   | { type: 'openEvidence'; evidenceId: string }
   | { type: 'openTopFile'; index: number }
   | { type: 'openLink'; index: number }
@@ -277,6 +278,19 @@ export function parseWebviewMessage(raw: unknown): WebviewMessage | undefined {
       field,
       value,
     };
+  }
+
+  if (raw.type === 'undoDeleteNote') {
+    if (typeof raw.noteId !== 'string') {
+      return undefined;
+    }
+
+    const noteId = raw.noteId.trim();
+    if (!noteId) {
+      return undefined;
+    }
+
+    return { type: 'undoDeleteNote', noteId };
   }
 
   if (raw.type === 'setEvidenceGroupMode') {

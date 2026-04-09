@@ -196,6 +196,13 @@ async function main() {
       [fixtureWorkspace, '--disable-extensions'],
       vscodeExecutablePath,
     );
+
+    await runSuite(
+      'note-delete-undo',
+      path.resolve(__dirname, 'suite', 'noteDeleteUndo.js'),
+      [fixtureWorkspace, '--disable-extensions'],
+      vscodeExecutablePath,
+    );
   } finally {
     fs.rmSync(restrictedUserDataDir, { recursive: true, force: true });
   }

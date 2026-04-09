@@ -108,6 +108,7 @@ const CSV_HEADERS = [
   'prospectiveIntentCaptureCount',
   'checkpointPromptSuppressedHighLoad',
   'sessionFrictionSummaryOpened',
+  'noteDeleteUndoCount',
 ] as const;
 
 function csvEscape(value: string): string {
@@ -617,6 +618,7 @@ export function buildMetricsBaselineSnapshotMarkdown(
     `| prospectiveIntentCaptureCount (total) | ${summarizeTotal(metrics, 'prospectiveIntentCaptureCount')} |`,
     `| checkpointPromptSuppressedHighLoad (total) | ${summarizeTotal(metrics, 'checkpointPromptSuppressedHighLoad')} |`,
     `| sessionFrictionSummaryOpened (total) | ${summarizeTotal(metrics, 'sessionFrictionSummaryOpened')} |`,
+    `| noteDeleteUndoCount (total) | ${summarizeTotal(metrics, 'noteDeleteUndoCount')} |`,
     '',
     'Interruption timing class:',
     '',
@@ -785,7 +787,8 @@ export function hasAnyRecordedMetric(metric: MetricRecord): boolean {
     (metric.aiSendAllowedAfterReviewTotal ?? 0) > 0 ||
     (metric.prospectiveIntentCaptureCount ?? 0) > 0 ||
     (metric.checkpointPromptSuppressedHighLoad ?? 0) > 0 ||
-    (metric.sessionFrictionSummaryOpened ?? 0) > 0
+    (metric.sessionFrictionSummaryOpened ?? 0) > 0 ||
+    (metric.noteDeleteUndoCount ?? 0) > 0
   );
 }
 
@@ -908,6 +911,7 @@ export function buildMetricsCsv(metrics: MetricRecord[]): string {
       toOptionalNumber(metric.prospectiveIntentCaptureCount),
       toOptionalNumber(metric.checkpointPromptSuppressedHighLoad),
       toOptionalNumber(metric.sessionFrictionSummaryOpened),
+      toOptionalNumber(metric.noteDeleteUndoCount),
     ];
 
     lines.push(fields.map((value) => csvEscape(value)).join(','));
