@@ -1515,3 +1515,68 @@ Cognitive recovery is a trust-sensitive workflow. Silent data loss after a destr
 
 - Plan: `PLANS.md` item `P22`.
 - Issue: https://github.com/jkordish/vscode-tacos/issues/312
+
+## Feature: ARIA Completion — Full Keyboard Navigation, Tab Focus, and Live Regions (P23)
+
+### Problem
+
+The companion panel tab strip had partial ARIA support: roving `tabindex` and keyboard arrow navigation existed, but activating a tab with `Enter` or `Space` did not transfer keyboard focus into the newly visible panel. Screen reader users and keyboard-only users could activate tabs but would be stranded at the tab strip rather than landing on the panel's first interactive element. Save-state and toast live regions existed in the DOM but had no unit coverage asserting their presence, roles, or attributes.
+
+### Goals
+
+- Complete the ARIA APG Tabs keyboard contract: `Enter`/`Space` activate a tab **and** transfer focus to the first focusable element in the newly activated panel.
+- Confirm all tab panels carry correct `role`, `aria-labelledby`, and `hidden`-toggling attributes via explicit unit assertions.
+- Confirm `aria-live="polite"` save-state region and `aria-live="assertive"` toast region attributes via explicit unit assertions.
+- Add keyboard/ARIA smoke checks to the manual runbook.
+
+### Non-goals
+
+- New focus-trap logic inside panels.
+- Changes to the underlying tabbed-panel HTML structure.
+- Screen reader end-to-end automation tests (covered manually per runbook).
+
+### User-facing behavior
+
+- Pressing `Enter` or `Space` on a focused tab activates the tab and moves keyboard focus to the first interactive element inside the newly visible panel (`button`, `a[href]`, `input`, `select`, `textarea`, or `[tabindex]:not([tabindex="-1"])`). If no such element exists, focus falls back to the panel container (which is given `tabindex="-1"` to remain focusable).
+- `ArrowLeft` / `ArrowRight` cycle focus through tabs in the tab strip (wrapping).
+- `Home` / `End` jump focus to the first / last tab in the strip.
+- Inactive tabs carry `tabindex="-1"`; the active tab carries `tabindex="0"`.
+- Each tab panel carries `role="tabpanel"`, `aria-labelledby="<tabId>"`, and a `hidden` attribute that is added/removed on tab switch.
+- The `#cockpit-save-state` element carries `aria-live="polite"` so `Saved • HH:MM` / `Saving…` confirmations are announced without interruption.
+- The `#toast-region` element carries `role="alert"`, `aria-live="assertive"`, and `aria-atomic="true"` so undo toasts are announced immediately.
+
+### Technical shape / architecture notes
+
+- `focusFirstPanelElement(tabId)` helper in `src/webview/panelClientScript.ts` locates the first focusable descendant of the panel identified by `tabId` and focuses it; falls back to focusing the panel container after setting `tabindex="-1"`.
+- The `Enter` / `Space` branch in the ARIA Tabs keydown listener calls `switchToTab(targetTabId)` and then `focusFirstPanelElement(targetTabId)`.
+- Existing `ArrowLeft` / `ArrowRight` / `Home` / `End` logic is unchanged.
+- `test/panelA11y.test.ts` carries four describe blocks: axe clean pass for card layout, axe clean pass for tabbed panel layout, tab-strip ARIA attribute assertions, tab-panel attribute assertions, and live-region attribute assertions.
+
+### Settings and commands affected
+
+- No new settings.
+- No new commands.
+
+### Acceptance criteria
+
+- axe-core reports zero violations for both the standard card layout and the full tabbed panel layout.
+- All rendered tab elements have `role="tab"`, `aria-selected`, `aria-controls`, and correct `tabindex` (`"0"` for active, `"-1"` for others).
+- All rendered panel elements have `role="tabpanel"`, `aria-labelledby`, and `hidden` attribute on inactive panels.
+- `#cockpit-save-state` carries `aria-live="polite"`.
+- `#toast-region` carries `role="alert"`, `aria-live="assertive"`, and `aria-atomic="true"`.
+- `Enter` / `Space` on a tab activates it and transfers focus into the panel.
+- Manual smoke checks K1–K4 in `docs/manual-smoke-runbook.md` pass.
+
+### Risks / failure modes
+
+- Focus transfer on `Enter`/`Space` could strand focus if a panel's content is not yet rendered. Mitigated by falling back to panel container focus with `tabindex="-1"`.
+- `aria-live` region changes can cause double-announcement if the region text and the region container are both observed by the screen reader; kept minimal with text-only updates.
+
+### Open questions
+
+- Should a future slice add `aria-orientation="horizontal"` to the `tablist` element explicitly (currently implied by horizontal layout)?
+
+### Links to plan items / issues / PRs
+
+- Plan: `PLANS.md` item `P23`.
+- Issue: https://github.com/jkordish/vscode-tacos/issues/313
