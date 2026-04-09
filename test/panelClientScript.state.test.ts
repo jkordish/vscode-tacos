@@ -566,6 +566,127 @@ describe('panelClientScript state behavior', () => {
     expect(toastRegion.textContent).toContain('Task state marked resolved');
   });
 
+  it('activates tab and transfers focus to first focusable element on Enter keydown', () => {
+    const tabBodyHtml = `
+      <a class="skip-link" href="#main">Skip to main content</a>
+      <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
+      <ul id="evidence-list"></ul>
+      <button type="button" data-action="toggleEvidenceMore" data-hidden-count="0">Show more</button>
+      <nav class="page-tabs" role="tablist">
+        <button type="button" class="page-tab" role="tab" data-tab-id="overview" aria-selected="true" tabindex="0" id="tab-btn-overview" aria-controls="tab-panel-overview">Overview</button>
+        <button type="button" class="page-tab" role="tab" data-tab-id="resume" aria-selected="false" tabindex="-1" id="tab-btn-resume" aria-controls="tab-panel-resume">Resume</button>
+      </nav>
+      <div class="tab-panels">
+        <section class="tab-panel" id="tab-panel-overview" role="tabpanel" aria-labelledby="tab-btn-overview"></section>
+        <section class="tab-panel" id="tab-panel-resume" role="tabpanel" aria-labelledby="tab-btn-resume" hidden>
+          <button type="button" id="first-focusable-in-resume">Action</button>
+        </section>
+      </div>
+    `;
+
+    bootstrap({}, 'scope-token', tabBodyHtml);
+
+    const resumeTabBtn = document.getElementById('tab-btn-resume') as HTMLButtonElement;
+    const resumePanel = document.getElementById('tab-panel-resume') as HTMLElement;
+    const firstFocusable = document.getElementById(
+      'first-focusable-in-resume',
+    ) as HTMLButtonElement;
+
+    // Focus the tab button first (simulates keyboard navigation to it)
+    resumeTabBtn.focus();
+
+    // Dispatch Enter keydown on the tab button
+    const enterEvent = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    });
+    resumeTabBtn.dispatchEvent(enterEvent);
+
+    // Panel should now be visible
+    expect(resumePanel.hasAttribute('hidden')).toBe(false);
+    // First focusable element in the panel should have focus
+    expect(document.activeElement).toBe(firstFocusable);
+  });
+
+  it('activates tab and transfers focus to first focusable element on Space keydown', () => {
+    const tabBodyHtml = `
+      <a class="skip-link" href="#main">Skip to main content</a>
+      <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
+      <ul id="evidence-list"></ul>
+      <button type="button" data-action="toggleEvidenceMore" data-hidden-count="0">Show more</button>
+      <nav class="page-tabs" role="tablist">
+        <button type="button" class="page-tab" role="tab" data-tab-id="overview" aria-selected="true" tabindex="0" id="tab-btn-overview" aria-controls="tab-panel-overview">Overview</button>
+        <button type="button" class="page-tab" role="tab" data-tab-id="details" aria-selected="false" tabindex="-1" id="tab-btn-details" aria-controls="tab-panel-details">Details</button>
+      </nav>
+      <div class="tab-panels">
+        <section class="tab-panel" id="tab-panel-overview" role="tabpanel" aria-labelledby="tab-btn-overview"></section>
+        <section class="tab-panel" id="tab-panel-details" role="tabpanel" aria-labelledby="tab-btn-details" hidden>
+          <a href="https://example.com" id="first-link-in-details">Link</a>
+        </section>
+      </div>
+    `;
+
+    bootstrap({}, 'scope-token', tabBodyHtml);
+
+    const detailsTabBtn = document.getElementById('tab-btn-details') as HTMLButtonElement;
+    const detailsPanel = document.getElementById('tab-panel-details') as HTMLElement;
+    const firstLink = document.getElementById('first-link-in-details') as HTMLAnchorElement;
+
+    detailsTabBtn.focus();
+
+    const spaceEvent = new KeyboardEvent('keydown', {
+      key: ' ',
+      bubbles: true,
+      cancelable: true,
+    });
+    detailsTabBtn.dispatchEvent(spaceEvent);
+
+    expect(detailsPanel.hasAttribute('hidden')).toBe(false);
+    expect(document.activeElement).toBe(firstLink);
+  });
+
+  it('falls back to focusing the panel container when no focusable element exists on Enter', () => {
+    const tabBodyHtml = `
+      <a class="skip-link" href="#main">Skip to main content</a>
+      <div id="panel-status-live"></div>
+      <main id="main" tabindex="-1"></main>
+      <ul id="evidence-list"></ul>
+      <button type="button" data-action="toggleEvidenceMore" data-hidden-count="0">Show more</button>
+      <nav class="page-tabs" role="tablist">
+        <button type="button" class="page-tab" role="tab" data-tab-id="overview" aria-selected="true" tabindex="0" id="tab-btn-overview" aria-controls="tab-panel-overview">Overview</button>
+        <button type="button" class="page-tab" role="tab" data-tab-id="empty" aria-selected="false" tabindex="-1" id="tab-btn-empty" aria-controls="tab-panel-empty">Empty</button>
+      </nav>
+      <div class="tab-panels">
+        <section class="tab-panel" id="tab-panel-overview" role="tabpanel" aria-labelledby="tab-btn-overview"></section>
+        <section class="tab-panel" id="tab-panel-empty" role="tabpanel" aria-labelledby="tab-btn-empty" hidden>
+          <p>No interactive elements here.</p>
+        </section>
+      </div>
+    `;
+
+    bootstrap({}, 'scope-token', tabBodyHtml);
+
+    const emptyTabBtn = document.getElementById('tab-btn-empty') as HTMLButtonElement;
+    const emptyPanel = document.getElementById('tab-panel-empty') as HTMLElement;
+
+    emptyTabBtn.focus();
+
+    const enterEvent = new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    });
+    emptyTabBtn.dispatchEvent(enterEvent);
+
+    expect(emptyPanel.hasAttribute('hidden')).toBe(false);
+    // Panel container should have received tabindex="-1" and become the active element
+    expect(emptyPanel.getAttribute('tabindex')).toBe('-1');
+    expect(document.activeElement).toBe(emptyPanel);
+  });
+
   it('clears scope-bound scroll, focus, and tab state when section scope changes', () => {
     const { setState } = bootstrap(
       {

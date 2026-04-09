@@ -544,24 +544,26 @@ Status vocabulary used in this file:
 
 ### P23. ARIA completion — full keyboard navigation, tab focus, and live regions
 
-- status: `queued`
-- why: the extension targets developers who may rely on keyboard navigation or assistive technologies. The current tab strip has partial ARIA, but the deep research report identified gaps in keyboard focus management (`tabindex="-1"` on inactive tabs, `ArrowLeft/Right/Home/End` tab switching, focus return to the active panel after switching). Additionally, save-state announcements (from P22) require `aria-live` regions to be meaningful for non-visual users.
+- status: `done`
+- why: the extension targets developers who may rely on keyboard navigation or assistive technologies. The current tab strip had partial ARIA; the deep research report identified gaps in keyboard focus management (`Enter`/`Space` activating a tab without transferring focus into the panel). Save-state and toast live regions were present but not unit-verified.
 - scope:
-  - Tab strip: inactive tabs get `tabindex="-1"`; active tab gets `tabindex="0"`; `ArrowLeft` / `ArrowRight` cycle focus through tabs; `Home` / `End` jump to first/last tab; `Enter` / `Space` activate; focus moves to the first focusable element in the newly activated panel.
-  - Save state: `aria-live="polite"` region for `Saved • HH:MM` / `Unsaved…` announcements (shared with P22).
-  - Toast region: `aria-live="assertive"` for undo toasts (time-sensitive) (shared with P22).
-  - Confirm all tab panels have correct `role="tabpanel"`, `aria-labelledby`, `hidden` attribute toggling.
-  - Run `panelA11y.test.ts` extended assertions for all new ARIA attributes and keyboard interaction contract.
+  - Tab strip: inactive tabs get `tabindex="-1"`; active tab gets `tabindex="0"`; `ArrowLeft` / `ArrowRight` cycle focus through tabs; `Home` / `End` jump to first/last tab; `Enter` / `Space` activate **and transfer focus** to the first focusable element in the newly activated panel.
+  - Save state: `aria-live="polite"` region (`#cockpit-save-state`) for `Saved • HH:MM` / `Saving…` announcements confirmed on cockpit card (P19/P22).
+  - Toast region: `#toast-region` with `role="alert"`, `aria-live="assertive"`, `aria-atomic="true"` confirmed in both card and tabbed layouts.
+  - All tab panels have correct `role="tabpanel"`, `aria-labelledby`, `hidden` attribute toggling — confirmed via explicit unit assertions.
+  - `panelA11y.test.ts` extended with 3 new describe blocks and 12 new assertions; axe clean pass added for tabbed panel layout.
+  - `docs/manual-smoke-runbook.md` extended with section 6 (K1–K4) keyboard/ARIA smoke checks.
 - dependencies: P19 (cockpit panel), P22 (save state / toast regions).
-- immediate next actions:
-  - audit `panelClientScript.ts` current tab keyboard handler and identify gaps vs. ARIA APG Tabs pattern.
-  - update tab strip keyboard handler to emit full `ArrowLeft/Right/Home/End` navigation with focus management.
-  - add `aria-live="polite"` save-state region and `aria-live="assertive"` toast region to `panelFragments.ts` header/footer.
-  - extend `panelA11y.test.ts` unit assertions for `tabindex`, `aria-selected`, `role`, `aria-labelledby`, and panel `hidden` state across all tab combinations.
-  - manual smoke check per `docs/manual-smoke-runbook.md` with keyboard-only navigation.
+- recent progress:
+  - added `focusFirstPanelElement(tabId)` helper to `panelClientScript.ts`; wired into `Enter`/`Space` handler inside the ARIA Tabs keydown listener.
+  - added `Enter`/`Space` branch to the tab strip keydown handler; activates the tab and transfers focus to first interactive element in the panel (or falls back to panel container with `tabindex="-1"`).
+  - extended `test/panelA11y.test.ts` with describe blocks: `tab strip ARIA attributes`, `tab panel ARIA attributes`, `live regions` — all 12 new assertions pass alongside the 2 axe checks.
+  - added `renderTabPanelHtml()` helper to test file for stable multi-tab fixture.
+  - added manual smoke runbook section 6 covering K1–K4 keyboard and live-region checks.
+  - `CHANGELOG.md` `[Unreleased]` entry written; verify:quick exits 0 (57 suites / 487 tests).
 - risks/rollback:
-  - risk: focus management changes can create focus traps in edge cases (e.g. panel content is empty or not yet rendered).
-  - rollback: revert keyboard handler to current behavior and ship ARIA attribute fixes independently as a safe subset.
+  - risk: focus management changes can create focus traps in edge cases (e.g. panel content is empty or not yet rendered). The fallback to `panel.focus()` after setting `tabindex="-1"` mitigates stranding.
+  - rollback: revert `Enter`/`Space` handler addition and `focusFirstPanelElement` call; all other ARIA attributes are already correct and safe without the focus-transfer logic.
 - links:
   - `src/webview/panelClientScript.ts`
   - `src/webview/panelFragments.ts`
