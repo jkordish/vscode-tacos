@@ -268,7 +268,80 @@ After executing sections above:
 Snapshot/date reference: `__________`
 Metric notes: `__________`
 
-## 6) Final Sign-off
+## 6) Keyboard Navigation and ARIA Smoke (P23)
+
+Run these checks with a keyboard only (no mouse) and a screen reader if available.
+
+### K1. Tab strip keyboard navigation
+
+Steps:
+
+1. Open the Companion panel (`TaCoS: Show Resume Brief Now`).
+2. Tab to the tab strip. Confirm the active tab receives focus and `tabindex="0"`.
+3. Press `ArrowRight` — focus should move to the next tab and the panel content should switch.
+4. Press `ArrowLeft` — focus should return to the previous tab.
+5. Press `Home` — focus should jump to the first tab.
+6. Press `End` — focus should jump to the last tab.
+7. Press `Enter` or `Space` on a non-active tab — the tab should activate **and** focus should transfer to the first interactive element inside the newly visible panel.
+
+Expected:
+
+- Active tab: `tabindex="0"`, `aria-selected="true"`.
+- Inactive tabs: `tabindex="-1"`, `aria-selected="false"`.
+- No focus trap: `Tab` out of the tab strip continues down the page normally.
+- `Enter`/`Space` on tab → focus lands inside the panel (not stays on the tab button).
+
+Result: `PASS / FAIL`
+Notes: `__________`
+
+### K2. Save-state live region (cockpit)
+
+Steps:
+
+1. Open the Resume tab cockpit.
+2. Edit the `Verify first` or `Next step` field.
+3. Wait for the debounce to flush (≤1 s) or press `Enter`.
+
+Expected:
+
+- `#cockpit-save-state` contains `Saving…` during debounce and `Saved • HH:MM` after flush.
+- Screen reader announces the save state via `aria-live="polite"`.
+
+Result: `PASS / FAIL`
+Notes: `__________`
+
+### K3. Undo toast live region
+
+Steps:
+
+1. Dismiss a task note.
+2. Observe the `Note dismissed. · Undo` toast.
+
+Expected:
+
+- Toast appears in `#toast-region` which has `role="alert"` and `aria-live="assertive"`.
+- Screen reader announces the toast immediately (assertive, not polite).
+- `Undo` button is keyboard-reachable and activates note restoration.
+
+Result: `PASS / FAIL`
+Notes: `__________`
+
+### K4. Panel status announcements
+
+Steps:
+
+1. Trigger `Show more` / `Show less` on the evidence list via keyboard.
+2. Trigger `Why am I seeing this?` deep link via keyboard.
+
+Expected:
+
+- `#panel-status-live` (`aria-live="polite"`) announces expansion/collapse state.
+- Screen reader reads the status message without interrupting current speech.
+
+Result: `PASS / FAIL`
+Notes: `__________`
+
+## 7) Final Sign-off
 
 Scenario status:
 

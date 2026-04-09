@@ -6,6 +6,16 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **P23: ARIA completion — full keyboard navigation, tab focus, and live regions**:
+  - `Enter` and `Space` keys on a focused tab button now activate the tab **and** transfer focus to the first focusable element inside the newly visible panel, completing the ARIA APG Tabs pattern. A `focusFirstPanelElement(tabId)` helper falls back to the panel container when no interactive element is present, ensuring keyboard users are never stranded.
+  - All tab buttons already carry `role="tab"`, `aria-controls="tab-panel-<id>"`, `aria-selected`, and roving `tabindex` (active `0`, inactive `-1`); verified via new explicit unit assertions.
+  - All tab panels already carry `role="tabpanel"`, `aria-labelledby="tab-btn-<id>"`, and `hidden` attribute toggling; verified via new explicit unit assertions.
+  - `#panel-status-live` (`aria-live="polite"`, `aria-atomic="true"`) and `#toast-region` (`role="alert"`, `aria-live="assertive"`, `aria-atomic="true"`) confirmed present in both card and tabbed panel layouts; verified via new unit assertions.
+  - `#cockpit-save-state` (`aria-live="polite"`, `aria-atomic="true"`) confirmed on cockpit card (P19/P22).
+  - `test/panelA11y.test.ts` extended with 3 new `describe` blocks covering: tab strip ARIA (role, aria-selected, tabindex, aria-controls, aria-labelledby/id round-trip), tab panel ARIA (role, hidden state, id convention), and live regions (polite save-state, assertive toast, role="alert") — 12 new assertions across both card and tabbed panel layouts.
+  - Axe clean pass extended to the tabbed panel layout (second `it` block in `panel webview accessibility`).
+  - `docs/manual-smoke-runbook.md` extended with section 6 "Keyboard Navigation and ARIA Smoke (P23)" covering K1–K4: tab strip arrow/Home/End/Enter/Space navigation, cockpit save-state live region, undo toast live region, and panel status announcements.
+
 - **P24: Task/checkpoint naming rationalization and schema v2 migration**:
   - `TASK_STATE_SCHEMA_VERSION` bumped from `1` to `2`; `TASK_STATE_SCHEMA_VERSION_V1 = 1` exported for migration reference.
   - `migrateV1toV2(raw)` added to `src/taskState.ts`: idempotent migration that promotes a legacy `checkpoints` key to `tasks` and stamps `schemaVersion: 2`. Called automatically inside `parseStructuredTaskStateStore`.

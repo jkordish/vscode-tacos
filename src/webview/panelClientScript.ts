@@ -414,6 +414,32 @@ export function renderPanelClientScript(
         persistViewState();
       }
 
+      /**
+       * Moves focus to the first focusable element inside the activated tab panel.
+       * Falls back to the panel container itself (tabindex="-1" on main) if no
+       * interactive element is found, so keyboard users are never left stranded.
+       */
+      function focusFirstPanelElement(tabId) {
+        if (typeof tabId !== 'string' || !tabId) {
+          return;
+        }
+        const panel = document.getElementById('tab-panel-' + tabId);
+        if (!(panel instanceof HTMLElement)) {
+          return;
+        }
+        const focusable = panel.querySelector(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        if (focusable instanceof HTMLElement) {
+          focusable.focus();
+        } else {
+          // Panel has no interactive elements — focus the panel container so the
+          // user can still read content via screen reader.
+          panel.setAttribute('tabindex', '-1');
+          panel.focus();
+        }
+      }
+
       function restoreActiveTab() {
         const tabs = document.querySelectorAll('.page-tab[data-tab-id]');
         if (tabs.length === 0) {
@@ -803,7 +829,7 @@ export function renderPanelClientScript(
         });
       });
 
-      // Tab keyboard navigation per ARIA Tabs pattern (ArrowLeft/ArrowRight/Home/End)
+      // Tab keyboard navigation per ARIA Tabs pattern (ArrowLeft/ArrowRight/Home/End/Enter/Space)
       document.addEventListener('keydown', (event) => {
         const target = event.target;
         if (!(target instanceof HTMLElement)) {
@@ -823,6 +849,18 @@ export function renderPanelClientScript(
         if (currentIndex === -1) {
           return;
         }
+
+        // Enter/Space: activate the focused tab and move focus into the panel
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          const tabId = target.dataset.tabId;
+          if (tabId) {
+            switchToTab(tabId);
+            focusFirstPanelElement(tabId);
+          }
+          return;
+        }
+
         let nextIndex = -1;
         if (event.key === 'ArrowRight') {
           nextIndex = (currentIndex + 1) % tabButtons.length;
