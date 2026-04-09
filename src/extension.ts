@@ -6268,6 +6268,11 @@ async function showDetailsPanel(
       state.panelSectionState = undefined;
       state.panelSectionScope = undefined;
       state.panelCockpitOverrides = undefined;
+      state.panelDismissUndoBuffer = undefined;
+      if (state.panelDismissUndoTimer) {
+        clearTimeout(state.panelDismissUndoTimer);
+        state.panelDismissUndoTimer = undefined;
+      }
     });
 
     state.panel.webview.onDidReceiveMessage(async (rawMessage: unknown) => {

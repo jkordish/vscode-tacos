@@ -589,7 +589,10 @@ export function renderPanelClientScript(
           });
           region.appendChild(btn);
         }
-        const timeoutMs = (opts && typeof opts.timeoutMs === 'number') ? opts.timeoutMs : 5000;
+        const rawTimeoutMs = opts && typeof opts.timeoutMs === 'number' ? opts.timeoutMs : 5000;
+        const timeoutMs = Number.isFinite(rawTimeoutMs) && rawTimeoutMs > 0
+          ? Math.min(Math.max(rawTimeoutMs, 100), 60000)
+          : 5000;
         toastDismissTimer = window.setTimeout(() => {
           toastDismissTimer = undefined;
           region.textContent = '';
@@ -1061,7 +1064,7 @@ export function renderPanelClientScript(
             // the toast is shown. Showing it optimistically here would allow
             // undoDeleteNote to race the in-flight dismiss write.
             const noteId = (actionElement.dataset.noteId || '').trim();
-            vscode.postMessage({ type: 'checkpointDismiss', noteId: noteId || undefined });
+            vscode.postMessage({ type: 'checkpointDismiss' });
             return;
           }
 

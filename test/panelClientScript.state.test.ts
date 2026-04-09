@@ -492,7 +492,6 @@ describe('panelClientScript state behavior', () => {
 
     expect(postMessage).toHaveBeenCalledWith({
       type: 'checkpointDismiss',
-      noteId: 'note-abc-123',
     });
 
     // Toast is deferred — the extension posts showUndoToast after the dismiss write completes.
