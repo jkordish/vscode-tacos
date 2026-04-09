@@ -6,6 +6,12 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **P24: Task/checkpoint naming rationalization and schema v2 migration**:
+  - `TASK_STATE_SCHEMA_VERSION` bumped from `1` to `2`; `TASK_STATE_SCHEMA_VERSION_V1 = 1` exported for migration reference.
+  - `migrateV1toV2(raw)` added to `src/taskState.ts`: idempotent migration that promotes a legacy `checkpoints` key to `tasks` and stamps `schemaVersion: 2`. Called automatically inside `parseStructuredTaskStateStore`.
+  - Command titles updated to converge on `task`/`task notes` terminology: `Capture Task State`, `Add Task Note`, `Add Task Note from Clipboard`, `Add Task Note from Selection`, `Add Quick Task Note`, `List Task Notes`, `Clear Task Notes in Current Task Scope`.
+  - `test/taskState.test.ts` extended with a `migrateV1toV2` describe block covering: nullish pass-through, v2+ no-op, idempotency, legacy `checkpoints` promotion, task-wins-over-checkpoints when both present, and missing `schemaVersion` default.
+
 - **P22: Inline editing with autosave indicator and undo for destructive actions**:
   - `showToast(message, { actionText, onAction, timeoutMs })` helper added to `panelClientScript.ts`; renders a persistent `#toast-region` DOM element with an optional action button that self-dismisses after its timeout.
   - Cockpit fields (`#cockpit-verify-first`, `#cockpit-next-step`) now show a transient `Saving…` indicator in `#cockpit-save-state` during the 600 ms debounce window, then `Saved • HH:MM` after `updateProspective` is posted.

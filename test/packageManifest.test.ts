@@ -75,7 +75,7 @@ describe('package manifest resume safety contributions', () => {
     );
 
     expect(commands.get('tacos.captureTaskCheckpoint')).toMatchObject({
-      title: 'TaCoS: Capture Task Checkpoint',
+      title: 'TaCoS: Capture Task State',
     });
     expect(commands.get('tacos.markTaskResolved')).toMatchObject({
       title: 'TaCoS: Mark Task Resolved',

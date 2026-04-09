@@ -228,7 +228,7 @@
       },
       {
         "command": "tacos.captureTaskCheckpoint",
-        "title": "TaCoS: Capture Task Checkpoint"
+        "title": "TaCoS: Capture Task State"
       },
       {
         "command": "tacos.markTaskResolved",
@@ -244,27 +244,27 @@
       },
       {
         "command": "tacos.addCheckpointNote",
-        "title": "TaCoS: Add Checkpoint Note"
+        "title": "TaCoS: Add Task Note"
       },
       {
         "command": "tacos.addCheckpointNoteFromClipboard",
-        "title": "TaCoS: Add Checkpoint Note from Clipboard"
+        "title": "TaCoS: Add Task Note from Clipboard"
       },
       {
         "command": "tacos.addCheckpointFromSelection",
-        "title": "TaCoS: Add Checkpoint from Selection"
+        "title": "TaCoS: Add Task Note from Selection"
       },
       {
         "command": "tacos.addQuickCheckpointNote",
-        "title": "TaCoS: Add Quick Checkpoint Note"
+        "title": "TaCoS: Add Quick Task Note"
       },
       {
         "command": "tacos.listCheckpointNotes",
-        "title": "TaCoS: List Checkpoint Notes"
+        "title": "TaCoS: List Task Notes"
       },
       {
         "command": "tacos.clearCheckpointNote",
-        "title": "TaCoS: Clear Checkpoint Notes in Current Task Scope"
+        "title": "TaCoS: Clear Task Notes in Current Task Scope"
       },
       {
         "command": "tacos.openScratchpad",

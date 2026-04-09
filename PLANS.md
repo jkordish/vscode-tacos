@@ -572,7 +572,7 @@ Status vocabulary used in this file:
 
 ### P24. Task/checkpoint naming rationalization and schema v2 migration
 
-- status: `queued`
+- status: `doing`
 - why: the deep research report identifies "checkpoint vs task" ontology confusion as a pure adoption blocker. Internally the split is meaningful (`taskState` = rich structured state, `checkpoint` = note/annotation layer), but externally users see both terms used interchangeably across commands, cards, and docs. This creates confusion about what to capture, when, and why. Additionally, the data model is ready for a `schemaVersion: 2` bump that formalizes `tasks` as the top-level concept with `notes` as a child collection — consistent with what `src/taskState.ts` already models internally.
 - scope:
   - **User-facing copy**: converge all user-visible strings on `task state` (not `structured task checkpoint`) and `task notes` (not `checkpoint notes`). Commands: `Capture task state`, `Update task state`, `Task notes`. Cards: `Task State`, `Task Notes`.
@@ -580,13 +580,17 @@ Status vocabulary used in this file:
   - **Storage key audit**: enumerate all `context.workspaceState.get/update` call sites for checkpoint/task keys across `src/checkpoint.ts`, `src/taskState.ts`, `src/extension.ts` and confirm migration covers all of them.
   - **Docs**: update `SPECS.md`, `README.md`, `docs/DESIGN_AND_IMPLEMENTATION.md`, `CHANGELOG.md` with new user-facing terminology and schema v2 contract.
 - dependencies: P15, P19, P22 (all depend on stable card/field naming).
+- recent progress:
+  - `TASK_STATE_SCHEMA_VERSION` bumped from `1` to `2`; `TASK_STATE_SCHEMA_VERSION_V1 = 1` exported.
+  - `migrateV1toV2(raw)` implemented in `src/taskState.ts`: idempotent v1→v2 migration, promotes legacy `checkpoints` key to `tasks`, stamps `schemaVersion: 2`; called automatically by `parseStructuredTaskStateStore`.
+  - Command titles in `package.json` updated: `Capture Task State`, `Add Task Note`, `Add Task Note from Clipboard`, `Add Task Note from Selection`, `Add Quick Task Note`, `List Task Notes`, `Clear Task Notes in Current Task Scope`.
+  - `test/taskState.test.ts` extended with `migrateV1toV2` describe block (7 cases: nullish pass-through, v2+ no-op, idempotency, checkpoints promotion, tasks-win, missing schemaVersion default, schema version constants).
+  - `CHANGELOG.md` `[Unreleased]` entry written.
+  - Feature branch: `feat/p24-task-naming-schema-v2`.
 - immediate next actions:
-  - enumerate all user-facing strings containing `checkpoint` (case-insensitive) across `src/webview/*`, `src/extension.ts`, `package.json` (command titles), and `README.md`.
-  - define migration contract: `schemaVersion` key, `migrateV1toV2()` signature, compat read window.
-  - implement migration in `src/taskState.ts` with full unit test coverage (idempotent, handles missing fields, handles empty store).
-  - update command titles in `package.json` and all string literals in the webview layer.
-  - update `panelFragments.test.ts`, `panelCards.test.ts`, and `taskState.test.ts` for new strings and migration behavior.
-  - update all affected docs in a single PR.
+  - update `README.md` and `docs/DESIGN_AND_IMPLEMENTATION.md` with new command titles.
+  - run `npm run verify:quick` to confirm zero regressions.
+  - close #314 on merge.
 - risks/rollback:
   - risk: storage key migration could lose task state if a user downgrades the extension between schema v1 and v2 write cycles.
   - rollback: keep compat read for both key shapes for two releases; never delete v1 key until v2 is confirmed present.
