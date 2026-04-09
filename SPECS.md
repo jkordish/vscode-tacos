@@ -2,21 +2,21 @@
 
 ## Product Overview
 
-TaCoS is a desktop-first VS Code extension for interruption-heavy engineers. It reduces interruption recovery cost by preserving and restoring task state with local-first resume briefs, structured checkpoints, safe next actions, and explicit retrieval cues.
+TaCoS is a desktop-first VS Code extension for interruption-heavy engineers. It reduces interruption recovery cost by preserving and restoring task state with local-first resume briefs, structured task state capture, safe next actions, and explicit retrieval cues.
 
 ## Current Scope
 
 - Automatic and manual resume brief generation.
 - Resume Safety Check annunciation after meaningful resume events.
 - Evidence-backed companion surfaces and restore actions.
-- Structured task checkpoints with typed local task-state storage.
+- Structured task state capture with typed local task-state storage.
 - Deterministic task-switch detection with conservative likely-boundary prompting.
-- Resume Brief v2 state recovery that merges checkpoint state with current repo/editor evidence.
+- Resume Brief v2 state recovery that merges task state with current repo/editor evidence.
 - On-demand Daily Cognitive Debrief for abandoned, stale, and unresolved threads.
 - Ambient-to-deep UX layering (status bar ambient cues, glanceable Companion Home, one-click deep trust/evidence drill-down).
 - Privacy and trust controls (redaction, consent, retention, Restricted Mode behavior).
 - Optional provider refinement (`local`, `vscode-lm`, `openai`).
-- Legacy checkpoint notes, scoped scratchpad, task partitions, standup generation.
+- Legacy task notes, scoped scratchpad, task partitions, standup generation.
 - Local-only metrics/diagnostics export and support workflows.
 
 ## Non-goals
@@ -213,7 +213,7 @@ Engineers doing interruption-heavy work lose mental state across branch switches
 
 ### User-facing behavior
 
-- `TaCoS: Capture Task Checkpoint` captures structured task state with:
+- `TaCoS: Capture Task State` captures structured task state with:
   - `objective`
   - `working set`
   - `assumptions`
@@ -223,7 +223,7 @@ Engineers doing interruption-heavy work lose mental state across branch switches
   - optional `stale after`
   - `last known safe breakpoint`
 - `TaCoS: Mark Task Resolved` explicitly closes the active structured task in the current scope.
-- `TaCoS: Confirm Task Switch` lets the user confirm a switch boundary and capture a checkpoint if needed.
+- `TaCoS: Confirm Task Switch` lets the user confirm a switch boundary and capture task state if needed.
 - `TaCoS: Show Cognitive Debrief` surfaces abandoned threads, unresolved blockers, repeated-switch tasks, stale task states, and open assumptions.
 - Likely-switch prompting is optional and conservative. It appears only at deterministic likely boundaries and always gives `Capture`, `Skip`, `Snooze`, and `Dismiss`.
 - Resume Brief v2 prioritizes:
@@ -242,7 +242,7 @@ Engineers doing interruption-heavy work lose mental state across branch switches
 - `src/cognitiveDebrief.ts` derives debrief sections from structured task state.
 - `src/extension.ts` orchestrates capture, prompt gating, panel rendering, task resolution, and diagnostics wiring.
 - `src/webview/panelFragments.ts` renders the `Task State` and `Cognitive Debrief` cards.
-- Legacy checkpoint-note flows remain available for compatibility, but structured task state is now the primary recovery primitive.
+- Legacy task-note flows remain available for compatibility, but structured task state is now the primary recovery primitive.
 - File-cluster drift is supporting evidence only and never a sole switch trigger.
 - Restricted Mode remains fail-closed for trust-sensitive signals; branch/debug/task context degrades gracefully when unavailable.
 
@@ -262,15 +262,15 @@ Engineers doing interruption-heavy work lose mental state across branch switches
 ### Acceptance criteria
 
 - Structured task state is stored locally in typed, versioned form.
-- Manual checkpoint capture is fast and editable later.
+- Manual task state capture is fast and editable later.
 - Likely-switch detection is deterministic, conservative, and explainable in diagnostics.
 - Resume Brief v2 uses structured task state when present and keeps `next likely safe move` framed as suggestion plus verification.
 - Cognitive Debrief remains on-demand, local-only, and non-surveillant.
-- Local metrics capture checkpoint usage, switch detection, debrief surfacing, and structured-state cohorts without adding remote telemetry.
+- Local metrics capture task state capture usage, switch detection, debrief surfacing, and structured-state cohorts without adding remote telemetry.
 
 ### Risks / failure modes
 
-- Overlap between legacy checkpoint notes and structured task state could confuse users if compatibility copy drifts.
+- Overlap between legacy task notes and structured task state could confuse users if compatibility copy drifts.
 - Aggressive switch detection could feel naggy if supporting signals ever become sole triggers.
 - Richer task-state persistence increases the importance of clear privacy copy and explicit workspace forget flows.
 
@@ -864,7 +864,7 @@ Provider behavior and consent must be explicit and reversible.
 
 - Plan: `PLANS.md` item `P3`.
 
-## Feature: Checkpoint Notes
+## Feature: Task Notes
 
 ### Problem
 
@@ -881,7 +881,7 @@ Users need short memory anchors between task switches.
 
 ### User-facing behavior
 
-- Add/list/clear/checkpoint lifecycle commands.
+- Add/list/clear task note lifecycle commands.
 - Notes can influence recommended next action text.
 
 ### Technical shape / architecture notes
@@ -1194,7 +1194,7 @@ Percolation ranking depends on multiple runtime inputs (git/task/debug/trust/pri
 - Normalize trigger-time runtime context into typed percolation signals.
 - Feed ranked percolation decisions from adapter output instead of ad hoc defaults.
 - Keep trust-sensitive signal adapters filtered in Restricted Mode.
-- Apply user-authored ranking priors (checkpoint notes, saved corrections, scratchpad context) with deterministic precedence and suppression behavior.
+- Apply user-authored ranking priors (task notes, saved corrections, scratchpad context) with deterministic precedence and suppression behavior.
 
 ### Non-goals
 
@@ -1317,20 +1317,20 @@ Automated summaries reliably capture what happened but miss **prospective inform
 ### Goals
 
 - Capture prospective intent (next verification action) at checkpoint time before context switches.
-- Suppress checkpoint prompts when the user is actively working (high-load window) to avoid self-interruption.
+- Suppress task state capture prompts when the user is actively working (high-load window) to avoid self-interruption.
 - Surface a local-only session friction summary so engineers can observe their own interruption cost trends.
 - Record gold-metric contract fields (prospective capture count, high-load suppression count, friction summary opens) in local metrics without adding remote telemetry.
 
 ### Non-goals
 
 - AI-generated prospective intent suggestions.
-- Automatic checkpoint prompting at arbitrary intervals.
+- Automatic task state capture prompting at arbitrary intervals.
 - Remote or team-level friction dashboards.
 - Hard-blocking execution on missing prospective intent.
 
 ### User-facing behavior
 
-- `TaCoS: Capture Task Checkpoint` now includes a `Prospective next verification (optional)` InputBox step — a single short line (max 280 chars) for the intended next verification action.
+- `TaCoS: Capture Task State` now includes a `Prospective next verification (optional)` InputBox step — a single short line (max 280 chars) for the intended next verification action.
 - Checkpoint prompt is suppressed when `lastMeaningfulActivityAt` is within the cooldown window of the current time (`shouldDeferCheckpointPromptHighLoad`). Suppression reason is recorded as `high-load-deferred`.
 - `TaCoS: Show Session Friction Summary` opens a local markdown document in a side panel with prompt-per-hour, suppression health, and mismatch rate from workspace metric history. Requires at least one metric session to exist.
 - Structured task state with a filled `prospectiveNextVerification` field is surfaced to AI refinement flows immediately after the objective/next-action/confidence triad.
@@ -1365,8 +1365,8 @@ Automated summaries reliably capture what happened but miss **prospective inform
 
 ### Risks / failure modes
 
-- Prospective intent prompt adds one extra step to checkpoint flow — keep it optional and fast to skip.
-- High-load suppression window uses `cooldownMinutes` as a proxy; too large a value could suppress checkpoint prompts entirely in busy sessions.
+- Prospective intent prompt adds one extra step to task state capture flow — keep it optional and fast to skip.
+- High-load suppression window uses `cooldownMinutes` as a proxy; too large a value could suppress task state capture prompts entirely in busy sessions.
 
 ### Open questions
 

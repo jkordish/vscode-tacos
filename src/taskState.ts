@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 
-export const TASK_STATE_SCHEMA_VERSION = 1;
+export const TASK_STATE_SCHEMA_VERSION = 2;
+export const TASK_STATE_SCHEMA_VERSION_V1 = 1;
 const TASK_STATE_STORAGE_KEY_PREFIX = 'tacos.taskStateStore';
 const MAX_TASKS_PER_WORKSPACE = 48;
 const MAX_WORKING_SET_ENTRIES = 12;
@@ -286,12 +287,63 @@ export function createEmptyStructuredTaskStateStore(): StructuredTaskStateStore 
   };
 }
 
+/**
+ * Migrates a v1 store shape to v2.
+ *
+ * V1 used a `checkpoints` key (never actually persisted under that name in
+ * production — the store always used `tasks` — but guard against any stale
+ * data that may have been written with that key). V2 formalises `tasks` as
+ * the only top-level collection key and stamps `schemaVersion: 2`.
+ *
+ * The migration is idempotent: a store already at v2+ is returned unchanged.
+ * A missing `schemaVersion` is treated as v1 (the implicit default before the
+ * version key was introduced) and will be stamped to v2 on migration.
+ *
+ * @param raw - Raw store value as read from workspaceState storage.
+ * @returns Migrated store object ready for `parseStructuredTaskStateStore`.
+ */
+export function migrateV1toV2(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') {
+    return raw;
+  }
+
+  const value = raw as Record<string, unknown>;
+  const schemaVersion =
+    typeof value.schemaVersion === 'number' ? value.schemaVersion : TASK_STATE_SCHEMA_VERSION_V1;
+
+  // Already at v2 or higher — nothing to do.
+  if (schemaVersion >= TASK_STATE_SCHEMA_VERSION) {
+    return raw;
+  }
+
+  // V1 guard: if `checkpoints` key exists and `tasks` is missing/empty,
+  // promote the `checkpoints` array to `tasks`.
+  const legacyCheckpoints = Array.isArray(value.checkpoints) ? value.checkpoints : undefined;
+  const existingTasks = Array.isArray(value.tasks) ? value.tasks : [];
+  const mergedTasks =
+    legacyCheckpoints && legacyCheckpoints.length > 0 && existingTasks.length === 0
+      ? legacyCheckpoints
+      : existingTasks;
+
+  // Omit the legacy `checkpoints` key entirely so it cannot be read back via
+  // `in`/`hasOwnProperty` checks or accidentally re-persisted.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { checkpoints: _, ...migratedValue } = value;
+
+  return {
+    ...migratedValue,
+    schemaVersion: TASK_STATE_SCHEMA_VERSION,
+    tasks: mergedTasks,
+  };
+}
+
 export function parseStructuredTaskStateStore(raw: unknown): StructuredTaskStateStore {
   if (!raw || typeof raw !== 'object') {
     return createEmptyStructuredTaskStateStore();
   }
 
-  const value = raw as Record<string, unknown>;
+  const migrated = migrateV1toV2(raw);
+  const value = migrated as Record<string, unknown>;
   const tasks = Array.isArray(value.tasks)
     ? value.tasks
         .map((entry) => normalizeTask(entry))

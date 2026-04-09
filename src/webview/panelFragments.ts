@@ -286,7 +286,7 @@ export function renderConfidenceCard(input: ConfidenceCardInput): string {
     ? "You've been away a while. Take a moment to reorient before acting."
     : 'Intent is unclear. A quick one-liner will help.';
   const reorientationCardAction = !input.hasCurrentCheckpointNote
-    ? '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add one-line checkpoint</button>'
+    ? '<button type="button" class="secondary" data-action="sessionAddCheckpoint">Add one-line task note</button>'
     : '';
 
   return `<div class="card card-attention">

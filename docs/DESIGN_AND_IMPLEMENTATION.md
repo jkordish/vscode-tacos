@@ -36,7 +36,7 @@ Principles:
 - Git semantic enrichment captures branch-switch, recent-commit checkpoint, and upstream divergence metadata from trusted git snapshots before policy ranking.
 - Summary generation computes precision `Changes Since Last Time` buckets (`Code`, `Runs`, `Blocker`, `Key files`, `Git`, `References`) plus a deterministic novelty profile (`score` + `low`/`medium`/`high`) consumed by ranking defaults.
 - Focus auto-trigger significant-change checks use a structured no-change fingerprint `v2` payload that includes partition scope, so partition transitions do not inherit stale no-change state.
-- Percolation ranking normalizes user-authored priors (checkpoint note, saved corrections, scratchpad excerpt/content) and applies deterministic promotion/suppression with corrections precedence when priors conflict.
+- Percolation ranking normalizes user-authored priors (task note, saved corrections, scratchpad excerpt/content) and applies deterministic promotion/suppression with corrections precedence when priors conflict.
 
 ### Sanitization / privacy filtering
 
@@ -61,7 +61,7 @@ Principles:
 
 - Companion webview panel (primary detail/action UI).
 - Status bar and notification prompts.
-- Structured checkpoint capture/edit/resolve commands keep state capture manual-first and lightweight.
+- Structured task state capture/edit/resolve commands keep state capture manual-first and lightweight.
 - Likely-switch prompting uses conservative, explainable notification prompts with `Capture`, `Skip`, `Snooze`, and `Dismiss`.
 - Resume Safety Check uses a second short-lived status-bar annunciator so `State / Risk / Verify` can appear without forcing a new panel or modal flow.
 - Status bar semantics are compact and policy-driven (`class + reason`) so ambient state remains stable; active-mode elevation is reserved for rare high-risk blocked states.
@@ -108,8 +108,8 @@ Key capability clusters:
 
 - resume: show now, show last, copy prompt + open Codex,
 - controls: pause/resume/snooze/quiet/toggle,
-- state capture: structured checkpoint capture, task resolution, manual task-switch confirmation, cognitive debrief,
-- notes/scratchpad: legacy checkpoint-note compatibility flows and scratchpad commands,
+- state capture: structured task state capture, task resolution, manual task-switch confirmation, cognitive debrief,
+- notes/scratchpad: legacy task-note compatibility flows and scratchpad commands,
 - execution helpers: restore working set, restore query capture, jump to last edit,
 - workflow: standup generation, task partition switching,
 - safety/admin: privacy preset, retention, diagnostics, sanitizer test, forget workspace, consent revoke.
@@ -129,7 +129,7 @@ These commands are not listed in the manifest because they are either internal a
 `package.json` contributes the `tacos.*` configuration surface for:
 
 - trigger timing and presentation,
-- structured checkpoint enablement and likely-switch prompting,
+- structured task state enablement and likely-switch prompting,
 - percolation rollout controls (policy engine, explainability affordances, notification broker),
 - context depth and privacy,
 - nudge suppression and quiet windows,
@@ -144,7 +144,7 @@ Primary stores:
 
 - `workspaceState`: scoped activity, summaries, notes, partitions, nudge state, metrics records.
 - `workspaceState`: also stores the latest scoped Resume Safety Check context (`sharedState`, `staleAssumption`, `nextVerificationAction`, plus lightweight provenance).
-- `workspaceState`: also stores structured task-state records, checkpoint-prompt snoozes, and dismissed switch-candidate hashes.
+- `workspaceState`: also stores structured task-state records, task-state-prompt snoozes, and dismissed switch-candidate hashes.
 - `globalState`: cross-workspace helper state where needed.
 - `SecretStorage`: OpenAI API key.
 - local files: `.tacos/metrics.json` and `.tacos/metrics.csv` exports.
@@ -154,9 +154,9 @@ Primary stores:
 - Metrics schema includes percolation decision-chain counters (`percolationDecisionCount`, segmented surface selections including `panel-silent`/`panel-emphasis`, and confidence-band counters) for policy-outcome analysis.
 - Metrics schema includes AI payload-preview entrypoint counters (`aiPayloadPreviewOpensTrustCenter`, `aiPayloadPreviewOpensWhySurfaced`, `aiPayloadPreviewOpensCompanionHome`) so trust-drill-down adoption can be measured locally.
 - Metrics schema includes Resume Safety Check counters (`resumeSafetyShown`, `resumeSafetyDismissed`, `resumeSafetyActionClicks`, `resumeSafetyMismatchDetected`, `resumeSafetyStrictWarnings`) plus `resumeSafetyFirstActionLagMs`.
-- Metrics schema now also includes structured checkpoint counters, task-switch counters, debrief counters, and cohort fields for `resumeWithStructuredTaskState`, `taskSwitchSessionClass`, and `resumeTaskStateFreshness`.
+- Metrics schema now also includes structured task state counters, task-switch counters, debrief counters, and cohort fields for `resumeWithStructuredTaskState`, `taskSwitchSessionClass`, and `resumeTaskStateFreshness`.
 - Suppression memory for nudge cooldown windows and noise-budget windows is partition-scoped; explicit task-partition switches clear destination-scope suppression memory.
-- Structured checkpoint prompt snoozes and switch dismissals are also workspace-scoped and explainable.
+- Task state capture prompt snoozes and switch dismissals are also workspace-scoped and explainable.
 - extension storage scratchpad files scoped by workspace/partition context.
 
 Retention:
@@ -173,7 +173,7 @@ Retention:
 ## Diagnostics and Metrics
 
 - `TaCoS: Copy Diagnostics` emits privacy-safe environment/mode context plus active percolation rollout flag state.
-- Diagnostics now include structured checkpoint enablement, active structured-task freshness/class counts, and the latest likely-switch explainability/suppression state.
+- Diagnostics now include structured task state enablement, active structured-task freshness/class counts, and the latest likely-switch explainability/suppression state.
 - `TaCoS: Export Local Metrics` writes local artifacts only.
 - Resume Safety Check evaluation uses local-only counters and lag metrics; no remote telemetry path was added.
 - Cognitive Observability evaluation remains local-only and focuses on recovery-support signals, not performance surveillance.
@@ -183,7 +183,7 @@ Retention:
 
 - baseline summary generation,
 - workspace state persistence,
-- structured task-state, checkpoint-note, and scratchpad storage,
+- structured task-state, task-note, and scratchpad storage,
 - metrics and diagnostics collection/export.
 
 ## What Can Leave the Machine

@@ -1,10 +1,13 @@
 import {
+  TASK_STATE_SCHEMA_VERSION,
+  TASK_STATE_SCHEMA_VERSION_V1,
   computeCheckpointFieldCompleteness,
   createStructuredTaskState,
   describeStructuredTaskStateFreshness,
   describeStructuredTaskSwitchClass,
   findActiveStructuredTaskForScope,
   markStructuredTaskStateResolved,
+  migrateV1toV2,
   parseStructuredTaskStateStore,
   updateStructuredTaskState,
   upsertStructuredTaskState,
@@ -70,6 +73,96 @@ describe('taskState helpers', () => {
     expect(describeStructuredTaskSwitchClass(task)).toBe('repeated-switch');
     expect(resolved.resolutionState).toBe('resolved');
     expect(resolved.resolvedAt).toBe(now);
+  });
+
+  it('schema version is 2', () => {
+    expect(TASK_STATE_SCHEMA_VERSION).toBe(2);
+    expect(TASK_STATE_SCHEMA_VERSION_V1).toBe(1);
+  });
+
+  it('parseStructuredTaskStateStore stamps schemaVersion 2 on fresh stores', () => {
+    const store = parseStructuredTaskStateStore(undefined);
+    expect(store.schemaVersion).toBe(2);
+    expect(store.tasks).toHaveLength(0);
+  });
+
+  describe('migrateV1toV2', () => {
+    it('returns raw unchanged when raw is nullish', () => {
+      expect(migrateV1toV2(null)).toBeNull();
+      expect(migrateV1toV2(undefined)).toBeUndefined();
+    });
+
+    it('returns raw unchanged when schemaVersion >= 2', () => {
+      const raw = { schemaVersion: 2, tasks: [] };
+      expect(migrateV1toV2(raw)).toBe(raw);
+    });
+
+    it('is idempotent — running twice produces the same result', () => {
+      const raw = { schemaVersion: 1, tasks: [] };
+      const once = migrateV1toV2(raw) as Record<string, unknown>;
+      const twice = migrateV1toV2(once) as Record<string, unknown>;
+      expect(twice.schemaVersion).toBe(2);
+    });
+
+    it('promotes legacy checkpoints key to tasks when tasks is empty', () => {
+      const legacyTask = {
+        taskId: 'abc123',
+        workspaceRoot: '/workspace/repo',
+        repo: 'repo',
+        branch: 'main',
+        taskPartition: 'default',
+        objective: 'Fix the thing',
+        nextAction: 'Open the file',
+        confidence: 'medium',
+        workingSet: [],
+        assumptions: [],
+        blockers: [],
+        switchCount: 0,
+        resolutionState: 'active',
+        lastKnownSafeBreakpoint: { capturedAt: 1_000_000 },
+        createdAt: 1_000_000,
+        updatedAt: 1_000_000,
+      };
+      const raw = { schemaVersion: 1, checkpoints: [legacyTask], tasks: [] };
+      const migrated = migrateV1toV2(raw) as Record<string, unknown>;
+      expect(migrated.schemaVersion).toBe(2);
+      expect(Array.isArray(migrated.tasks)).toBe(true);
+      expect((migrated.tasks as unknown[]).length).toBe(1);
+      expect(migrated.checkpoints).toBeUndefined();
+    });
+
+    it('preserves existing tasks and ignores checkpoints when tasks is non-empty', () => {
+      const task = {
+        taskId: 'xyz',
+        workspaceRoot: '/workspace/repo',
+        repo: 'repo',
+        branch: 'main',
+        taskPartition: 'default',
+        objective: 'Existing task',
+        nextAction: 'Do something',
+        confidence: 'medium',
+        workingSet: [],
+        assumptions: [],
+        blockers: [],
+        switchCount: 0,
+        resolutionState: 'active',
+        lastKnownSafeBreakpoint: { capturedAt: 1_000_000 },
+        createdAt: 1_000_000,
+        updatedAt: 1_000_000,
+      };
+      const legacyTask = { ...task, taskId: 'legacy', objective: 'Legacy task' };
+      const raw = { schemaVersion: 1, checkpoints: [legacyTask], tasks: [task] };
+      const migrated = migrateV1toV2(raw) as Record<string, unknown>;
+      expect(migrated.schemaVersion).toBe(2);
+      expect((migrated.tasks as unknown[]).length).toBe(1);
+      expect((migrated.tasks as Array<Record<string, unknown>>)[0].taskId).toBe('xyz');
+    });
+
+    it('handles missing schemaVersion (defaults to v1) and migrates', () => {
+      const raw = { tasks: [] };
+      const migrated = migrateV1toV2(raw) as Record<string, unknown>;
+      expect(migrated.schemaVersion).toBe(2);
+    });
   });
 
   it('allows edit patches to clear optional fields', () => {

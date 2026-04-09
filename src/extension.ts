@@ -2128,7 +2128,7 @@ export function activate(context: vscode.ExtensionContext): void {
         return;
       }
       const saved = await saveCheckpointNoteFromClipboard(context, root, {
-        successMessage: 'TaCoS: checkpoint note saved from clipboard.',
+        successMessage: 'TaCoS: task note saved from clipboard.',
       });
       if (saved) {
         await refreshPanelCheckpointState(context, root);
@@ -2146,7 +2146,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
 
       const saved = await saveCheckpointNoteFromClipboard(context, root, {
-        successMessage: 'TaCoS: quick checkpoint saved.',
+        successMessage: 'TaCoS: quick task note saved.',
         noPrompt: true,
       });
       if (saved) {
@@ -2167,8 +2167,8 @@ export function activate(context: vscode.ExtensionContext): void {
       const cleared = await clearCheckpointNotesInScope(context, root);
       void vscode.window.showInformationMessage(
         cleared > 0
-          ? `TaCoS: cleared ${cleared} checkpoint note${cleared === 1 ? '' : 's'} in this task scope.`
-          : 'TaCoS: no checkpoint notes found in this task scope.',
+          ? `TaCoS: cleared ${cleared} task note${cleared === 1 ? '' : 's'} in this task scope.`
+          : 'TaCoS: no task notes found in this task scope.',
       );
     }),
     vscode.commands.registerCommand('tacos.openScratchpad', async () => {
@@ -5959,7 +5959,7 @@ async function showCompanionActions(context: vscode.ExtensionContext): Promise<v
     },
     {
       id: 'listCheckpointNotes',
-      label: 'List checkpoint notes',
+      label: 'List task notes',
       detail: 'Review, edit, pin, dismiss, or mark notes done.',
     },
     {
@@ -6342,7 +6342,7 @@ async function showDetailsPanel(
           state.panelSummary?.recommendedFirstAction?.trim();
         recordBlockedPrimaryClick();
         const saved = await promptAndSaveCheckpointNote(context, workspaceRoot, {
-          title: 'TaCoS: Add Checkpoint Note',
+          title: 'TaCoS: Add Task Note',
           prompt: 'One-line retrieval cue for future you',
           placeHolder: 'Example: Reopen the failing diff and verify the rollout guard.',
           initialValue: firstAction || undefined,
@@ -6364,7 +6364,7 @@ async function showDetailsPanel(
           state.panelSummary?.nextLikelySafeMove?.trim() ||
           state.panelSummary?.recommendedFirstAction?.trim();
         await captureTaskCheckpointCommand(context, workspaceRoot, {
-          title: 'TaCoS: Capture Task Checkpoint',
+          title: 'TaCoS: Capture Task State',
           initialNextAction: firstAction || undefined,
         });
         await refreshPanelCheckpointState(context, workspaceRoot);
@@ -12494,7 +12494,7 @@ async function promptAndSaveCheckpointNote(
   options: CheckpointPromptOptions = {},
 ): Promise<boolean> {
   const note = await vscode.window.showInputBox({
-    title: options.title ?? 'TaCoS: Add Checkpoint Note',
+    title: options.title ?? 'TaCoS: Add Task Note',
     prompt: options.prompt ?? 'One-line next step for future you',
     placeHolder: options.placeHolder ?? 'Example: Fix failing parser test and rerun npm test',
     value: options.initialValue ?? '',
@@ -12535,7 +12535,7 @@ async function promptAndSaveCheckpointNote(
       ? ` Removed sensitive content (${sanitizedResult.report.totalReplacements} item${sanitizedResult.report.totalReplacements === 1 ? '' : 's'} redacted).`
       : '';
   void vscode.window.showInformationMessage(
-    `${options.successMessage ?? 'TaCoS: checkpoint note saved for this task scope.'}${redactionDetail}`,
+    `${options.successMessage ?? 'TaCoS: task note saved for this task scope.'}${redactionDetail}`,
   );
   return true;
 }
@@ -12548,9 +12548,7 @@ async function saveCheckpointNoteFromClipboard(
   const clipboardValue = (await vscode.env.clipboard.readText()).trim();
   if (!clipboardValue) {
     if (!options.noPrompt) {
-      void vscode.window.showWarningMessage(
-        'TaCoS: clipboard is empty; no checkpoint note was saved.',
-      );
+      void vscode.window.showWarningMessage('TaCoS: clipboard is empty; no task note was saved.');
     }
     return false;
   }
@@ -12586,7 +12584,7 @@ async function saveCheckpointNoteFromClipboard(
       ? ` Removed sensitive content (${sanitizedResult.report.totalReplacements} item${sanitizedResult.report.totalReplacements === 1 ? '' : 's'} redacted).`
       : '';
   void vscode.window.showInformationMessage(
-    `${options.successMessage ?? 'TaCoS: checkpoint note saved for this task scope.'}${redactionDetail}`,
+    `${options.successMessage ?? 'TaCoS: task note saved for this task scope.'}${redactionDetail}`,
   );
   return true;
 }
@@ -12657,9 +12655,7 @@ async function captureTaskCheckpointCommand(
 
   const config = getConfig();
   if (!config.taskCheckpointEnabled) {
-    void vscode.window.showInformationMessage(
-      'TaCoS: structured task checkpoints are disabled in settings.',
-    );
+    void vscode.window.showInformationMessage('TaCoS: task state capture is disabled in settings.');
     return undefined;
   }
 
@@ -12673,7 +12669,7 @@ async function captureTaskCheckpointCommand(
   const currentConfidence = existing?.confidence ?? 'medium';
   const currentStalePreset = resolveStaleAfterPreset(existing);
   const objective = await vscode.window.showInputBox({
-    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    title: options.title ?? 'TaCoS: Capture Task State',
     prompt:
       options.promptPrefix ?? 'Capture the objective for the task you want to recover quickly.',
     placeHolder: 'Example: Stabilize the incident rollback verification flow',
@@ -12686,7 +12682,7 @@ async function captureTaskCheckpointCommand(
   }
 
   const nextAction = await vscode.window.showInputBox({
-    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    title: options.title ?? 'TaCoS: Capture Task State',
     prompt: 'Capture the next likely safe move as a suggestion you can verify later.',
     placeHolder: 'Example: Reopen the auth middleware diff and rerun the targeted test',
     value:
@@ -12725,7 +12721,7 @@ async function captureTaskCheckpointCommand(
       },
     ],
     {
-      title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+      title: options.title ?? 'TaCoS: Capture Task State',
       placeHolder: 'How confident are you that this state will recover cleanly?',
       ignoreFocusOut: true,
     },
@@ -12769,7 +12765,7 @@ async function captureTaskCheckpointCommand(
       },
     ],
     {
-      title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+      title: options.title ?? 'TaCoS: Capture Task State',
       placeHolder: 'Optional deterministic freshness boundary',
       ignoreFocusOut: true,
     },
@@ -12779,7 +12775,7 @@ async function captureTaskCheckpointCommand(
   }
 
   const currentHypothesis = await vscode.window.showInputBox({
-    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    title: options.title ?? 'TaCoS: Capture Task State',
     prompt: 'Optional: capture the current hypothesis or framing for this task.',
     placeHolder: 'Example: Failure is likely coming from stale branch-specific config',
     value: existing?.currentHypothesis ?? '',
@@ -12790,7 +12786,7 @@ async function captureTaskCheckpointCommand(
   }
 
   const assumptionsRaw = await vscode.window.showInputBox({
-    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    title: options.title ?? 'TaCoS: Capture Task State',
     prompt: 'Optional: assumptions to verify later (comma-separated).',
     placeHolder: 'Example: canary is still pinned, rollback branch matches prod',
     value: existing?.assumptions.join(', ') ?? '',
@@ -12801,7 +12797,7 @@ async function captureTaskCheckpointCommand(
   }
 
   const blockersRaw = await vscode.window.showInputBox({
-    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    title: options.title ?? 'TaCoS: Capture Task State',
     prompt: 'Optional: blockers or open questions (comma-separated).',
     placeHolder: 'Example: waiting on logs, flaky test still red',
     value: existing?.blockers.join(', ') ?? '',
@@ -12812,7 +12808,7 @@ async function captureTaskCheckpointCommand(
   }
 
   const prospectiveNextVerification = await vscode.window.showInputBox({
-    title: options.title ?? 'TaCoS: Capture Task Checkpoint',
+    title: options.title ?? 'TaCoS: Capture Task State',
     prompt: 'Optional: what is the single next verification action you intend to do? (max 1 line)',
     placeHolder: 'Example: Confirm healthcheck returns 200 after the rollback',
     value: existing?.prospectiveNextVerification ?? '',
@@ -12901,9 +12897,7 @@ async function captureTaskCheckpointCommand(
   await refreshPanelCheckpointState(context, workspaceRoot);
   rerenderPanel();
   void vscode.window.showInformationMessage(
-    existing
-      ? 'TaCoS: structured task checkpoint updated.'
-      : 'TaCoS: structured task checkpoint captured.',
+    existing ? 'TaCoS: task state updated.' : 'TaCoS: task state captured.',
   );
   await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
   return nextTask;
@@ -12925,9 +12919,7 @@ async function markTaskResolvedCommand(
     (preferredTaskId ? findStructuredTaskStateById(store, preferredTaskId) : undefined) ??
     resolveActiveStructuredTaskState(context, workspaceRoot);
   if (!current) {
-    void vscode.window.showInformationMessage(
-      'TaCoS: no active structured task checkpoint to resolve.',
-    );
+    void vscode.window.showInformationMessage('TaCoS: no active task state to resolve.');
     return false;
   }
   const ephemeralMetricSession = beginEphemeralMetricSession(workspaceRoot);
@@ -13109,7 +13101,7 @@ async function showCognitiveDebriefCommand(
   }
   if (action.id === 'edit') {
     await captureTaskCheckpointCommand(context, workspaceRoot, {
-      title: 'TaCoS: Edit Task Checkpoint',
+      title: 'TaCoS: Edit Task State',
       preferredTaskId: picked.task.taskId,
     });
     await finalizeEphemeralMetricSession(context, ephemeralMetricSession);
@@ -13250,7 +13242,7 @@ async function maybeOfferTaskCheckpointPrompt(
 
   await context.workspaceState.update(taskSwitchDismissedHashKey(workspaceRoot), undefined);
   const task = await captureTaskCheckpointCommand(context, workspaceRoot, {
-    title: 'TaCoS: Capture Task Checkpoint',
+    title: 'TaCoS: Capture Task State',
     promptPrefix: candidate.summary,
     incrementSwitchCount: true,
   });
@@ -13317,7 +13309,7 @@ async function addCheckpointFromSelectionCommand(context: vscode.ExtensionContex
       ? ` Removed sensitive content (${sanitizedResult.report.totalReplacements} item${sanitizedResult.report.totalReplacements === 1 ? '' : 's'} redacted).`
       : '';
   void vscode.window.showInformationMessage(
-    `TaCoS: checkpoint note saved from selection.${redactionDetail}`,
+    `TaCoS: task note saved from selection.${redactionDetail}`,
   );
 }
 
@@ -13376,7 +13368,7 @@ async function listCheckpointNotesCommand(
   ];
 
   const picked = await vscode.window.showQuickPick(picks, {
-    title: 'TaCoS: List Checkpoint Notes',
+    title: 'TaCoS: List Task Notes',
     placeHolder: resolved.notes.length
       ? 'Pick a note to manage, or add a new one'
       : 'No notes yet. Add one now.',
@@ -13391,8 +13383,8 @@ async function listCheckpointNotesCommand(
       scope: picked.id === 'add-workspace' ? 'workspace' : 'partition',
       successMessage:
         picked.id === 'add-workspace'
-          ? 'TaCoS: workspace-global checkpoint note saved.'
-          : 'TaCoS: checkpoint note saved for this task scope.',
+          ? 'TaCoS: workspace-global task note saved.'
+          : 'TaCoS: task note saved for this task scope.',
     });
     if (saved) {
       await refreshPanelCheckpointState(context, workspaceRoot);
@@ -13446,7 +13438,7 @@ async function listCheckpointNotesCommand(
 
   if (action.id === 'edit') {
     const edited = await vscode.window.showInputBox({
-      title: 'TaCoS: Edit Checkpoint Note',
+      title: 'TaCoS: Edit Task Note',
       value: target.text,
       prompt: 'One-line next step for future you',
       ignoreFocusOut: true,
@@ -14096,7 +14088,7 @@ async function maybePromptCheckpointOnBlur(
   }
 
   const note = await vscode.window.showInputBox({
-    title: 'TaCoS: Future You Checkpoint',
+    title: 'TaCoS: Future You Task Note',
     prompt: 'One-line next step for Future You (optional)',
     placeHolder: 'Example: Fix parser edge case and rerun npm test',
     ignoreFocusOut: false,
@@ -14131,7 +14123,7 @@ async function maybePromptCheckpointOnBlur(
       ? ` Removed sensitive content (${sanitizedResult.report.totalReplacements} item${sanitizedResult.report.totalReplacements === 1 ? '' : 's'} redacted).`
       : '';
   void vscode.window.showInformationMessage(
-    `TaCoS: checkpoint note saved for this task scope.${redactionDetail}`,
+    `TaCoS: task note saved for this task scope.${redactionDetail}`,
   );
 }
 
