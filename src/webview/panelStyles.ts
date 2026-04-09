@@ -1182,6 +1182,12 @@ export const PANEL_WEBVIEW_STYLE = `
         min-width: 52px;
         padding-top: 3px;
       }
+      .evidence-recent-anchor-content {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-width: 0;
+      }
       .evidence-kind-inline {
         color: var(--surface-muted);
         font-size: 11px;
