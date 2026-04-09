@@ -6,6 +6,18 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **P26: Hierarchical/nested task support — design spike (`docs/task-hierarchy-design.md`)**:
+  - Added `docs/task-hierarchy-design.md`: a 10-section design spike covering the full scope of P26.
+  - §2 documents the current schema v2 flat model baseline (`StructuredTaskState`, key constants, scope tuple).
+  - §3 proposes minimal additive schema extensions: optional `parentTaskId`, `childTaskIds`, `lineageChain`, and `hierarchyDepth` fields on `StructuredTaskState`; proposed `TASK_STATE_SCHEMA_VERSION` bump to `3`; depth limit of 3, max 8 children per task; sub-task lifecycle (promotion, demotion, cascading-resolve with confirmation, orphan promotion on parent abandon).
+  - §4 documents UI surface implications: cockpit breadcrumb (Option A — recommended for v1.x, hidden for flat tasks), Evidence tab scope filter and task-attribution badges, Task State card parent/sub-task rows, Cognitive Debrief cross-task stale/blocker surfaces, status-bar tooltip depth path.
+  - §5 provides a `migrateV2toV3` function sketch (near no-op — all new fields are optional; stamps `schemaVersion: 3`; rollback contract documented).
+  - §6 provides two user story sketches: incident investigation (Maya, Staff SRE, payment-service latency spike with two sub-tasks) and PR review with sub-tasks (Tomás, reviewing a complex sharding PR with an eviction edge-case investigation).
+  - §7 go/no-go: schema-only additions **recommended for v1.0** (additive, zero impact on flat users); UI surfaces (cockpit breadcrumb, sub-task list card, Evidence scope filter) **deferred to v1.1** pending user validation; explicit "never in v1.x" list (auto-creation, silent cascading resolve, tree sidebar, AI decomposition).
+  - §8 ten open questions table (OQ-1 through OQ-10) covering branch inheritance, sub-task creation UX, `findActiveStructuredTaskForScope` return semantics, `switchCount` in hierarchy, cross-branch visibility, orphan handling, depth limit policy, `MAX_TASKS_PER_WORKSPACE` interaction, stored vs derived `lineageChain`, and downgrade contract.
+  - §9 implementation preview file table listing affected files for the future implementation PR.
+  - Doc-only; no code changes.
+
 - **P25: Feature Traceability Matrix in `docs/references.md`**:
   - Added a `## Feature Traceability Matrix` section to `docs/references.md` (as of v0.99.0) mapping all key TaCoS ICSE'26 findings and supporting research findings to shipped features, PLANS.md items, and outstanding gaps.
   - Core findings mapped (F1–F7): combination cue (P19), timeline grouping (P21), prospective intent (P16/P19), manual note proximity (P13/P22/P24), nested tasks (P26 aspirational), save-state live regions (P22/P23), full keyboard navigation (P23).
