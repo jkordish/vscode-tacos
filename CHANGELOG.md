@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-04-09
+
+### Fixed
+
+- **Evidence tab affordance chips missing in grouped views**: `renderRecentAnchorRow` (introduced in P21) was missing the `data-evidence-affordance` span that `renderEvidenceListItem` emits. All four Evidence tab grouped renderers (`renderRecentAnchorsHtml`, `renderEvidenceFileGroupsHtml`, `renderEvidenceTimeBucketsHtml`, `renderEvidenceActionGroupsHtml`) delegate to `renderRecentAnchorRow`, so clickable evidence rows in the Evidence tab lacked their `Open` / `Context only` affordance chips. The fix adds the affordance span to `renderRecentAnchorRow` — restoring correct chip rendering for all grouped Evidence tab views. Caught by the `resumeFlowCriticalPath` integration test (`evidenceOpenAffordanceCount > 0` assertion).
+
+- **Panel goes blank after ~30 seconds (missing `onDidChangeViewState` handler)**: The details panel uses `retainContextWhenHidden: false`, which means VS Code destroys the webview iframe whenever the panel is hidden and does **not** restore `panel.webview.html` when the panel is revealed again. Without an `onDidChangeViewState` handler, the panel appeared blank every time it was un-hidden (e.g. switching editor tabs, then switching back). The fix adds an `onDidChangeViewState` listener inside `showDetailsPanel` that calls `rerenderPanel()` whenever `e.webviewPanel.visible` becomes `true`, ensuring the panel is always fully rendered on reveal. Affects both `TaCoS: Show Resume Brief Now` and `TaCoS: Show Demo Resume Card`.
+
 ## [1.0.0] - 2026-04-09
 
 ### Added

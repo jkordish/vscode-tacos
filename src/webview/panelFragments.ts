@@ -469,9 +469,15 @@ function renderRecentAnchorRow(row: RecentAnchorRow): string {
   const labelControl = row.clickable
     ? `<button type="button" class="text-link-button evidence-link-button" data-action="openEvidence" data-evidence-id="${escapeHtml(row.evidenceId)}" aria-label="${escapeHtml(row.label)} - Opens validated evidence" title="Opens validated evidence">${escapeHtml(row.label)}</button>`
     : `<span class="evidence-label" aria-label="${escapeHtml(row.label)} - Static validated evidence" title="Static validated evidence">${escapeHtml(row.label)}</span>`;
+  const affordanceClass = row.clickable
+    ? 'evidence-affordance evidence-affordance-clickable'
+    : 'evidence-affordance evidence-affordance-static';
+  const affordance = `<span class="${affordanceClass}" data-evidence-affordance="${
+    row.clickable ? 'open' : 'static'
+  }" aria-hidden="true">${row.clickable ? 'Open' : 'Context only'}</span>`;
   const kindBadge = `<span class="evidence-kind evidence-kind-inline">[${escapeHtml(row.kind)}]</span>`;
   const timeStamp = `<span class="evidence-anchor-time">${escapeHtml(row.relativeTime)}</span>`;
-  return `<li class="evidence-item evidence-recent-anchor">${timeStamp}<div class="evidence-row">${labelControl}${kindBadge}</div></li>`;
+  return `<li class="evidence-item evidence-recent-anchor">${timeStamp}<div class="evidence-row">${labelControl}${affordance}${kindBadge}</div></li>`;
 }
 
 /**
