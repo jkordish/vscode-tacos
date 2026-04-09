@@ -1541,7 +1541,7 @@ The companion panel tab strip had partial ARIA support: roving `tabindex` and ke
 - `ArrowLeft` / `ArrowRight` cycle focus through tabs in the tab strip (wrapping).
 - `Home` / `End` jump focus to the first / last tab in the strip.
 - Inactive tabs carry `tabindex="-1"`; the active tab carries `tabindex="0"`.
-- Each tab panel carries `role="tabpanel"`, `aria-labelledby="<tabId>"`, and a `hidden` attribute that is added/removed on tab switch.
+- Each tab panel carries `role="tabpanel"`, `aria-labelledby="tab-btn-<tabId>"`, and a `hidden` attribute that is added/removed on tab switch.
 - The `#cockpit-save-state` element carries `aria-live="polite"` so `Saved • HH:MM` / `Saving…` confirmations are announced without interruption.
 - The `#toast-region` element carries `role="alert"`, `aria-live="assertive"`, and `aria-atomic="true"` so undo toasts are announced immediately.
 

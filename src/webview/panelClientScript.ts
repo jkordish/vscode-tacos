@@ -416,8 +416,9 @@ export function renderPanelClientScript(
 
       /**
        * Moves focus to the first focusable element inside the activated tab panel.
-       * Falls back to the panel container itself (tabindex="-1" on main) if no
-       * interactive element is found, so keyboard users are never left stranded.
+       * Falls back to the tab panel container itself by setting tabindex="-1"
+       * on that panel if no interactive element is found, so keyboard users are
+       * never left stranded.
        */
       function focusFirstPanelElement(tabId) {
         if (typeof tabId !== 'string' || !tabId) {
@@ -428,7 +429,7 @@ export function renderPanelClientScript(
           return;
         }
         const focusable = panel.querySelector(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          'button:not([disabled]), a[href], area[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
         );
         if (focusable instanceof HTMLElement) {
           focusable.focus();
