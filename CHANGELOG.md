@@ -4,7 +4,16 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-09
+
 ### Added
+
+- **P27: v1.0 release preparation**:
+  - Version bumped to `1.0.0` — the first stable release.
+  - `CHANGELOG.md` stamped for v1.0.0.
+  - `docs/quickstart.md` verified accurate for v1.0 feature set.
+  - Marketplace publish remains VSIX-only (`package:vsix` + GitHub release artifact); no `VSCE_PAT` automation added for this release — intentional pre-marketplace posture maintained per `AGENTS.md`.
+  - All P19–P26 research-alignment and UX polish items confirmed `done`.
 
 - **P26: Hierarchical/nested task support — design spike (`docs/task-hierarchy-design.md`)**:
   - Added `docs/task-hierarchy-design.md`: a 10-section design spike covering the full scope of P26.
