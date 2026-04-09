@@ -19,7 +19,7 @@ All notable changes to this project are documented in this file.
   - Doc-only; no code changes.
 
 - **P25: Feature Traceability Matrix in `docs/references.md`**:
-  - Added a `## Feature Traceability Matrix` section to `docs/references.md` (as of v0.99.0) mapping all key TaCoS ICSE'26 findings and supporting research findings to shipped features, PLANS.md items, and outstanding gaps.
+  - Added a `## Feature Traceability Matrix` section to `docs/references.md` (as of v0.99.5) mapping all key TaCoS ICSE'26 findings and supporting research findings to shipped features, PLANS.md items, and outstanding gaps.
   - Core findings mapped (F1–F7): combination cue (P19), timeline grouping (P21), prospective intent (P16/P19), manual note proximity (P13/P22/P24), nested tasks (P26 aspirational), save-state live regions (P22/P23), full keyboard navigation (P23).
   - Supporting research mapped (S1–S8): attention residue, goal decay, interruption timing, automation level, Human-AI interaction, provenance visibility, friction scoring, noise/over-automation.
   - Visual encoding aspirational row (V1): heat-map breadcrumb gradient (P28).
