@@ -11,6 +11,10 @@ All notable changes to this project are documented in this file.
   - `migrateV1toV2(raw)` added to `src/taskState.ts`: idempotent migration that promotes a legacy `checkpoints` key to `tasks` and stamps `schemaVersion: 2`. Called automatically inside `parseStructuredTaskStateStore`.
   - Command titles updated to converge on `task`/`task notes` terminology: `Capture Task State`, `Add Task Note`, `Add Task Note from Clipboard`, `Add Task Note from Selection`, `Add Quick Task Note`, `List Task Notes`, `Clear Task Notes in Current Task Scope`.
   - `test/taskState.test.ts` extended with a `migrateV1toV2` describe block covering: nullish pass-through, v2+ no-op, idempotency, legacy `checkpoints` promotion, task-wins-over-checkpoints when both present, and missing `schemaVersion` default.
+  - `migrateV1toV2` now omits the legacy `checkpoints` key via destructuring rather than setting it to `undefined`, ensuring it is absent from `in`/`hasOwnProperty` checks and cannot be re-persisted.
+  - `migrateV1toV2` JSDoc updated to explicitly state that a missing `schemaVersion` defaults to v1 and will be stamped to v2 on migration.
+  - All user-visible strings across `src/extension.ts` and `src/webview/panelFragments.ts` converged on `task state` / `task notes` terminology (input box titles, toast messages, quick-pick labels); internal identifiers unchanged.
+  - `README.md`, `SPECS.md`, and `docs/DESIGN_AND_IMPLEMENTATION.md` updated with new user-facing command names and terminology.
 
 - **P22: Inline editing with autosave indicator and undo for destructive actions**:
   - `showToast(message, { actionText, onAction, timeoutMs })` helper added to `panelClientScript.ts`; renders a persistent `#toast-region` DOM element with an optional action button that self-dismisses after its timeout.

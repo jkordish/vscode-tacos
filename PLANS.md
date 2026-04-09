@@ -572,7 +572,7 @@ Status vocabulary used in this file:
 
 ### P24. Task/checkpoint naming rationalization and schema v2 migration
 
-- status: `doing`
+- status: `done`
 - why: the deep research report identifies "checkpoint vs task" ontology confusion as a pure adoption blocker. Internally the split is meaningful (`taskState` = rich structured state, `checkpoint` = note/annotation layer), but externally users see both terms used interchangeably across commands, cards, and docs. This creates confusion about what to capture, when, and why. Additionally, the data model is ready for a `schemaVersion: 2` bump that formalizes `tasks` as the top-level concept with `notes` as a child collection — consistent with what `src/taskState.ts` already models internally.
 - scope:
   - **User-facing copy**: converge all user-visible strings on `task state` (not `structured task checkpoint`) and `task notes` (not `checkpoint notes`). Commands: `Capture task state`, `Update task state`, `Task notes`. Cards: `Task State`, `Task Notes`.

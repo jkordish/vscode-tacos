@@ -295,8 +295,9 @@ export function createEmptyStructuredTaskStateStore(): StructuredTaskStateStore 
  * data that may have been written with that key). V2 formalises `tasks` as
  * the only top-level collection key and stamps `schemaVersion: 2`.
  *
- * The migration is idempotent: if neither `checkpoints` nor a v1 schema
- * version is present, the store is returned unchanged (already v2+).
+ * The migration is idempotent: a store already at v2+ is returned unchanged.
+ * A missing `schemaVersion` is treated as v1 (the implicit default before the
+ * version key was introduced) and will be stamped to v2 on migration.
  *
  * @param raw - Raw store value as read from workspaceState storage.
  * @returns Migrated store object ready for `parseStructuredTaskStateStore`.
@@ -324,12 +325,15 @@ export function migrateV1toV2(raw: unknown): unknown {
       ? legacyCheckpoints
       : existingTasks;
 
+  // Omit the legacy `checkpoints` key entirely so it cannot be read back via
+  // `in`/`hasOwnProperty` checks or accidentally re-persisted.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { checkpoints: _, ...migratedValue } = value;
+
   return {
-    ...value,
+    ...migratedValue,
     schemaVersion: TASK_STATE_SCHEMA_VERSION,
     tasks: mergedTasks,
-    // Remove legacy key once promoted to avoid double-reads on future loads.
-    checkpoints: undefined,
   };
 }
 
