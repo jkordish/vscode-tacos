@@ -649,15 +649,18 @@ Status vocabulary used in this file:
 
 ### P27. v1.0 release preparation
 
-- status: `queued`
-- why: `v0.99.0` is the last pre-v1.0 feature-complete milestone. P19–P25 represent the final research-alignment and UX polish work required to reach a v1.0 quality bar. P27 sequences the release prep after those items land.
-- scope: version bump to `1.0.0`, `CHANGELOG.md` `[1.0.0]` stamp, final `README.md` refresh, `docs/quickstart.md` accuracy check, Marketplace publish prerequisite documentation and decision point (does `VSCE_PAT` get added to the release workflow?), final `npm run verify` + `npm run package:vsix` regression pass.
-- dependencies: P19, P20, P21, P22, P23, P24, P25 (all research-alignment items done or explicitly deferred to v1.x).
-- immediate next actions:
-  - confirm all P19–P25 items are `done` or explicitly `blocked`/`deferred` with documented rationale.
-  - decide Marketplace publish policy for v1.0 (add `VSCE_PAT` to workflow or remain VSIX-only).
-  - run full `npm run verify` + `npm run package:vsix` clean pass.
-  - bump `package.json` to `1.0.0` and stamp `CHANGELOG.md`.
+- status: `done`
+- why: `v0.99.0` is the last pre-v1.0 feature-complete milestone. P19–P26 represent the final research-alignment and UX polish work required to reach a v1.0 quality bar.
+- scope: version bump to `1.0.0`, `CHANGELOG.md` `[1.0.0]` stamp, `docs/quickstart.md` accuracy check, Marketplace publish policy decision (VSIX-only — no `VSCE_PAT` automation for this release), final `npm run verify:quick` + `npm run package:vsix` regression pass.
+- dependencies: P19, P20, P21, P22, P23, P24, P25, P26.
+- recent progress:
+  - confirmed all P19–P26 items are `done`.
+  - Marketplace publish policy: remain **VSIX-only** for v1.0 per `AGENTS.md` pre-v1.0 no-Marketplace posture. No `VSCE_PAT` added to release workflow.
+  - bumped `package.json` version to `1.0.0`.
+  - stamped `CHANGELOG.md` `[1.0.0] - 2026-04-09`.
+  - verified `docs/quickstart.md` accurate for v1.0 feature set.
+  - `verify:quick` exits 0 (57 suites / 490 tests).
+  - `npm run package:vsix` clean pass.
 - risks/rollback:
   - risk: shipping v1.0 with unresolved ARIA or naming gaps creates a trust deficit with early adopters.
   - rollback: release as `v0.99.x` patch until blocking items are resolved.
