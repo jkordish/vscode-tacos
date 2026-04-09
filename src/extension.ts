@@ -7117,6 +7117,21 @@ function rerenderPanel(): void {
     PERF_PANEL_RERENDER_SLOW_MS,
     `evidence=${state.panelSummary.evidenceCatalog?.length ?? 0}`,
   );
+  // Re-post the undo toast after every rerender that replaces webview.html.
+  // Replacing the HTML clears #toast-region, so the Undo affordance is lost
+  // for any rerender that occurs during the 30 s undo window. Re-send the
+  // message with the remaining TTL so the client can restore it.
+  const undoBuffer = state.panelDismissUndoBuffer;
+  if (undoBuffer) {
+    const remainingMs = undoBuffer.expiresAt - Date.now();
+    if (remainingMs > 0) {
+      void state.panel.webview.postMessage({
+        type: 'showUndoToast',
+        noteId: undoBuffer.note.id,
+        timeoutMs: remainingMs,
+      });
+    }
+  }
 }
 
 function postPanelStatus(message: string): void {
