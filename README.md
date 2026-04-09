@@ -25,7 +25,7 @@ TaCoS is **not** an AI productivity assistant. It's a local-first cognitive reco
 1. Install the extension.
 2. Open a project in VS Code.
 3. Run **`TaCoS: Show Resume Brief Now`** to see your brief.
-4. Run **`TaCoS: Capture Task Checkpoint`** to save your current context before switching away.
+4. Run **`TaCoS: Capture Task State`** to save your current context before switching away.
 
 → [5-minute quickstart](https://github.com/jkordish/vscode-tacos/blob/main/docs/quickstart.md)
 
@@ -33,25 +33,25 @@ TaCoS is **not** an AI productivity assistant. It's a local-first cognitive reco
 
 ## Core commands
 
-| Command                            | What it does                                                         |
-| ---------------------------------- | -------------------------------------------------------------------- |
-| `TaCoS: Show Resume Brief Now`     | Open your resume brief                                               |
-| `TaCoS: Capture Task Checkpoint`   | Save current task state (objective, next step, blockers, confidence) |
-| `TaCoS: Mark Task Resolved`        | Close the current checkpoint cleanly                                 |
-| `TaCoS: Show Cognitive Debrief`    | Review open threads, stale state, and unresolved blockers            |
-| `TaCoS: Show Resume Safety Check`  | Post-resume `State / Risk / Verify` quick-check                      |
-| `TaCoS: Add Quick Checkpoint Note` | Fast freeform note for the current task                              |
-| `TaCoS: List Checkpoint Notes`     | Browse and manage open notes                                         |
-| `TaCoS: Run Setup Checklist`       | Guided first-run setup                                               |
-| `TaCoS: Set Privacy Preset`        | Choose `Minimal / Balanced / Max context`                            |
+| Command                           | What it does                                                         |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `TaCoS: Show Resume Brief Now`    | Open your resume brief                                               |
+| `TaCoS: Capture Task State`       | Save current task state (objective, next step, blockers, confidence) |
+| `TaCoS: Mark Task Resolved`       | Close the current task state cleanly                                 |
+| `TaCoS: Show Cognitive Debrief`   | Review open threads, stale state, and unresolved blockers            |
+| `TaCoS: Show Resume Safety Check` | Post-resume `State / Risk / Verify` quick-check                      |
+| `TaCoS: Add Quick Task Note`      | Fast freeform note for the current task                              |
+| `TaCoS: List Task Notes`          | Browse and manage open notes                                         |
+| `TaCoS: Run Setup Checklist`      | Guided first-run setup                                               |
+| `TaCoS: Set Privacy Preset`       | Choose `Minimal / Balanced / Max context`                            |
 
 ---
 
 ## How it works
 
-### Task checkpoints
+### Task state
 
-When you capture a checkpoint, TaCoS records:
+When you capture task state, TaCoS records:
 
 - what you're trying to accomplish
 - files and systems in scope
@@ -97,11 +97,11 @@ TaCoS watches for conservative signals: focus return after idle, workspace root 
 
 | Setting                                     | Default  | Description                                                                                  |
 | ------------------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
-| `tacos.taskCheckpoint.enabled`              | `true`   | Enable structured task checkpoints                                                           |
+| `tacos.taskCheckpoint.enabled`              | `true`   | Enable structured task state capture                                                         |
 | `tacos.taskCheckpoint.promptOnLikelySwitch` | `true`   | Prompt at conservative switch boundaries                                                     |
 | `tacos.resumeSafety.enabled`                | `true`   | Post-resume safety check annunciator                                                         |
 | `tacos.resumeSafety.strict`                 | `false`  | Warn before first risky action on strong mismatch                                            |
-| `tacos.aiIncludeCheckpointNotes`            | `false`  | Include checkpoint notes in AI payloads                                                      |
+| `tacos.aiIncludeCheckpointNotes`            | `false`  | Include task notes in AI payloads                                                            |
 | `tacos.aiIncludeScratchpad`                 | `false`  | Include scratchpad in AI payloads                                                            |
 | `tacos.percolationPolicyEnabled`            | `true`   | Dynamic surface arbitration                                                                  |
 | `tacos.evidence.granularity`                | `medium` | Evidence tab time window: `coarse` = last 10 min, `medium` = last 5 min, `fine` = last 2 min |
