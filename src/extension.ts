@@ -6279,10 +6279,17 @@ async function showDetailsPanel(
     // VS Code destroys the webview iframe while the panel is hidden and does NOT restore
     // panel.webview.html when the panel is revealed again. Without this handler the panel
     // would appear blank every time it is un-hidden.
+    //
+    // Gate on a false→true visibility transition so we only rerender after the iframe was
+    // actually torn down while hidden — not on every focus/active state change that fires
+    // onDidChangeViewState while the panel is already visible.
+    let lastKnownVisible = state.panel.visible;
     state.panel.onDidChangeViewState((e) => {
-      if (e.webviewPanel.visible) {
+      const nowVisible = e.webviewPanel.visible;
+      if (!lastKnownVisible && nowVisible) {
         rerenderPanel();
       }
+      lastKnownVisible = nowVisible;
     });
 
     state.panel.webview.onDidReceiveMessage(async (rawMessage: unknown) => {

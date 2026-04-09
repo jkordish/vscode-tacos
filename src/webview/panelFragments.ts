@@ -477,7 +477,10 @@ function renderRecentAnchorRow(row: RecentAnchorRow): string {
   }" aria-hidden="true">${row.clickable ? 'Open' : 'Context only'}</span>`;
   const kindBadge = `<span class="evidence-kind evidence-kind-inline">[${escapeHtml(row.kind)}]</span>`;
   const timeStamp = `<span class="evidence-anchor-time">${escapeHtml(row.relativeTime)}</span>`;
-  return `<li class="evidence-item evidence-recent-anchor">${timeStamp}<div class="evidence-row">${labelControl}${affordance}${kindBadge}</div></li>`;
+  // Keep kindBadge in a separate .evidence-meta div (matching renderEvidenceListItem's two-child
+  // .evidence-row layout) so that justify-content:space-between only distributes label vs affordance
+  // and the kind badge doesn't float in the middle between them.
+  return `<li class="evidence-item evidence-recent-anchor">${timeStamp}<div class="evidence-row">${labelControl}${affordance}</div><div class="evidence-meta">${kindBadge}</div></li>`;
 }
 
 /**
