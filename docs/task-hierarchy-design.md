@@ -59,7 +59,7 @@ Each `StructuredTaskState` is keyed to a unique `(workspaceRoot, branch, taskPar
 - `confidence` — `'low' | 'medium' | 'high'`
 - `lastKnownSafeBreakpoint` — explicit safe return point
 - `staleAfter`, `createdAt`, `updatedAt`, `switchCount`
-- `resolutionState` — `'active' | 'resolved' | 'abandoned'`
+- `resolutionState` — `'active' | 'resolved' | 'dismissed'`
 
 The flat model is simple, local-first, and easy to reason about. Any hierarchical extension must preserve these properties.
 
@@ -102,15 +102,15 @@ interface StructuredTaskState {
   currentHypothesis?: string;
   assumptions: string[];
   blockers: string[];
-  nextAction?: string;
+  nextAction: string;
   prospectiveNextVerification?: string;
   confidence: 'low' | 'medium' | 'high';
-  lastKnownSafeBreakpoint?: LastKnownSafeBreakpoint;
-  staleAfter?: string;
-  createdAt: string;
-  updatedAt: string;
+  lastKnownSafeBreakpoint: LastKnownSafeBreakpoint;
+  staleAfter?: number;
+  createdAt: number;
+  updatedAt: number;
   switchCount: number;
-  resolutionState: 'active' | 'resolved' | 'abandoned';
+  resolutionState: 'active' | 'resolved' | 'dismissed';
 
   // --- new optional hierarchy fields ---
   parentTaskId?: string;
@@ -134,7 +134,7 @@ To prevent runaway nesting and preserve the tool's "calm, approachable" characte
 
 ### 3.4 Sub-task lifecycle
 
-Sub-tasks follow the same `active → resolved / abandoned` lifecycle as root tasks, with two additions:
+Sub-tasks follow the same `active → resolved / dismissed` lifecycle as root tasks, with two additions:
 
 **Promotion:** A sub-task can be promoted to a root task (its `parentTaskId` is cleared, `hierarchyDepth` set to `0`, parent's `childTaskIds` updated). This is a non-destructive operation — no data is lost.
 
@@ -142,14 +142,14 @@ Sub-tasks follow the same `active → resolved / abandoned` lifecycle as root ta
 
 **Cascading resolve:** When a parent task is marked resolved, the system should offer to resolve all active children too. Never cascade silently.
 
-**Orphan handling:** If a parent task is deleted or abandoned, its children become orphaned root tasks (their `parentTaskId` is cleared automatically, `hierarchyDepth` reset to `0`).
+**Orphan handling:** If a parent task is deleted or dismissed, its children become orphaned root tasks (their `parentTaskId` is cleared automatically, `hierarchyDepth` reset to `0`).
 
 ### 3.5 `findActiveStructuredTaskForScope` changes
 
 The current function uses an exact match on `(workspaceRoot, branch, taskPartition, resolutionState === 'active')`. With hierarchy:
 
 - The function signature stays identical; callers are not broken.
-- A new `findActiveTaskTree(workspaceRoot, branch): TaskTreeNode` function would build the full parent→children tree for cockpit rendering.
+- A new `findActiveTaskTree(workspaceRoot, branch, taskPartition): TaskTreeNode` function would build the full parent→children tree for cockpit rendering within that partition.
 - The existing `findActiveStructuredTaskForScope` continues to return the **focused** task — the leaf being actively worked — not the root.
 
 ---
@@ -188,7 +188,7 @@ The Evidence tab currently groups timeline entries by file, time, or action mode
 1. **Scope filter toggle:** `All tasks / Root task only / Sub-tasks only` — lets users scan evidence across the full tree or narrow to a specific branch.
 2. **Task label badge on each entry:** Small `[sub-task name]` badge on evidence items that were captured while a sub-task was active, so the timeline is attributable.
 
-Neither addition requires changing `TimelineEntry` — the label would be derived by matching the entry's timestamp against the task's `createdAt`/`updatedAt` window.
+These additions should not rely on inferring task ownership from timestamps. In the current codebase the Evidence/Timeline UI is backed by `SummaryEvidenceItem` (using `capturedAt`), and task `updatedAt` changes whenever a task is edited, so it is not a reliable "active window" boundary. Instead, hierarchical attribution should be recorded explicitly at capture time (for example `taskId` and optional task lineage stored in `SummaryEvidenceItem.meta`) and then used to drive the scope filter and badge rendering.
 
 ### 4.3 Companion Panel — Task State Card
 
@@ -265,9 +265,10 @@ Because the new fields are all optional, the migration body is nearly a no-op �
 
 If a user downgrades from a schema v3 extension to a schema v2 extension:
 
-- The schema v2 parser will see `schemaVersion: 3` and treat the store as unknown/corrupt.
-- Mitigation: `parseStructuredTaskStateStore` should read `tasks` defensively regardless of `schemaVersion` when the field array is structurally valid, treating unknown future versions as "best-effort v2".
-- This must be tested explicitly before any schema v3 code ships.
+- The current schema v2 parser does **not** reject `schemaVersion: 3` as unknown/corrupt. Instead, `parseStructuredTaskStateStore` normalizes the parsed tasks into the v2 shape and returns `schemaVersion: 2`.
+- That means downgrade is currently a **best-effort read with silent data loss risk**: any v3-only hierarchy fields that v2 does not understand can be discarded on read/write, even if the base task data remains usable.
+- Mitigation/release requirement: schema v3 should not ship until we either (a) make downgrade preservation explicit (for example, by retaining unknown fields or preventing v2 from rewriting newer-version stores), or (b) document and accept that opening/saving a v3 store in a v2 build is a destructive downgrade path.
+- This must be tested explicitly before any schema v3 code ships, including the current silent-loss scenario and whichever mitigation or product decision is chosen.
 
 ---
 
@@ -312,7 +313,7 @@ Root task is now updated:
   Next step: confirm rollback v2.4.0 is healthy on canary
 ```
 
-The breadcrumb breadcrumb correctly surfaces the parent context without forcing Maya to scroll through sub-task details.
+The breadcrumb correctly surfaces the parent context without forcing Maya to scroll through sub-task details.
 
 ---
 
