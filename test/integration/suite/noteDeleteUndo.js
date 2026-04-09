@@ -3,8 +3,15 @@
 const assert = require('node:assert/strict');
 const vscode = require('vscode');
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/** Poll `fn` up to `maxMs` in `intervalMs` steps until it returns a truthy value. */
+async function pollUntil(fn, { maxMs = 3000, intervalMs = 100 } = {}) {
+  const deadline = Date.now() + maxMs;
+  while (Date.now() < deadline) {
+    const result = await fn();
+    if (result) return result;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return await fn();
 }
 
 async function run() {
@@ -15,10 +22,13 @@ async function run() {
 
   // 1. Open the panel so checkpoint card is rendered.
   await vscode.commands.executeCommand('tacos.showNow');
-  await wait(200);
 
-  const runtime = await vscode.commands.executeCommand('tacos.__test.getRuntimeStateSnapshot');
-  assert.equal(runtime?.panelOpen, true, 'Expected panel to be open after tacos.showNow.');
+  const runtime = await pollUntil(async () => {
+    const s = await vscode.commands.executeCommand('tacos.__test.getRuntimeStateSnapshot');
+    return s?.panelOpen ? s : null;
+  });
+  assert.ok(runtime, 'Expected getRuntimeStateSnapshot to return a result.');
+  assert.equal(runtime.panelOpen, true, 'Expected panel to be open after tacos.showNow.');
 
   // 2. Seed a checkpoint note into the current partition scope.
   const seeded = await vscode.commands.executeCommand('tacos.__test.seedCheckpointNote', {
@@ -28,16 +38,14 @@ async function run() {
   assert.equal(typeof seeded.id, 'string', 'Expected seeded note to have an id.');
   assert.equal(seeded.status, 'open', 'Expected seeded note to have open status.');
 
-  await wait(100);
-
-  // 3. Assert: note is reflected in the panel checkpoint snapshot.
-  const beforeDismiss = await vscode.commands.executeCommand(
-    'tacos.__test.getPanelCheckpointSnapshot',
-  );
-  assert.ok(
-    beforeDismiss,
-    'Expected getPanelCheckpointSnapshot to return a snapshot.',
-  );
+  // 3. Poll until the panel checkpoint snapshot reflects the seeded note.
+  const beforeDismiss = await pollUntil(async () => {
+    const snap = await vscode.commands.executeCommand(
+      'tacos.__test.getPanelCheckpointSnapshot',
+    );
+    return snap?.primaryNoteId === seeded.id ? snap : null;
+  });
+  assert.ok(beforeDismiss, 'Expected getPanelCheckpointSnapshot to return a snapshot.');
   assert.equal(
     beforeDismiss.primaryNoteId,
     seeded.id,
@@ -76,12 +84,13 @@ async function run() {
   assert.equal(dismissResult.ok, true, 'Expected dismiss to succeed.');
   assert.equal(dismissResult.noteId, seeded.id, 'Expected dismissed note id to match seeded id.');
 
-  await wait(50);
-
-  // 6. Assert: undo buffer is now populated with the dismissed note id.
-  const afterDismiss = await vscode.commands.executeCommand(
-    'tacos.__test.getPanelCheckpointSnapshot',
-  );
+  // 6. Poll until undo buffer is populated and primary note is cleared.
+  const afterDismiss = await pollUntil(async () => {
+    const snap = await vscode.commands.executeCommand(
+      'tacos.__test.getPanelCheckpointSnapshot',
+    );
+    return snap?.undoBufferNoteId === seeded.id ? snap : null;
+  });
   assert.ok(afterDismiss, 'Expected getPanelCheckpointSnapshot after dismiss to return a snapshot.');
   assert.equal(
     afterDismiss.undoBufferNoteId,
@@ -93,7 +102,6 @@ async function run() {
     false,
     'Expected undo buffer to not be expired immediately after dismiss.',
   );
-  // The dismissed note should no longer be the primary open note.
   assert.equal(
     afterDismiss.primaryNoteId,
     null,
@@ -110,12 +118,13 @@ async function run() {
   assert.equal(undoResult.ok, true, 'Expected undo to succeed.');
   assert.equal(undoResult.noteId, seeded.id, 'Expected undone note id to match seeded id.');
 
-  await wait(50);
-
-  // 8. Assert: note is restored to open status and undo buffer is cleared.
-  const afterUndo = await vscode.commands.executeCommand(
-    'tacos.__test.getPanelCheckpointSnapshot',
-  );
+  // 8. Poll until note is restored and undo buffer is cleared.
+  const afterUndo = await pollUntil(async () => {
+    const snap = await vscode.commands.executeCommand(
+      'tacos.__test.getPanelCheckpointSnapshot',
+    );
+    return snap?.primaryNoteId === seeded.id && snap?.undoBufferNoteId === null ? snap : null;
+  });
   assert.ok(afterUndo, 'Expected getPanelCheckpointSnapshot after undo to return a snapshot.');
   assert.equal(
     afterUndo.undoBufferNoteId,
@@ -133,16 +142,24 @@ async function run() {
     'Expected restored note status to be open.',
   );
 
-  // 9. Reset runtime state to confirm a clean teardown path.
+  // 9. Reset runtime state and verify clean teardown.
   await vscode.commands.executeCommand('tacos.__test.resetRuntimeWorkspaceState');
-  await wait(50);
 
-  const afterReset = await vscode.commands.executeCommand(
-    'tacos.__test.getPanelCheckpointSnapshot',
-  );
-  assert.equal(afterReset?.primaryNoteId, null, 'Expected primary note to be cleared after reset.');
+  const afterReset = await pollUntil(async () => {
+    const snap = await vscode.commands.executeCommand(
+      'tacos.__test.getPanelCheckpointSnapshot',
+    );
+    // After reset the panel is disposed so snapshot may be null; treat null as
+    // "panel gone" which is also an acceptable clean state.
+    return snap === null || snap === undefined ? { primaryNoteId: null, undoBufferNoteId: null } : snap;
+  });
   assert.equal(
-    afterReset?.undoBufferNoteId,
+    afterReset?.primaryNoteId ?? null,
+    null,
+    'Expected primary note to be cleared after reset.',
+  );
+  assert.equal(
+    afterReset?.undoBufferNoteId ?? null,
     null,
     'Expected undo buffer to be cleared after reset.',
   );
