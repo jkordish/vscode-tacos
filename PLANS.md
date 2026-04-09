@@ -630,21 +630,21 @@ Status vocabulary used in this file:
 
 ### P26. Hierarchical / nested task support — research-grounded future direction
 
-- status: `queued`
+- status: `done`
 - why: the TaCoS ICSE'26 paper's discussion section explicitly calls out "nested and interdependent tasks" as a direction future systems should address. Real-world engineering work — especially for Staff+ engineers and on-call responders — involves a tree of tasks (e.g. investigating an incident triggers a sub-task to check a service, which triggers another to read a runbook). The current TaCoS model treats task state as flat (one active structured task per partition). This plan item sequences the design and prototyping work.
 - scope: this is a design-first item before any code. Deliverables: (a) a `docs/task-hierarchy-design.md` spike document exploring the data model extension (parent/child task IDs, lineage chain, sub-task promotion/demotion), (b) user story sketches for the two primary use cases (incident investigation, PR review with sub-tasks), (c) an assessment of which existing storage/rendering surfaces need to change, and (d) a go/no-go recommendation for including in v1.x.
 - dependencies: P24 (schema v2 must be stable before extending the task model further).
-- immediate next actions:
-  - draft `docs/task-hierarchy-design.md` covering: data model extension sketch, UI surface implications (how would the cockpit P19 render a task tree?), migration path from flat to hierarchical, and open questions.
-  - review against `src/taskState.ts` current shape and identify minimal schema additions.
-  - circulate for review before any implementation work begins.
+- recent progress:
+  - drafted `docs/task-hierarchy-design.md` (10 sections): current schema v2 baseline, optional hierarchy field additions (`parentTaskId`, `childTaskIds`, `lineageChain`, `hierarchyDepth`), depth/breadth limits, sub-task lifecycle (promotion/demotion/orphan/cascading-resolve), UI surface implications for cockpit (breadcrumb option A), Evidence tab, Task State card, Cognitive Debrief, and status bar, migration path sketch (`migrateV2toV3` — near no-op additive), two user story sketches (incident investigation with Maya and PR review with Tomás), go/no-go recommendation (schema fields safe for v1.0; UI deferred to v1.1), 10 open questions table, and implementation preview file table.
+  - reviewed against `src/taskState.ts` schema v2 shape; confirmed all proposed additions are optional and backwards-compatible with zero impact on existing flat tasks.
+  - go/no-go: schema-only additions recommended for v1.0; UI surfaces (cockpit breadcrumb, sub-task list card, Evidence scope filter) deferred to v1.1 pending user validation of story workflows.
 - risks/rollback:
   - risk: hierarchical tasks add significant model complexity that could destabilize the clean local-first single-task mental model that makes TaCoS approachable.
   - rollback: keep as a design spike only; do not merge any code changes until the design doc is approved.
 - links:
+  - `docs/task-hierarchy-design.md`
   - `src/taskState.ts`
-  - `docs/references.md` (TaCoS paper nested-tasks direction)
-  - `deep-research-report.md` (§ "Hierarchical / nested dependent tasks")
+  - `docs/references.md` (TaCoS paper nested-tasks direction; P25 traceability matrix row F5)
   - https://github.com/jkordish/vscode-tacos/issues/316
 
 ### P27. v1.0 release preparation
