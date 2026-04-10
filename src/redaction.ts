@@ -74,7 +74,11 @@ const SECRET_DETECTORS: RedactionDetector[] = [
   },
   {
     category: 'url_token_param',
-    pattern: /([?&](?:api[_-]?key|token|access[_-]?token|key)=)[^&\s]+/gi,
+    // Use a named group to preserve the parameter prefix (e.g. `?token=`) in the
+    // output and only replace the sensitive value portion. Without this the
+    // replacement would swallow the `?key=` prefix, breaking URL structure and
+    // over-counting chars replaced.
+    pattern: /(?<prefix>[?&](?:api[_-]?key|token|access[_-]?token|key)=)[^&\s]+/gi,
     highRisk: true,
   },
   {
@@ -187,12 +191,18 @@ function applyDetector(
       : replacement;
 
   const pattern = withGlobalFlags(detector.pattern);
-  return input.replace(pattern, (matched: string) => {
-    trackMatch(report, detector.category, matched.length);
+  return input.replace(pattern, (matched: string, ...args: unknown[]) => {
+    // If the pattern uses a named capture group `prefix`, preserve it and only
+    // count/replace the non-prefix portion so that URL structure is maintained
+    // and `totalCharsReplaced` reflects only the sensitive value chars.
+    const groups = args[args.length - 1] as Record<string, string> | null | undefined;
+    const prefix = groups?.prefix ?? '';
+    const sensitiveChars = matched.length - prefix.length;
+    trackMatch(report, detector.category, Math.max(0, sensitiveChars));
     if (detector.highRisk) {
       report.highRiskDetected = true;
     }
-    return effectiveReplacement;
+    return `${prefix}${effectiveReplacement}`;
   });
 }
 

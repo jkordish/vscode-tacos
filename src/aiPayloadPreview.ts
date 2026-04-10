@@ -49,9 +49,6 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
   const json = JSON.stringify(payload, null, 2);
   const { value: previewJson, truncated } = truncateJson(json, input.maxJsonChars ?? 12_000);
 
-  const truncationNote = truncated
-    ? '\n- Preview JSON is truncated for readability. The sent payload uses full redacted context.\n'
-    : '';
   const report = input.redactionReport;
   const categoryEntries =
     report && Object.keys(report.categoryCounts).length > 0
@@ -61,6 +58,12 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
     categoryEntries.length > 0
       ? categoryEntries.map(([category, count]) => `  - ${category}: ${count}`)
       : ['  - none'];
+
+  // Only insert the truncation note line when actually truncated — avoids a
+  // spurious blank line before the code fence when the payload is not truncated.
+  const truncationLines = truncated
+    ? ['', '- Preview JSON is truncated for readability. The sent payload uses full redacted context.']
+    : [];
 
   return [
     '# TaCoS AI Payload Preview',
@@ -80,7 +83,8 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
     `- High-risk detected: ${report?.highRiskDetected ? 'yes' : 'no'}`,
     '- Category counts:',
     ...categoryLines,
-    truncationNote,
+    ...truncationLines,
+    '',
     '```json',
     previewJson,
     '```',

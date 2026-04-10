@@ -172,7 +172,7 @@ export async function collectGit(root: string, config: ExtensionConfig): Promise
   }
 
   if (cached?.inFlight) {
-    return cached.snapshot;
+    return cached.inFlight;
   }
 
   if (cached) {
