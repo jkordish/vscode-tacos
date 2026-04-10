@@ -7423,8 +7423,12 @@ function renderWebview(
   });
   const topFiles = renderTopFilesListItems(summary.topFiles);
   const evidenceCatalog = summary.evidenceCatalog ?? [];
-  const evidenceGranularityWindowMs =
-    config.evidenceGranularity === 'coarse'
+  // Demo evidence has timestamps 38–60 min old; the normal 5–10 min window
+  // would filter every item out, causing empty Evidence tab and cockpit anchors.
+  // In demo mode widen to 2 hours so all demo items are always visible.
+  const evidenceGranularityWindowMs = demoMode
+    ? 2 * 60 * 60_000
+    : config.evidenceGranularity === 'coarse'
       ? 10 * 60_000
       : config.evidenceGranularity === 'fine'
         ? 2 * 60_000
