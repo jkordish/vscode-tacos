@@ -14231,28 +14231,38 @@ function buildDemoResumeSummary(now = Date.now()): ResumeSummary {
     evidenceCatalog: [
       {
         id: 'file:ranking',
-        kind: 'git',
+        // kind must be 'file' (not 'git') so the id matches lastActionEvidenceId lookup
+        // and renders as a clickable "Open last action" button. capturedAt is required
+        // for selectRecentAnchors to include this item in the Evidence tab.
+        kind: 'file' as const,
         label: 'src/percolation/ranking.ts (last edited ~42 min ago)',
+        target: 'src/percolation/ranking.ts',
+        capturedAt: now - 42 * 60_000,
       },
       {
         id: 'file:broker',
-        kind: 'git',
+        kind: 'file' as const,
         label: 'src/percolation/surfaceBroker.ts (stub call added)',
+        target: 'src/percolation/surfaceBroker.ts',
+        capturedAt: now - 55 * 60_000,
       },
       {
         id: 'git:ranking-diff',
-        kind: 'git',
+        kind: 'git' as const,
         label: 'git diff — ranking.ts (+38 −4)',
+        capturedAt: now - 43 * 60_000,
       },
       {
         id: 'branch:feat',
-        kind: 'branch',
+        kind: 'branch' as const,
         label: 'main → feat/percolation-surface-v2 (+7 commits ahead)',
+        capturedAt: now - 60 * 60_000,
       },
       {
         id: 'task:verify',
-        kind: 'terminal',
+        kind: 'terminal' as const,
         label: 'npm test -- --testPathPattern=percolationRanking',
+        capturedAt: now - 38 * 60_000,
       },
     ],
     detailsMarkdown: [
