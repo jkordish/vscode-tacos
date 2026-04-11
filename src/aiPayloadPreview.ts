@@ -62,7 +62,10 @@ export function buildAiPayloadPreviewMarkdown(input: AiPayloadPreviewInput): str
   // Only insert the truncation note line when actually truncated — avoids a
   // spurious blank line before the code fence when the payload is not truncated.
   const truncationLines = truncated
-    ? ['', '- Preview JSON is truncated for readability. The sent payload uses full redacted context.']
+    ? [
+        '',
+        '- Preview JSON is truncated for readability. The sent payload uses full redacted context.',
+      ]
     : [];
 
   return [

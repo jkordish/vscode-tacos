@@ -7113,12 +7113,45 @@ function rerenderPanel(): void {
   const rerenderStartNs = monotonicNowNs();
   state.panel.title = titleForSummary(state.panelSummary);
   const webviewRenderStartNs = monotonicNowNs();
-  const webviewHtml = renderWebview(
-    state.panel.webview,
-    state.panelSummary,
-    state.panelCheckpointNotes,
-    state.panelPrimaryCheckpointNote,
-  );
+  let webviewHtml: string;
+  try {
+    webviewHtml = renderWebview(
+      state.panel.webview,
+      state.panelSummary,
+      state.panelCheckpointNotes,
+      state.panelPrimaryCheckpointNote,
+    );
+  } catch (err) {
+    // renderWebview threw before producing any HTML, so webview.html was never
+    // updated and the panel would show a blank white page.  Render a minimal
+    // error fallback so the user can see what went wrong, and surface the error
+    // in the VS Code notification area so it is visible and reportable.
+    const message =
+      err instanceof Error ? err.message : typeof err === 'string' ? err : String(err);
+    const fallbackNonce = createNonce();
+    const safeFallbackNonce = escapeHtml(fallbackNonce);
+    const fallbackCspMetaTag = buildWebviewCspMetaTag(state.panel.webview.cspSource, fallbackNonce);
+    state.panel.webview.html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TaCoS Resume Brief — Render Error</title>
+    ${fallbackCspMetaTag}
+    <style nonce="${safeFallbackNonce}">
+      body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 16px; }
+      pre { white-space: pre-wrap; word-break: break-word; background: var(--vscode-textBlockQuote-background, rgba(128,128,128,.1)); padding: 12px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h2>TaCoS: Panel render error</h2>
+    <p>The resume brief panel encountered an unexpected error while rendering.
+    Please open a GitHub issue with the details below.</p>
+    <pre>${escapeHtml(message)}</pre>
+  </body>
+</html>`;
+    void vscode.window.showErrorMessage(`TaCoS: panel render failed — ${message}`);
+    return;
+  }
   recordPerformanceGuardrail(
     'webview-render',
     state.perfWebviewRender,
