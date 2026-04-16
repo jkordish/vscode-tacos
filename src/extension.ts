@@ -13909,7 +13909,7 @@ async function refreshPanelScratchpadState(
     sizeBytes = stat.size;
     updatedAt = stat.mtime > 0 ? stat.mtime : undefined;
   } catch {
-    exists = false;
+    // exists remains false (initialised above)
   }
 
   let content = '';
