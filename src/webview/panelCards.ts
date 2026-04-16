@@ -195,21 +195,6 @@ export function renderTitledListCard(input: TitledListCardInput): string {
     </div>`;
 }
 
-export function renderQuickActionsCard(quickActionGroupsTrustedHtml: string): string {
-  return `<div class="card">
-      <h3>Quick Actions</h3>
-      ${quickActionGroupsTrustedHtml}
-      <details class="shortcut-help">
-        <summary class="muted shortcut-help-summary">Keyboard shortcuts</summary>
-        <ul class="compact-list">
-          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>: Refresh</li>
-          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>N</kbd>: Copy next steps</li>
-          <li><kbd>Alt</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd>: Focus intent</li>
-        </ul>
-      </details>
-    </div>`;
-}
-
 export function renderRestorePackCard(
   restorePackGroupsTrustedHtml: string,
   trustedWorkspace: boolean,

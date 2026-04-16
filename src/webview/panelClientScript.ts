@@ -3,6 +3,7 @@ export function renderPanelClientScript(
   panelSectionScopeToken: string,
 ): string {
   return `
+      console.log('[TaCoS] panel client script starting');
       const vscode = acquireVsCodeApi();
       const panelSectionIds = new Set(['trustCenter', 'timeline', 'evidence', 'details', 'moreContext']);
       const panelSectionScope = ${JSON.stringify(panelSectionScopeToken)};
@@ -481,6 +482,30 @@ export function renderPanelClientScript(
         const header = document.querySelector('.page-header');
         if (header instanceof HTMLElement) {
           new ResizeObserver(updatePageHeaderHeight).observe(header);
+        }
+      }
+
+      // ── Auto-density: apply compact mode when panel width is narrow ────────
+      // Sets data-density='compact' on .tacos-root when the panel is narrower
+      // than 400 px so CSS can apply tighter spacing automatically.
+      const COMPACT_DENSITY_BREAKPOINT = 400;
+      function updateDensity() {
+        const root = document.querySelector('.tacos-root');
+        if (!(root instanceof HTMLElement)) {
+          return;
+        }
+        const width = root.getBoundingClientRect().width;
+        if (width > 0 && width < COMPACT_DENSITY_BREAKPOINT) {
+          root.dataset.density = 'compact';
+        } else {
+          delete root.dataset.density;
+        }
+      }
+      updateDensity();
+      if (typeof ResizeObserver !== 'undefined') {
+        const root = document.querySelector('.tacos-root');
+        if (root instanceof HTMLElement) {
+          new ResizeObserver(updateDensity).observe(root);
         }
       }
 

@@ -4,6 +4,21 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-04-15
+
+### Changed
+
+- **UI redesign — final 5% completion**:
+  - Removed vestigial `renderQuickActionsCard` from `src/webview/panelCards.ts`. Quick actions were already moved to the compact page-header toolbar in the 4-tab redesign; the old card function was exported but never called. Removed the corresponding `renderQuickActionsCard` import and call from `test/panelCards.test.ts` and `test/panelA11y.test.ts`.
+  - Added auto-density ResizeObserver to `src/webview/panelClientScript.ts`: a `updateDensity()` function now observes `.tacos-root` via `ResizeObserver` and automatically sets `data-density='compact'` when the panel width drops below 400 px (or removes it when wide enough). This activates the existing compact-spacing CSS rules (`panelStyles.ts`) that were wired but never triggered automatically. Covered by new assertions in `test/panelClientScript.test.ts`.
+  - Deleted `ui-redesign.md` — all redesign items are now fully implemented.
+
+## [1.0.4] - 2026-04-10
+
+### Fixed
+
+- **Panel renders blank on first reveal in VS Code Insiders (`lastKnownVisible` initialization race)**: In `showDetailsPanel`, `lastKnownVisible` was initialized from `state.panel.visible` immediately after `createWebviewPanel()`. In VS Code Insiders, the panel can report `visible=true` at creation time — before `reveal()` is called. This caused the `!lastKnownVisible && nowVisible` guard in the `onDidChangeViewState` listener to evaluate `false` on the very first visibility transition, so the post-reveal `rerenderPanel()` call was skipped entirely. The webview `.html` assignment had already occurred before the iframe was live, leaving the panel blank. The fix initializes `lastKnownVisible = false` unconditionally so the first `visible=true` transition always triggers a recovery rerender, regardless of what `createWebviewPanel()` reports. Affects both `TaCoS: Show Resume Brief Now` and `TaCoS: Show Demo Resume Card`.
+
 ## [1.0.1] - 2026-04-09
 
 ### Fixed

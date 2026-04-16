@@ -4,7 +4,7 @@
 
 import axe from 'axe-core';
 import { renderCompanionNextSteps, renderWebviewDocument } from '../src/webview/panelFragments';
-import { renderQuickActionsCard, renderStatusCard } from '../src/webview/panelCards';
+import { renderStatusCard } from '../src/webview/panelCards';
 import { PANEL_WEBVIEW_STYLE } from '../src/webview/panelStyles';
 import { renderResumeStackCard } from '../src/resumeStackCard';
 
@@ -54,16 +54,12 @@ function renderPanelHtml(): string {
     autoSummaryToggleLabel: 'Pause auto summaries',
   });
 
-  const quickActionsCard = renderQuickActionsCard(
-    '<section class="action-group"><h4>Copy</h4><div class="quick-actions"><button type="button">Copy summary</button></div></section>',
-  );
-
   return renderWebviewDocument({
     cspMetaTag:
       "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'nonce-123'; script-src 'nonce-123'\" />",
     nonce: 'nonce-123',
     panelStyle: PANEL_WEBVIEW_STYLE,
-    bodyCardsTrustedHtml: [resumeCard, statusCard, quickActionsCard].join('\n'),
+    bodyCardsTrustedHtml: [resumeCard, statusCard].join('\n'),
     clientScript: '',
   });
 }

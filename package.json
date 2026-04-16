@@ -3,7 +3,7 @@
   "displayName": "TaCoS Resume Brief",
   "description": "Calm ambient resume cues with deep trust/evidence drill-down when you need it.",
   "license": "MIT",
-  "version": "1.0.1",
+  "version": "1.0.5",
   "publisher": "jkordish",
   "repository": {
     "type": "git",
@@ -97,7 +97,8 @@
     "onCommand:tacos.openPrivacySafety",
     "onCommand:tacos.clearCorrections",
     "onCommand:tacos.setOpenAiApiKey",
-    "onCommand:tacos.clearOpenAiApiKey"
+    "onCommand:tacos.clearOpenAiApiKey",
+    "onCommand:tacos.dumpPanelHtml"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -297,6 +298,10 @@
       {
         "command": "tacos.clearOpenAiApiKey",
         "title": "TaCoS: Clear OpenAI API Key"
+      },
+      {
+        "command": "tacos.dumpPanelHtml",
+        "title": "TaCoS: Dump Panel HTML to Clipboard (Debug)"
       }
     ],
     "keybindings": [

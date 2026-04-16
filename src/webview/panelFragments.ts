@@ -839,6 +839,7 @@ export function renderWebviewDocument(input: WebviewDocumentInput): string {
     <style nonce="${escapedNonce}">${input.panelStyle}</style>
   </head>
   <body>
+    <noscript><p style="padding:16px;font-family:sans-serif;color:red">TaCoS: JavaScript is required but appears to be blocked. Please report this as a bug.</p></noscript>
     <a class="skip-link" href="#main">Skip to main content</a>
     <div id="panel-status-live" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <div id="toast-region" role="alert" aria-live="assertive" aria-atomic="true" class="toast-region"></div>

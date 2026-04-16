@@ -2247,6 +2247,19 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.copyDiagnostics', async () => {
       await copyDiagnosticsBundle(context);
     }),
+    vscode.commands.registerCommand('tacos.dumpPanelHtml', async () => {
+      const html = state.panel?.webview?.html ?? '';
+      if (!html) {
+        void vscode.window.showWarningMessage(
+          'TaCoS: No panel HTML available — open the Resume Brief panel first.',
+        );
+        return;
+      }
+      await vscode.env.clipboard.writeText(html);
+      void vscode.window.showInformationMessage(
+        `TaCoS: Panel HTML (${html.length} chars) copied to clipboard. Paste into a .html file to inspect.`,
+      );
+    }),
     vscode.commands.registerCommand('tacos.testSanitizer', async () => {
       await testSanitizerCommand();
     }),
@@ -6280,10 +6293,13 @@ async function showDetailsPanel(
     // panel.webview.html when the panel is revealed again. Without this handler the panel
     // would appear blank every time it is un-hidden.
     //
-    // Gate on a false→true visibility transition so we only rerender after the iframe was
-    // actually torn down while hidden — not on every focus/active state change that fires
-    // onDidChangeViewState while the panel is already visible.
-    let lastKnownVisible = state.panel.visible;
+    // Initialize lastKnownVisible to false (not panel.visible) so that the very first
+    // visibility-true event always triggers a rerender, even if the panel reported
+    // visible=true at createWebviewPanel time before reveal() was called. Without this,
+    // VS Code Insiders can return visible=true from createWebviewPanel immediately, causing
+    // the !lastKnownVisible && nowVisible guard to skip the post-reveal rerender entirely,
+    // leaving the panel blank when webview.html was assigned before the iframe was live.
+    let lastKnownVisible = false;
     state.panel.onDidChangeViewState((e) => {
       const nowVisible = e.webviewPanel.visible;
       if (!lastKnownVisible && nowVisible) {

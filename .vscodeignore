@@ -21,3 +21,5 @@ test/**
 **/*.map
 jest.config.cjs
 tsconfig.json
+dump.txt
+ui-redesign.md

@@ -88,5 +88,12 @@ describe('renderPanelClientScript', () => {
     // taskStateResolve toast
     expect(script).toContain("if (action === 'taskStateResolve')");
     expect(script).toContain("'Task state marked resolved.'");
+    // Auto-density ResizeObserver
+    expect(script).toContain('const COMPACT_DENSITY_BREAKPOINT = 400');
+    expect(script).toContain('function updateDensity()');
+    expect(script).toContain("document.querySelector('.tacos-root')");
+    expect(script).toContain("root.dataset.density = 'compact'");
+    expect(script).toContain('delete root.dataset.density');
+    expect(script).toContain('new ResizeObserver(updateDensity).observe(root)');
   });
 });
