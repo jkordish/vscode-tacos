@@ -8,11 +8,15 @@ export function escapeHtml(value: string): string {
 }
 
 export function buildWebviewCsp(cspSource: string, nonce: string): string {
+  // Escape both dynamic values so that a stray `"` or `>` cannot break the
+  // surrounding `content="…"` HTML attribute or terminate the meta tag early.
+  const safeCspSource = escapeHtml(cspSource);
+  const safeNonce = escapeHtml(nonce);
   return [
     "default-src 'none'",
-    `script-src 'nonce-${nonce}'`,
-    `style-src 'nonce-${nonce}'`,
-    `img-src ${cspSource} https:`,
+    `script-src 'nonce-${safeNonce}'`,
+    `style-src 'nonce-${safeNonce}'`,
+    `img-src ${safeCspSource} https:`,
     "connect-src 'none'",
     "frame-src 'none'",
     "base-uri 'none'",

@@ -71,7 +71,12 @@ export function buildCognitiveDebrief(input: BuildCognitiveDebriefInput): Cognit
     staleTaskStates: unresolved
       .filter((task) => isStructuredTaskStateStale(task, now))
       .map((task) =>
-        createItem(task, `Stale after ${new Date(task.staleAfter!).toLocaleString()}.`),
+        createItem(
+          task,
+          task.staleAfter != null
+            ? `Stale after ${new Date(task.staleAfter).toLocaleString()}.`
+            : 'Task state is stale.',
+        ),
       ),
     openAssumptions: unresolved
       .filter((task) => task.assumptions.length > 0)

@@ -2,7 +2,6 @@ import {
   renderChangesSinceCard,
   renderDetailsCard,
   renderEvidenceCard,
-  renderQuickActionsCard,
   renderRecapCard,
   renderResumeCockpitCard,
   renderRestorePackCard,
@@ -108,22 +107,17 @@ describe('panelCards', () => {
     expect(details).toContain('<div class="details-markdown"><p>Summary</p></div>');
   });
 
-  it('renders recap, quick actions, restore pack, and changes cards', () => {
+  it('renders recap, restore pack, and changes cards', () => {
     const recap = renderRecapCard({
       recapDoneListTrustedHtml: '<li>Ran verify</li>',
       recapPendingListTrustedHtml: '<li>Fix blocker</li>',
     });
-    const quickActions = renderQuickActionsCard(
-      '<div class="quick-actions"><button>Copy summary</button></div>',
-    );
     const restore = renderRestorePackCard('<section>restore buttons</section>', false);
     const changes = renderChangesSinceCard('<li>Diffstat: 1 file changed</li>');
 
     expect(recap).toContain('<h3>Session Recap</h3>');
     expect(recap).not.toContain('data-primary-next-safe-action=');
     expect(recap).not.toContain('data-action="copyNextSteps"');
-    expect(quickActions).toContain('<h3>Quick Actions</h3>');
-    expect(quickActions).toContain('Keyboard shortcuts');
     expect(restore).toContain('Restricted Mode');
     expect(restore).toContain('execution actions disabled');
     expect(changes).toContain('<h3>What Changed</h3>');

@@ -2247,6 +2247,19 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('tacos.copyDiagnostics', async () => {
       await copyDiagnosticsBundle(context);
     }),
+    vscode.commands.registerCommand('tacos.dumpPanelHtml', async () => {
+      const html = state.panel?.webview?.html ?? '';
+      if (!html) {
+        void vscode.window.showWarningMessage(
+          'TaCoS: No panel HTML available — open the Resume Brief panel first.',
+        );
+        return;
+      }
+      await vscode.env.clipboard.writeText(html);
+      void vscode.window.showInformationMessage(
+        `TaCoS: Panel HTML (${html.length} chars) copied to clipboard. Paste into a .html file to inspect.`,
+      );
+    }),
     vscode.commands.registerCommand('tacos.testSanitizer', async () => {
       await testSanitizerCommand();
     }),
@@ -6280,10 +6293,13 @@ async function showDetailsPanel(
     // panel.webview.html when the panel is revealed again. Without this handler the panel
     // would appear blank every time it is un-hidden.
     //
-    // Gate on a false→true visibility transition so we only rerender after the iframe was
-    // actually torn down while hidden — not on every focus/active state change that fires
-    // onDidChangeViewState while the panel is already visible.
-    let lastKnownVisible = state.panel.visible;
+    // Initialize lastKnownVisible to false (not panel.visible) so that the very first
+    // visibility-true event always triggers a rerender, even if the panel reported
+    // visible=true at createWebviewPanel time before reveal() was called. Without this,
+    // VS Code Insiders can return visible=true from createWebviewPanel immediately, causing
+    // the !lastKnownVisible && nowVisible guard to skip the post-reveal rerender entirely,
+    // leaving the panel blank when webview.html was assigned before the iframe was live.
+    let lastKnownVisible = false;
     state.panel.onDidChangeViewState((e) => {
       const nowVisible = e.webviewPanel.visible;
       if (!lastKnownVisible && nowVisible) {
@@ -7113,12 +7129,45 @@ function rerenderPanel(): void {
   const rerenderStartNs = monotonicNowNs();
   state.panel.title = titleForSummary(state.panelSummary);
   const webviewRenderStartNs = monotonicNowNs();
-  const webviewHtml = renderWebview(
-    state.panel.webview,
-    state.panelSummary,
-    state.panelCheckpointNotes,
-    state.panelPrimaryCheckpointNote,
-  );
+  let webviewHtml: string;
+  try {
+    webviewHtml = renderWebview(
+      state.panel.webview,
+      state.panelSummary,
+      state.panelCheckpointNotes,
+      state.panelPrimaryCheckpointNote,
+    );
+  } catch (err) {
+    // renderWebview threw before producing any HTML, so webview.html was never
+    // updated and the panel would show a blank white page.  Render a minimal
+    // error fallback so the user can see what went wrong, and surface the error
+    // in the VS Code notification area so it is visible and reportable.
+    const message =
+      err instanceof Error ? err.message : typeof err === 'string' ? err : String(err);
+    const fallbackNonce = createNonce();
+    const safeFallbackNonce = escapeHtml(fallbackNonce);
+    const fallbackCspMetaTag = buildWebviewCspMetaTag(state.panel.webview.cspSource, fallbackNonce);
+    state.panel.webview.html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TaCoS Resume Brief — Render Error</title>
+    ${fallbackCspMetaTag}
+    <style nonce="${safeFallbackNonce}">
+      body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); background: var(--vscode-editor-background); padding: 16px; }
+      pre { white-space: pre-wrap; word-break: break-word; background: var(--vscode-textBlockQuote-background, rgba(128,128,128,.1)); padding: 12px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h2>TaCoS: Panel render error</h2>
+    <p>The resume brief panel encountered an unexpected error while rendering.
+    Please open a GitHub issue with the details below.</p>
+    <pre>${escapeHtml(message)}</pre>
+  </body>
+</html>`;
+    void vscode.window.showErrorMessage(`TaCoS: panel render failed — ${message}`);
+    return;
+  }
   recordPerformanceGuardrail(
     'webview-render',
     state.perfWebviewRender,
@@ -7423,8 +7472,12 @@ function renderWebview(
   });
   const topFiles = renderTopFilesListItems(summary.topFiles);
   const evidenceCatalog = summary.evidenceCatalog ?? [];
-  const evidenceGranularityWindowMs =
-    config.evidenceGranularity === 'coarse'
+  // Demo evidence has timestamps 38–60 min old; the normal 5–10 min window
+  // would filter every item out, causing empty Evidence tab and cockpit anchors.
+  // In demo mode widen to 2 hours so all demo items are always visible.
+  const evidenceGranularityWindowMs = demoMode
+    ? 2 * 60 * 60_000
+    : config.evidenceGranularity === 'coarse'
       ? 10 * 60_000
       : config.evidenceGranularity === 'fine'
         ? 2 * 60_000
@@ -13856,7 +13909,7 @@ async function refreshPanelScratchpadState(
     sizeBytes = stat.size;
     updatedAt = stat.mtime > 0 ? stat.mtime : undefined;
   } catch {
-    exists = false;
+    // exists remains false (initialised above)
   }
 
   let content = '';
@@ -14231,28 +14284,38 @@ function buildDemoResumeSummary(now = Date.now()): ResumeSummary {
     evidenceCatalog: [
       {
         id: 'file:ranking',
-        kind: 'git',
+        // kind must be 'file' (not 'git') so the id matches lastActionEvidenceId lookup
+        // and renders as a clickable "Open last action" button. capturedAt is required
+        // for selectRecentAnchors to include this item in the Evidence tab.
+        kind: 'file' as const,
         label: 'src/percolation/ranking.ts (last edited ~42 min ago)',
+        target: 'src/percolation/ranking.ts',
+        capturedAt: now - 42 * 60_000,
       },
       {
         id: 'file:broker',
-        kind: 'git',
+        kind: 'file' as const,
         label: 'src/percolation/surfaceBroker.ts (stub call added)',
+        target: 'src/percolation/surfaceBroker.ts',
+        capturedAt: now - 55 * 60_000,
       },
       {
         id: 'git:ranking-diff',
-        kind: 'git',
+        kind: 'git' as const,
         label: 'git diff — ranking.ts (+38 −4)',
+        capturedAt: now - 43 * 60_000,
       },
       {
         id: 'branch:feat',
-        kind: 'branch',
+        kind: 'branch' as const,
         label: 'main → feat/percolation-surface-v2 (+7 commits ahead)',
+        capturedAt: now - 60 * 60_000,
       },
       {
         id: 'task:verify',
-        kind: 'terminal',
+        kind: 'terminal' as const,
         label: 'npm test -- --testPathPattern=percolationRanking',
+        capturedAt: now - 38 * 60_000,
       },
     ],
     detailsMarkdown: [
