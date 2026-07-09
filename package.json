@@ -618,6 +618,6 @@
     "typescript": "^6.0.2"
   },
   "dependencies": {
-    "markdown-it": "^14.1.1"
+    "markdown-it": "^14.3.0"
   }
 }
